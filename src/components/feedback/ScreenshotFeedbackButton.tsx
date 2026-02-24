@@ -43,6 +43,15 @@ export function ScreenshotFeedbackButton() {
     const captureX      = isOverlay ? 0 : (targetRect!.left + target.scrollLeft);
     const captureY      = isOverlay ? 0 : (targetRect!.top  + target.scrollTop);
 
+    const baseIgnore = (el: Element) => {
+      const tag = el.tagName?.toLowerCase();
+      // Always ignore iframes, embeds, objects (cross-origin crash prevention)
+      if (tag === "iframe" || tag === "embed" || tag === "object") return true;
+      if (el.getAttribute?.("data-feedback-btn") === "true") return true;
+      if (el.classList?.contains("floating-vizzy")) return true;
+      return false;
+    };
+
     const baseOpts = {
       useCORS: true,
       allowTaint: false,
@@ -57,14 +66,17 @@ export function ScreenshotFeedbackButton() {
       scrollY: isOverlay ? 0 : -target.scrollTop,
       backgroundColor: getComputedStyle(document.documentElement).backgroundColor || "#0f172a",
       logging: false,
-      ignoreElements: (el: Element) => {
-        return el.getAttribute?.("data-feedback-btn") === "true" ||
-          el.classList?.contains("floating-vizzy");
-      },
+      ignoreElements: baseIgnore,
       onclone: (clonedDoc: Document) => {
         const style = clonedDoc.createElement("style");
         style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
         clonedDoc.head.appendChild(style);
+        // Remove iframes from clone to prevent html2canvas from traversing them
+        clonedDoc.querySelectorAll("iframe, embed, object").forEach((el) => {
+          const placeholder = clonedDoc.createElement("div");
+          placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth}px;height:${(el as HTMLElement).offsetHeight}px;background:#1e293b;`;
+          el.parentNode?.replaceChild(placeholder, el);
+        });
       },
     };
 
@@ -74,18 +86,14 @@ export function ScreenshotFeedbackButton() {
     const totalCount = target.querySelectorAll("*").length;
     const isHeavyPage = totalCount > 3000;
 
-    // Lightweight trimming: only target known scroll containers, not every DOM node
+    // Lightweight trimming: only target known scroll containers
     const trimStart = performance.now();
     try {
       const scrollSelectors = '[data-radix-scroll-area-viewport], [class*="overflow-y-auto"], [class*="overflow-auto"], tbody, [class*="kanban"], [role="list"]';
       const scrollContainers = target.querySelectorAll(scrollSelectors);
-
       scrollContainers.forEach((container) => {
-        // Abort if trimming is taking too long (500ms budget)
         if (performance.now() - trimStart > 500) return;
-
         const cRect = container.getBoundingClientRect();
-        // Only process direct children to avoid deep traversal
         const children = container.children;
         for (let i = 0; i < children.length; i++) {
           const child = children[i] as HTMLElement;
@@ -101,14 +109,44 @@ export function ScreenshotFeedbackButton() {
     }
 
     const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
+      const ignoreElements = skipImages
+        ? (el: Element) => {
+            if (baseIgnore(el)) return true;
+            const tag = el.tagName?.toLowerCase();
+            return tag === "img" || tag === "video" || tag === "picture" || tag === "source" || tag === "svg" || tag === "canvas";
+          }
+        : baseIgnore;
+
+      const onclone = (clonedDoc: Document) => {
+        const style = clonedDoc.createElement("style");
+        style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
+        clonedDoc.head.appendChild(style);
+        // Remove iframes
+        clonedDoc.querySelectorAll("iframe, embed, object").forEach((el) => {
+          const placeholder = clonedDoc.createElement("div");
+          placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth}px;height:${(el as HTMLElement).offsetHeight}px;background:#1e293b;`;
+          el.parentNode?.replaceChild(placeholder, el);
+        });
+        // Remove images when skipImages
+        if (skipImages) {
+          clonedDoc.querySelectorAll("img, video, picture, svg, canvas").forEach((el) => {
+            const placeholder = clonedDoc.createElement("div");
+            placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth || 0}px;height:${(el as HTMLElement).offsetHeight || 0}px;background:#334155;`;
+            el.parentNode?.replaceChild(placeholder, el);
+          });
+        }
+      };
+
       const opts = {
         ...baseOpts,
         scale: isHeavyPage ? 0.4 : 1,
-        imageTimeout: isHeavyPage ? 0 : 5000,
+        imageTimeout: skipImages ? 0 : (isHeavyPage ? 0 : 5000),
+        ignoreElements,
+        onclone,
       };
       return Promise.race([
         html2canvas(target, opts),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), isHeavyPage ? 3000 : 5000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), isHeavyPage ? 4000 : 8000)),
       ]);
     };
 
