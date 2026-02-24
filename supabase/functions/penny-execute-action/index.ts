@@ -132,6 +132,42 @@ serve(async (req) => {
       })
       .eq("id", action_id);
 
+    // Auto-create task for assigned user on successful execution
+    if (finalStatus === "executed" && action.assigned_to) {
+      try {
+        // Look up approver's profile ID
+        const { data: approverProfile } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("user_id", userId)
+          .single();
+
+        const taskDescription = [
+          `Action: ${action.action_type}`,
+          `Amount: $${action.amount}`,
+          `Days overdue: ${action.days_overdue}`,
+          action.ai_reasoning ? `AI reasoning: ${action.ai_reasoning}` : null,
+          `Result: ${JSON.stringify(result)}`,
+        ].filter(Boolean).join("\n");
+
+        await supabase.from("tasks").insert({
+          title: `Collection: ${action.customer_name} - $${action.amount}`,
+          description: taskDescription,
+          assigned_to: action.assigned_to,
+          due_date: action.followup_date ? new Date(action.followup_date).toISOString() : null,
+          status: "open",
+          priority: action.priority === "critical" ? "high" : action.priority || "medium",
+          company_id: action.company_id,
+          source: "penny",
+          source_ref: action.id,
+          agent_type: "penny",
+          created_by_profile_id: approverProfile?.id || null,
+        });
+      } catch (taskErr) {
+        console.error("Failed to create task for assignee:", taskErr);
+      }
+    }
+
     // Auto-queue next follow-up if executed successfully
     if (finalStatus === "executed" && action.action_type !== "escalate") {
       // Dedup check: skip if a pending_approval item already exists for same customer
