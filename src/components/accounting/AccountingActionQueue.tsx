@@ -196,7 +196,7 @@ function ActionCard({ item, onApprove, onReject, onSchedule, onAssign }: {
 ActionCard.displayName = "ActionCard";
 
 export function AccountingActionQueue() {
-  const { pendingItems, items, loading, approve, reject, schedule, assign, triggerAutoActions } = usePennyQueue();
+  const { pendingItems, items, loading, scanning, approve, reject, schedule, assign, triggerAutoActions } = usePennyQueue();
   const [filter, setFilter] = useState<"pending" | "all">("pending");
 
   const displayItems = filter === "pending" ? pendingItems : items;
@@ -230,9 +230,9 @@ export function AccountingActionQueue() {
           >
             All ({items.length})
           </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={triggerAutoActions} disabled={loading}>
-            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-            Scan Now
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={triggerAutoActions} disabled={scanning}>
+            {scanning ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+            {scanning ? "Scanning..." : "Scan Now"}
           </Button>
         </div>
       </div>

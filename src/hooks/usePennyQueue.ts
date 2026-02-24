@@ -32,6 +32,7 @@ const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
 export function usePennyQueue() {
   const [items, setItems] = useState<PennyQueueItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -142,14 +143,18 @@ export function usePennyQueue() {
   }, [toast]);
 
   const triggerAutoActions = useCallback(async () => {
+    if (scanning) return;
+    setScanning(true);
     try {
       const { data, error } = await supabase.functions.invoke("penny-auto-actions");
       if (error) throw error;
       toast({ title: "🤖 Penny scanned invoices", description: `${data?.queued || 0} new actions queued` });
     } catch (err) {
       toast({ title: "Auto-scan failed", description: String(err), variant: "destructive" });
+    } finally {
+      setScanning(false);
     }
-  }, [toast]);
+  }, [scanning, toast]);
 
   const totalAtRisk = pendingItems.reduce((s, i) => s + (i.amount || 0), 0);
   const nextFollowup = items
@@ -158,7 +163,7 @@ export function usePennyQueue() {
 
   return {
     items, pendingItems, pendingCount, totalAtRisk, nextFollowup,
-    loading, load, approve, reject, schedule, assign, triggerAutoActions,
+    loading, scanning, load, approve, reject, schedule, assign, triggerAutoActions,
   };
 }
 
