@@ -342,7 +342,7 @@ export default function Deliveries() {
 
 
           {/* Content */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-auto">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
               <div className="px-4 sm:px-6 pt-4">
                 <TabsList>
