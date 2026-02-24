@@ -1,64 +1,55 @@
 
 
-## Fix: Station Page Should Only Show Items for the Active Project
+## Fix: Sales Agent Cannot Generate Quotes (Quote Engine Integration Broken)
 
 ### Problem
-The station page (`/shopfloor/station/:machineId`) displays barlist items from ALL projects assigned to the machine. The screenshot shows items from multiple projects (DWG# R01 and DWG# SD01) mixed together. Items should be isolated to a single project at a time.
+When users ask the sales agent (Blitz) for a quote (e.g., "can you quote for a cage, 16 10MM circular ties, 18" dia, 8 15MM vert 10'"), it responds with "internal error with the quote engine" instead of generating a price.
 
-### Root Cause
-In `src/hooks/useStationData.ts`:
-- **Bender path** (line 49-54): Fetches all bend items company-wide with no project filter
-- **Cutter path** (line 69-74): Fetches all cut plans for the machine regardless of project
+### Root Causes
 
-The `StationView` has client-side project filter pills, but they are optional and only appear when multiple projects are present. There is no server-side project isolation.
+**1. Invalid action fallback (Bug)**
+In `supabase/functions/_shared/agentToolExecutor.ts` line 270:
+```typescript
+action: args.action || "generate"  // "generate" is NOT a valid action!
+```
+The quote engine only accepts `"validate"`, `"quote"`, or `"explain"`. If the AI omits the `action` field, it defaults to `"generate"`, which returns a 400 error.
+
+**2. No prompt guidance for quote structure (Missing)**
+The sales agent prompt in `supabase/functions/_shared/agents/sales.ts` has no instructions on how to use the `generate_sales_quote` tool. The AI must construct a complex `EstimateRequest` JSON with `meta`, `project`, `scope`, `shipping`, and `customer_confirmations` fields -- but it has no schema reference or examples to follow.
 
 ### Solution
-Add `project_id` filtering to the `useStationData` hook and enforce project selection in the station view.
 
-### Changes
+**File: `supabase/functions/_shared/agentToolExecutor.ts`**
+- Change the action fallback from `"generate"` to `"quote"` (the correct default action)
 
-**File: `src/hooks/useStationData.ts`**
-- Add an optional `projectId` parameter to the hook signature
-- **Bender query**: When `projectId` is provided, add `.eq("cut_plans.project_id", projectId)` to scope items to that project only
-- **Cutter query**: When `projectId` is provided, add `.eq("project_id", projectId)` to the `cut_plans` query
-- Include `projectId` in the query key for proper cache isolation
-
-**File: `src/pages/StationView.tsx`**
-- Import `useWorkspace` from `WorkspaceContext`
-- Read `activeProjectId` from workspace context
-- Pass `activeProjectId` to `useStationData` as the `projectId` filter
-- Keep the existing client-side project filter pills as a secondary filter for when no workspace project is selected
-- When `activeProjectId` is set, auto-scope data to that project without needing pill selection
+**File: `supabase/functions/_shared/agents/sales.ts`**
+- Add a "Quoting Instructions" section to the sales prompt that:
+  - Explains when to use the `generate_sales_quote` tool
+  - Provides the exact JSON structure template for `estimate_request`
+  - Shows how to map natural language inputs (bar sizes, quantities, cage specs) to the structured format
+  - Lists examples of converting common requests (ties, cages, straight bars) to the correct JSON fields
+  - Instructs the agent to use `action: "quote"` for generating quotes and `action: "validate"` when info is incomplete
 
 ### Technical Detail
 
-In `useStationData.ts`, update the hook signature:
+**Fix 1 -- `agentToolExecutor.ts` (line 270)**
 ```typescript
-export function useStationData(
-  machineId: string | null, 
-  machineType?: string, 
-  projectId?: string | null
-)
+// Before:
+action: args.action || "generate",
+
+// After:
+action: args.action || "quote",
 ```
 
-Bender query addition (after line 53):
-```typescript
-if (projectId) query = query.eq("cut_plans.project_id", projectId);
-```
+**Fix 2 -- `agents/sales.ts` (add to sales prompt)**
+Add a section with the `EstimateRequest` template so the AI knows:
+- `scope.ties_circular` expects `{ line_id, type, diameter, quantity }`
+- `scope.cages` expects `{ line_id, cage_type, total_cage_weight_kg, quantity }`  
+- `scope.straight_rebar_lines` expects `{ line_id, bar_size, length_ft, quantity }`
+- `scope.fabricated_rebar_lines` expects `{ line_id, bar_size, shape_code, cut_length_ft, quantity }`
+- All unused scope arrays should be empty `[]`
+- `meta` and `project` fields can use sensible defaults
+- `shipping.delivery_required` defaults to `false` unless the customer mentions delivery
+- When information is incomplete, use `action: "validate"` first to get clarifying questions
 
-Cutter query addition (after line 73):
-```typescript
-if (projectId) query = query.eq("project_id", projectId);
-```
-
-In `StationView.tsx`, pass the workspace project:
-```typescript
-const { activeProjectId } = useWorkspace();
-const { groups, items, isLoading: dataLoading, error } = useStationData(
-  machineId || null, 
-  machine?.type, 
-  activeProjectId
-);
-```
-
-This ensures the database query itself is scoped to the active project, preventing cross-project data from being fetched at all. The existing pill filters remain as a fallback when no workspace project is selected.
+This ensures the AI can reliably translate natural language quote requests into the structured JSON the deterministic quote engine requires.
