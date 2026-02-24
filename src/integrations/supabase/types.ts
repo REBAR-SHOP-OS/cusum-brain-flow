@@ -2490,40 +2490,28 @@ export type Database = {
       }
       document_embeddings: {
         Row: {
-          agent_domain: string
           company_id: string
-          content_text: string
+          content: string
           created_at: string
           embedding: string | null
-          entity_id: string | null
-          entity_type: string
           id: string
           metadata: Json | null
-          updated_at: string
         }
         Insert: {
-          agent_domain: string
-          company_id?: string
-          content_text: string
+          company_id: string
+          content: string
           created_at?: string
           embedding?: string | null
-          entity_id?: string | null
-          entity_type: string
           id?: string
           metadata?: Json | null
-          updated_at?: string
         }
         Update: {
-          agent_domain?: string
           company_id?: string
-          content_text?: string
+          content?: string
           created_at?: string
           embedding?: string | null
-          entity_id?: string | null
-          entity_type?: string
           id?: string
           metadata?: Json | null
-          updated_at?: string
         }
         Relationships: []
       }
@@ -12449,18 +12437,12 @@ export type Database = {
       }
       match_documents: {
         Args: {
-          filter_company?: string
-          filter_domain?: string
+          filter_company_id?: string
           match_count?: number
-          match_threshold?: number
           query_embedding: string
         }
         Returns: {
-          agent_domain: string
-          company_id: string
-          content_text: string
-          entity_id: string
-          entity_type: string
+          content: string
           id: string
           metadata: Json
           similarity: number
