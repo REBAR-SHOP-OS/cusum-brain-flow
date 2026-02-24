@@ -356,7 +356,7 @@ export default function Deliveries() {
                 </TabsList>
               </div>
 
-              <TabsContent value="today" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+              <TabsContent value="today" className="flex-1 overflow-auto px-4 sm:px-6 pb-6">
                 <DeliveryList 
                   deliveries={todayDeliveries} 
                   isLoading={isLoading}
@@ -368,7 +368,7 @@ export default function Deliveries() {
                 />
               </TabsContent>
 
-              <TabsContent value="upcoming" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+              <TabsContent value="upcoming" className="flex-1 overflow-auto px-4 sm:px-6 pb-6">
                 <DeliveryList 
                   deliveries={upcomingDeliveries} 
                   isLoading={isLoading}
@@ -380,7 +380,7 @@ export default function Deliveries() {
                 />
               </TabsContent>
 
-              <TabsContent value="all" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+              <TabsContent value="all" className="flex-1 overflow-auto px-4 sm:px-6 pb-6">
                 <DeliveryList 
                   deliveries={filteredDeliveries} 
                   isLoading={isLoading}
@@ -634,7 +634,7 @@ function DeliveryList({ deliveries, isLoading, selectedId, onSelect, onRequestDe
   }
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="max-h-[calc(100vh-300px)] h-full">
       <div className="grid gap-3 pr-4 pt-4">
         {deliveries.map((delivery) => (
           <DeliveryCard 
