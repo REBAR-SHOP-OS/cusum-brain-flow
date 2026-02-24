@@ -33,6 +33,7 @@ export default function LoadingStation() {
   const {
     checklistMap,
     loadedCount,
+    photoCount,
     isLoading: checklistLoading,
     initializeChecklist,
     toggleLoaded,
@@ -67,7 +68,7 @@ export default function LoadingStation() {
   }, [selectedBundle?.cutPlanId, allPlanItems.length]);
 
   const totalItems = checklistItems.length;
-  const allLoaded = totalItems > 0 && loadedCount >= totalItems;
+  const allLoaded = totalItems > 0 && loadedCount >= totalItems && photoCount >= totalItems;
   const progressPct = totalItems > 0 ? Math.round((loadedCount / totalItems) * 100) : 0;
 
   const handleCreateDelivery = async () => {
@@ -199,7 +200,7 @@ export default function LoadingStation() {
               ) : (
                 <Truck className="w-4 h-4" />
               )}
-              {allLoaded ? "Create Delivery" : `${totalItems - loadedCount} items remaining`}
+              {allLoaded ? "Create Delivery" : `${totalItems - Math.min(loadedCount, photoCount)} items remaining`}
             </Button>
           </div>
         </>

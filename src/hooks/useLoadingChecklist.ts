@@ -132,11 +132,13 @@ export function useLoadingChecklist(cutPlanId: string | null) {
   }
 
   const loadedCount = checklistItems.filter(c => c.loaded).length;
+  const photoCount = checklistItems.filter(c => c.loaded && !!c.photo_path).length;
 
   return {
     checklistItems,
     checklistMap,
     loadedCount,
+    photoCount,
     isLoading,
     initializeChecklist,
     toggleLoaded,
