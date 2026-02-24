@@ -267,7 +267,7 @@ export async function executeToolCall(
     // ═══════════════════════════════════════════════════
     else if (name === "generate_sales_quote") {
       const body = {
-        action: args.action || "generate",
+        action: args.action || "quote",
         estimate_request: args.estimate_request || args,
         company_id: companyId,
       };
