@@ -91,6 +91,7 @@ export function usePennyQueue() {
       // Trigger execution
       await supabase.functions.invoke("penny-execute-action", { body: { action_id: id } });
       toast({ title: "✅ Action approved & executing" });
+      await load();
     } catch (err) {
       toast({ title: "Approval failed", description: String(err), variant: "destructive" });
     }
@@ -107,6 +108,7 @@ export function usePennyQueue() {
         .eq("id", id);
       if (error) throw error;
       toast({ title: "Action dismissed" });
+      await load();
     } catch (err) {
       toast({ title: "Reject failed", description: String(err), variant: "destructive" });
     }
@@ -120,6 +122,7 @@ export function usePennyQueue() {
         .eq("id", id);
       if (error) throw error;
       toast({ title: "📅 Follow-up scheduled", description: followupDate });
+      await load();
     } catch (err) {
       toast({ title: "Schedule failed", description: String(err), variant: "destructive" });
     }
