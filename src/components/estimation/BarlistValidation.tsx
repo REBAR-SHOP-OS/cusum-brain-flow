@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Upload, CheckCircle2, XCircle, AlertTriangle, Minus } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import * as XLSX from "@e965/xlsx";
 
 interface ValidationItem {
   mark: string;

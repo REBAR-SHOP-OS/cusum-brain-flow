@@ -9,7 +9,7 @@ import { format, subDays, isAfter, isBefore, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
-import * as XLSX from "xlsx";
+import * as XLSX from "@e965/xlsx";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;

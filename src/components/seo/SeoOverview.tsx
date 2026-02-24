@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers, Globe, Link2, CheckCircle, Mail, Upload, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
-import * as XLSX from "xlsx";
+import * as XLSX from "@e965/xlsx";
 
 const SOURCE_COLORS: Record<string, string> = {
   gsc: "bg-blue-500/10 text-blue-600",

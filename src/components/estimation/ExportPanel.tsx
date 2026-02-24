@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, FileSpreadsheet, FileJson } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import * as XLSX from "@e965/xlsx";
 
 interface ExportPanelProps {
   project: any;
