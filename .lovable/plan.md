@@ -1,20 +1,34 @@
 
 
-## Remove "ESTIMATION" from Shopfloor Hub Screens
+## Fix: Delivery Tile Navigation on ShopFloor Hub
 
 ### Problem
-The "ESTIMATION" card appears on the shopfloor "SELECT INTERFACE" screen, but Estimation is an office/admin tool (AI Takeoff and Bids), not a production floor interface. Shopfloor workers should not see it alongside Material Pool, Clearance, Loading, etc.
+The "DELIVERY" tile on the shopfloor hub screens (`/shop-floor` and `/home`) does not navigate correctly to `/deliveries` when clicked.
+
+### Root Cause
+The tile uses React Router's `<Link>` component for cross-page navigation. In certain contexts (e.g., when navigating between pages with different layout structures), `<Link>` can fail to trigger a proper navigation. Using a native `<a>` tag ensures the browser performs a full navigation.
 
 ### Solution
-Remove the ESTIMATION entry from the hub cards array in both places where the shopfloor hub is rendered.
+Replace the `<Link>` component with a native `<a>` tag specifically for the Delivery card, since it navigates to a completely different page (`/deliveries`) rather than a sub-route under `/shopfloor/`.
 
 ### Changes
 
 **File: `src/pages/ShopFloor.tsx`**
-- Remove the ESTIMATION object from the `hubCards` array (the last entry with `label: "ESTIMATION"`, linking to `/estimation`)
+- In the hub cards grid rendering loop, detect when the card links outside the `/shopfloor/` prefix (i.e., the Delivery card pointing to `/deliveries`)
+- Render those cards as native `<a href="...">` instead of `<Link to="...">`
+- All other cards that link to `/shopfloor/*` sub-routes continue using `<Link>`
 
 **File: `src/pages/Home.tsx`**
-- Remove the ESTIMATION object from the `shopfloorCards` array (the entry with `label: "ESTIMATION"`, linking to `/estimation`)
+- Apply the same fix in the shopfloor dashboard section rendered for workshop users
+- Delivery card rendered as `<a href="/deliveries">` instead of `<Link to="/deliveries">`
 
-This leaves 7 hub cards (Material Pool, Shop Floor, Clearance, Loading, Delivery, Pickup, Inventory) which is a cleaner fit for the grid layout.
+### Technical Detail
+```
+// Current (broken)
+<Link to="/deliveries">DELIVERY</Link>
 
+// Fixed
+<a href="/deliveries">DELIVERY</a>
+```
+
+Both files share the same pattern: a mapped array of cards rendered with `<Link>`. The fix adds a conditional check so that external routes use `<a>` while internal shopfloor routes keep using `<Link>`.
