@@ -34,26 +34,6 @@ export interface BarSizeGroup {
   straightItems: StationItem[];
 }
 
-/**
- * TODO: Hardcoded machine UUIDs for cutter distribution rules.
- * These should be moved to the machine_capabilities table and queried dynamically
- * to avoid breakage when machines are re-created or deployed to another company.
- */
-const CUTTER_DISTRIBUTION: Record<string, { maxMm: number } | { minMm: number }> = {
-  // CUTTER-01: 10M, 15M only
-  "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3": { maxMm: 15 },
-  // CUTTER-02: 20M and above
-  "b0000000-0000-0000-0000-000000000002": { minMm: 20 },
-};
-
-function passesDistribution(machineId: string, barCode: string): boolean {
-  const rule = CUTTER_DISTRIBUTION[machineId];
-  if (!rule) return true; // no rule → show everything
-  const num = parseInt(barCode.replace(/\D/g, "")) || 0;
-  if ("maxMm" in rule) return num <= rule.maxMm;
-  if ("minMm" in rule) return num >= rule.minMm;
-  return true;
-}
 
 export function useStationData(machineId: string | null, machineType?: string) {
   const { user } = useAuth();
@@ -90,7 +70,7 @@ export function useStationData(machineId: string | null, machineType?: string) {
         .from("cut_plans")
         .select("id, name, project_name, machine_id")
         .eq("company_id", companyId!)
-        .or(`machine_id.eq.${machineId},machine_id.is.null`)
+        .eq("machine_id", machineId)
         .in("status", ["draft", "queued", "running"]);
 
       if (plansError) throw plansError;
@@ -108,7 +88,6 @@ export function useStationData(machineId: string | null, machineType?: string) {
       if (itemsError) throw itemsError;
 
       return (items || [])
-        .filter((item: Record<string, unknown>) => passesDistribution(machineId!, item.bar_code as string))
         .map((item: Record<string, unknown>) => {
           const plan = planMap.get(item.cut_plan_id as string);
           return {
