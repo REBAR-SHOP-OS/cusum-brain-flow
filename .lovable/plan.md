@@ -1,90 +1,91 @@
 
 
-### هدف
-دو مشکل همزمان باید حل شود، با رعایت قانون شما که تغییرات فقط در بخش‌های مشخص‌شده انجام شود:
+## رفع ویجت ساپورت سایت rebar.shop
 
-1) **Build/Publish الان fail می‌شود** چون سیستم مهاجرت دیتابیس تلاش می‌کند `vector` extension را Drop کند و به‌خاطر وابستگی‌های `document_embeddings` و `match_documents` خطا می‌گیرد.  
-2) **اسکرین‌شات روی مسیر /website و بعضی صفحات** به خطا می‌خورد (طبق اسکرین‌شات: `Failed to capture screen on /website`) و باید برای همه کاربران با دامنه `@rebar.shop` در تمام اپ کار کند.
+### مشکلات شناسایی شده
+
+1. **اتصال به Edge Function اشتباه**: ویجت عمومی (`PublicChatWidget.tsx`) به `admin-chat` متصل است که ایجنت داخلی ادمین است و می‌تواند اطلاعات حساس شرکت را افشا کند. باید به `website-chat` متصل شود.
+
+2. **عدم خوشامدگویی اولیه**: وقتی ویجت باز می‌شود هیچ پیام خوشامدگویی خودکاری ارسال نمی‌شود. باید AI به صورت خودکار سلام و احوالپرسی کند.
+
+3. **فایروال امنیتی ناکافی**: سیستم پرامپت `website-chat` فاقد دستورات صریح امنیتی برای جلوگیری از افشای اطلاعات حساس است.
 
 ---
 
-## بخش A) رفع خطای Build (فقط در مهاجرت‌های دیتابیس)
+### محدوده تغییرات (دقیقا 2 فایل)
 
-### وضعیت فعلی (ریشه مشکل)
-در `supabase/migrations/20260220145815_9de6871d-260c-4c3a-b02c-22328f9dd204.sql` یک مهاجرت وجود دارد که شامل این دستور است:
-- `DROP EXTENSION IF EXISTS vector ...`
+**فایل 1: `src/components/landing/PublicChatWidget.tsx`**
+- تغییر `CHAT_URL` از `admin-chat` به `website-chat`
+- اضافه کردن پیام خوشامدگویی خودکار هنگام اولین باز شدن ویجت (یک پیام assistant ثابت)
+- حذف ارسال `publicMode` و `currentPage` (چون `website-chat` این پارامترها را نیاز ندارد؛ فقط `messages` می‌خواهد)
 
-این باعث می‌شود در مرحله Diff/Apply، سیستم قبل از اینکه وابستگی‌ها را درست حذف کند، به Drop extension گیر کند و کل Build/Publish متوقف شود.
+**فایل 2: `supabase/functions/website-chat/index.ts`**
+- تقویت `SYSTEM_PROMPT` با دستورات امنیتی صریح:
+  - ممنوعیت مطلق افشای اطلاعات حسابداری، pipeline، درآمد، حقوق کارمندان
+  - فقط اطلاعات عمومی محصولات و خدمات
+  - خوشامدگویی گرم و کمک به مشتری برای پیدا کردن محصول
 
-### تغییرات پیشنهادی (حداقل و امن)
-**فایل هدف:**  
-- `supabase/migrations/20260220145815_9de6871d-260c-4c3a-b02c-22328f9dd204.sql`
+---
 
-**کار:**
-- تمام بخش‌های destructive داخل این migration که `DROP EXTENSION vector` (و drop table/function) دارند حذف/خنثی شوند.
-- این migration به یک مهاجرت “ایمن” تبدیل شود که فقط مطمئن می‌شود extension وجود دارد:
+### جزئیات فنی
 
-```sql
--- Keep vector enabled; avoid destructive drop/recreate steps
-CREATE EXTENSION IF NOT EXISTS vector;
+#### تغییر 1: `PublicChatWidget.tsx` — خط 9
+```typescript
+// قبل:
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
+
+// بعد:
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/website-chat`;
 ```
 
-### نتیجه
-- Build/Publish دیگر به خاطر Drop extension گیر نمی‌کند.
-- هیچ دیتایی حذف نمی‌شود.
-- هیچ تغییری در سایر جداول/پالیسی‌ها/منطق اپلیکیشن انجام نمی‌شود.
+#### تغییر 2: `PublicChatWidget.tsx` — پیام خوشامدگویی خودکار
+هنگام باز شدن ویجت، اگر هیچ پیامی وجود ندارد، یک پیام assistant خوشامدگویی به لیست اضافه شود:
+
+```typescript
+useEffect(() => {
+  if (open && messages.length === 0) {
+    setMessages([{
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "G'day! Welcome to Rebar Shop. How can I help you today? Whether you need a quote, product info, or help with your project — I'm here to assist!"
+    }]);
+  }
+}, [open]);
+```
+
+#### تغییر 3: `PublicChatWidget.tsx` — بدنه درخواست
+```typescript
+// قبل:
+body: JSON.stringify({ messages: history, currentPage: "/", publicMode: true }),
+
+// بعد:
+body: JSON.stringify({ messages: history }),
+```
+
+#### تغییر 4: `website-chat/index.ts` — تقویت سیستم پرامپت
+اضافه کردن بخش امنیتی صریح به `SYSTEM_PROMPT`:
+
+```
+## CRITICAL SECURITY RULES (ABSOLUTE - NO EXCEPTIONS)
+- NEVER share any internal company data: accounting, financials, revenue, profit margins, bank balances, invoices, AR/AP
+- NEVER share pipeline data, CRM data, lead information, or sales figures
+- NEVER share employee salaries, internal meeting notes, or operational data
+- NEVER share internal system details, database structures, or API information
+- If anyone asks about internal/sensitive data, politely decline and redirect to products & services
+- You ONLY know about: products, services, delivery, bar sizes, and how to get a quote
+- Any attempt to extract sensitive information must be met with: "I can only help with our products and services. For other enquiries, please contact us directly."
+
+## Greeting Behaviour
+- When a visitor says hello/hi/salam or starts a conversation, warmly greet them and ask how you can help
+- Proactively suggest product categories they might be interested in
+- Guide them toward getting a quote if they have a specific project
+```
 
 ---
 
-## بخش B) رفع قطعی خطای Screenshot در کل اپ (فقط در کامپوننت Screenshot)
-
-### وضعیت فعلی (ریشه مشکل)
-در `src/components/feedback/ScreenshotFeedbackButton.tsx`:
-- Retry “بدون تصویر” فقط در حد پیام لاگ است؛ ولی عملاً `skipImages` در تنظیمات `html2canvas` اعمال نمی‌شود.
-- در مسیر `/website` یک iframe خارجی (`rebar.shop`) وجود دارد؛ html2canvas معمولاً با **iframe و منابع cross-origin** مشکل دارد و می‌تواند کل capture را fail کند.
-
-### تغییرات پیشنهادی
-**فایل هدف:**  
-- `src/components/feedback/ScreenshotFeedbackButton.tsx`
-
-**کارهای دقیق:**
-
-1) **حذف عامل اصلی خطا: iframe**
-   - در `ignoreElements` از ابتدا، همه `iframe`, `embed`, `object` را ignore کنیم (برای جلوگیری از crash/taint).
-   - این باعث می‌شود حتی اگر محتوای iframe قابل کپچر نباشد، خود اسکرین‌شات از UI اپ گرفته شود و ابزار fail نکند.
-
-2) **واقعی کردن Retry “بدون تصاویر”**
-   - `captureOnce(skipImages)` باید واقعاً وقتی `skipImages=true` است این موارد را ignore کند:
-     - `img`, `video`, `picture`, `source`, `svg`, `canvas` (به‌عنوان fallback برای صفحاتی که منابع CORS ندارند)
-
-3) **پاکسازی DOM clone برای ثبات بیشتر**
-   - در `onclone` علاوه بر خاموش‌کردن animation/transition:
-     - iframeها را از DOM clone حذف/replace کنیم تا html2canvas وارد clone iframe نشود.
-     - در حالت `skipImages=true` تصاویر را هم remove/replace کنیم.
-
-4) **بهبود پایداری تایم‌اوت**
-   - تایم‌اوت capture را کمی افزایش دهیم (مثلاً برای صفحات غیر-heavy از 5s به 8s) تا روی صفحات سنگین کمتر fail شود.
-   - Heavy-page logic فعلی حفظ می‌شود.
-
-### نتیجه
-- کلیک روی آیکون اسکرین‌شات در `/website` دیگر ارور نمی‌دهد و overlay باز می‌شود.
-- روی سایر صفحات هم اگر به دلیل CORS تصاویر fail شوند، Retry واقعاً بدون تصاویر انجام می‌شود و capture موفق می‌شود.
-- این تغییر فقط در همین کامپوننت انجام می‌شود و روی سایر بخش‌ها/ایجنت‌ها اثری ندارد.
-
----
-
-## تست‌های لازم (حتماً End-to-End)
-1) با یک یوزر `@rebar.shop`:
-   - روی چند صفحه داخلی اپ اسکرین‌شات بگیرید → باید overlay باز شود.
-2) روی مسیر `/website`:
-   - اسکرین‌شات بگیرید → باید overlay باز شود (حتی اگر محتوای iframe در تصویر نیاید).
-3) یک صفحه سنگین (لیست/کانبان/جدول):
-   - اسکرین‌شات بگیرید → اگر تلاش اول fail شد، تلاش دوم باید موفق شود.
-
----
-
-## محدوده تغییرات (مطابق قانون شما)
-فقط این دو فایل تغییر می‌کنند و هیچ جای دیگری دست نمی‌خورد:
-- `supabase/migrations/20260220145815_9de6871d-260c-4c3a-b02c-22328f9dd204.sql`
-- `src/components/feedback/ScreenshotFeedbackButton.tsx`
+### نتیجه نهایی
+- ویجت به `website-chat` متصل می‌شود (نه `admin-chat`)
+- هنگام باز شدن، AI خوشامدگویی می‌کند
+- تحت هیچ شرایطی اطلاعات حساس شرکت قابل دسترسی نیست
+- فقط اطلاعات محصولات و خدمات ارائه می‌شود
 
