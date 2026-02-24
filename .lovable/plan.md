@@ -1,61 +1,36 @@
 
 
-## Fix: Prevent Duplicate QuickBooks Invoices
+## Fix: "Apply Mapping" Edge Function Non-2xx Errors
 
 ### Root Cause
 
-There are two layers where duplicate prevention is missing:
+The `manage-extract` edge function has **incomplete CORS headers** (line 7). It only allows `authorization, x-client-info, apikey, content-type` but the current Supabase JS SDK sends additional headers (`x-supabase-client-platform`, `x-supabase-client-platform-version`, etc.). This causes the browser's CORS preflight `OPTIONS` check to reject the request before it even reaches the function logic -- which also explains why there are **zero logs** for this function.
 
-1. **Client-side (`useOrders.ts` -- `sendToQuickBooks`)**: The function does not check if `order.quickbooks_invoice_id` already exists before calling the edge function. Clicking "Send to QuickBooks" multiple times (or on an already-invoiced order) creates a new invoice each time.
+### Fix (1 file: `supabase/functions/manage-extract/index.ts`)
 
-2. **Server-side (`quickbooks-oauth/index.ts` -- `handleCreateInvoice`)**: The edge function blindly POSTs to the QuickBooks Invoice API without checking if an invoice for that order/memo already exists. There is no idempotency guard.
+#### 1. Update CORS headers to match the standard
 
-### Fix (2 files)
-
-#### 1. Client-side guard -- `src/hooks/useOrders.ts`
-
-Add an early check in `sendToQuickBooks`: if the order already has a `quickbooks_invoice_id`, throw an error instead of creating a duplicate.
-
+Replace the current incomplete headers:
 ```typescript
-// Before fetching items:
-if (order.quickbooks_invoice_id) {
-  throw new Error(`Order already invoiced (Invoice #${order.quickbooks_invoice_id})`);
-}
+// BEFORE (line 6-8)
+"Access-Control-Allow-Headers":
+  "authorization, x-client-info, apikey, content-type",
 ```
 
-#### 2. Server-side idempotency -- `supabase/functions/quickbooks-oauth/index.ts`
-
-Add an optional `orderId` parameter to `handleCreateInvoice`. When provided:
-- Query the `orders` table for that order's `quickbooks_invoice_id`
-- If one already exists, return the existing invoice info instead of creating a new one
-- If not, proceed with creation as normal
-
-```text
-handleCreateInvoice receives body.orderId (optional)
-  |
-  +-- orderId provided?
-       |
-       Yes --> Query orders table for quickbooks_invoice_id
-       |       |
-       |       +-- Already has QB ID? --> Return existing (skip creation)
-       |       +-- No QB ID? --> Create invoice, update orders row
-       |
-       No --> Create invoice as before (backwards compatible)
+With the full set used by all other edge functions in the project:
+```typescript
+// AFTER
+"Access-Control-Allow-Headers":
+  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 ```
 
-#### 3. Pass `orderId` from client -- `src/hooks/useOrders.ts`
+This single change aligns the function with the CORS configuration used in every other edge function (e.g., `diagnostic-logs`, `quickbooks-oauth`, `_shared/auth.ts`).
 
-Update the `sendToQuickBooks` call to include `orderId` in the request body so the edge function can perform the server-side check.
+### Why This Fixes It
 
-### Summary of Changes
+The Supabase JS SDK (`@supabase/supabase-js@2.95`) now sends platform-identifying headers on every request. When the `OPTIONS` preflight response doesn't list them in `Access-Control-Allow-Headers`, the browser blocks the actual `POST` request entirely -- resulting in a network-level failure that appears as a non-2xx status code to the calling code.
 
-| File | Change |
-|---|---|
-| `src/hooks/useOrders.ts` | Add client-side guard checking `quickbooks_invoice_id` before calling edge function; pass `orderId` in request body |
-| `supabase/functions/quickbooks-oauth/index.ts` | Add idempotency check in `handleCreateInvoice` -- query `orders` table for existing QB invoice ID before creating |
+### Verification
 
-### Why Both Layers?
-
-- **Client guard** provides instant feedback (no network round-trip) and prevents accidental re-clicks
-- **Server guard** prevents race conditions where two concurrent requests could both pass the client check before either writes back the invoice ID
+After deploying, the "Apply Mapping" button should successfully invoke the function and return the mapping results.
 
