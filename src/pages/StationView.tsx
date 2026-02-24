@@ -29,34 +29,49 @@ export default function StationView() {
   const [activeTab, setActiveTab] = useState("production");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isSupervisor, setIsSupervisor] = useState(false);
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [selectedBarListId, setSelectedBarListId] = useState<string | null>(null);
   const { pinnedMachineId, unpinMachine } = useTabletPin();
   const isPinned = pinnedMachineId === machineId;
 
-  // Distinct project names present in loaded items
-  const projectNames = useMemo(
-    () => [...new Set(items.map((i) => i.project_name).filter(Boolean))] as string[],
-    [items]
-  );
-
-  // Auto-reset if selected project disappears (e.g. phase transition)
-  useEffect(() => {
-    if (selectedProject && !projectNames.includes(selectedProject)) {
-      setSelectedProject(null);
+  // Compute distinct bar lists (scopes) from items
+  const barLists = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; projectName: string | null; count: number }>();
+    for (const item of items) {
+      const existing = map.get(item.cut_plan_id);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(item.cut_plan_id, {
+          id: item.cut_plan_id,
+          name: item.plan_name,
+          projectName: item.project_name,
+          count: 1,
+        });
+      }
     }
-  }, [projectNames, selectedProject]);
+    return [...map.values()];
+  }, [items]);
+
+  // Auto-select if only one scope; auto-reset if selected scope disappears
+  useEffect(() => {
+    if (barLists.length === 1) {
+      setSelectedBarListId(barLists[0].id);
+    } else if (selectedBarListId && !barLists.some((b) => b.id === selectedBarListId)) {
+      setSelectedBarListId(null);
+    }
+  }, [barLists, selectedBarListId]);
 
   // Filtered views
-  const filteredItems = selectedProject
-    ? items.filter((i) => i.project_name === selectedProject)
+  const filteredItems = selectedBarListId
+    ? items.filter((i) => i.cut_plan_id === selectedBarListId)
     : items;
 
-  const filteredGroups = selectedProject
+  const filteredGroups = selectedBarListId
     ? groups
         .map((g) => ({
           ...g,
-          bendItems: g.bendItems.filter((i) => i.project_name === selectedProject),
-          straightItems: g.straightItems.filter((i) => i.project_name === selectedProject),
+          bendItems: g.bendItems.filter((i) => i.cut_plan_id === selectedBarListId),
+          straightItems: g.straightItems.filter((i) => i.cut_plan_id === selectedBarListId),
         }))
         .filter((g) => g.bendItems.length > 0 || g.straightItems.length > 0)
     : groups;
@@ -168,32 +183,33 @@ export default function StationView() {
       )}
 
       <div className="px-4 pt-3">
-        {/* Project filter pills — only shown when multiple projects present */}
-        {projectNames.length > 1 && (
+        {/* Bar list (scope) selector — shown when multiple scopes present */}
+        {barLists.length > 1 && (
           <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none">
             <button
-              onClick={() => setSelectedProject(null)}
+              onClick={() => setSelectedBarListId(null)}
               className={cn(
                 "shrink-0 text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-full border transition-colors",
-                !selectedProject
+                !selectedBarListId
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
               )}
             >
               ALL ({items.length})
             </button>
-            {projectNames.map((name) => (
+            {barLists.map((bl) => (
               <button
-                key={name}
-                onClick={() => setSelectedProject(name)}
+                key={bl.id}
+                onClick={() => setSelectedBarListId(bl.id)}
                 className={cn(
-                  "shrink-0 text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-full border transition-colors max-w-[180px] truncate",
-                  selectedProject === name
+                  "shrink-0 text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-full border transition-colors max-w-[200px] truncate",
+                  selectedBarListId === bl.id
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
                 )}
+                title={bl.projectName ? `${bl.name} — ${bl.projectName}` : bl.name}
               >
-                {name} ({items.filter((i) => i.project_name === name).length})
+                {bl.name} ({bl.count})
               </button>
             ))}
           </div>
