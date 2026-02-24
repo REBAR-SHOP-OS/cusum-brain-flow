@@ -193,16 +193,10 @@ export default function AccountingWorkspace() {
 
   useEffect(() => {
     if (!hasAccess || hasLoadedToday.current) return;
-
-    const today = new Date().toLocaleDateString("en-CA");
-    const lastLoad = localStorage.getItem(QB_LAST_LOAD_KEY);
-
-    if (lastLoad !== today) {
-      loadAllRef.current();
-      // updateRefreshTimestamp removed — prevents chat refresh coupling
-    }
-
     hasLoadedToday.current = true;
+
+    loadAllRef.current();
+    updateRefreshTimestamp();
 
     if (webPhoneStatusRef.current === "idle") {
       webPhoneActionsRef.current.initialize();
