@@ -235,7 +235,170 @@ const WIDGET_TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "generate_and_email_quote",
+      description: "Generate a branded quotation and email it to the customer. Use when the customer wants a price quote for rebar products or services. Collect customer name, email, and item details first.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: { type: "string", description: "Customer full name" },
+          customer_email: { type: "string", description: "Customer email address" },
+          project_name: { type: "string", description: "Project name or description" },
+          items: {
+            type: "array",
+            description: "List of quoted items",
+            items: {
+              type: "object",
+              properties: {
+                description: { type: "string", description: "Item description (e.g. 10M rebar, 6m length)" },
+                quantity: { type: "number", description: "Quantity" },
+                unit: { type: "string", description: "Unit (e.g. pcs, tonnes, m)" },
+                unit_price: { type: "number", description: "Price per unit in CAD" },
+              },
+              required: ["description", "quantity", "unit_price"],
+            },
+          },
+          notes: { type: "string", description: "Additional notes or terms" },
+        },
+        required: ["customer_name", "customer_email", "items"],
+      },
+    },
+  },
 ];
+
+// ── Quote Email Helper ──
+function generateQuoteHtml(quoteNumber: string, customerName: string, items: any[], notes?: string): string {
+  const today = new Date();
+  const validUntil = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const formatDate = (d: Date) => d.toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
+
+  let subtotal = 0;
+  const itemRows = items.map((item: any, i: number) => {
+    const amount = (item.quantity || 0) * (item.unit_price || 0);
+    subtotal += amount;
+    return `<tr style="border-bottom:1px solid #eee;">
+      <td style="padding:10px;text-align:center;">${i + 1}</td>
+      <td style="padding:10px;">${item.description || ""}</td>
+      <td style="padding:10px;text-align:center;">${item.quantity || 0} ${item.unit || "pcs"}</td>
+      <td style="padding:10px;text-align:right;">$${(item.unit_price || 0).toFixed(2)}</td>
+      <td style="padding:10px;text-align:right;">$${amount.toFixed(2)}</td>
+    </tr>`;
+  }).join("");
+
+  const hst = subtotal * 0.13;
+  const total = subtotal + hst;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f5f5f5;">
+<div style="max-width:700px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+  <div style="background:#1a1a2e;padding:24px 32px;color:#fff;">
+    <table width="100%"><tr>
+      <td><h1 style="margin:0;font-size:22px;color:#fff;">🔩 Rebar.Shop</h1><p style="margin:4px 0 0;font-size:12px;color:#ccc;">Premium Rebar Solutions</p></td>
+      <td style="text-align:right;font-size:12px;color:#ccc;">130 Bridgeland Ave, Unit 23<br>Toronto, ON M6A 1Z4<br>📞 (647) 521-0090<br>✉️ sales@rebar.shop</td>
+    </tr></table>
+  </div>
+  <div style="padding:24px 32px;">
+    <h2 style="color:#1a1a2e;margin:0 0 16px;">Quotation ${quoteNumber}</h2>
+    <table style="font-size:14px;margin-bottom:20px;"><tr>
+      <td style="padding:4px 16px 4px 0;color:#666;">Customer:</td><td><strong>${customerName}</strong></td>
+    </tr><tr>
+      <td style="padding:4px 16px 4px 0;color:#666;">Date:</td><td>${formatDate(today)}</td>
+    </tr><tr>
+      <td style="padding:4px 16px 4px 0;color:#666;">Valid Until:</td><td>${formatDate(validUntil)}</td>
+    </tr></table>
+    <table width="100%" style="border-collapse:collapse;font-size:14px;">
+      <thead><tr style="background:#f0f0f5;">
+        <th style="padding:10px;text-align:center;width:40px;">#</th>
+        <th style="padding:10px;text-align:left;">Description</th>
+        <th style="padding:10px;text-align:center;">Qty</th>
+        <th style="padding:10px;text-align:right;">Unit Price</th>
+        <th style="padding:10px;text-align:right;">Amount</th>
+      </tr></thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+    <table width="100%" style="font-size:14px;margin-top:12px;">
+      <tr><td></td><td style="text-align:right;padding:4px 10px;color:#666;">Subtotal:</td><td style="text-align:right;padding:4px 10px;width:100px;">$${subtotal.toFixed(2)}</td></tr>
+      <tr><td></td><td style="text-align:right;padding:4px 10px;color:#666;">HST (13%):</td><td style="text-align:right;padding:4px 10px;">$${hst.toFixed(2)}</td></tr>
+      <tr style="font-weight:bold;font-size:16px;"><td></td><td style="text-align:right;padding:8px 10px;border-top:2px solid #1a1a2e;">Total:</td><td style="text-align:right;padding:8px 10px;border-top:2px solid #1a1a2e;">$${total.toFixed(2)} CAD</td></tr>
+    </table>
+    ${notes ? `<div style="margin-top:20px;padding:12px;background:#f9f9f9;border-radius:6px;font-size:13px;color:#555;"><strong>Notes:</strong> ${notes}</div>` : ""}
+    <div style="margin-top:24px;padding:16px;background:#eef6ff;border-radius:6px;font-size:13px;">
+      <strong>Terms & Conditions:</strong><br>
+      • Prices quoted in Canadian Dollars (CAD)<br>
+      • Quote valid for 30 days from date of issue<br>
+      • Delivery charges apply based on location<br>
+      • Payment terms: Net 30 for approved accounts<br>
+      • To accept this quote, reply to this email or call us at (647) 521-0090
+    </div>
+  </div>
+  <div style="background:#f0f0f5;padding:16px 32px;text-align:center;font-size:11px;color:#888;">
+    © ${today.getFullYear()} Rebar.Shop — rebar.shop — All rights reserved
+  </div>
+</div></body></html>`;
+}
+
+async function sendQuoteEmailDirect(supabase: any, customerEmail: string, quoteNumber: string, quoteHtml: string): Promise<void> {
+  const clientId = Deno.env.get("GMAIL_CLIENT_ID");
+  const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+  const refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
+  if (!clientId || !clientSecret || !refreshToken) {
+    console.error("Gmail credentials not configured for quote email");
+    return;
+  }
+
+  // Get access token
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: "refresh_token" }),
+  });
+  if (!tokenRes.ok) { console.error("Failed to get Gmail access token:", await tokenRes.text()); return; }
+  const { access_token } = await tokenRes.json();
+
+  // Build raw email
+  const emailLines = [
+    "From: Rebar.Shop Sales <sales@rebar.shop>",
+    `To: ${customerEmail}`,
+    `Subject: Your Quotation ${quoteNumber} from Rebar.Shop`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    quoteHtml,
+  ];
+  const raw = btoa(unescape(encodeURIComponent(emailLines.join("\r\n")))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw }),
+  });
+  if (!sendRes.ok) { console.error("Gmail send failed:", await sendRes.text()); }
+  else { console.log("Quote email sent to", customerEmail); await sendRes.json(); }
+}
+
+async function createQuoteFollowUpTask(supabase: any, companyId: string, quoteNumber: string, customerName: string, customerEmail: string, quoteId?: string): Promise<void> {
+  const SAURABH_PROFILE_ID = "f919e8fa-4981-42f9-88c9-e1e425687522";
+  const SAURABH_USER_ID = "1a618127-a569-4134-b4cc-42da73a70399";
+
+  try {
+    await supabase.from("tasks").insert({
+      title: `Follow-up: Quote ${quoteNumber} for ${customerName}`,
+      description: `Quotation ${quoteNumber} has been emailed to ${customerEmail}. Follow up to close the deal.`,
+      status: "open", priority: "high", assigned_to: SAURABH_PROFILE_ID,
+      agent_type: "sales", source: "website_chat", source_ref: quoteId || null, company_id: companyId,
+    });
+  } catch (_e) { console.error("Failed to create follow-up task:", _e); }
+
+  try {
+    await supabase.from("notifications").insert({
+      user_id: SAURABH_USER_ID, type: "todo",
+      title: `New Quote Sent: ${quoteNumber}`,
+      description: `Quotation ${quoteNumber} emailed to ${customerName} (${customerEmail}). Please follow up.`,
+      link_to: "/tasks", agent_name: "JARVIS", status: "unread", priority: "high",
+    });
+  } catch (_e) { console.error("Failed to create notification:", _e); }
+}
 
 // ── Execute Widget Tools ──
 async function executeWidgetTool(supabase: any, toolName: string, args: any, companyId: string): Promise<string> {
@@ -283,14 +446,35 @@ async function executeWidgetTool(supabase: any, toolName: string, args: any, com
       }).select("id, quote_number").single();
       if (qrErr) throw qrErr;
 
-      try { await supabase.from("tasks").insert({
-        title: "Follow-up: Quote " + qn + " for " + args.customer_name,
-        description: "Quote " + qn + " prepared. Follow up to close the deal.",
-        status: "open", priority: "medium", assigned_to: SAURABH_PROFILE_ID,
-        agent_type: "sales", source: "website_chat", source_ref: qr.id, company_id: companyId,
-      }); } catch (_e) { /* best effort */ }
+      // Create follow-up task and notify
+      createQuoteFollowUpTask(supabase, companyId, qn, args.customer_name, args.customer_email, qr?.id).catch(e => console.error("Follow-up error:", e));
 
-      return JSON.stringify({ success: true, quote_number: qn, message: "Quote is being prepared and will be emailed." });
+      return JSON.stringify({ success: true, quote_number: qn, message: "Barlist received. A follow-up task has been created and our team will prepare your quotation and email it to you shortly." });
+    }
+
+    if (toolName === "generate_and_email_quote") {
+      const qn = "QR-" + Date.now().toString(36).toUpperCase();
+      
+      // Save quote request in DB
+      const { data: qr, error: qrErr } = await supabase.from("quote_requests").insert({
+        quote_number: qn, customer_name: args.customer_name, customer_email: args.customer_email,
+        project_name: args.project_name || "Quote Request", status: "sent",
+        source: "website_chat", company_id: companyId,
+        notes: args.notes || null,
+        items: args.items || [],
+      }).select("id, quote_number").single();
+      if (qrErr) throw qrErr;
+
+      // Generate HTML quote
+      const quoteHtml = generateQuoteHtml(qn, args.customer_name, args.items || [], args.notes);
+
+      // Send email directly via Gmail API
+      await sendQuoteEmailDirect(supabase, args.customer_email, qn, quoteHtml);
+
+      // Create follow-up task and notification
+      createQuoteFollowUpTask(supabase, companyId, qn, args.customer_name, args.customer_email, qr?.id).catch(e => console.error("Follow-up error:", e));
+
+      return JSON.stringify({ success: true, quote_number: qn, message: `Quotation ${qn} has been emailed to ${args.customer_email}. A follow-up task has been created for our sales team.` });
     }
 
     return JSON.stringify({ error: "Unknown tool: " + toolName });
@@ -339,6 +523,13 @@ async function triggerAiReply(supabase: any, convo: any, _visitorMessage: string
     "\n- If asked about ANY internal data: respond with 'I can only help with our products and services. How can I assist you?'" +
     "\n\nIMPORTANT: If the visitor asks to speak with a real person, respond warmly and let them know a team member will be with them shortly." +
     "\n\nCRITICAL - CONTACT INFO: Do NOT ask for contact details upfront. Help them first. When they want a quote or order, then ask for name and email." +
+    "\n\n## QUOTING INSTRUCTIONS:" +
+    "\nWhen a customer requests a price quote:" +
+    "\n1. Help them identify the products they need (rebar sizes, lengths, quantities)" +
+    "\n2. Ask for their name and email address" +
+    "\n3. Use the generate_and_email_quote tool to create and email a branded quotation" +
+    "\n4. The tool will automatically email the quote and create a follow-up task for the sales team" +
+    "\n5. Confirm to the customer that the quotation has been sent to their email" +
     "\n\n## Knowledge Base:\n" + (kbContext || "No articles.") +
     "\n\n## Company Knowledge:\n" + (knowledgeContext || "No entries.") +
     pageContext;
