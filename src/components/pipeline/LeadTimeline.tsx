@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SmartTextarea } from "@/components/ui/SmartTextarea";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -306,7 +306,7 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
               </SelectContent>
             </Select>
           </div>
-          <SmartTextarea
+          <Textarea
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             placeholder="Log activity details..."

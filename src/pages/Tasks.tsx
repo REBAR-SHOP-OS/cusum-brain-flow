@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { SmartTextarea } from "@/components/ui/SmartTextarea";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -1183,7 +1183,7 @@ export default function Tasks() {
                     <DialogTitle>Reopen with Issue</DialogTitle>
                     <DialogDescription>Describe what's wrong so the assignee can fix it with new evidence.</DialogDescription>
                   </DialogHeader>
-                  <SmartTextarea
+                  <Textarea
                     placeholder="Describe the issue or problem found..."
                     value={reopenReason}
                     onChange={e => setReopenReason(e.target.value)}
@@ -1332,7 +1332,7 @@ export default function Tasks() {
                       />
                     </div>
                     <div className="flex gap-2 items-end">
-                      <SmartTextarea
+                      <Textarea
                         value={newComment}
                         onChange={e => setNewComment(e.target.value)}
                         onPaste={handleCommentPaste}
