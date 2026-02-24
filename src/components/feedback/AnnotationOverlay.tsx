@@ -11,7 +11,6 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 const COLORS = ["#ef4444", "#3b82f6", "#eab308"] as const;
 const LINE_WIDTH = 8;
 
-const SATTAR_PROFILE_ID = "ee659c5c-20e1-4bf5-a01d-dedd886a4ad7";
 const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
 
 interface Props {
@@ -219,7 +218,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       const pagePath = window.location.pathname;
 
       // Create tasks for both assignees
-      for (const profileId of [SATTAR_PROFILE_ID, RADIN_PROFILE_ID]) {
+      for (const profileId of [RADIN_PROFILE_ID]) {
         const { error: taskErr } = await supabase.from("tasks").insert({
           title: `Feedback: ${
             description.trim().slice(0, 80) || "Screenshot annotation"
@@ -237,7 +236,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       }
 
       // Create notifications — translated to each recipient's preferred_language
-      for (const profileId of [SATTAR_PROFILE_ID, RADIN_PROFILE_ID]) {
+      for (const profileId of [RADIN_PROFILE_ID]) {
         const { data: targetProf } = await supabase
           .from("profiles")
           .select("user_id, preferred_language")
