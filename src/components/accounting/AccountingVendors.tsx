@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Store, Search, AlertTriangle, FileText, DollarSign, ChevronDown, Plus, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/utils";
 import type { useQuickBooksData, QBVendor, QBBill } from "@/hooks/useQuickBooksData";
 import { VendorDetail } from "./VendorDetail";
 import { AddVendorDialog } from "./AddVendorDialog";
@@ -51,7 +52,7 @@ export function AccountingVendors({ data }: Props) {
       toast({ title: "Vendor data synced", description: `${totalSynced} transaction records synced from QuickBooks` });
       data.loadAll();
     } catch (err) {
-      toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+      toast({ title: "Sync failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSyncing(false);
     }

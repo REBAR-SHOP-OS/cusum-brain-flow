@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
@@ -51,7 +52,7 @@ export function AddVendorDialog({ open, onOpenChange, onSuccess }: Props) {
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
-      toast({ title: "Failed to create supplier", description: String(err), variant: "destructive" });
+      toast({ title: "Failed to create supplier", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSaving(false);
     }

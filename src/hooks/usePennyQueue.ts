@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/utils";
 
 export interface PennyQueueItem {
   id: string;
@@ -94,7 +95,7 @@ export function usePennyQueue() {
       toast({ title: "✅ Action approved & executing" });
       await load();
     } catch (err) {
-      toast({ title: "Approval failed", description: String(err), variant: "destructive" });
+      toast({ title: "Approval failed", description: getErrorMessage(err), variant: "destructive" });
     }
   }, [toast]);
 
@@ -111,7 +112,7 @@ export function usePennyQueue() {
       toast({ title: "Action dismissed" });
       await load();
     } catch (err) {
-      toast({ title: "Reject failed", description: String(err), variant: "destructive" });
+      toast({ title: "Reject failed", description: getErrorMessage(err), variant: "destructive" });
     }
   }, [toast]);
 
@@ -125,7 +126,7 @@ export function usePennyQueue() {
       toast({ title: "📅 Follow-up scheduled", description: followupDate });
       await load();
     } catch (err) {
-      toast({ title: "Schedule failed", description: String(err), variant: "destructive" });
+      toast({ title: "Schedule failed", description: getErrorMessage(err), variant: "destructive" });
     }
   }, [toast]);
 
@@ -138,7 +139,7 @@ export function usePennyQueue() {
       if (error) throw error;
       toast({ title: "👤 Action assigned" });
     } catch (err) {
-      toast({ title: "Assign failed", description: String(err), variant: "destructive" });
+      toast({ title: "Assign failed", description: getErrorMessage(err), variant: "destructive" });
     }
   }, [toast]);
 
@@ -150,7 +151,7 @@ export function usePennyQueue() {
       if (error) throw error;
       toast({ title: "🤖 Penny scanned invoices", description: `${data?.queued || 0} new actions queued` });
     } catch (err) {
-      toast({ title: "Auto-scan failed", description: String(err), variant: "destructive" });
+      toast({ title: "Auto-scan failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setScanning(false);
     }

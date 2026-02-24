@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { reportToVizzy } from "@/lib/vizzyAutoReport";
+import { getErrorMessage } from "@/lib/utils";
 
 // ─── QB Interfaces ─────────────────────────────────────────────────
 
@@ -493,7 +494,7 @@ export function useQuickBooksData() {
       }
     } catch (err) {
       console.error("QB load error:", err);
-      const errMsg = String(err);
+      const errMsg = getErrorMessage(err);
       setError(errMsg);
       toast({ title: "Error loading data", description: errMsg, variant: "destructive" });
       reportToVizzy(`QuickBooks data load failed: ${errMsg}`, "Accounting — useQuickBooksData.loadAll");
@@ -509,7 +510,7 @@ export function useQuickBooksData() {
       toast({ title: `✅ Synced ${entity}`, description: `${data.synced || 0} records updated` });
       await loadAll();
     } catch (err) {
-      toast({ title: `Sync failed`, description: String(err), variant: "destructive" });
+      toast({ title: `Sync failed`, description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSyncing(null);
     }
@@ -562,7 +563,7 @@ export function useQuickBooksData() {
       await loadAll();
       return data;
     } catch (err) {
-      reportToVizzy(`Payroll correction failed: ${String(err)}`, "Accounting — createPayrollCorrection");
+      reportToVizzy(`Payroll correction failed: ${getErrorMessage(err)}`, "Accounting — createPayrollCorrection");
       throw err;
     }
   }, [qbAction, toast, loadAll]);
@@ -576,7 +577,7 @@ export function useQuickBooksData() {
       await loadAll();
       return data;
     } catch (err) {
-      toast({ title: "Full sync failed", description: String(err), variant: "destructive" });
+      toast({ title: "Full sync failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSyncing(null);
     }
@@ -590,7 +591,7 @@ export function useQuickBooksData() {
       await loadAll();
       return data;
     } catch (err) {
-      toast({ title: "Incremental sync failed", description: String(err), variant: "destructive" });
+      toast({ title: "Incremental sync failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSyncing(null);
     }
@@ -626,7 +627,7 @@ export function useQuickBooksData() {
       });
       return data;
     } catch (err) {
-      toast({ title: "Reconciliation failed", description: String(err), variant: "destructive" });
+      toast({ title: "Reconciliation failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSyncing(null);
     }

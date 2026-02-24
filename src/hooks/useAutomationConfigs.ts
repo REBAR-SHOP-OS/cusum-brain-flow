@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/utils";
 
 export interface AutomationConfig {
   id: string;
@@ -79,7 +80,7 @@ export function useAutomationConfigs() {
       toast({ title: enabled ? "✅ Automation enabled" : "⏸️ Automation paused" });
     },
     onError: (err) => {
-      toast({ title: "Failed to toggle", description: String(err), variant: "destructive" });
+      toast({ title: "Failed to toggle", description: getErrorMessage(err), variant: "destructive" });
     },
   });
 
@@ -104,7 +105,7 @@ export function useAutomationConfigs() {
       toast({ title: "🚀 Automation triggered", description: JSON.stringify(data) });
     },
     onError: (err) => {
-      toast({ title: "Trigger failed", description: String(err), variant: "destructive" });
+      toast({ title: "Trigger failed", description: getErrorMessage(err), variant: "destructive" });
     },
   });
 
