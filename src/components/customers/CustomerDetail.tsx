@@ -379,7 +379,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
     v != null ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
       {/* ── Header ── */}
       <div className="px-6 py-5 border-b border-border space-y-4">
         {/* Top: avatar + name + actions */}
@@ -426,27 +426,6 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                 <DropdownMenuItem onClick={() => openTxnDialog("CreditMemo")}>Credit memo</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Customer</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to permanently delete <strong>{customer.name}</strong>? This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
           </div>
         </div>
 
@@ -949,6 +928,30 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           onClose={() => setPreviewInvoice(null)}
         />
       )}
+      {/* ── Delete Button (bottom-right) ── */}
+      <div className="absolute bottom-4 right-4">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" size="sm">
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to permanently delete <strong>{customer.name}</strong>? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </div>
   );
 }
