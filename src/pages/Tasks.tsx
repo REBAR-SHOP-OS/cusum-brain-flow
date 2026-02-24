@@ -642,7 +642,7 @@ export default function Tasks() {
       toast.success("Task created");
       setCreateForEmployee(null);
       setNewTitle(""); setNewDesc(""); setNewDueDate(""); setNewPriority("medium"); setPendingFiles([]);
-      loadData();
+      await loadData();
     } catch (err: any) { toast.error(err.message); }
     finally { setCreating(false); setUploadingFiles(false); }
   };
