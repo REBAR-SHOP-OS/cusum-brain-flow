@@ -182,9 +182,10 @@ export default function Deliveries() {
     d.scheduled_date?.startsWith(today)
   );
   
-  const upcomingDeliveries = filteredDeliveries.filter(d => 
-    d.scheduled_date && d.scheduled_date > today
-  );
+  const upcomingDeliveries = filteredDeliveries.filter(d => {
+    const dateOnly = d.scheduled_date?.split("T")[0];
+    return dateOnly && dateOnly > today;
+  });
   
   const completedDeliveries = filteredDeliveries.filter(d => 
     d.status === "completed" || d.status === "delivered"
