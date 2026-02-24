@@ -133,6 +133,7 @@ export function CreateTransactionDialog({
 
   // Payment-specific state
   const [paymentMethodValue, setPaymentMethodValue] = useState("");
+  const [txnDate, setTxnDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [outstandingFilter, setOutstandingFilter] = useState<"all" | "Invoice" | "CreditMemo">("all");
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>({}); // qbId -> applied amount
 
@@ -303,6 +304,7 @@ export function CreateTransactionDialog({
       if (type === "Payment") {
         body.totalAmount = paymentAmount;
         if (paymentMethodValue) body.paymentMethod = paymentMethodValue;
+        if (txnDate) body.txnDate = txnDate;
 
         // Build invoiceLines from selected outstanding items
         const invoiceLines = Object.entries(selectedItems)
@@ -370,6 +372,7 @@ export function CreateTransactionDialog({
       setSalesRep("");
       setDetailsOpen(false);
       setPaymentMethodValue("");
+      setTxnDate(new Date().toISOString().slice(0, 10));
       setOutstandingFilter("all");
       setSelectedItems({});
     } catch (err: any) {
@@ -413,7 +416,16 @@ export function CreateTransactionDialog({
                       <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
                     ))}
                   </SelectContent>
-                </Select>
+              </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Date of Payment</Label>
+                <Input
+                  type="date"
+                  value={txnDate}
+                  onChange={(e) => setTxnDate(e.target.value)}
+                />
               </div>
 
               <div className="space-y-1.5">
