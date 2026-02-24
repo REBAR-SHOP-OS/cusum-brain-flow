@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { callAI } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
@@ -8,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -21,36 +20,25 @@ serve(async (req) => {
     const url = new URL(req.url);
     const action = url.searchParams.get("action") || "send";
 
-    if (action === "widget.js") {
-      return handleWidgetJs(url, supabase, supabaseUrl);
-    }
-    if (action === "start") {
-      return handleStart(req, supabase);
-    }
-    if (action === "send") {
-      return handleSend(req, supabase);
-    }
-    if (action === "poll") {
-      return handlePoll(url, supabase);
-    }
-    if (action === "heartbeat") {
-      return handleHeartbeat(req, supabase);
-    }
+    if (action === "widget.js") return handleWidgetJs(url, supabase, supabaseUrl);
+    if (action === "start") return handleStart(req, supabase);
+    if (action === "send") return handleSend(req, supabase);
+    if (action === "poll") return handlePoll(url, supabase);
+    if (action === "heartbeat") return handleHeartbeat(req, supabase);
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Internal error";
     console.error("support-chat error:", err);
-    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
 
-// ── IP Geolocation (called once on start) ──
+// ── IP Geolocation ──
 async function resolveGeo(ip: string): Promise<{ city: string; country: string } | null> {
   if (!ip || ip === "unknown" || ip === "127.0.0.1") return null;
   try {
@@ -58,9 +46,7 @@ async function resolveGeo(ip: string): Promise<{ city: string; country: string }
     if (!res.ok) return null;
     const data = await res.json();
     return data.city ? { city: data.city, country: data.countryCode || data.country } : null;
-  } catch (_e) {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function getClientIp(req: Request): string {
@@ -71,26 +57,17 @@ function getClientIp(req: Request): string {
 // ── Widget JS ──
 async function handleWidgetJs(url: URL, supabase: any, supabaseUrl: string) {
   const widgetKey = url.searchParams.get("key");
-  if (!widgetKey) {
-    return new Response("Missing key", { status: 400, headers: corsHeaders });
-  }
+  if (!widgetKey) return new Response("Missing key", { status: 400, headers: corsHeaders });
 
   const { data: config } = await supabase
-    .from("support_widget_configs")
-    .select("*")
-    .eq("widget_key", widgetKey)
-    .eq("enabled", true)
-    .single();
+    .from("support_widget_configs").select("*")
+    .eq("widget_key", widgetKey).eq("enabled", true).single();
 
-  if (!config) {
-    return new Response("// Widget not found or disabled", {
-      status: 404,
-      headers: { ...corsHeaders, "Content-Type": "application/javascript" },
-    });
-  }
+  if (!config) return new Response("// Widget not found or disabled", {
+    status: 404, headers: { ...corsHeaders, "Content-Type": "application/javascript" },
+  });
 
-  const widgetJs = generateWidgetJs(config, supabaseUrl);
-  return new Response(widgetJs, {
+  return new Response(generateWidgetJs(config, supabaseUrl), {
     headers: { ...corsHeaders, "Content-Type": "application/javascript", "Cache-Control": "public, max-age=300" },
   });
 }
@@ -100,58 +77,38 @@ async function handleStart(req: Request, supabase: any) {
   const { widget_key, visitor_name, visitor_email, current_page } = await req.json();
 
   const { data: config } = await supabase
-    .from("support_widget_configs")
-    .select("id, company_id")
-    .eq("widget_key", widget_key)
-    .eq("enabled", true)
-    .single();
+    .from("support_widget_configs").select("id, company_id")
+    .eq("widget_key", widget_key).eq("enabled", true).single();
 
-  if (!config) {
-    return new Response(JSON.stringify({ error: "Widget not found" }), {
-      status: 404,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!config) return new Response(JSON.stringify({ error: "Widget not found" }), {
+    status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
   const ip = getClientIp(req);
   const geo = await resolveGeo(ip);
-
-  const metadata: Record<string, any> = {
-    current_page: current_page || null,
-    last_seen_at: new Date().toISOString(),
-  };
-  if (geo) {
-    metadata.city = geo.city;
-    metadata.country = geo.country;
-  }
+  const metadata: Record<string, any> = { current_page: current_page || null, last_seen_at: new Date().toISOString() };
+  if (geo) { metadata.city = geo.city; metadata.country = geo.country; }
 
   const { data: convo, error } = await supabase
-    .from("support_conversations")
-    .insert({
-      company_id: config.company_id,
-      widget_config_id: config.id,
+    .from("support_conversations").insert({
+      company_id: config.company_id, widget_config_id: config.id,
       visitor_name: visitor_name?.slice(0, 100) || "Visitor",
       visitor_email: visitor_email?.slice(0, 255) || null,
-      status: "open",
-      metadata,
-    })
-    .select("id, visitor_token")
-    .single();
-
+      status: "open", metadata,
+    }).select("id, visitor_token").single();
   if (error) throw error;
 
-  await supabase.from("support_messages").insert({
-    conversation_id: convo.id,
-    sender_type: "system",
-    content: "Conversation started",
-    content_type: "system",
-  });
+  // System message (hidden from widget display)
+  try {
+    await supabase.from("support_messages").insert({
+      conversation_id: convo.id, sender_type: "system", content: "Conversation started", content_type: "system",
+    });
+  } catch (_e) { /* best effort */ }
 
-  triggerProactiveGreeting(supabase, convo.id, config.company_id, config.id, metadata).catch((e: any) =>
+  triggerProactiveGreeting(supabase, convo.id, config.company_id, config.id, metadata).catch((e: unknown) =>
     console.error("Proactive greeting error:", e)
   );
-
-  notifySalesTeam(supabase, config.company_id, visitor_name || "Visitor", metadata).catch((e: any) =>
+  notifySalesTeam(supabase, config.company_id, visitor_name || "Visitor", metadata).catch((e: unknown) =>
     console.error("Sales notification error:", e)
   );
 
@@ -163,105 +120,54 @@ async function handleStart(req: Request, supabase: any) {
 // ── Heartbeat ──
 async function handleHeartbeat(req: Request, supabase: any) {
   const { conversation_id, visitor_token, current_page } = await req.json();
-
-  if (!conversation_id || !visitor_token) {
-    return new Response(JSON.stringify({ error: "Missing fields" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!conversation_id || !visitor_token) return new Response(JSON.stringify({ error: "Missing fields" }), {
+    status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
   const { data: convo } = await supabase
-    .from("support_conversations")
-    .select("id, metadata")
-    .eq("id", conversation_id)
-    .eq("visitor_token", visitor_token)
-    .single();
-
-  if (!convo) {
-    return new Response(JSON.stringify({ error: "Invalid" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+    .from("support_conversations").select("id, metadata")
+    .eq("id", conversation_id).eq("visitor_token", visitor_token).single();
+  if (!convo) return new Response(JSON.stringify({ error: "Invalid" }), {
+    status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
   const existingMeta = (convo.metadata && typeof convo.metadata === "object") ? convo.metadata : {};
-  const updatedMeta = {
-    ...existingMeta,
-    current_page: current_page || existingMeta.current_page,
-    last_seen_at: new Date().toISOString(),
-  };
+  await supabase.from("support_conversations").update({
+    metadata: { ...existingMeta, current_page: current_page || existingMeta.current_page, last_seen_at: new Date().toISOString() },
+  }).eq("id", conversation_id);
 
-  await supabase
-    .from("support_conversations")
-    .update({ metadata: updatedMeta })
-    .eq("id", conversation_id);
-
-  return new Response(JSON.stringify({ ok: true }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
 // ── Send Message (visitor) ──
 async function handleSend(req: Request, supabase: any) {
   const { conversation_id, content, visitor_token, current_page } = await req.json();
-
-  if (!conversation_id || !content || !visitor_token) {
-    return new Response(JSON.stringify({ error: "Missing fields" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!conversation_id || !content || !visitor_token) return new Response(JSON.stringify({ error: "Missing fields" }), {
+    status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
   const { data: convo } = await supabase
-    .from("support_conversations")
-    .select("id, status, company_id, widget_config_id, metadata")
-    .eq("id", conversation_id)
-    .eq("visitor_token", visitor_token)
-    .single();
-
-  if (!convo) {
-    return new Response(JSON.stringify({ error: "Invalid conversation" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+    .from("support_conversations").select("id, status, company_id, widget_config_id, metadata")
+    .eq("id", conversation_id).eq("visitor_token", visitor_token).single();
+  if (!convo) return new Response(JSON.stringify({ error: "Invalid conversation" }), {
+    status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
   const sanitizedContent = content.slice(0, 5000).trim();
-  if (!sanitizedContent) {
-    return new Response(JSON.stringify({ error: "Empty message" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!sanitizedContent) return new Response(JSON.stringify({ error: "Empty message" }), {
+    status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
-  const { data: msg, error } = await supabase
-    .from("support_messages")
-    .insert({
-      conversation_id,
-      sender_type: "visitor",
-      content: sanitizedContent,
-    })
-    .select("id, created_at")
-    .single();
-
+  const { data: msg, error } = await supabase.from("support_messages").insert({
+    conversation_id, sender_type: "visitor", content: sanitizedContent,
+  }).select("id, created_at").single();
   if (error) throw error;
 
   const existingMeta = (convo.metadata && typeof convo.metadata === "object") ? convo.metadata : {};
-  const updatedMeta = {
-    ...existingMeta,
-    current_page: current_page || existingMeta.current_page,
-    last_seen_at: new Date().toISOString(),
-  };
+  const updatedMeta = { ...existingMeta, current_page: current_page || existingMeta.current_page, last_seen_at: new Date().toISOString() };
+  await supabase.from("support_conversations").update({ last_message_at: new Date().toISOString(), metadata: updatedMeta }).eq("id", conversation_id);
 
-  await supabase
-    .from("support_conversations")
-    .update({ last_message_at: new Date().toISOString(), metadata: updatedMeta })
-    .eq("id", conversation_id);
-
-  triggerAiReply(supabase, convo, sanitizedContent, updatedMeta).catch((e: any) =>
-    console.error("AI reply error:", e)
-  );
+  triggerAiReply(supabase, convo, sanitizedContent, updatedMeta).catch((e: unknown) => console.error("AI reply error:", e));
 
   return new Response(JSON.stringify({ message_id: msg.id, created_at: msg.created_at }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -273,36 +179,21 @@ async function handlePoll(url: URL, supabase: any) {
   const conversationId = url.searchParams.get("conversation_id");
   const visitorToken = url.searchParams.get("visitor_token");
   const after = url.searchParams.get("after") || "1970-01-01T00:00:00Z";
-
-  if (!conversationId || !visitorToken) {
-    return new Response(JSON.stringify({ error: "Missing params" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!conversationId || !visitorToken) return new Response(JSON.stringify({ error: "Missing params" }), {
+    status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
   const { data: convo } = await supabase
-    .from("support_conversations")
-    .select("id")
-    .eq("id", conversationId)
-    .eq("visitor_token", visitorToken)
-    .single();
-
-  if (!convo) {
-    return new Response(JSON.stringify({ error: "Invalid" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+    .from("support_conversations").select("id")
+    .eq("id", conversationId).eq("visitor_token", visitorToken).single();
+  if (!convo) return new Response(JSON.stringify({ error: "Invalid" }), {
+    status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
   const { data: messages } = await supabase
-    .from("support_messages")
-    .select("id, sender_type, content, content_type, created_at")
-    .eq("conversation_id", conversationId)
-    .eq("is_internal_note", false)
-    .gt("created_at", after)
-    .order("created_at", { ascending: true })
-    .limit(50);
+    .from("support_messages").select("id, sender_type, content, content_type, created_at")
+    .eq("conversation_id", conversationId).eq("is_internal_note", false)
+    .gt("created_at", after).order("created_at", { ascending: true }).limit(50);
 
   return new Response(JSON.stringify({ messages: messages || [] }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -319,9 +210,9 @@ const WIDGET_TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          customer_name: { type: "string", description: "Customer's name" },
-          customer_email: { type: "string", description: "Customer's email address" },
-          project_name: { type: "string", description: "Name or description of the project" },
+          customer_name: { type: "string", description: "Customer name" },
+          customer_email: { type: "string", description: "Customer email" },
+          project_name: { type: "string", description: "Project name" },
         },
         required: ["customer_name", "customer_email"],
       },
@@ -331,14 +222,14 @@ const WIDGET_TOOLS = [
     type: "function" as const,
     function: {
       name: "submit_barlist_for_quote",
-      description: "Submit a barlist/BBS for automated quoting when customer has ready data.",
+      description: "Submit a barlist/BBS for automated quoting.",
       parameters: {
         type: "object",
         properties: {
-          customer_name: { type: "string", description: "Customer's name" },
-          customer_email: { type: "string", description: "Customer's email address" },
+          customer_name: { type: "string", description: "Customer name" },
+          customer_email: { type: "string", description: "Customer email" },
           project_name: { type: "string", description: "Project name" },
-          bar_details: { type: "string", description: "The barlist/BBS details" },
+          bar_details: { type: "string", description: "Barlist/BBS details" },
         },
         required: ["customer_name", "customer_email", "bar_details"],
       },
@@ -349,138 +240,103 @@ const WIDGET_TOOLS = [
 // ── Execute Widget Tools ──
 async function executeWidgetTool(supabase: any, toolName: string, args: any, companyId: string): Promise<string> {
   const SAURABH_PROFILE_ID = "f919e8fa-4981-42f9-88c9-e1e425687522";
-
   try {
     if (toolName === "create_estimation_task") {
-      const quoteNumber = "QR-EST-" + Date.now().toString(36).toUpperCase();
+      const qn = "QR-EST-" + Date.now().toString(36).toUpperCase();
       const { data: qr, error: qrErr } = await supabase.from("quote_requests").insert({
-        quote_number: quoteNumber,
-        customer_name: args.customer_name,
-        customer_email: args.customer_email,
-        project_name: args.project_name || "Estimation Request",
-        status: "estimation_pending",
-        source: "website_chat",
-        company_id: companyId,
+        quote_number: qn, customer_name: args.customer_name, customer_email: args.customer_email,
+        project_name: args.project_name || "Estimation Request", status: "estimation_pending",
+        source: "website_chat", company_id: companyId,
         notes: "Customer wants to submit drawings for estimation via website chat.",
       }).select("id, quote_number").single();
-
       if (qrErr) throw qrErr;
 
-      await supabase.from("tasks").insert({
+      try { await supabase.from("tasks").insert({
         title: "Estimation: " + args.customer_name + " - " + (args.project_name || "New Project"),
-        description: "Customer wants to submit drawings.\nEmail: " + args.customer_email + "\nQuote: " + quoteNumber,
-        status: "open",
-        priority: "high",
-        assigned_to: SAURABH_PROFILE_ID,
-        agent_type: "estimation",
-        source: "website_chat",
-        source_ref: qr.id,
-        company_id: companyId,
-      });
+        description: "Customer wants to submit drawings.\nEmail: " + args.customer_email + "\nQuote: " + qn,
+        status: "open", priority: "high", assigned_to: SAURABH_PROFILE_ID,
+        agent_type: "estimation", source: "website_chat", source_ref: qr.id, company_id: companyId,
+      }); } catch (_e) { /* best effort */ }
 
-      const { data: saurabh } = await supabase.from("profiles").select("user_id").eq("id", SAURABH_PROFILE_ID).single();
-      if (saurabh?.user_id) {
-        await supabase.from("notifications").insert({
-          user_id: saurabh.user_id,
-          type: "todo",
-          title: "New Estimation: " + args.customer_name,
-          description: "Customer " + args.customer_name + " wants to submit drawings. Email: " + args.customer_email,
-          link_to: "/pipeline",
-          agent_name: "JARVIS",
-          status: "unread",
-          priority: "high",
-        });
-      }
+      try {
+        const { data: saurabh } = await supabase.from("profiles").select("user_id").eq("id", SAURABH_PROFILE_ID).single();
+        if (saurabh?.user_id) {
+          await supabase.from("notifications").insert({
+            user_id: saurabh.user_id, type: "todo", title: "New Estimation: " + args.customer_name,
+            description: "Customer " + args.customer_name + " wants to submit drawings. Email: " + args.customer_email,
+            link_to: "/pipeline", agent_name: "JARVIS", status: "unread", priority: "high",
+          });
+        }
+      } catch (_e) { /* best effort */ }
 
-      return JSON.stringify({ success: true, quote_number: quoteNumber, message: "Estimation task created. Customer should email drawings to sales@rebar.shop." });
+      return JSON.stringify({ success: true, quote_number: qn, message: "Estimation task created. Customer should email drawings to sales@rebar.shop." });
     }
 
     if (toolName === "submit_barlist_for_quote") {
-      const quoteNumber = "QR-BL-" + Date.now().toString(36).toUpperCase();
+      const qn = "QR-BL-" + Date.now().toString(36).toUpperCase();
       const { data: qr, error: qrErr } = await supabase.from("quote_requests").insert({
-        quote_number: quoteNumber,
-        customer_name: args.customer_name,
-        customer_email: args.customer_email,
-        project_name: args.project_name || "Barlist Quote",
-        status: "new",
-        source: "website_chat",
-        company_id: companyId,
+        quote_number: qn, customer_name: args.customer_name, customer_email: args.customer_email,
+        project_name: args.project_name || "Barlist Quote", status: "new",
+        source: "website_chat", company_id: companyId,
         notes: "Barlist from chat:\n" + args.bar_details,
         items: [{ type: "barlist_raw", details: args.bar_details }],
       }).select("id, quote_number").single();
-
       if (qrErr) throw qrErr;
 
-      await supabase.from("tasks").insert({
-        title: "Follow-up: Quote " + quoteNumber + " for " + args.customer_name,
-        description: "Quote " + quoteNumber + " prepared. Follow up to close the deal.",
-        status: "open",
-        priority: "medium",
-        assigned_to: SAURABH_PROFILE_ID,
-        agent_type: "sales",
-        source: "website_chat",
-        source_ref: qr.id,
-        company_id: companyId,
-      });
+      try { await supabase.from("tasks").insert({
+        title: "Follow-up: Quote " + qn + " for " + args.customer_name,
+        description: "Quote " + qn + " prepared. Follow up to close the deal.",
+        status: "open", priority: "medium", assigned_to: SAURABH_PROFILE_ID,
+        agent_type: "sales", source: "website_chat", source_ref: qr.id, company_id: companyId,
+      }); } catch (_e) { /* best effort */ }
 
-      return JSON.stringify({ success: true, quote_number: quoteNumber, message: "Quote is being prepared and will be emailed." });
+      return JSON.stringify({ success: true, quote_number: qn, message: "Quote is being prepared and will be emailed." });
     }
 
     return JSON.stringify({ error: "Unknown tool: " + toolName });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Tool execution failed";
     console.error("Tool " + toolName + " error:", err);
-    return JSON.stringify({ error: err.message || "Tool execution failed" });
+    return JSON.stringify({ error: msg });
   }
 }
 
 // ── AI Auto-Reply ──
-async function triggerAiReply(supabase: any, convo: any, visitorMessage: string, metadata?: any) {
+async function triggerAiReply(supabase: any, convo: any, _visitorMessage: string, metadata?: any) {
   const { data: widgetConfig } = await supabase
-    .from("support_widget_configs")
-    .select("ai_enabled, ai_system_prompt, company_id")
-    .eq("id", convo.widget_config_id)
-    .single();
-
+    .from("support_widget_configs").select("ai_enabled, ai_system_prompt, company_id")
+    .eq("id", convo.widget_config_id).single();
   if (!widgetConfig?.ai_enabled) return;
 
   const { data: articles } = await supabase
-    .from("kb_articles")
-    .select("title, content, excerpt")
-    .eq("company_id", widgetConfig.company_id)
-    .eq("is_published", true)
-    .limit(20);
+    .from("kb_articles").select("title, content, excerpt")
+    .eq("company_id", widgetConfig.company_id).eq("is_published", true).limit(20);
 
-  const allowedKbCategories = ["webpage", "company-playbook", "document", "research"];
   const { data: knowledgeEntries } = await supabase
-    .from("knowledge")
-    .select("title, content, category")
+    .from("knowledge").select("title, content, category")
     .eq("company_id", widgetConfig.company_id)
-    .in("category", allowedKbCategories)
-    .order("updated_at", { ascending: false })
-    .limit(10);
+    .in("category", ["webpage", "company-playbook", "document", "research"])
+    .order("updated_at", { ascending: false }).limit(10);
 
-  const kbContext = (articles || [])
-    .map((a: any) => "## " + a.title + "\n" + (a.excerpt || "") + "\n" + a.content)
-    .join("\n\n---\n\n");
-
-  const knowledgeContext = (knowledgeEntries || [])
-    .map((k: any) => "## " + k.title + " [" + k.category + "]\n" + ((k.content || "").slice(0, 500)))
-    .join("\n\n---\n\n");
+  const kbContext = (articles || []).map((a: any) => "## " + a.title + "\n" + (a.excerpt || "") + "\n" + a.content).join("\n\n---\n\n");
+  const knowledgeContext = (knowledgeEntries || []).map((k: any) => "## " + k.title + " [" + k.category + "]\n" + ((k.content || "").slice(0, 500))).join("\n\n---\n\n");
 
   const { data: history } = await supabase
-    .from("support_messages")
-    .select("sender_type, content")
-    .eq("conversation_id", convo.id)
-    .eq("is_internal_note", false)
-    .neq("content_type", "system")
-    .order("created_at", { ascending: true })
-    .limit(20);
+    .from("support_messages").select("sender_type, content")
+    .eq("conversation_id", convo.id).eq("is_internal_note", false)
+    .neq("content_type", "system").order("created_at", { ascending: true }).limit(20);
 
   const currentPage = metadata?.current_page;
   const pageContext = currentPage ? "\n\n[Visitor is currently viewing: " + currentPage + "]" : "";
 
   const systemPrompt = (widgetConfig.ai_system_prompt || "You are a helpful support assistant.") +
-    "\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans." +
+    "\n\n## CRITICAL SECURITY RULES (ABSOLUTE - NO EXCEPTIONS)" +
+    "\n- NEVER share: accounting data, invoices, AR/AP, bank balances, profit margins, revenue figures" +
+    "\n- NEVER share: pipeline data, CRM data, lead info, sales figures, conversion rates" +
+    "\n- NEVER share: employee salaries, internal notes, operational data, meeting notes" +
+    "\n- NEVER share: database structure, API keys, system internals, strategic plans" +
+    "\n- ONLY discuss: products, services, delivery, rebar sizes, quotes, and general company info" +
+    "\n- If asked about ANY internal data: respond with 'I can only help with our products and services. How can I assist you?'" +
     "\n\nIMPORTANT: If the visitor asks to speak with a real person, respond warmly and let them know a team member will be with them shortly." +
     "\n\nCRITICAL - CONTACT INFO: Do NOT ask for contact details upfront. Help them first. When they want a quote or order, then ask for name and email." +
     "\n\n## Knowledge Base:\n" + (kbContext || "No articles.") +
@@ -498,48 +354,28 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
   let reply: string | undefined;
   try {
     let result = await callAI({
-      provider: "gemini",
-      model: "gemini-2.5-flash",
-      messages,
-      tools: WIDGET_TOOLS,
+      provider: "gemini", model: "gemini-2.5-flash", messages, tools: WIDGET_TOOLS,
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
 
     let iterations = 0;
     while (result.toolCalls && result.toolCalls.length > 0 && iterations < 3) {
       iterations++;
-
-      messages.push({
-        role: "assistant",
-        content: result.content || "",
-        tool_calls: result.toolCalls,
-      });
+      messages.push({ role: "assistant", content: result.content || "", tool_calls: result.toolCalls });
 
       for (const tc of result.toolCalls) {
         const fnName = tc.function?.name;
         let fnArgs: any = {};
-        try {
-          fnArgs = JSON.parse(tc.function?.arguments || "{}");
-        } catch (_e) { /* ignore */ }
-
+        try { fnArgs = JSON.parse(tc.function?.arguments || "{}"); } catch { /* ignore */ }
         const toolResult = await executeWidgetTool(supabase, fnName, fnArgs, widgetConfig.company_id);
-
-        messages.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          content: toolResult,
-        });
+        messages.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
       }
 
       result = await callAI({
-        provider: "gemini",
-        model: "gemini-2.5-flash",
-        messages,
-        tools: WIDGET_TOOLS,
+        provider: "gemini", model: "gemini-2.5-flash", messages, tools: WIDGET_TOOLS,
         fallback: { provider: "gemini", model: "gemini-2.5-flash" },
       });
     }
-
     reply = result.content;
   } catch (aiErr) {
     console.error("AI reply error:", aiErr);
@@ -547,60 +383,51 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
   }
 
   if (!reply) return;
-
-  await supabase.from("support_messages").insert({
-    conversation_id: convo.id,
-    sender_type: "bot",
-    content: reply.slice(0, 5000),
-  });
+  try {
+    await supabase.from("support_messages").insert({
+      conversation_id: convo.id, sender_type: "bot", content: reply.slice(0, 5000),
+    });
+  } catch (_e) { /* best effort */ }
 }
 
 // ── Proactive AI Greeting ──
 async function triggerProactiveGreeting(supabase: any, conversationId: string, companyId: string, widgetConfigId: string, metadata: any) {
   const { data: widgetConfig } = await supabase
-    .from("support_widget_configs")
-    .select("ai_enabled, ai_system_prompt")
-    .eq("id", widgetConfigId)
-    .single();
-
+    .from("support_widget_configs").select("ai_enabled, ai_system_prompt")
+    .eq("id", widgetConfigId).single();
   if (!widgetConfig?.ai_enabled) return;
 
   const currentPage = metadata?.current_page || "";
   const city = metadata?.city || "";
 
-  const greetingPrompt = "You are a friendly support assistant. A new visitor just opened the chat widget." +
+  const greetingPrompt = "You are JARVIS, the friendly support assistant for Rebar Shop (rebar.shop)." +
+    " A new visitor just opened the chat widget." +
     (currentPage ? " They are currently viewing: " + currentPage : "") +
     (city ? " They appear to be from " + city + "." : "") +
-    "\n\nGenerate a warm, contextual welcome message (2-3 sentences max). Be specific based on their page context.";
+    "\n\nGenerate a warm, contextual welcome message (2-3 sentences max). Be specific based on their page context." +
+    "\nONLY discuss products, services, and quotes. NEVER share internal company data, financials, or employee info.";
 
   let reply: string | undefined;
   try {
     const result = await callAI({
-      provider: "gemini",
-      model: "gemini-2.5-flash",
+      provider: "gemini", model: "gemini-2.5-flash",
       messages: [{ role: "user", content: greetingPrompt }],
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
     reply = result.content;
-  } catch (_e) {
-    return;
-  }
+  } catch { return; }
   if (!reply) return;
 
-  await supabase.from("support_messages").insert({
-    conversation_id: conversationId,
-    sender_type: "bot",
-    content: reply.slice(0, 2000),
-  });
+  try {
+    await supabase.from("support_messages").insert({
+      conversation_id: conversationId, sender_type: "bot", content: reply.slice(0, 2000),
+    });
+  } catch (_e) { /* best effort */ }
 }
 
 // ── Notify Sales Team ──
 async function notifySalesTeam(supabase: any, companyId: string, visitorName: string, metadata: any) {
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("user_id")
-    .eq("company_id", companyId);
-
+  const { data: profiles } = await supabase.from("profiles").select("user_id").eq("company_id", companyId);
   if (!profiles || profiles.length === 0) return;
 
   const city = metadata?.city || "Unknown location";
@@ -608,138 +435,118 @@ async function notifySalesTeam(supabase: any, companyId: string, visitorName: st
   const pageName = page.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || "/";
 
   const notifications = profiles.map((p: any) => ({
-    user_id: p.user_id,
-    type: "notification",
-    title: "New Website Visitor",
+    user_id: p.user_id, type: "notification", title: "New Website Visitor",
     description: visitorName + " from " + city + " viewing " + pageName,
-    link_to: "/support-inbox",
-    agent_name: "Support",
-    status: "unread",
-    priority: "high",
+    link_to: "/support-inbox", agent_name: "Support", status: "unread", priority: "high",
     metadata: { conversation_type: "support_visitor" },
   }));
 
-  await supabase.from("notifications").insert(notifications);
+  try { await supabase.from("notifications").insert(notifications); } catch (_e) { /* best effort */ }
 }
 
 // ── Widget JS Generator ──
 function generateWidgetJs(config: any, supabaseUrl: string): string {
   const chatUrl = supabaseUrl + "/functions/v1/support-chat";
   const cfgJson = JSON.stringify({
-    brandName: config.brand_name,
-    brandColor: config.brand_color,
-    welcomeMessage: config.welcome_message,
-    widgetKey: config.widget_key,
-    chatUrl,
+    brandName: config.brand_name, brandColor: config.brand_color,
+    welcomeMessage: config.welcome_message, widgetKey: config.widget_key, chatUrl,
   });
 
-  return "(function(){\n" +
-    "if(window.__support_widget_loaded) return;\n" +
-    "window.__support_widget_loaded = true;\n" +
-    "var cfg = " + cfgJson + ";\n" +
-    "var state = { open: false, convoId: null, visitorToken: null, messages: [], lastTs: null, polling: null, heartbeat: null, currentPage: window.location.href };\n" +
-    "function getCurrentPage() { return window.location.href; }\n" +
-    "setInterval(function(){ state.currentPage = getCurrentPage(); }, 2000);\n" +
-    "window.addEventListener('popstate', function(){ state.currentPage = getCurrentPage(); });\n" +
-    "var style = document.createElement('style');\n" +
-    "style.textContent = '" +
-      "#sw-bubble { position:fixed; bottom:20px; right:20px; z-index:99999; width:56px; height:56px; border-radius:50%; background:'+cfg.brandColor+'; color:#fff; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.2); transition:transform 0.2s; } " +
-      "#sw-bubble:hover { transform:scale(1.1); } " +
-      "#sw-bubble svg { width:24px; height:24px; fill:currentColor; } " +
-      "#sw-panel { position:fixed; bottom:84px; right:20px; z-index:99999; width:360px; max-height:500px; background:#fff; border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.15); display:none; flex-direction:column; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif; } " +
-      "#sw-panel.open { display:flex; animation:sw-slide-in 0.2s ease-out; } " +
-      "@keyframes sw-slide-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} } " +
-      "#sw-header { padding:14px 16px; background:'+cfg.brandColor+'; color:#fff; display:flex; align-items:center; justify-content:space-between; } " +
-      "#sw-header h3 { margin:0; font-size:15px; font-weight:600; } " +
-      "#sw-header button { background:none; border:none; color:#fff; cursor:pointer; font-size:20px; line-height:1; } " +
-      "#sw-messages { flex:1; overflow-y:auto; padding:12px; max-height:320px; min-height:200px; } " +
-      ".sw-msg { margin-bottom:8px; max-width:85%; padding:8px 12px; border-radius:12px; font-size:13px; line-height:1.4; word-wrap:break-word; } " +
-      ".sw-msg.visitor { margin-left:auto; background:'+cfg.brandColor+'; color:#fff; border-bottom-right-radius:4px; } " +
-      ".sw-msg.agent,.sw-msg.bot,.sw-msg.system { background:#f0f0f0; color:#333; border-bottom-left-radius:4px; } " +
-      "#sw-input-area { padding:10px; border-top:1px solid #eee; display:flex; gap:6px; } " +
-      "#sw-input { flex:1; border:1px solid #ddd; border-radius:8px; padding:8px 12px; font-size:13px; outline:none; resize:none; font-family:inherit; } " +
-      "#sw-input:focus { border-color:'+cfg.brandColor+'; } " +
-      "#sw-send { background:'+cfg.brandColor+'; color:#fff; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; } " +
-      "#sw-send:disabled { opacity:0.5; cursor:not-allowed; } " +
-      "@media(max-width:420px){ #sw-panel{ width:calc(100vw - 24px); right:12px; bottom:80px; } } " +
-    "';\n" +
-    "document.head.appendChild(style);\n" +
-    "var bubble = document.createElement('button');\n" +
-    "bubble.id = 'sw-bubble';\n" +
-    "bubble.setAttribute('aria-label','Open chat');\n" +
-    "bubble.innerHTML = '<svg viewBox=\"0 0 24 24\"><path d=\"M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z\"/></svg>';\n" +
-    "document.body.appendChild(bubble);\n" +
-    "var panel = document.createElement('div');\n" +
-    "panel.id = 'sw-panel';\n" +
-    "panel.innerHTML = '<div id=\"sw-header\"><h3>'+esc(cfg.brandName)+'</h3><button onclick=\"document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')\">&times;</button></div>'\n" +
-    "  + '<div id=\"sw-messages\"></div>'\n" +
-    "  + '<div id=\"sw-input-area\"><textarea id=\"sw-input\" rows=\"1\" placeholder=\"Type a message...\"></textarea><button id=\"sw-send\" disabled>Send</button></div>';\n" +
-    "document.body.appendChild(panel);\n" +
-    "var started = false;\n" +
-    "bubble.onclick = async function(){\n" +
-    "  var wasOpen = panel.classList.contains('open');\n" +
-    "  panel.classList.toggle('open');\n" +
-    "  if(!wasOpen && !started){\n" +
-    "    started = true;\n" +
-    "    try {\n" +
-    "      var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:'Visitor', visitor_email:null, current_page:state.currentPage}) });\n" +
-    "      var d = await r.json();\n" +
-    "      if(d.conversation_id) {\n" +
-    "        state.convoId = d.conversation_id;\n" +
-    "        state.visitorToken = d.visitor_token;\n" +
-    "        startPolling();\n" +
-    "        startHeartbeat();\n" +
-    "      }\n" +
-    "    } catch(e){ started=false; }\n" +
-    "  }\n" +
-    "};\n" +
-    "document.getElementById('sw-send').onclick = sendMsg;\n" +
-    "document.getElementById('sw-input').oninput = function(){ document.getElementById('sw-send').disabled = !this.value.trim(); };\n" +
-    "document.getElementById('sw-input').onkeydown = function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} };\n" +
-    "async function sendMsg(){\n" +
-    "  var inp = document.getElementById('sw-input');\n" +
-    "  var txt = inp.value.trim();\n" +
-    "  if(!txt||!state.convoId) return;\n" +
-    "  inp.value=''; document.getElementById('sw-send').disabled=true;\n" +
-    "  addMsg('visitor', txt);\n" +
-    "  try {\n" +
-    "    await fetch(cfg.chatUrl+'?action=send', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, content:txt, current_page:state.currentPage}) });\n" +
-    "  } catch(e){}\n" +
-    "}\n" +
-    "function addMsg(type, text){\n" +
-    "  var el = document.createElement('div');\n" +
-    "  el.className = 'sw-msg ' + type;\n" +
-    "  el.textContent = text;\n" +
-    "  var container = document.getElementById('sw-messages');\n" +
-    "  container.appendChild(el);\n" +
-    "  container.scrollTop = container.scrollHeight;\n" +
-    "}\n" +
-    "function startPolling(){\n" +
-    "  state.polling = setInterval(async function(){\n" +
-    "    try {\n" +
-    "      var url = cfg.chatUrl+'?action=poll&conversation_id='+state.convoId+'&visitor_token='+state.visitorToken;\n" +
-    "      if(state.lastTs) url += '&after='+encodeURIComponent(state.lastTs);\n" +
-    "      var r = await fetch(url);\n" +
-    "      var d = await r.json();\n" +
-    "      if(d.messages && d.messages.length){\n" +
-    "        d.messages.forEach(function(m){\n" +
-    "          if(m.sender_type !== 'visitor'){\n" +
-    "            addMsg(m.sender_type, m.content);\n" +
-    "          }\n" +
-    "          state.lastTs = m.created_at;\n" +
-    "        });\n" +
-    "      }\n" +
-    "    } catch(e){}\n" +
-    "  }, 3000);\n" +
-    "}\n" +
-    "function startHeartbeat(){\n" +
-    "  state.heartbeat = setInterval(async function(){\n" +
-    "    if(!state.convoId) return;\n" +
-    "    try {\n" +
-    "      await fetch(cfg.chatUrl+'?action=heartbeat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, current_page:getCurrentPage()}) });\n" +
-    "    } catch(e){}\n" +
-    "  }, 30000);\n" +
-    "}\n" +
-    "function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }\n" +
-    "})();\n";
+  return `(function(){
+if(window.__support_widget_loaded) return;
+window.__support_widget_loaded = true;
+var cfg = ${cfgJson};
+var state = { open:false, convoId:null, visitorToken:null, messages:[], lastTs:null, polling:null, heartbeat:null, currentPage:window.location.href };
+function getCurrentPage(){ return window.location.href; }
+setInterval(function(){ state.currentPage = getCurrentPage(); }, 2000);
+window.addEventListener('popstate', function(){ state.currentPage = getCurrentPage(); });
+
+var style = document.createElement('style');
+style.textContent = '#sw-bubble{position:fixed;bottom:20px;right:20px;z-index:99999;width:56px;height:56px;border-radius:50%;background:'+cfg.brandColor+';color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:transform 0.2s}#sw-bubble:hover{transform:scale(1.1)}#sw-bubble svg{width:24px;height:24px;fill:currentColor}#sw-panel{position:fixed;bottom:84px;right:20px;z-index:99999;width:360px;max-height:500px;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.15);display:none;flex-direction:column;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif}#sw-panel.open{display:flex;animation:sw-slide-in 0.2s ease-out}@keyframes sw-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}#sw-header{padding:14px 16px;background:'+cfg.brandColor+';color:#fff;display:flex;align-items:center;justify-content:space-between}#sw-header h3{margin:0;font-size:15px;font-weight:600}#sw-header button{background:none;border:none;color:#fff;cursor:pointer;font-size:20px;line-height:1}#sw-messages{flex:1;overflow-y:auto;padding:12px;max-height:320px;min-height:200px}.sw-msg{margin-bottom:8px;max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.4;word-wrap:break-word}.sw-msg.visitor{margin-left:auto;background:'+cfg.brandColor+';color:#fff;border-bottom-right-radius:4px}.sw-msg.agent,.sw-msg.bot{background:#f0f0f0;color:#333;border-bottom-left-radius:4px}#sw-input-area{padding:10px;border-top:1px solid #eee;display:flex;gap:6px}#sw-input{flex:1;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-size:13px;outline:none;resize:none;font-family:inherit}#sw-input:focus{border-color:'+cfg.brandColor+'}#sw-send{background:'+cfg.brandColor+';color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:500}#sw-send:disabled{opacity:0.5;cursor:not-allowed}@media(max-width:420px){#sw-panel{width:calc(100vw - 24px);right:12px;bottom:80px}}';
+document.head.appendChild(style);
+
+var bubble = document.createElement('button');
+bubble.id = 'sw-bubble';
+bubble.setAttribute('aria-label','Open chat');
+bubble.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>';
+document.body.appendChild(bubble);
+
+var panel = document.createElement('div');
+panel.id = 'sw-panel';
+panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+'</h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div><div id="sw-messages"></div><div id="sw-input-area"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
+document.body.appendChild(panel);
+
+var started = false;
+bubble.onclick = async function(){
+  var wasOpen = panel.classList.contains('open');
+  panel.classList.toggle('open');
+  if(!wasOpen && !started){
+    started = true;
+    try {
+      var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:'Visitor', visitor_email:null, current_page:state.currentPage}) });
+      var d = await r.json();
+      if(d.conversation_id) {
+        state.convoId = d.conversation_id;
+        state.visitorToken = d.visitor_token;
+        startPolling();
+        startHeartbeat();
+      }
+    } catch(e){ started=false; }
+  }
+};
+
+document.getElementById('sw-send').onclick = sendMsg;
+document.getElementById('sw-input').oninput = function(){ document.getElementById('sw-send').disabled = !this.value.trim(); };
+document.getElementById('sw-input').onkeydown = function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} };
+
+async function sendMsg(){
+  var inp = document.getElementById('sw-input');
+  var txt = inp.value.trim();
+  if(!txt||!state.convoId) return;
+  inp.value=''; document.getElementById('sw-send').disabled=true;
+  addMsg('visitor', txt);
+  try {
+    await fetch(cfg.chatUrl+'?action=send', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, content:txt, current_page:state.currentPage}) });
+  } catch(e){}
+}
+
+function addMsg(type, text){
+  var el = document.createElement('div');
+  el.className = 'sw-msg ' + type;
+  el.textContent = text;
+  var container = document.getElementById('sw-messages');
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+}
+
+function startPolling(){
+  state.polling = setInterval(async function(){
+    try {
+      var url = cfg.chatUrl+'?action=poll&conversation_id='+state.convoId+'&visitor_token='+state.visitorToken;
+      if(state.lastTs) url += '&after='+encodeURIComponent(state.lastTs);
+      var r = await fetch(url);
+      var d = await r.json();
+      if(d.messages && d.messages.length){
+        d.messages.forEach(function(m){
+          if(m.sender_type !== 'visitor' && m.sender_type !== 'system' && m.content_type !== 'system'){
+            addMsg(m.sender_type, m.content);
+          }
+          state.lastTs = m.created_at;
+        });
+      }
+    } catch(e){}
+  }, 3000);
+}
+
+function startHeartbeat(){
+  state.heartbeat = setInterval(async function(){
+    if(!state.convoId) return;
+    try {
+      await fetch(cfg.chatUrl+'?action=heartbeat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, current_page:getCurrentPage()}) });
+    } catch(e){}
+  }, 30000);
+}
+
+function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+})();`;
 }
