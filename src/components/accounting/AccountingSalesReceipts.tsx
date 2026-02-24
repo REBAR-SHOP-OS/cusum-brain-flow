@@ -50,18 +50,32 @@ export function AccountingSalesReceipts({ data }: Props) {
       const { data: result, error } = await supabase.functions.invoke("quickbooks-oauth", {
         body: { action: "list-sales-receipts" },
       });
-      if (error) throw error;
+      if (error) {
+        let msg = getErrorMessage(error);
+        try {
+          const body = await error.context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {
+          try {
+            const text = await error.context?.text?.();
+            if (text) {
+              const parsed = JSON.parse(text);
+              if (parsed.error) msg = parsed.error;
+            }
+          } catch { /* use fallback */ }
+        }
+        toast({ title: "Error loading sales receipts", description: msg, variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+      if (result?.error) {
+        toast({ title: "Error loading sales receipts", description: result.error, variant: "destructive" });
+        setLoading(false);
+        return;
+      }
       setReceipts(result?.salesReceipts || []);
     } catch (e: any) {
-      let msg = getErrorMessage(e);
-      try {
-        const body = e?.context?.body ? await e.context.body.text() : null;
-        if (body) {
-          const parsed = JSON.parse(body);
-          if (parsed.error) msg = parsed.error;
-        }
-      } catch { /* use fallback msg */ }
-      toast({ title: "Error loading sales receipts", description: msg, variant: "destructive" });
+      toast({ title: "Error loading sales receipts", description: getErrorMessage(e), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -83,21 +97,35 @@ export function AccountingSalesReceipts({ data }: Props) {
           memo,
         },
       });
-      if (error) throw error;
+      if (error) {
+        let msg = getErrorMessage(error);
+        try {
+          const body = await error.context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {
+          try {
+            const text = await error.context?.text?.();
+            if (text) {
+              const parsed = JSON.parse(text);
+              if (parsed.error) msg = parsed.error;
+            }
+          } catch { /* use fallback */ }
+        }
+        toast({ title: "Error creating sales receipt", description: msg, variant: "destructive" });
+        setCreating(false);
+        return;
+      }
+      if (result?.error) {
+        toast({ title: "Error creating sales receipt", description: result.error, variant: "destructive" });
+        setCreating(false);
+        return;
+      }
       toast({ title: "Sales receipt created", description: `#${result?.docNumber}` });
       setShowCreate(false);
       setCustomerId(""); setDescription(""); setAmount(""); setMemo("");
       loadReceipts();
     } catch (e: any) {
-      let msg = getErrorMessage(e);
-      try {
-        const body = e?.context?.body ? await e.context.body.text() : null;
-        if (body) {
-          const parsed = JSON.parse(body);
-          if (parsed.error) msg = parsed.error;
-        }
-      } catch { /* use fallback msg */ }
-      toast({ title: "Error creating sales receipt", description: msg, variant: "destructive" });
+      toast({ title: "Error creating sales receipt", description: getErrorMessage(e), variant: "destructive" });
     } finally {
       setCreating(false);
     }
