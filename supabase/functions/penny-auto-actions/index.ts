@@ -18,6 +18,28 @@ serve(async (req) => {
     if (!profile?.company_id) return json({ error: "No company found" }, 400);
     const companyId = profile.company_id;
 
+    // Force QB sync before scanning to ensure fresh balance data
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const syncController = new AbortController();
+      const syncTimeout = setTimeout(() => syncController.abort(), 15000);
+
+      await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${svcKey}`,
+        },
+        body: JSON.stringify({ action: "incremental", company_id: companyId }),
+        signal: syncController.signal,
+      });
+      clearTimeout(syncTimeout);
+      console.log("[penny-auto-actions] QB sync completed before scan");
+    } catch (syncErr) {
+      console.warn("[penny-auto-actions] QB sync failed, proceeding with cached data:", syncErr);
+    }
+
     // Load configurable thresholds from comms_config (penny_config JSON field)
     let thresholds = { email_reminder: 7, call_collection: 14, send_invoice: 30, escalate: 60 };
     try {
