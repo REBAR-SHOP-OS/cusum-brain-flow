@@ -1,49 +1,36 @@
 
 
-## Fix: "Create Delivery" Button Should Require Photos on All Loaded Items
+## Fix: Loading Station Should Only Show Cleared Items
 
 ### Problem
-The "Create Delivery" button on `/shopfloor/loading` becomes active as soon as all items are tick-marked (loaded), even if some items are missing photo evidence. The Loading Station is described as requiring "item-by-item truck loading **with evidence**", so photos should be mandatory.
+The Loading Station (`/shopfloor/loading`) displays ALL bar marks from the cut plan, including items that haven't been cleared yet (e.g., A1001, A1002 circled in the screenshot). Only items with phase "clearance" or "complete" should appear.
 
 ### Root Cause
-In `src/pages/LoadingStation.tsx`, line 70:
+In `src/pages/LoadingStation.tsx` (lines 44-55), a secondary query fetches ALL items for the selected cut plan **without any phase filter**:
+
 ```tsx
-const allLoaded = totalItems > 0 && loadedCount >= totalItems;
+const { data: allPlanItems = [] } = useQuery({
+  queryFn: async () => {
+    const { data } = await supabase
+      .from("cut_plan_items")
+      .select(...)
+      .eq("cut_plan_id", selectedBundle!.cutPlanId);
+    // No .in("phase", ["clearance", "complete"]) filter!
 ```
-This only checks if all items have `loaded = true`. It does not verify that each item also has a `photo_path`.
+
+Then on line 58, it **prefers** these unfiltered items over the correctly filtered bundle items:
+```tsx
+const checklistItems = allPlanItems.length > 0 ? allPlanItems : selectedBundle?.items ?? [];
+```
+
+The original `useCompletedBundles` hook already filters by phase correctly, but this override query undoes that filtering.
 
 ### Solution
-Add a photo completeness check alongside the loaded check, so the button is only enabled when every item is both loaded AND has a photo.
+Add the phase filter to the `allPlanItems` query so it only returns cleared items, matching the same filter used in `useCompletedBundles`.
 
 ### Changes
 
-**File: `src/hooks/useLoadingChecklist.ts`**
-- Add a new derived value `allPhotosComplete` that checks if every loaded checklist item has a non-null `photo_path`
-- Export a `photoCount` alongside the existing `loadedCount`
-
 **File: `src/pages/LoadingStation.tsx`**
-- Import the new `photoCount` from the hook
-- Update `allLoaded` logic to also require all items have photos:
-  ```tsx
-  const allLoaded = totalItems > 0 && loadedCount >= totalItems && photoCount >= totalItems;
-  ```
-- Update the button label to indicate missing photos when items are loaded but photos are incomplete:
-  ```tsx
-  {allLoaded ? "Create Delivery" : `${totalItems - Math.min(loadedCount, photoCount)} items remaining`}
-  ```
+- Add `.in("phase", ["clearance", "complete"])` to the `cut_plan_items` query (around line 50)
+- This ensures only cleared/completed items appear in the loading checklist, consistent with the bundle selection logic
 
-### Technical Detail
-
-In `useLoadingChecklist.ts`, add after line 134:
-```typescript
-const photoCount = checklistItems.filter(c => c.loaded && !!c.photo_path).length;
-```
-
-And return `photoCount` from the hook.
-
-In `LoadingStation.tsx`, destructure `photoCount` from the hook and update the guard:
-```typescript
-const allLoaded = totalItems > 0 && loadedCount >= totalItems && photoCount >= totalItems;
-```
-
-This ensures the "Create Delivery" button stays disabled until every single item has both a tick mark and an uploaded photo, enforcing the evidence requirement.
