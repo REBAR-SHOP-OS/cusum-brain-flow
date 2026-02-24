@@ -15,13 +15,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, AlertTriangle, LayoutGrid, Unlock, Lock } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export default function StationView() {
   const { machineId } = useParams<{ machineId: string }>();
   const navigate = useNavigate();
   const { machines, isLoading: machinesLoading } = useLiveMonitorData();
   const machine = machines.find((m) => m.id === machineId);
-  const { groups, items, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type);
+  const { activeProjectId } = useWorkspace();
+  const { groups, items, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type, activeProjectId);
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
   const [activeTab, setActiveTab] = useState("production");
