@@ -1,6 +1,5 @@
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -8,6 +7,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface ConfirmActionDialogProps {
@@ -60,13 +60,14 @@ export function ConfirmActionDialog({
           <AlertDialogCancel className="h-12 text-base px-6">
             Cancel
           </AlertDialogCancel>
-          <AlertDialogAction
+          <Button
             onClick={onConfirm}
             disabled={loading}
-            className={`h-12 text-base px-6 ${variant === "destructive" ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground" : ""}`}
+            variant={variant === "destructive" ? "destructive" : "default"}
+            className="h-12 text-base px-6"
           >
             {loading ? "Processing..." : confirmLabel}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

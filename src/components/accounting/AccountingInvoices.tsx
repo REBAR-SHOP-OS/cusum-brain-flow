@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
 import { FileText, Send, Ban, Search, Eye, ArrowUpDown } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
 type SortField = "DocNumber" | "Customer" | "TxnDate" | "DueDate" | "TotalAmt" | "Balance" | "Status";
@@ -89,6 +90,8 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
     setActionLoading(true);
     try {
       await voidInvoice(voidTarget.id, voidTarget.syncToken);
+    } catch (err: any) {
+      toast({ title: "Void failed", description: err?.message || "An unexpected error occurred", variant: "destructive" });
     } finally {
       setActionLoading(false);
       setVoidTarget(null);
