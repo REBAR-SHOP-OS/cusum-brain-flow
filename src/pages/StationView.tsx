@@ -1,7 +1,8 @@
-import { useParams, Navigate } from "react-router-dom";
+import { useParams, Navigate, useNavigate } from "react-router-dom";
 import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useStationData } from "@/hooks/useStationData";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useTabletPin } from "@/hooks/useTabletPin";
 import { CutterStationView } from "@/components/shopfloor/CutterStationView";
 import { BenderStationView } from "@/components/shopfloor/BenderStationView";
 import { BarSizeGroup } from "@/components/shopfloor/BarSizeGroup";
@@ -11,12 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, AlertTriangle, LayoutGrid } from "lucide-react";
+import { Loader2, AlertTriangle, LayoutGrid, Unlock, Lock } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 export default function StationView() {
   const { machineId } = useParams<{ machineId: string }>();
+  const navigate = useNavigate();
   const { machines, isLoading: machinesLoading } = useLiveMonitorData();
   const machine = machines.find((m) => m.id === machineId);
   const { groups, items, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type);
@@ -26,6 +28,8 @@ export default function StationView() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isSupervisor, setIsSupervisor] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const { pinnedMachineId, unpinMachine } = useTabletPin();
+  const isPinned = pinnedMachineId === machineId;
 
   // Distinct project names present in loaded items
   const projectNames = useMemo(
@@ -136,6 +140,30 @@ export default function StationView() {
         onToggleSupervisor={() => setIsSupervisor((v) => !v)}
         showBedsSuffix={true}
       />
+
+      {/* Pinned indicator + unpin (supervisor only) */}
+      {isPinned && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-border">
+          <Lock className="w-3 h-3 text-primary" />
+          <span className="text-[10px] tracking-wider uppercase font-bold text-primary">
+            Pinned to this device
+          </span>
+          {isSupervisor && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-6 text-[10px] gap-1 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => {
+                unpinMachine();
+                navigate("/shopfloor/station");
+              }}
+            >
+              <Unlock className="w-3 h-3" />
+              Unpin
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="px-4 pt-3">
         {/* Project filter pills — only shown when multiple projects present */}

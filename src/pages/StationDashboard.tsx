@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Cloud, Radio, Loader2, Settings, FolderOpen, FileText, Layers, Play, Pause, CheckCircle2, ArrowLeft, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
+import { useTabletPin } from "@/hooks/useTabletPin";
 import brandLogo from "@/assets/brand-logo.png";
 
 export default function StationDashboard() {
@@ -17,6 +18,12 @@ export default function StationDashboard() {
   const { projectLanes } = useProductionQueues();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { pinnedMachineId } = useTabletPin();
+
+  // Auto-redirect if a machine is pinned to this device
+  if (pinnedMachineId && !isLoading) {
+    return <Navigate to={`/shopfloor/station/${pinnedMachineId}`} replace />;
+  }
 
   // Active cut plans (draft, ready, queued, running)
   const activePlans = plans.filter(p =>

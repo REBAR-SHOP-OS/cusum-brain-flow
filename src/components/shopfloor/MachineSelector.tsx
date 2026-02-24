@@ -1,9 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LayoutGrid, Lock } from "lucide-react";
 import type { LiveMachine } from "@/types/machine";
 import { getMachineSpec } from "./machineRegistry";
 import { MachineSpecsPanel } from "./MachineSpecsPanel";
+import { useTabletPin } from "@/hooks/useTabletPin";
+import { useToast } from "@/hooks/use-toast";
 
 // Fallback SVG icons when no image is available
 function CutterIcon({ className }: { className?: string }) {
@@ -65,6 +68,8 @@ interface MachineSelectorProps {
 
 export function MachineSelector({ machines }: MachineSelectorProps) {
   const navigate = useNavigate();
+  const { pinMachine } = useTabletPin();
+  const { toast } = useToast();
 
   return (
     <div className="space-y-4">
@@ -134,12 +139,27 @@ export function MachineSelector({ machines }: MachineSelectorProps) {
                 </span>
               </button>
 
-              {/* Specs button (non-navigating) */}
-              {spec && (
-                <div className="border-t border-border flex justify-center py-1.5">
-                  <MachineSpecsPanel spec={spec} machineName={machine.name} />
-                </div>
-              )}
+              {/* Pin + Specs buttons */}
+              <div className="border-t border-border flex items-center justify-center gap-1 py-1.5 px-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[10px] gap-1 px-2 text-muted-foreground hover:text-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    pinMachine(machine.id);
+                    toast({
+                      title: "Pinned to this tablet",
+                      description: `${machine.name} is now the default station for this device.`,
+                    });
+                    navigate(`/shopfloor/station/${machine.id}`);
+                  }}
+                >
+                  <Lock className="w-3 h-3" />
+                  Pin
+                </Button>
+                {spec && <MachineSpecsPanel spec={spec} machineName={machine.name} />}
+              </div>
 
               {/* Running indicator */}
               {machine.status === "running" && (
