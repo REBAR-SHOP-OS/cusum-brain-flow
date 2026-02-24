@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { 
   Truck, 
   MapPin, 
@@ -106,23 +107,21 @@ export default function Deliveries() {
   const queryClient = useQueryClient();
   const [deletingSlipId, setDeletingSlipId] = useState<string | null>(null);
   const [deletingDeliveryId, setDeletingDeliveryId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
-  const deleteDelivery = async (deliveryId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const delivery = deliveries.find(d => d.id === deliveryId);
+  const confirmDeleteDelivery = async () => {
+    if (!pendingDeleteId) return;
+    const delivery = deliveries.find(d => d.id === pendingDeleteId);
     if (!delivery || delivery.status !== "pending") return;
     
-    setDeletingDeliveryId(deliveryId);
+    setDeletingDeliveryId(pendingDeleteId);
     try {
-      // Delete related packing slips
-      await supabase.from("packing_slips" as any).delete().eq("delivery_id", deliveryId);
-      // Delete related delivery stops
-      await supabase.from("delivery_stops").delete().eq("delivery_id", deliveryId);
-      // Delete the delivery itself
-      const { error } = await supabase.from("deliveries").delete().eq("id", deliveryId);
+      await supabase.from("packing_slips" as any).delete().eq("delivery_id", pendingDeleteId);
+      await supabase.from("delivery_stops").delete().eq("delivery_id", pendingDeleteId);
+      const { error } = await supabase.from("deliveries").delete().eq("id", pendingDeleteId);
       if (error) throw error;
       
-      if (selectedDelivery?.id === deliveryId) setSelectedDelivery(null);
+      if (selectedDelivery?.id === pendingDeleteId) setSelectedDelivery(null);
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       queryClient.invalidateQueries({ queryKey: ["packing-slips"] });
       toast.success("Delivery deleted");
@@ -130,6 +129,7 @@ export default function Deliveries() {
       toast.error("Failed to delete: " + err.message);
     } finally {
       setDeletingDeliveryId(null);
+      setPendingDeleteId(null);
     }
   };
 
@@ -361,7 +361,7 @@ export default function Deliveries() {
                   isLoading={isLoading}
                   selectedId={selectedDelivery?.id}
                   onSelect={(d) => { setSelectedDelivery(d); }}
-                  onDelete={deleteDelivery}
+                  onRequestDelete={(id) => setPendingDeleteId(id)}
                   deletingId={deletingDeliveryId}
                   emptyMessage="No deliveries scheduled for today"
                 />
@@ -373,7 +373,7 @@ export default function Deliveries() {
                   isLoading={isLoading}
                   selectedId={selectedDelivery?.id}
                   onSelect={(d) => { setSelectedDelivery(d); }}
-                  onDelete={deleteDelivery}
+                  onRequestDelete={(id) => setPendingDeleteId(id)}
                   deletingId={deletingDeliveryId}
                   emptyMessage="No upcoming deliveries"
                 />
@@ -385,7 +385,7 @@ export default function Deliveries() {
                   isLoading={isLoading}
                   selectedId={selectedDelivery?.id}
                   onSelect={(d) => { setSelectedDelivery(d); }}
-                  onDelete={deleteDelivery}
+                  onRequestDelete={(id) => setPendingDeleteId(id)}
                   deletingId={deletingDeliveryId}
                   emptyMessage="No deliveries found"
                 />
@@ -559,6 +559,18 @@ export default function Deliveries() {
         />
 
         {/* Packing Slip Overlay */}
+        {/* Delete Confirmation Dialog */}
+        <ConfirmActionDialog
+          open={!!pendingDeleteId}
+          onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+          title="Delete Delivery"
+          description="Are you sure you want to delete this delivery? This will also remove all associated packing slips and delivery stops."
+          variant="destructive"
+          confirmLabel="Delete Delivery"
+          onConfirm={confirmDeleteDelivery}
+          loading={!!deletingDeliveryId}
+        />
+
         {showPackingSlip && (
           <DeliveryPackingSlip
             slipNumber={showPackingSlip.slipNumber}
@@ -598,12 +610,12 @@ interface DeliveryListProps {
   isLoading: boolean;
   selectedId?: string;
   onSelect: (delivery: Delivery) => void;
-  onDelete: (id: string, e: React.MouseEvent) => void;
+  onRequestDelete: (id: string) => void;
   deletingId: string | null;
   emptyMessage: string;
 }
 
-function DeliveryList({ deliveries, isLoading, selectedId, onSelect, onDelete, deletingId, emptyMessage }: DeliveryListProps) {
+function DeliveryList({ deliveries, isLoading, selectedId, onSelect, onRequestDelete, deletingId, emptyMessage }: DeliveryListProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -629,7 +641,7 @@ function DeliveryList({ deliveries, isLoading, selectedId, onSelect, onDelete, d
             delivery={delivery} 
             isSelected={delivery.id === selectedId}
             onClick={() => onSelect(delivery)}
-            onDelete={onDelete}
+            onRequestDelete={onRequestDelete}
             deletingId={deletingId}
           />
         ))}
@@ -643,11 +655,11 @@ interface DeliveryCardProps {
   delivery: Delivery;
   isSelected: boolean;
   onClick: () => void;
-  onDelete: (id: string, e: React.MouseEvent) => void;
+  onRequestDelete: (id: string) => void;
   deletingId: string | null;
 }
 
-function DeliveryCard({ delivery, isSelected, onClick, onDelete, deletingId }: DeliveryCardProps) {
+function DeliveryCard({ delivery, isSelected, onClick, onRequestDelete, deletingId }: DeliveryCardProps) {
   const status = (delivery.status || "pending").toLowerCase();
   
   return (
@@ -670,15 +682,15 @@ function DeliveryCard({ delivery, isSelected, onClick, onDelete, deletingId }: D
             </Badge>
             {status === "pending" && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
-                className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={(e) => onDelete(delivery.id, e)}
+                className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                onClick={(e) => { e.stopPropagation(); onRequestDelete(delivery.id); }}
                 disabled={deletingId === delivery.id}
               >
                 {deletingId === delivery.id
-                  ? <Loader2 className="w-3 h-3 animate-spin" />
-                  : <Trash2 className="w-3 h-3" />
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Trash2 className="w-4 h-4" />
                 }
               </Button>
             )}
