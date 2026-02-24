@@ -1,55 +1,57 @@
 
 
-## Fix: Sales Agent Cannot Generate Quotes (Quote Engine Integration Broken)
+## Fix: Prevent Duplicate AI Scans on Accounting Page
 
 ### Problem
-When users ask the sales agent (Blitz) for a quote (e.g., "can you quote for a cage, 16 10MM circular ties, 18" dia, 8 15MM vert 10'"), it responds with "internal error with the quote engine" instead of generating a price.
+The "Scan Now" button in the AI Actions Queue can be clicked multiple times while a scan is already in progress. The button's `disabled` prop checks `loading`, but the `triggerAutoActions` function never sets `loading` to `true`, so the guard has no effect.
 
-### Root Causes
-
-**1. Invalid action fallback (Bug)**
-In `supabase/functions/_shared/agentToolExecutor.ts` line 270:
-```typescript
-action: args.action || "generate"  // "generate" is NOT a valid action!
-```
-The quote engine only accepts `"validate"`, `"quote"`, or `"explain"`. If the AI omits the `action` field, it defaults to `"generate"`, which returns a 400 error.
-
-**2. No prompt guidance for quote structure (Missing)**
-The sales agent prompt in `supabase/functions/_shared/agents/sales.ts` has no instructions on how to use the `generate_sales_quote` tool. The AI must construct a complex `EstimateRequest` JSON with `meta`, `project`, `scope`, `shipping`, and `customer_confirmations` fields -- but it has no schema reference or examples to follow.
+### Root Cause
+In `src/hooks/usePennyQueue.ts`, the `triggerAutoActions` function (line 144-152) invokes the edge function but does not toggle any loading state. The `loading` state is only managed by the `load` function (which fetches queue items), not by the scan trigger.
 
 ### Solution
+Add a dedicated `scanning` state to `usePennyQueue` that is set to `true` before invoking the edge function and `false` after completion. Expose it from the hook and use it to disable the "Scan Now" button.
 
-**File: `supabase/functions/_shared/agentToolExecutor.ts`**
-- Change the action fallback from `"generate"` to `"quote"` (the correct default action)
+### Changes
 
-**File: `supabase/functions/_shared/agents/sales.ts`**
-- Add a "Quoting Instructions" section to the sales prompt that:
-  - Explains when to use the `generate_sales_quote` tool
-  - Provides the exact JSON structure template for `estimate_request`
-  - Shows how to map natural language inputs (bar sizes, quantities, cage specs) to the structured format
-  - Lists examples of converting common requests (ties, cages, straight bars) to the correct JSON fields
-  - Instructs the agent to use `action: "quote"` for generating quotes and `action: "validate"` when info is incomplete
+**File: `src/hooks/usePennyQueue.ts`**
+- Add `const [scanning, setScanning] = useState(false);` state
+- Wrap `triggerAutoActions` with `setScanning(true)` before the invoke and `setScanning(false)` in a `finally` block
+- Add early return if `scanning` is already `true` (prevents race conditions)
+- Export `scanning` from the hook return
+
+**File: `src/components/accounting/AccountingActionQueue.tsx`**
+- Destructure `scanning` from `usePennyQueue()`
+- Change the "Scan Now" button: `disabled={scanning}` (instead of `loading`)
+- Change the spinner/icon: show `Loader2` when `scanning` is true (instead of `loading`)
 
 ### Technical Detail
 
-**Fix 1 -- `agentToolExecutor.ts` (line 270)**
+In `usePennyQueue.ts`:
 ```typescript
-// Before:
-action: args.action || "generate",
+const [scanning, setScanning] = useState(false);
 
-// After:
-action: args.action || "quote",
+const triggerAutoActions = useCallback(async () => {
+  if (scanning) return; // guard against concurrent scans
+  setScanning(true);
+  try {
+    const { data, error } = await supabase.functions.invoke("penny-auto-actions");
+    if (error) throw error;
+    toast({ title: "Penny scanned invoices", description: `${data?.queued || 0} new actions queued` });
+  } catch (err) {
+    toast({ title: "Auto-scan failed", description: String(err), variant: "destructive" });
+  } finally {
+    setScanning(false);
+  }
+}, [scanning, toast]);
 ```
 
-**Fix 2 -- `agents/sales.ts` (add to sales prompt)**
-Add a section with the `EstimateRequest` template so the AI knows:
-- `scope.ties_circular` expects `{ line_id, type, diameter, quantity }`
-- `scope.cages` expects `{ line_id, cage_type, total_cage_weight_kg, quantity }`  
-- `scope.straight_rebar_lines` expects `{ line_id, bar_size, length_ft, quantity }`
-- `scope.fabricated_rebar_lines` expects `{ line_id, bar_size, shape_code, cut_length_ft, quantity }`
-- All unused scope arrays should be empty `[]`
-- `meta` and `project` fields can use sensible defaults
-- `shipping.delivery_required` defaults to `false` unless the customer mentions delivery
-- When information is incomplete, use `action: "validate"` first to get clarifying questions
+In `AccountingActionQueue.tsx`:
+```typescript
+const { ..., scanning, triggerAutoActions } = usePennyQueue();
 
-This ensures the AI can reliably translate natural language quote requests into the structured JSON the deterministic quote engine requires.
+<Button ... onClick={triggerAutoActions} disabled={scanning}>
+  {scanning ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+  {scanning ? "Scanning..." : "Scan Now"}
+</Button>
+```
+
