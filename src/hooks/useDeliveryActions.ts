@@ -38,19 +38,7 @@ export function useDeliveryActions() {
 
       if (delErr) throw delErr;
 
-      // 2. Create delivery stop
-      const { error: stopErr } = await supabase
-        .from("delivery_stops")
-        .insert({
-          company_id: companyId,
-          delivery_id: delivery.id,
-          stop_sequence: 1,
-          status: "pending",
-        });
-
-      if (stopErr) throw stopErr;
-
-      // 2b. Fetch project site_address via cut_plan
+      // 2. Fetch project site_address via cut_plan
       let siteAddress: string | null = null;
       try {
         const { data: cpData } = await supabase
@@ -67,6 +55,19 @@ export function useDeliveryActions() {
           siteAddress = (proj as any)?.site_address ?? null;
         }
       } catch { /* non-critical */ }
+
+      // 3. Create delivery stop (with address)
+      const { error: stopErr } = await supabase
+        .from("delivery_stops")
+        .insert({
+          company_id: companyId,
+          delivery_id: delivery.id,
+          stop_sequence: 1,
+          status: "pending",
+          address: siteAddress,
+        });
+
+      if (stopErr) throw stopErr;
 
       // 3. Build items snapshot (includes drawing_ref for DW# column)
       const itemsSnapshot = bundle.items.map((item) => ({
