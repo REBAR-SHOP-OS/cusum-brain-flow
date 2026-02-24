@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/website-chat`;
 const BTN_SIZE = 56;
 
 interface Msg {
@@ -39,7 +39,16 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
   }, [messages]);
 
   useEffect(() => {
-    if (open) inputRef.current?.focus();
+    if (open) {
+      inputRef.current?.focus();
+      if (messages.length === 0) {
+        setMessages([{
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "G'day! Welcome to Rebar Shop. How can I help you today? Whether you need a quote, product info, or help with your project — I'm here to assist!"
+        }]);
+      }
+    }
   }, [open]);
 
   useEffect(() => {
@@ -73,7 +82,7 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, currentPage: "/", publicMode: true }),
+        body: JSON.stringify({ messages: history }),
         signal: controller.signal,
       });
 
