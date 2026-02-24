@@ -977,7 +977,35 @@ export default function Tasks() {
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Assigned To</span>
-                  <p className="mt-0.5 text-sm">{employees.find(p => p.id === selectedTask.assigned_to)?.full_name || "Unassigned"}</p>
+                  <Select
+                    value={selectedTask.assigned_to || ""}
+                    onValueChange={async (newAssignee) => {
+                      const oldAssignee = selectedTask.assigned_to;
+                      if (newAssignee === oldAssignee) return;
+                      const { error } = await supabase
+                        .from("tasks")
+                        .update({ assigned_to: newAssignee, updated_at: new Date().toISOString() })
+                        .eq("id", selectedTask.id);
+                      if (error) { toast.error(error.message); return; }
+                      const oldName = employees.find(e => e.id === oldAssignee)?.full_name || "Unassigned";
+                      const newName = employees.find(e => e.id === newAssignee)?.full_name || "Unassigned";
+                      await writeAudit(selectedTask.id, "reassign", "assigned_to", oldName, newName);
+                      setSelectedTask({ ...selectedTask, assigned_to: newAssignee });
+                      loadData();
+                      toast.success("Task reassigned");
+                    }}
+                  >
+                    <SelectTrigger className="mt-0.5 h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Created By</span>
