@@ -48,7 +48,8 @@ export default function LoadingStation() {
       const { data, error } = await supabase
         .from("cut_plan_items")
         .select("id, mark_number, drawing_ref, bar_code, cut_length_mm, total_pieces, asa_shape_code")
-        .eq("cut_plan_id", selectedBundle!.cutPlanId);
+        .eq("cut_plan_id", selectedBundle!.cutPlanId)
+        .in("phase", ["clearance", "complete"]);
       if (error) throw error;
       return (data || []) as CompletedBundleItem[];
     },
