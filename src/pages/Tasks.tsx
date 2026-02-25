@@ -1425,24 +1425,49 @@ export default function Tasks() {
                   )}
                 </h4>
                 {(selectedTask as any)?.attachment_urls?.length > 0 ? (
-                  <div className="space-y-1">
-                    {((selectedTask as any).attachment_urls as string[]).map((url, i) => (
-                      <div key={i} className="flex items-center gap-1 group/attachment">
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:underline truncate flex-1">
-                          <ExternalLink className="w-3 h-3 shrink-0" />
-                          {url.split("/").pop()?.split("?")[0] || `Attachment ${i + 1}`}
-                        </a>
-                        {authResolved && isInternal && (
-                          <button
-                            onClick={() => deleteAttachment(url, i)}
-                            className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1"
-                            title="Remove attachment"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                  <div className="space-y-2">
+                    {((selectedTask as any).attachment_urls as string[]).map((url, i) => {
+                      const fileName = url.split("/").pop()?.split("?")[0] || `Attachment ${i + 1}`;
+                      const isImage = /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(fileName);
+                      return (
+                        <div key={i} className="space-y-1">
+                          {isImage && (
+                            <div className="relative group/img rounded-md overflow-hidden border border-border">
+                              <img src={url} alt={fileName} className="w-full max-h-48 object-contain bg-muted/30" loading="lazy" />
+                              <button
+                                onClick={() => { navigator.clipboard.writeText(url); toast.success("Link copied"); }}
+                                className="absolute top-1.5 right-1.5 p-1 rounded bg-background/80 text-muted-foreground hover:text-foreground opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                title="Copy image link"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1 group/attachment">
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:underline truncate flex-1">
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                              {fileName}
+                            </a>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(url); toast.success("Link copied"); }}
+                              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                              title="Copy link"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                            {authResolved && isInternal && (
+                              <button
+                                onClick={() => deleteAttachment(url, i)}
+                                className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1"
+                                title="Remove attachment"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">No attachments</p>
