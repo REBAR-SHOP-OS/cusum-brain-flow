@@ -1,31 +1,30 @@
 
-## رفع خطای حذف بارلیست - Foreign Key Constraint
+
+## رفع خطای حذف مشتری - NOT NULL constraint روی orders
 
 ### مشکل
-هنگام حذف بارلیست، خطای `work_orders_barlist_id_fkey` رخ می‌دهد چون `work_orders` با `ON DELETE RESTRICT` (پیش‌فرض) به `barlists` متصل است.
+ستون `customer_id` در جدول `orders` به صورت `NOT NULL` تعریف شده، اما FK آن `ON DELETE SET NULL` است. هنگام حذف مشتری، دیتابیس سعی می‌کند `customer_id` را NULL کند ولی constraint اجازه نمی‌دهد.
 
-کد فعلی سعی می‌کند قبل از حذف بارلیست، رکوردهای `work_orders` مرتبط را حذف کند، اما در برخی موارد (مثلاً race condition یا work order های دیگر) این کافی نیست.
+همین مشکل احتمالاً برای جداول دیگر هم وجود دارد (`quotes`, `leads`, `communications`, `tasks`, `delivery_stops`, `pickup_orders`, `estimation_projects`, `accounting_mirror`, `recurring_transactions`).
 
 ### راه‌حل
-تغییر constraint `work_orders_barlist_id_fkey` از `RESTRICT` به `SET NULL` تا هنگام حذف بارلیست، فیلد `barlist_id` در work orders به NULL تنظیم شود (work order حذف نشود ولی ارتباطش با بارلیست قطع شود).
+یک migration اجرا شود که ستون `customer_id` را در تمام جداولی که FK آنها `ON DELETE SET NULL` است، nullable کند:
 
-### تغییرات
-
-#### 1. Migration دیتابیس
 ```sql
-ALTER TABLE public.work_orders
-  DROP CONSTRAINT work_orders_barlist_id_fkey;
-
-ALTER TABLE public.work_orders
-  ADD CONSTRAINT work_orders_barlist_id_fkey
-  FOREIGN KEY (barlist_id) REFERENCES public.barlists(id) ON DELETE SET NULL;
+ALTER TABLE public.orders ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.quotes ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.leads ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.communications ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.tasks ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.delivery_stops ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.pickup_orders ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.estimation_projects ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.accounting_mirror ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE public.recurring_transactions ALTER COLUMN customer_id DROP NOT NULL;
 ```
 
-#### 2. ساده‌سازی کد حذف در `ProductionQueueView.tsx`
-- حذف خط `supabase.from("work_orders").delete().eq("barlist_id", barlistId)` از `handleDeleteBarlist` چون دیگر نیازی نیست - دیتابیس خودش `SET NULL` می‌کند.
-- همچنین حذف حلقه مشابه از `handleDeleteProject`.
-
 ### نتیجه
-- حذف بارلیست بدون خطا انجام می‌شود
-- Work orders مرتبط حفظ می‌شوند ولی `barlist_id` آنها NULL می‌شود
-- کد ساده‌تر و قابل اعتمادتر می‌شود
+- حذف مشتری بدون خطا انجام می‌شود
+- سفارشات و فاکتورهای قبلی حفظ می‌شوند (فقط `customer_id` آنها NULL می‌شود)
+- بدون تغییر کد فرانت‌اند
+
