@@ -2,7 +2,7 @@ import { useCallback, useRef } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 
-const BTN_SIZE = 56;
+const BTN_SIZE = 72;
 
 interface FloatingMicButtonProps {
   onToggleVoice: () => void;
@@ -40,7 +40,7 @@ export function FloatingMicButton({ onToggleVoice, isListening, isSupported }: F
       onPointerDown={handlePointerDown}
       onPointerMove={handlers.onPointerMove}
       onPointerUp={handlePointerUp}
-      className={`fixed z-[9999] w-14 h-14 rounded-full shadow-lg ring-1 ring-white/30 flex items-center justify-center hover:scale-110 transition-transform cursor-grab active:cursor-grabbing select-none ${
+      className={`fixed z-[9999] w-[72px] h-[72px] rounded-full shadow-xl ring-2 ring-white/40 flex items-center justify-center hover:scale-110 transition-transform cursor-grab active:cursor-grabbing select-none ${
         isListening
           ? "bg-destructive text-destructive-foreground animate-pulse"
           : "bg-primary text-primary-foreground"
@@ -50,9 +50,9 @@ export function FloatingMicButton({ onToggleVoice, isListening, isSupported }: F
       title={isListening ? "Tap to stop recording" : "Tap to start voice feedback"}
     >
       {isListening ? (
-        <MicOff className="w-7 h-7 pointer-events-none" />
+        <MicOff className="w-9 h-9 pointer-events-none" />
       ) : (
-        <Mic className="w-7 h-7 pointer-events-none" />
+        <Mic className="w-9 h-9 pointer-events-none" />
       )}
     </button>
   );
