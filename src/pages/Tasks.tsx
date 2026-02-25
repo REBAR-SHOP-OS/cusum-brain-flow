@@ -432,6 +432,22 @@ export default function Tasks() {
         company_id: companyRes.data?.company_id,
       } as any);
       if (error) throw error;
+
+      // Auto-create a follow-up activity for the next day
+      try {
+        await supabase.from("scheduled_activities").insert({
+          company_id: companyRes.data?.company_id,
+          entity_type: "task",
+          entity_id: selectedTask.id,
+          activity_type: "follow_up",
+          summary: "Follow up on comment",
+          due_date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+          assigned_to: currentProfileId,
+          status: "planned",
+          created_by: user?.id,
+        } as any);
+      } catch (_) { /* best-effort */ }
+
       setNewComment("");
       setCommentFiles([]);
       loadComments(selectedTask.id);

@@ -90,7 +90,7 @@ serve(async (req) => {
 
       for (const s of openInvoiceSuggestions) {
         const balance = balanceMap.get(s.entity_id);
-        if (balance === undefined || balance === null || balance <= 0) {
+        if (balance === undefined || balance === null || balance < 2) {
           toResolveInv.push(s.id);
           if (s.entity_id) toResolveInvEntityIds.push(s.entity_id);
         }
