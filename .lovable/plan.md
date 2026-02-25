@@ -1,33 +1,48 @@
 
 
-## Add "Clear All" to Brain Page
+## Fix RLS DELETE Policies for Production Queue
 
-### What This Does
-Adds a "Clear All" button to the Brain page header that deletes all knowledge items for the user's company. Includes a confirmation dialog to prevent accidental deletion.
+### Problem
+Deleting projects/barlists from the Production Queue fails because:
+1. **`work_orders`** DELETE policy only works when `order_id` is set (joins through `orders` table). Production Queue work orders use `project_id`/`barlist_id` and may have `order_id = NULL`.
+2. **`clearance_evidence`** has NO DELETE policy at all -- any attempt to delete clearance evidence rows is blocked.
 
-### Changes
+### Fix: One SQL Migration
 
-**1. `src/pages/Brain.tsx`**
-- Add a "Clear All" button (with Trash2 icon) next to existing header buttons
-- Add an AlertDialog for confirmation ("Are you sure? This will permanently delete all X items.")
-- On confirm: call `supabase.from("knowledge").delete().eq("company_id", companyId)` directly (no edge function needed since RLS already protects the table)
-- After deletion: invalidate the `["knowledge"]` query to refresh the UI
-- Show success/error toast
+Create a migration that:
 
-**2. Add `useCompanyId` hook import** (already exists in codebase)
-- Used to scope the delete to the current company
+**1. Replace `work_orders` DELETE policy** to also allow deletion when the work order is linked via `project_id` or `barlist_id` (not just `order_id`):
 
-### Technical Details
+```sql
+DROP POLICY "Admins can delete work_orders" ON public.work_orders;
 
-| Detail | Value |
-|--------|-------|
-| Table | `knowledge` |
-| Delete scope | All rows matching `company_id` |
-| Protection | RLS on table + AlertDialog confirmation |
-| No edge function needed | Direct client delete with RLS is sufficient |
+CREATE POLICY "Admins can delete work_orders" ON public.work_orders
+FOR DELETE TO authenticated
+USING (
+  has_role(auth.uid(), 'admin'::app_role)
+  AND (
+    -- Via order
+    EXISTS (SELECT 1 FROM orders o WHERE o.id = work_orders.order_id AND o.company_id = get_user_company_id(auth.uid()))
+    OR
+    -- Via project
+    EXISTS (SELECT 1 FROM projects p WHERE p.id = work_orders.project_id AND p.company_id = get_user_company_id(auth.uid()))
+    OR
+    -- Via barlist
+    EXISTS (SELECT 1 FROM barlists b WHERE b.id = work_orders.barlist_id AND b.company_id = get_user_company_id(auth.uid()))
+  )
+);
+```
 
-### UI Flow
-1. User clicks "Clear All" button (red/destructive style)
-2. AlertDialog appears: "Delete all brain items? This will permanently remove all {count} items. This action cannot be undone."
-3. User confirms -> all items deleted -> toast "All brain items cleared" -> grid refreshes to empty state
-4. User cancels -> nothing happens
+**2. Add `clearance_evidence` DELETE policy**:
+
+```sql
+CREATE POLICY "Admin and workshop can delete clearance evidence"
+ON public.clearance_evidence
+FOR DELETE TO authenticated
+USING (
+  has_any_role(auth.uid(), ARRAY['admin'::app_role, 'workshop'::app_role])
+);
+```
+
+### No Frontend Changes Needed
+The deletion code in `ProductionQueueView.tsx` is already correct -- it just needs the database policies to allow the operations.
