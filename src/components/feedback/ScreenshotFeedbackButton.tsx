@@ -37,6 +37,22 @@ export function ScreenshotFeedbackButton() {
     const target = hasOverlay ? document.body : (document.getElementById("main-content") || document.body);
     const isOverlay = !!hasOverlay;
 
+    // --- Pre-capture: temporarily expand overflow-hidden containers ---
+    const expandedEls: { el: HTMLElement; orig: string }[] = [];
+    const expand = (el: HTMLElement, css: string) => {
+      expandedEls.push({ el, orig: el.style.cssText });
+      el.style.cssText += css;
+    };
+
+    if (!isOverlay && target instanceof HTMLElement) {
+      expand(target, "; overflow: visible !important; height: auto !important;");
+      target.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-x-scroll')
+        .forEach(el => expand(el, "; overflow: visible !important; height: auto !important;"));
+      target.querySelectorAll<HTMLElement>('[data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-y-scroll, .overflow-auto')
+        .forEach(el => expand(el, "; overflow: visible !important; max-height: none !important; height: auto !important;"));
+    }
+
+    // Measure AFTER expansion so dimensions reflect full content
     const captureWidth  = isOverlay ? window.innerWidth  : target.scrollWidth;
     const captureHeight = isOverlay ? window.innerHeight : target.scrollHeight;
     const targetRect    = isOverlay ? null : target.getBoundingClientRect();
@@ -68,45 +84,24 @@ export function ScreenshotFeedbackButton() {
       logging: false,
       ignoreElements: baseIgnore,
       onclone: (clonedDoc: Document) => {
-        const style = clonedDoc.createElement("style");
-        style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
-        clonedDoc.head.appendChild(style);
-        // Remove iframes from clone to prevent html2canvas from traversing them
+        try {
+          const style = clonedDoc.createElement("style");
+          style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
+          clonedDoc.head.appendChild(style);
+        } catch {}
         clonedDoc.querySelectorAll("iframe, embed, object").forEach((el) => {
-          const placeholder = clonedDoc.createElement("div");
-          placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth}px;height:${(el as HTMLElement).offsetHeight}px;background:#1e293b;`;
-          el.parentNode?.replaceChild(placeholder, el);
+          try {
+            const placeholder = clonedDoc.createElement("div");
+            placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth}px;height:${(el as HTMLElement).offsetHeight}px;background:#1e293b;`;
+            el.parentNode?.replaceChild(placeholder, el);
+          } catch {}
         });
       },
     };
 
-    const hiddenEls: HTMLElement[] = [];
-
     // Fast element count to determine strategy
     const totalCount = target.querySelectorAll("*").length;
     const isHeavyPage = totalCount > 3000;
-
-    // Lightweight trimming: only target known scroll containers
-    const trimStart = performance.now();
-    try {
-      const scrollSelectors = '[data-radix-scroll-area-viewport], [class*="overflow-y-auto"], [class*="overflow-auto"], tbody, [class*="kanban"], [role="list"]';
-      const scrollContainers = target.querySelectorAll(scrollSelectors);
-      scrollContainers.forEach((container) => {
-        if (performance.now() - trimStart > 500) return;
-        const cRect = container.getBoundingClientRect();
-        const children = container.children;
-        for (let i = 0; i < children.length; i++) {
-          const child = children[i] as HTMLElement;
-          const childRect = child.getBoundingClientRect();
-          if (childRect.bottom < cRect.top - 50 || childRect.top > cRect.bottom + 50) {
-            child.style.visibility = "hidden";
-            hiddenEls.push(child);
-          }
-        }
-      });
-    } catch {
-      // Trimming failed — proceed without it
-    }
 
     const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
       const ignoreElements = skipImages
@@ -118,21 +113,25 @@ export function ScreenshotFeedbackButton() {
         : baseIgnore;
 
       const onclone = (clonedDoc: Document) => {
-        const style = clonedDoc.createElement("style");
-        style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
-        clonedDoc.head.appendChild(style);
-        // Remove iframes
+        try {
+          const style = clonedDoc.createElement("style");
+          style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
+          clonedDoc.head.appendChild(style);
+        } catch {}
         clonedDoc.querySelectorAll("iframe, embed, object").forEach((el) => {
-          const placeholder = clonedDoc.createElement("div");
-          placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth}px;height:${(el as HTMLElement).offsetHeight}px;background:#1e293b;`;
-          el.parentNode?.replaceChild(placeholder, el);
+          try {
+            const placeholder = clonedDoc.createElement("div");
+            placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth}px;height:${(el as HTMLElement).offsetHeight}px;background:#1e293b;`;
+            el.parentNode?.replaceChild(placeholder, el);
+          } catch {}
         });
-        // Remove images when skipImages
         if (skipImages) {
           clonedDoc.querySelectorAll("img, video, picture, svg, canvas").forEach((el) => {
-            const placeholder = clonedDoc.createElement("div");
-            placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth || 0}px;height:${(el as HTMLElement).offsetHeight || 0}px;background:#334155;`;
-            el.parentNode?.replaceChild(placeholder, el);
+            try {
+              const placeholder = clonedDoc.createElement("div");
+              placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth || 0}px;height:${(el as HTMLElement).offsetHeight || 0}px;background:#334155;`;
+              el.parentNode?.replaceChild(placeholder, el);
+            } catch {}
           });
         }
       };
@@ -146,7 +145,7 @@ export function ScreenshotFeedbackButton() {
       };
       return Promise.race([
         html2canvas(target, opts),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), isHeavyPage ? 4000 : 8000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), isHeavyPage ? 8000 : 15000)),
       ]);
     };
 
@@ -175,8 +174,7 @@ export function ScreenshotFeedbackButton() {
       });
       toast.error(`Failed to capture screen on ${window.location.pathname}`);
     } finally {
-      // Restore hidden elements immediately
-      hiddenEls.forEach(el => el.style.visibility = "");
+      expandedEls.forEach(({ el, orig }) => { el.style.cssText = orig; });
       setCapturing(false);
     }
   }, [capturing]);
