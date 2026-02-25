@@ -1,32 +1,46 @@
 
+## اضافه کردن دیالوگ بررسی فیدبک برای آیتم‌های To-do
 
-## Remove Description Text from Dashboard Cards
+### مشکل
+آیتم‌های To-do مربوط به فیدبک (مثل "Approve & Close: Feedback:...") وقتی کلیک می‌شوند، کاربر را به صفحه `/tasks` منتقل می‌کنند. کاربر باید بتواند مستقیماً از اینباکس فیدبک را بررسی کند.
 
-### Problem
-The helper cards on `/home` display role descriptions (e.g., "Customer Support", "Estimating") below each card's name. Similarly, the shop floor cards show subtitle text. This clutters the UI, especially on tablets.
+### راه‌حل
+وقتی کاربر روی یک To-do فیدبکی کلیک می‌کند، اطلاعات تسک مرتبط از دیتابیس خوانده شده و دیالوگ FeedbackReviewDialog باز می‌شود. کاربر می‌تواند:
+1. **تأیید**: تسک به حالت completed تغییر کرده و نوتیفیکیشن حذف می‌شود
+2. **رد با نظر**: تسک جدید با اولویت بالا برای Radin ساخته می‌شود
 
-### Changes
+### تغییرات
 
-**File: `src/pages/Home.tsx`**
+**فایل: `src/components/panels/InboxPanel.tsx`**
 
-1. **HelperCard component (line 339)**: Remove the `<p>` element that renders `helper.role`
-2. **Shopfloor cards (lines 203-206)**: Remove the conditional block that renders `card.subtitle`
+1. در تابع `handleToggle`: شناسایی To-do آیتم‌های فیدبکی با بررسی `metadata.category === "task_approval"` و عنوان شامل "Feedback:"
+2. وقتی شناسایی شد: با استفاده از `metadata.human_task_id` اطلاعات تسک (اسکرین‌شات، توضیحات) از جدول `tasks` خوانده می‌شود
+3. ساخت یک آبجکت موقت با metadata مناسب برای FeedbackReviewDialog و باز کردن دیالوگ
+4. در `handleConfirmFixed`: علاوه بر dismiss نوتیفیکیشن، تسک مرتبط نیز به حالت `completed` آپدیت شود
+5. در `handleReReport`: تسک فعلی را completed کرده و تسک جدید برای Radin بسازد
 
-### Details
+### جزییات فنی
 
-In the `HelperCard` component at the bottom of the file, the line:
+```text
+کلیک روی To-do فیدبکی
+  -> بررسی: metadata.category === "task_approval" && title شامل "Feedback:"
+  -> بله: fetch task by human_task_id از جدول tasks
+     -> ساخت reviewItem با metadata شامل:
+        - original_title: task.title
+        - original_description: task.description
+        - original_attachment_url: task.attachment_url
+        - human_task_id: task.id
+     -> باز کردن FeedbackReviewDialog
+  -> خیر: رفتار عادی (navigate یا expand)
+
+تأیید:
+  -> UPDATE tasks SET status='completed' WHERE id=human_task_id
+  -> dismiss notification
+
+رد:
+  -> INSERT new task for Radin with comment
+  -> UPDATE current task SET status='completed'
+  -> dismiss notification
 ```
-<p className="text-[8px] sm:text-sm ...">{helper.role}</p>
-```
-will be removed entirely.
 
-In the shopfloor workshop view, the block:
-```
-{card.subtitle && (
-  <p className="text-[9px] ...">{card.subtitle}</p>
-)}
-```
-will also be removed.
-
-No backend changes needed. The `role` and `subtitle` properties remain in the data definitions for accessibility (`alt` text on helper images still uses `helper.role`).
-
+بدون تغییر دیتابیس. فقط تغییر در فایل InboxPanel.tsx.
