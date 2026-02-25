@@ -95,7 +95,7 @@ export function DeliveryPackingSlip({
         </div>
 
         {/* Info grid - Row 2 */}
-        <div className="grid grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-b-lg text-sm">
+        <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-b-lg text-sm">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Invoice #</p>
             <p className="font-semibold">{invoiceNumber || "—"}</p>
@@ -109,10 +109,6 @@ export function DeliveryPackingSlip({
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Scope</p>
             <p className="font-semibold">{scope || "—"}</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Slip #</p>
-            <p className="font-semibold">{slipNumber}</p>
           </div>
         </div>
 
