@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useCutPlans, CutPlan } from "@/hooks/useCutPlans";
 import { useProductionQueues } from "@/hooks/useProductionQueues";
@@ -12,6 +12,8 @@ import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle } from "lucid
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useTabletPin } from "@/hooks/useTabletPin";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
 
 export default function StationDashboard() {
@@ -21,7 +23,13 @@ export default function StationDashboard() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { pinnedMachineId } = useTabletPin();
+  const queryClient = useQueryClient();
 
+  const assignToMachine = useCallback(async (planId: string, machineId: string) => {
+    await supabase.from("cut_plans").update({ machine_id: machineId }).eq("id", planId);
+    queryClient.invalidateQueries({ queryKey: ["cut-plans"] });
+    toast({ title: "Assigned", description: "Plan assigned to machine" });
+  }, [queryClient, toast]);
   // Build a machine name lookup
   const machineMap = new Map(machines.map(m => [m.id, m.name]));
 
@@ -142,6 +150,8 @@ export default function StationDashboard() {
                   queuedPlans={machineGroups.unassigned.queued}
                   onUpdateStatus={updatePlanStatus}
                   onStatusChanged={(name, action) => toast({ title: action, description: name })}
+                  availableMachines={machines.map(m => ({ id: m.id, name: m.name }))}
+                  onAssignMachine={assignToMachine}
                 />
               )}
             </div>
