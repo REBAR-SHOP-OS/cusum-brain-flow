@@ -44,6 +44,8 @@ interface TaskRow {
   updated_at: string;
   completed_at: string | null;
   company_id: string;
+  source?: string | null;
+  attachment_url?: string | null;
   created_by_profile?: { id: string; full_name: string | null } | null;
 }
 
@@ -561,6 +563,40 @@ export default function Tasks() {
 
       await dismissTaskNotifications(task.id);
       await writeAudit(task.id, "approved_and_closed", "status", "completed", "completed");
+
+      // Send feedback resolution notification to original reporter
+      if (task.source === "screenshot_feedback" && task.created_by_profile_id) {
+        try {
+          const { data: reporterProfile } = await supabase
+            .from("profiles")
+            .select("user_id, company_id")
+            .eq("id", task.created_by_profile_id)
+            .maybeSingle();
+
+          if (reporterProfile?.user_id) {
+            await supabase.from("notifications").insert({
+              user_id: reporterProfile.user_id,
+              type: "notification",
+              title: `بازخورد شما بررسی شد: ${task.title}`,
+              description: task.description || null,
+              agent_name: "Feedback",
+              agent_color: "bg-emerald-500",
+              link_to: null,
+              company_id: reporterProfile.company_id,
+              metadata: {
+                task_id: task.id,
+                feedback_resolved: true,
+                original_title: task.title,
+                original_description: task.description || null,
+                original_attachment_url: task.attachment_url || null,
+              },
+            });
+          }
+        } catch (notifErr) {
+          console.error("Failed to send feedback resolution notification:", notifErr);
+        }
+      }
+
       toast.success("Task approved & closed");
       loadData();
     } catch (e: any) {

@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { X, ChevronRight, ChevronDown, Loader2, Check, Bell, CheckSquare, Lightbulb, AlertTriangle, Settings } from "lucide-react";
+import { X, ChevronRight, ChevronDown, Loader2, Check, Bell, CheckSquare, Lightbulb, AlertTriangle, Settings, CheckCircle, RotateCcw } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { getCompanyId } from "@/hooks/useCompanyId";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +62,8 @@ function NotificationItem({
   onDismiss,
   onAction,
   showCheckmark,
+  onConfirmFixed,
+  onReReport,
 }: {
   item: Notification;
   isExpanded: boolean;
@@ -66,7 +71,11 @@ function NotificationItem({
   onDismiss: (e: React.MouseEvent) => void;
   onAction?: (e: React.MouseEvent) => void;
   showCheckmark?: boolean;
+  onConfirmFixed?: (id: string) => void;
+  onReReport?: (item: Notification) => void;
 }) {
+  const isFeedbackResolved = item.metadata?.feedback_resolved === true;
+
   return (
     <div
       className={cn(
@@ -108,17 +117,42 @@ function NotificationItem({
             {item.agentName ?? "System"} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
           </p>
         </div>
-        <button
-          onClick={onDismiss}
-          aria-label="Dismiss notification"
-          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-        {!item.linkTo && (
-          isExpanded
-            ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            : <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+
+        {/* Feedback resolved action buttons */}
+        {isFeedbackResolved && onConfirmFixed && onReReport ? (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); onConfirmFixed(item.id); }}
+              aria-label="تأیید رفع مشکل"
+              title="مشکل برطرف شده"
+              className="p-1.5 rounded-md hover:bg-emerald-500/20 text-emerald-500 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            >
+              <CheckCircle className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onReReport(item); }}
+              aria-label="گزارش مجدد"
+              title="هنوز مشکل دارد - گزارش مجدد"
+              className="p-1.5 rounded-md hover:bg-destructive/20 text-destructive transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={onDismiss}
+              aria-label="Dismiss notification"
+              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+            {!item.linkTo && (
+              isExpanded
+                ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                : <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            )}
+          </>
         )}
       </div>
       {isExpanded && (
@@ -231,6 +265,48 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     e.stopPropagation();
     markActioned(id);
   };
+
+  const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
+
+  const handleConfirmFixed = useCallback((id: string) => {
+    dismiss(id);
+    toast.success("مشکل تأیید و بسته شد");
+  }, [dismiss]);
+
+  const handleReReport = useCallback(async (item: Notification) => {
+    try {
+      const meta = item.metadata as Record<string, unknown> | null;
+      if (!meta) return;
+
+      const companyId = await getCompanyId();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !companyId) { toast.error("خطا در احراز هویت"); return; }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      await supabase.from("tasks").insert({
+        title: (meta.original_title as string) || "گزارش مجدد باگ",
+        description: (meta.original_description as string) || null,
+        attachment_url: (meta.original_attachment_url as string) || null,
+        source: "screenshot_feedback",
+        assigned_to: RADIN_PROFILE_ID,
+        created_by_profile_id: profile?.id || null,
+        status: "pending",
+        priority: "high",
+        company_id: companyId,
+      } as any);
+
+      dismiss(item.id);
+      toast.success("مشکل مجدداً گزارش شد");
+    } catch (err: any) {
+      console.error("Re-report failed:", err);
+      toast.error("خطا در گزارش مجدد");
+    }
+  }, [dismiss]);
 
   const handleDismissAllForTab = () => {
     if (activeTab === "notifications") dismissAll();
@@ -397,6 +473,8 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                             onDismiss={(e) => handleDismiss(e, item.id)}
                             onAction={activeTab === "todos" ? (e) => handleAction(e, item.id) : undefined}
                             showCheckmark={activeTab === "todos"}
+                            onConfirmFixed={handleConfirmFixed}
+                            onReReport={handleReReport}
                           />
                         ))}
                       </div>
