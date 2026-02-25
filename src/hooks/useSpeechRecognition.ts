@@ -55,7 +55,9 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = optionsRef.current?.lang ?? "fa-IR";
+    if (optionsRef.current?.lang) {
+      recognition.lang = optionsRef.current.lang;
+    }
 
     recognition.onstart = () => setIsListening(true);
 
