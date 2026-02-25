@@ -17,20 +17,25 @@ export async function fetchContext(
   const svc = svcClient || supabase; // Fallback
 
   try {
-    // 1. Basic Communications (Last 15 emails)
-    const { data: comms } = await supabase
-      .from("communications")
-      .select("id, subject, from_address, to_address, body_preview, status, source, received_at, customer_id")
-      .order("received_at", { ascending: false })
-      .limit(15);
-    context.recentEmails = comms;
+    // Skip heavy context for social/Pixel agent — it only needs Brain knowledge + employees
+    if (agent === "social") {
+      // Jump straight to employees + brain block (handled below)
+    } else {
+      // 1. Basic Communications (Last 15 emails)
+      const { data: comms } = await supabase
+        .from("communications")
+        .select("id, subject, from_address, to_address, body_preview, status, source, received_at, customer_id")
+        .order("received_at", { ascending: false })
+        .limit(15);
+      context.recentEmails = comms;
 
-    // 2. Customers (Top 15)
-    const { data: customers } = await supabase
-      .from("customers")
-      .select("id, name, company_name, status, payment_terms, credit_limit")
-      .limit(15);
-    context.customers = customers;
+      // 2. Customers (Top 15)
+      const { data: customers } = await supabase
+        .from("customers")
+        .select("id, name, company_name, status, payment_terms, credit_limit")
+        .limit(15);
+      context.customers = customers;
+    }
 
     // 3. Agent-Specific Data Loading
     
