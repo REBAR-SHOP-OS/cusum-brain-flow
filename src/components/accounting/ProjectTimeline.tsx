@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -39,6 +40,28 @@ export function ProjectTimeline({ projectId }: ProjectTimelineProps) {
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState("");
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  const handleNoteChange = (val: string) => {
+    setNoteText(val);
+    const atMatch = val.match(/@(\w*)$/);
+    if (atMatch) { setMentionOpen(true); setMentionFilter(atMatch[1]); setMentionIndex(0); }
+    else { setMentionOpen(false); }
+  };
+
+  const handleMentionSelect = useCallback((item: { label: string }) => {
+    setNoteText(prev => prev.replace(/@\w*$/, `@${item.label} `));
+    setMentionOpen(false);
+  }, []);
+
+  const handleNoteKeyDown = (e: React.KeyboardEvent) => {
+    if (!mentionOpen) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => i + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(0, i - 1)); }
+    else if (e.key === "Escape") { e.preventDefault(); setMentionOpen(false); }
+  };
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["project_events", companyId, projectId],
@@ -101,13 +124,23 @@ export function ProjectTimeline({ projectId }: ProjectTimelineProps) {
     <div className="space-y-4">
       {/* Note composer */}
       <div className="flex gap-2 items-start bg-amber-50/60 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200/50 dark:border-amber-800/30">
-        <Textarea
-          value={noteText}
-          onChange={e => setNoteText(e.target.value)}
-          placeholder="Log a note to the project timeline..."
-          className="min-h-[50px] text-sm resize-none bg-transparent border-amber-300/50 dark:border-amber-700/50"
-          rows={2}
-        />
+        <div className="relative flex-1">
+          <Textarea
+            value={noteText}
+            onChange={e => handleNoteChange(e.target.value)}
+            onKeyDown={handleNoteKeyDown}
+            placeholder="Log a note to the project timeline..."
+            className="min-h-[50px] text-sm resize-none bg-transparent border-amber-300/50 dark:border-amber-700/50"
+            rows={2}
+          />
+          <MentionMenu
+            isOpen={mentionOpen}
+            filter={mentionFilter}
+            selectedIndex={mentionIndex}
+            onSelect={handleMentionSelect}
+            onClose={() => setMentionOpen(false)}
+          />
+        </div>
         <Button
           size="sm"
           className="shrink-0 gap-1 h-8"

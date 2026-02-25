@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +49,28 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   const [composerText, setComposerText] = useState("");
   const [activityType, setActivityType] = useState("follow_up");
   const [activityDate, setActivityDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  const handleComposerChange = (val: string) => {
+    setComposerText(val);
+    const atMatch = val.match(/@(\w*)$/);
+    if (atMatch) { setMentionOpen(true); setMentionFilter(atMatch[1]); setMentionIndex(0); }
+    else { setMentionOpen(false); }
+  };
+
+  const handleMentionSelect = useCallback((item: { label: string }) => {
+    setComposerText(prev => prev.replace(/@\w*$/, `@${item.label} `));
+    setMentionOpen(false);
+  }, []);
+
+  const handleComposerKeyDown = (e: React.KeyboardEvent) => {
+    if (!mentionOpen) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => i + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(0, i - 1)); }
+    else if (e.key === "Escape") { e.preventDefault(); setMentionOpen(false); }
+  };
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -300,18 +323,28 @@ export function OdooChatter({ lead }: OdooChatterProps) {
               />
             </div>
           )}
-          <Textarea
-            value={composerText}
-            onChange={(e) => setComposerText(e.target.value)}
-            placeholder={
-              activeTab === "note"
-                ? "Log an internal note..."
-                : activeTab === "message"
-                ? "Write a message..."
-                : "Add a description..."
-            }
-            className={cn("min-h-[60px] text-[13px] resize-none", activeTab === "note" && "bg-transparent border-amber-300/50 dark:border-amber-700/50")}
-          />
+          <div className="relative">
+            <Textarea
+              value={composerText}
+              onChange={(e) => handleComposerChange(e.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              placeholder={
+                activeTab === "note"
+                  ? "Log an internal note..."
+                  : activeTab === "message"
+                  ? "Write a message..."
+                  : "Add a description..."
+              }
+              className={cn("min-h-[60px] text-[13px] resize-none", activeTab === "note" && "bg-transparent border-amber-300/50 dark:border-amber-700/50")}
+            />
+            <MentionMenu
+              isOpen={mentionOpen}
+              filter={mentionFilter}
+              selectedIndex={mentionIndex}
+              onSelect={handleMentionSelect}
+              onClose={() => setMentionOpen(false)}
+            />
+          </div>
           <div className="flex items-center justify-between">
             <input
               ref={fileInputRef}
