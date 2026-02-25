@@ -1,198 +1,215 @@
 
 
-## Full Pipeline Audit: Extract → Delivery — New Bugs Found
+## Multi-Project Parallel Pipeline Audit: New Bugs Found
 
-After tracing every code path from AI extraction through cut planning, cutter/bender stations, clearance, loading, delivery creation, and driver POD capture, here are the additional bugs beyond the 6 already fixed.
-
----
-
-### CRITICAL — Will cause runtime failures
-
-#### 1. `manage-extract` reject handler: `company_id` missing from activity_events insert
-
-**File**: `supabase/functions/manage-extract/index.ts` line 719
-
-The `rejectExtract` function only selects `id, name, status` from the session (line 699):
-```typescript
-const { data: session } = await sb
-  .from("extract_sessions")
-  .select("id, name, status")  // ← no company_id
-  .eq("id", sessionId)
-  .single();
-```
-
-Then at line 719 it inserts an activity event WITHOUT `company_id`:
-```typescript
-await sb.from("activity_events").insert({
-  entity_type: "extract_session",
-  entity_id: sessionId,
-  event_type: "rejected",
-  // ... NO company_id
-});
-```
-
-This will fail with a not-null constraint violation — the same bug class as the `manage-machine` fix already applied.
-
-**Fix**: Add `company_id` to the session select, and include it in the event insert.
+After tracing 10 parallel projects running simultaneously across different machines from extraction through delivery and the driver UI, here are all new bugs beyond the 17 already fixed.
 
 ---
 
-#### 2. `auto_advance_item_phase` trigger: bending completion only fires when phase is `bending` — but bender items may still be in `cut_done`
+### CRITICAL — Race conditions and data corruption in multi-project parallel execution
 
-**File**: Migration `20260207210138` — trigger function
+#### 1. `QueueToMachineDialog`: does NOT set `machine_id` on the `cut_plans` row
 
-The trigger at line 21-25:
+**File**: `src/components/cutter/QueueToMachineDialog.tsx` line 78
+
+```typescript
+await supabase.from("cut_plans").update({ status: "queued" }).eq("id", plan.id);
+```
+
+Only `status` is updated — `machine_id` is never set. The cutter station query in `useStationData` (line 76) filters by `.eq("machine_id", machineId)`. Since `machine_id` stays `NULL`, the plan's items **never appear** on the cutter station.
+
+The `machine_runs` rows ARE created with the correct `machine_id`, but cut_plan_items are fetched via `cut_plans.machine_id`, not via `machine_runs`. This means:
+- Office queues a plan to Machine A → plan status becomes "queued"
+- Cutter operator opens Machine A station → sees nothing (plan's `machine_id` is still NULL)
+- With 10 projects queued in parallel, NONE appear on any station
+
+**Fix**: Change line 78 to:
+```typescript
+await supabase.from("cut_plans").update({ status: "queued", machine_id: machineId }).eq("id", plan.id);
+```
+
+---
+
+#### 2. `useStationData` realtime: channel name collision across projects
+
+**File**: `src/hooks/useStationData.ts` line 122
+
+```typescript
+.channel(`station-${machineId}`)
+```
+
+The channel name uses only `machineId`. When `StationView` calls `useStationData(machineId, machineType, null)` (line 26 — no project filter to get ALL items for project selection), and then the filtered items are computed client-side, the **single** realtime channel correctly invalidates. However, the query key includes `projectId`:
+
+```typescript
+queryKey: ["station-data", machineId, machineType, companyId, projectId]
+```
+
+The invalidation at line 125 also includes `projectId`. So the channel invalidates only the `projectId=null` query. If a user navigates back, selects a different project, the old subscription's invalidation targets the wrong key. Items won't auto-refresh until the component remounts.
+
+**Fix**: Remove `projectId` from the invalidation query key or use partial key matching:
+```typescript
+queryClient.invalidateQueries({ queryKey: ["station-data", machineId] })
+```
+
+---
+
+#### 3. `StationView` project picker uses `project_name` string as ID — collisions across plans
+
+**File**: `src/pages/StationView.tsx` lines 37-53
+
+```typescript
+const projKey = item.project_name || "__unassigned__";
+```
+
+Projects are keyed by their `project_name` string, not by a UUID `project_id`. If two different projects have the same name (e.g., two "123 Main St" projects from different customers), they merge into one entry. The operator sees combined items from both projects, which can cause mixed barlists loaded onto the same truck.
+
+With 10 projects in parallel, name collisions become statistically likely.
+
+**Fix**: Use `cut_plans.project_id` (available via the join) as the key instead of `project_name`. This requires adding `project_id` to the `cut_plans` select in `useStationData` and the `StationItem` type.
+
+---
+
+#### 4. `useDeliveryActions`: delivery number race condition in parallel creation
+
+**File**: `src/hooks/useDeliveryActions.ts` lines 22-29
+
+```typescript
+const { count } = await supabase
+  .from("deliveries")
+  .select("id", { count: "exact", head: true })
+  .eq("company_id", companyId)
+  .like("delivery_number", `${invoiceNumber}-%`);
+const seq = String((count ?? 0) + 1).padStart(2, "0");
+```
+
+If two operators create deliveries for the same invoice number simultaneously (e.g., two trucks for the same project), both read `count=0` and both generate `INV-01`. The second insert succeeds (no unique constraint on `delivery_number`), creating duplicate delivery numbers. With 10 projects loading simultaneously, this is likely.
+
+**Fix**: Add a unique constraint on `(company_id, delivery_number)` in the database, and retry with incremented seq on conflict.
+
+---
+
+#### 5. `autoDispatchTask`: queue position race condition
+
+**File**: `supabase/functions/manage-extract/index.ts` lines 804-811
+
+```typescript
+const { data: posData } = await sb
+  .from("machine_queue_items")
+  .select("position")
+  .eq("machine_id", bestMachine.id)
+  .in("status", ["queued", "running"])
+  .order("position", { ascending: false })
+  .limit(1);
+const nextPos = posData?.length ? posData[0].position + 1 : 0;
+```
+
+When 10 projects approve simultaneously, multiple `autoDispatchTask` calls read the same `nextPos` and insert at the same position. This creates duplicate positions, corrupting the queue order. The production operator sees items in random order.
+
+**Fix**: Use a database sequence or `COALESCE(MAX(position), -1) + 1` inside a transaction, or use `ON CONFLICT` to resolve position collisions.
+
+---
+
+### HIGH — Multi-project data integrity
+
+#### 6. `BenderStationView`: `items` passed from parent are NOT filtered by project
+
+**File**: `src/pages/StationView.tsx` line 223
+
+```typescript
+<BenderStationView
+  machine={machine}
+  items={items}  // ← these are project-filtered items from line 64-70
+```
+
+Wait — `items` at line 64 IS filtered. But `items` is filtered by `selectedProjectId` using `project_name` string matching (Bug #3). If two projects share a name, the bender gets mixed items. Additionally, if `selectedProjectId` is `null` (user hasn't selected), ALL items from ALL projects are passed to the bender — the operator sees a merged list across projects.
+
+**Impact with 10 parallel projects**: Bender operator can accidentally process items from the wrong project if they haven't selected a project, or if project names collide.
+
+#### 7. `DriverDashboard`: delivery filtering uses `driver_name` string match, not user ID
+
+**File**: `src/pages/DriverDashboard.tsx` line 105
+
+```typescript
+.eq("driver_name", myProfile!.full_name!)
+```
+
+If two drivers have the same `full_name` (e.g., two "John Smith" employees), they see each other's deliveries. With 10 parallel projects generating deliveries assigned to different drivers, name collisions cause cross-delivery visibility.
+
+**Fix**: Use `driver_profile_id` (a UUID FK to profiles) instead of `driver_name` string matching.
+
+#### 8. Delivery `status` never transitions to `in-transit`
+
+**File**: `src/hooks/useDeliveryActions.ts` — the delivery is created with `status: "pending"` (line 40). There is no code anywhere that transitions it to `in-transit`. The `DriverDashboard` filters by `d.status === "in-transit"` (line 129) to find the active delivery. But no UI action ever sets this status.
+
+The driver can only see deliveries in the "Today's Deliveries" list and tap "Mark Arrived" on individual stops, but the parent delivery stays "pending" forever. The "Active Delivery" highlight card never appears.
+
+**Fix**: Add a "Start Delivery" button in `DriverDashboard` that updates the delivery status to `in-transit`. Also auto-transition to `delivered` when all stops are completed.
+
+#### 9. `delivery_stops.order_id` is never set — `block_delivery_without_qc` trigger is bypassed
+
+**File**: The `block_delivery_without_qc` trigger (DB function) checks:
 ```sql
-IF NEW.bend_completed_pieces >= NEW.total_pieces 
-   AND NEW.total_pieces > 0
-   AND NEW.phase = 'bending' THEN   -- ← ONLY fires if phase is already 'bending'
-  NEW.phase := 'clearance';
-END IF;
+SELECT EXISTS (
+  SELECT 1 FROM delivery_stops ds
+  JOIN orders o ON o.id = ds.order_id
+  WHERE ds.delivery_id = NEW.id
+    AND (o.qc_evidence_uploaded = FALSE OR o.qc_final_approved = FALSE)
+) INTO _missing;
 ```
 
-But the bender `handleDone` (correctly) no longer sets `phase: "bending"`. Items arrive at the bender with `phase = 'cut_done'`. When the operator completes all bending (bend_completed_pieces = total_pieces), the trigger checks `NEW.phase = 'bending'` — which is FALSE because the item is still in `cut_done`. The item **never advances to clearance**.
-
-This means completed bend items remain stuck in `cut_done` forever, still visible on the bender station.
-
-**Fix**: Update the trigger to also accept `cut_done`:
-```sql
-IF NEW.bend_completed_pieces >= NEW.total_pieces 
-   AND NEW.total_pieces > 0
-   AND NEW.phase IN ('bending', 'cut_done') THEN
-  NEW.phase := 'clearance';
-END IF;
-```
-
----
-
-### HIGH — Data integrity / functional gaps
-
-#### 3. `manage-extract` approve: `pieces_per_bar` never calculated for cut_plan_items
-
-**File**: `supabase/functions/manage-extract/index.ts` line 565-578
-
-When creating `cut_plan_items` during approval:
-```typescript
-const cutItems = rows.map((row: any) => ({
-  cut_plan_id: cutPlan.id,
-  bar_code: row.bar_size_mapped || row.bar_size || "10M",
-  qty_bars: row.quantity || 1,        // ← sets qty_bars = quantity (total pieces)
-  cut_length_mm: row.total_length_mm || 0,
-  total_pieces: row.quantity || 1,
-  // pieces_per_bar is NOT set — defaults to DB default or null
-}));
-```
-
-`qty_bars` is set to the row quantity (total pieces), but this should be bars needed, not pieces. `pieces_per_bar` is never calculated. The cutter station's Foreman Brain uses these values for run planning. With `qty_bars = total_pieces` and no `pieces_per_bar`, the run plan will compute incorrect bar counts.
-
-**Fix**: Calculate `pieces_per_bar` from stock length and cut length:
-```typescript
-const stockLength = 12000; // default
-const piecesPerBar = row.total_length_mm > 0 
-  ? Math.floor(stockLength / row.total_length_mm) 
-  : 1;
-const qtyBars = Math.ceil((row.quantity || 1) / Math.max(piecesPerBar, 1));
-```
-
-#### 4. `manage-extract` approve: `production_tasks.project_id` is set to `workOrder.id` instead of actual `projectId`
-
-**File**: `supabase/functions/manage-extract/index.ts` line 590
-
-```typescript
-const tasks = savedItems.map((item: any) => ({
-  company_id: session.company_id,
-  project_id: workOrder.id,          // ← BUG: this is work_order.id, not project_id
-  work_order_id: item.work_order_id || workOrder.id,
-}));
-```
-
-This means all production tasks have their `project_id` set to a work order UUID, breaking any project-based filtering or reporting.
-
-**Fix**: Change to `project_id: projectId,`
-
-#### 5. `useCompletedBundles`: includes `clearance` phase items — but these haven't passed QC yet
-
-**File**: `src/hooks/useCompletedBundles.ts` line 37
-
-```typescript
-.in("phase", ["clearance", "complete"])
-```
-
-Items in `clearance` are awaiting QC verification. Including them in "completed bundles" at the Loading Station means operators can load items onto the truck before QC has signed off. The loading station then creates deliveries for unverified items.
-
-**Fix**: Change to `.eq("phase", "complete")` only, or add a QC verification check.
-
-#### 6. `useDeliveryActions`: delivery `cut_plan_id` set but not typed correctly
-
-**File**: `src/hooks/useDeliveryActions.ts` line 39
-
+But `useDeliveryActions.ts` creates delivery stops WITHOUT `order_id` (line 68-76):
 ```typescript
 .insert({
   company_id: companyId,
-  delivery_number: deliveryNumber,
+  delivery_id: delivery.id,
+  stop_sequence: 1,
   status: "pending",
-  scheduled_date: scheduledDate,
-  cut_plan_id: bundle.cutPlanId,   // ← cast as `any` to bypass type check
-} as any)
+  address: siteAddress,
+  // NO order_id
+})
 ```
 
-The `deliveries` table may not have a `cut_plan_id` column in the type definitions. If the column doesn't exist, this insert silently ignores it. If it does exist but the type is wrong, the insert fails silently because errors from `as any` are opaque.
+The `JOIN orders o ON o.id = ds.order_id` returns zero rows because `order_id` is NULL. The QC check is completely bypassed — unverified items can be delivered.
+
+**Fix**: Resolve the `order_id` from the cut plan's work order chain: `cut_plan → work_order → order_id`, and set it on the delivery stop.
 
 ---
 
-### MEDIUM — Edge cases / UX issues
+### MEDIUM — UX / functional issues in multi-project scenarios
 
-#### 7. `CutterStationView`: `queryClient.invalidateQueries` in `handleCompleteRun` includes wrong key
+#### 10. `LoadingStation`: bundle selection doesn't show project name distinctly
 
-**File**: `src/components/shopfloor/CutterStationView.tsx` line 324
+When 10 projects produce completed bundles simultaneously, the `ReadyBundleList` component displays bundles by `projectName` — but this is actually `cut_plans.project_name`, which is set to `session.name` during extract approval (line 556 of manage-extract). If operators used the same session name across projects, bundles are indistinguishable.
 
-```typescript
-queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "cutter"] });
-```
+#### 11. `PODCaptureDialog`: no delivery-level status update after all stops complete
 
-But the actual query key in `useStationData` is `["station-data", machineId, machineType, companyId, projectId]`. The invalidation uses only 3 elements vs. the 5-element key. TanStack Query uses prefix matching, so this works by accident — but if TanStack changes prefix matching behavior, it would break.
+After the driver captures POD for the last stop, only the stop status is set to "completed". The parent delivery status stays "pending" (or "in-transit" if bug #8 is fixed). The office user sees the delivery as still in progress even though all stops are done.
 
-#### 8. Packing slip `Total Length` column is misleading
+**Fix**: After updating the stop, check if all stops for the delivery are "completed" and auto-update delivery status to "delivered".
 
-**File**: `src/components/delivery/DeliveryPackingSlip.tsx` line 135
+#### 12. `CutterStationView`: `completedAtRunStart` snapshot is not machine-scoped
 
-```typescript
-<td className="py-3 text-right tabular-nums">
-  {(item.cut_length_mm / 1000).toFixed(2)} m
-</td>
-```
-
-The column header says "Total Length" but displays `cut_length_mm` (per piece). The actual total length should be `cut_length_mm * total_pieces`. This is confusing on the packing slip — the customer sees per-piece length under a "Total" header.
-
-#### 9. `extract-manifest`: no retry on AI token limit truncation for large barlists
-
-**File**: `supabase/functions/extract-manifest/index.ts` lines 202-215
-
-When JSON is truncated due to token limits, the code tries to repair it by finding the last `},` and appending `]}`. This discards the `summary` and all items after the truncation point. For large barlists (200+ items), this can silently lose 50%+ of the data with no warning to the user.
-
-**Fix**: Add a warning to the response indicating truncation occurred and how many items were recovered vs. expected.
-
-#### 10. `LoadingStation`: no deduplication protection on `handleCreateDelivery`
-
-**File**: `src/pages/LoadingStation.tsx` line 78-84
-
-Double-clicking "Create Delivery" can create duplicate deliveries because the `creating` flag may not update fast enough. The button is disabled by `creating`, but rapid clicks can bypass this.
-
-**Fix**: Add a guard at the start of `handleCreateDelivery`:
-```typescript
-if (creating) return;
-```
-
-#### 11. `PODCaptureDialog`: sets `arrival_time` and `departure_time` to the same timestamp
-
-**File**: `src/components/delivery/PODCaptureDialog.tsx` lines 79-80
+**File**: `src/components/shopfloor/CutterStationView.tsx` line 43
 
 ```typescript
-arrival_time: new Date().toISOString(),
-departure_time: new Date().toISOString(),
+const [completedAtRunStart, setCompletedAtRunStart] = useState<number | null>(null);
 ```
 
-Both are identical, making it impossible to track actual time at the delivery site. Arrival should be recorded when the driver arrives, not when they complete the POD.
+This state is per-component instance. If an operator navigates to a different item within the same cutter session (via prev/next), `completedAtRunStart` from the previous item's run persists. The next item's "effective completed" calculation uses the wrong base, showing incorrect progress.
+
+This is especially problematic when running 10 projects in parallel — switching between items from different projects mid-run corrupts the count.
+
+**Fix**: Reset `completedAtRunStart` and `slotTracker` when `currentItem.id` changes.
+
+#### 13. `StationView`: `workspaceName` prop passes raw `selectedProjectId` string
+
+**File**: `src/pages/StationView.tsx` line 264
+
+```typescript
+workspaceName={selectedProjectId && selectedProjectId !== "__unassigned__" ? selectedProjectId : undefined}
+```
+
+`selectedProjectId` is the `project_name` string (e.g., "123 Main St"), not a formatted display name. For bender stations, `selectedProjectId` could be any arbitrary text since it comes from `project_name`. This is cosmetic but confusing when 10 projects are active.
 
 ---
 
@@ -200,23 +217,20 @@ Both are identical, making it impossible to track actual time at the delivery si
 
 | # | Severity | Fix | File |
 |---|----------|-----|------|
-| 1 | CRITICAL | Update `auto_advance_item_phase` trigger to accept `cut_done` phase for bending completion | DB migration |
-| 2 | CRITICAL | Add `company_id` to `rejectExtract` session select and event insert | `manage-extract/index.ts` line 699, 719 |
-| 3 | HIGH | Fix `production_tasks.project_id` — use `projectId` not `workOrder.id` | `manage-extract/index.ts` line 590 |
-| 4 | HIGH | Calculate `pieces_per_bar` and correct `qty_bars` in approve handler | `manage-extract/index.ts` line 565 |
-| 5 | HIGH | Remove `clearance` from completed bundles query — only show `complete` items | `useCompletedBundles.ts` line 37 |
-| 6 | MEDIUM | Fix packing slip "Total Length" to show per-piece length or rename column | `DeliveryPackingSlip.tsx` line 135 |
-| 7 | MEDIUM | Add truncation warning to `extract-manifest` response | `extract-manifest/index.ts` |
-| 8 | MEDIUM | Fix `arrival_time` vs `departure_time` in POD capture | `PODCaptureDialog.tsx` line 79 |
-| 9 | LOW | Guard against double-click on Create Delivery | `LoadingStation.tsx` |
-| 10 | LOW | Fix `queryClient.invalidateQueries` key to match actual query key structure | `CutterStationView.tsx` line 324 |
+| 1 | CRITICAL | Set `machine_id` on `cut_plans` when queuing to machine | `QueueToMachineDialog.tsx` line 78 |
+| 2 | CRITICAL | Fix realtime invalidation to use partial query key | `useStationData.ts` line 125 |
+| 3 | CRITICAL | Use `project_id` instead of `project_name` for project keying | `StationView.tsx` + `useStationData.ts` |
+| 4 | CRITICAL | Add unique constraint on delivery numbers / handle race | `useDeliveryActions.ts` + DB migration |
+| 5 | CRITICAL | Fix queue position race in autoDispatchTask | `manage-extract/index.ts` line 804 |
+| 6 | HIGH | Set `order_id` on delivery stops to enable QC gate | `useDeliveryActions.ts` line 68 |
+| 7 | HIGH | Use `driver_profile_id` instead of `driver_name` for filtering | `DriverDashboard.tsx` line 105 |
+| 8 | HIGH | Add delivery status transitions (`in-transit`, `delivered`) | `DriverDashboard.tsx` + `PODCaptureDialog.tsx` |
+| 9 | HIGH | Reset `completedAtRunStart` on item change | `CutterStationView.tsx` |
+| 10 | MEDIUM | Auto-complete delivery when all stops done | `PODCaptureDialog.tsx` |
+| 11 | MEDIUM | Show distinct project identifiers in loading station | `LoadingStation.tsx` |
+| 12 | LOW | Fix `workspaceName` display | `StationView.tsx` |
 
-### Most Urgent: Bug #1 — Bender items stuck forever
+### Most Urgent: Bug #1 — Plans never appear on cutter stations
 
-The `auto_advance_item_phase` trigger bug (#1) is the most impactful. With the previous fix removing `phase: "bending"` from the bender handler, items now complete bending while still in `cut_done` phase. The trigger never fires the clearance transition because it requires `phase = 'bending'`. This means:
-
-- All bent items stay in `cut_done` forever
-- They remain visible on the bender station after completion
-- They never appear in clearance or loading station
-- The entire post-bending pipeline is broken
+Bug #1 (`QueueToMachineDialog` not setting `machine_id`) means **zero plans appear on any cutter station** after being queued from the office. This is the single most critical break in the entire pipeline — the factory floor sees empty queues despite the office having queued work. Every single project is affected.
 
