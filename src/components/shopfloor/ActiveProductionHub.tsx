@@ -1,11 +1,12 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Play, Pause, LayoutGrid } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Play, Pause, LayoutGrid, AlertTriangle } from "lucide-react";
 import type { LiveMachine } from "@/types/machine";
 import type { CutPlan } from "@/hooks/useCutPlans";
 
@@ -16,6 +17,7 @@ interface ActiveProductionHubProps {
 
 export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProductionHubProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Machines that are running or have queued runs
   const workingMachines = machines.filter(
@@ -34,6 +36,9 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
   );
 
   const allWorkingMachines = [...workingMachines, ...additionalMachines];
+
+  // Unassigned running/queued plans
+  const unassignedPlans = activePlans.filter(p => !p.machine_id && ["running", "queued"].includes(p.status));
 
   // Fetch aggregated progress from cut_plan_items
   const planIds = activePlans.map(p => p.id);
@@ -73,7 +78,13 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
     }
   }
 
-  if (allWorkingMachines.length === 0) {
+  const assignToMachine = async (planId: string, machineId: string) => {
+    await supabase.from("cut_plans").update({ machine_id: machineId }).eq("id", planId);
+    queryClient.invalidateQueries({ queryKey: ["cut-plans"] });
+    queryClient.invalidateQueries({ queryKey: ["production-hub-progress"] });
+  };
+
+  if (allWorkingMachines.length === 0 && unassignedPlans.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-6 text-center">
         <p className="text-muted-foreground text-sm">No machines currently running</p>
@@ -104,7 +115,6 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {allWorkingMachines.map((machine) => {
-          const queuedCount = machine.queued_runs?.length || 0;
           const machinePlans = plansByMachine.get(machine.id) || [];
           const planCount = machinePlans.length;
 
@@ -113,7 +123,6 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
               key={machine.id}
               className="rounded-xl border-2 border-border bg-card p-5 space-y-4 hover:border-primary/30 transition-all"
             >
-              {/* Job header */}
               <div className="flex items-center justify-between">
                 <Badge variant="outline" className="text-[10px] font-mono">
                   #{machine.name}
@@ -133,12 +142,10 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
                 </div>
               </div>
 
-              {/* Machine / project name */}
               <h3 className="text-xl font-black text-foreground">
                 {machine.model || machine.name}
               </h3>
 
-              {/* Show assigned plans */}
               {machinePlans.length > 0 && (
                 <div className="space-y-1">
                   {machinePlans.slice(0, 3).map(plan => (
@@ -154,7 +161,6 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
                 </div>
               )}
 
-              {/* Progress */}
               {(() => {
                 const prog = machineProgress.get(machine.id);
                 const pct = prog && prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
@@ -172,7 +178,6 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
                 );
               })()}
 
-              {/* Actions */}
               <div className="flex items-center gap-2">
                 <Button
                   className="flex-1 gap-2 font-bold"
@@ -188,6 +193,43 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
             </div>
           );
         })}
+
+        {/* Unassigned plans card */}
+        {unassignedPlans.length > 0 && (
+          <div className="rounded-xl border-2 border-dashed border-warning/50 bg-card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-warning" />
+                <span className="text-sm font-black italic tracking-wide uppercase text-warning">
+                  Unassigned Jobs
+                </span>
+              </div>
+              <Badge className="bg-warning/20 text-warning border-warning/30 text-[10px]">
+                {unassignedPlans.length} PLAN{unassignedPlans.length !== 1 ? "S" : ""}
+              </Badge>
+            </div>
+            <div className="space-y-3">
+              {unassignedPlans.map(plan => (
+                <div key={plan.id} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-muted/20">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${plan.status === "running" ? "bg-success animate-pulse" : "bg-muted-foreground/30"}`} />
+                  <span className="text-xs font-bold text-foreground truncate flex-1">{plan.name}</span>
+                  <Select onValueChange={(machineId) => assignToMachine(plan.id, machineId)}>
+                    <SelectTrigger className="w-[160px] h-7 text-[10px] bg-card">
+                      <SelectValue placeholder="Assign to machine" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card z-50">
+                      {machines.map(m => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

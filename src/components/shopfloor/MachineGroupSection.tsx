@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, FolderOpen, Layers, FileText, Play, Pause, CheckCircle2, Cpu, ChevronRight } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronDown, FolderOpen, Play, Pause, CheckCircle2, Cpu, ChevronRight } from "lucide-react";
 import { CutPlan } from "@/hooks/useCutPlans";
 
 interface MachineGroupSectionProps {
@@ -11,6 +12,8 @@ interface MachineGroupSectionProps {
   queuedPlans: CutPlan[];
   onUpdateStatus: (planId: string, status: string) => Promise<boolean>;
   onStatusChanged: (planName: string, action: string) => void;
+  availableMachines?: { id: string; name: string }[];
+  onAssignMachine?: (planId: string, machineId: string) => void;
 }
 
 const statusMap: Record<string, { label: string; color: string }> = {
@@ -37,6 +40,8 @@ export function MachineGroupSection({
   queuedPlans,
   onUpdateStatus,
   onStatusChanged,
+  availableMachines,
+  onAssignMachine,
 }: MachineGroupSectionProps) {
   const [open, setOpen] = useState(true);
   const totalJobs = runningPlans.length + queuedPlans.length;
@@ -70,7 +75,7 @@ export function MachineGroupSection({
               <span className="text-xs font-bold uppercase tracking-wider text-success">Live</span>
             </div>
             {runningGroups.map(([projectName, plans]) => (
-              <ProjectFolder key={projectName} projectName={projectName} plans={plans} variant="running" onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+              <ProjectFolder key={projectName} projectName={projectName} plans={plans} variant="running" onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} availableMachines={availableMachines} onAssignMachine={onAssignMachine} />
             ))}
           </div>
         )}
@@ -85,7 +90,7 @@ export function MachineGroupSection({
               <span className="text-xs font-bold uppercase tracking-wider text-primary">Queued</span>
             </div>
             {queuedGroups.map(([projectName, plans]) => (
-              <ProjectFolder key={projectName} projectName={projectName} plans={plans} variant="queued" onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+              <ProjectFolder key={projectName} projectName={projectName} plans={plans} variant="queued" onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} availableMachines={availableMachines} onAssignMachine={onAssignMachine} />
             ))}
           </div>
         )}
@@ -100,12 +105,16 @@ function ProjectFolder({
   variant,
   onUpdateStatus,
   onStatusChanged,
+  availableMachines,
+  onAssignMachine,
 }: {
   projectName: string;
   plans: CutPlan[];
   variant: "running" | "queued";
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
   onStatusChanged: (name: string, action: string) => void;
+  availableMachines?: { id: string; name: string }[];
+  onAssignMachine?: (planId: string, machineId: string) => void;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -121,7 +130,7 @@ function ProjectFolder({
       </CollapsibleTrigger>
       <CollapsibleContent className="ml-4 space-y-1 mt-1">
         {plans.map(plan => (
-          <PlanRow key={plan.id} plan={plan} variant={variant} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+          <PlanRow key={plan.id} plan={plan} variant={variant} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} availableMachines={availableMachines} onAssignMachine={onAssignMachine} />
         ))}
       </CollapsibleContent>
     </Collapsible>
@@ -133,11 +142,15 @@ function PlanRow({
   variant,
   onUpdateStatus,
   onStatusChanged,
+  availableMachines,
+  onAssignMachine,
 }: {
   plan: CutPlan;
   variant: "running" | "queued";
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
   onStatusChanged: (name: string, action: string) => void;
+  availableMachines?: { id: string; name: string }[];
+  onAssignMachine?: (planId: string, machineId: string) => void;
 }) {
   const isRunning = variant === "running";
   const st = isRunning
@@ -156,6 +169,20 @@ function PlanRow({
         <h3 className="text-sm font-bold text-foreground truncate">{plan.name}</h3>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
+        {!plan.machine_id && availableMachines && onAssignMachine && (
+          <Select onValueChange={(machineId) => onAssignMachine(plan.id, machineId)}>
+            <SelectTrigger className="w-[130px] h-7 text-[10px] bg-card">
+              <SelectValue placeholder="Assign machine" />
+            </SelectTrigger>
+            <SelectContent className="bg-card z-50">
+              {availableMachines.map(m => (
+                <SelectItem key={m.id} value={m.id} className="text-xs">
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {isRunning ? (
           <>
             <Button
