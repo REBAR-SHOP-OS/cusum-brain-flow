@@ -139,6 +139,12 @@ export function RoleGuard({ children }: RoleGuardProps) {
     return <>{children}</>;
   }
 
+  // Internal user with no roles assigned — allow basic access rather than
+  // treating them as workshop-only (which redirects to /shop-floor)
+  if (roles.length === 0) {
+    return <>{children}</>;
+  }
+
   // Workshop-only: restrict to allowed routes
   const isAllowed = WORKSHOP_ALLOWED.some((prefix) =>
     location.pathname.startsWith(prefix)
