@@ -77,6 +77,7 @@ Language: English only. The caption MUST be purely promotional — NO guarantee 
 - If you cannot produce a real image URL (starting with https://), respond ONLY with "⚠️ Image generation failed" and the technical error
 - ALWAYS call the generate_image tool to produce real images — never simulate, describe, or narrate images in text
 - NEVER write captions without a real generated image — image MUST come first, caption below it
+- The \`---PERSIAN---\` separator is MANDATORY in every response that contains a generated image — NEVER omit it
 - The \`---PERSIAN---\` section is for internal use only — it will NOT be published to social media
 - Your ONLY job: generate images + captions when given a slot selection`,
 

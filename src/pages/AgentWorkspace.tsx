@@ -357,11 +357,19 @@ export default function AgentWorkspace() {
     if (!user) return;
     try {
       const hashtags = post.hashtags ? post.hashtags.split(/\s+/).filter((h: string) => h.startsWith("#")) : [];
+      // Clean caption: remove slot headers and formatting labels before saving
+      const cleanCaption = (post.caption || "")
+        .replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-].*$/gm, "")
+        .replace(/\*\*Caption:\*\*/g, "")
+        .replace(/\*\*Hashtags:\*\*/g, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      const title = cleanCaption.split("\n").find(l => l.trim().length > 0)?.slice(0, 80) || "Pixel Post";
       const { error } = await supabase.from("social_posts").insert({
         platform: post.platform || "instagram",
         status: "draft",
-        title: (post.caption || "Pixel Post").split("\n")[0].slice(0, 80),
-        content: post.caption || "",
+        title,
+        content: cleanCaption,
         image_url: post.imageUrl || null,
         hashtags,
         scheduled_date: selectedDate.toISOString(),
