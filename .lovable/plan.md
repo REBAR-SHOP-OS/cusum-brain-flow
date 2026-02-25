@@ -1,41 +1,46 @@
 
-## محدود کردن دسترسی اکانتینگ به ۳ کاربر خاص
+## فرمت‌بندی شماره دلیوری: `[invoice_number]-[sequence]`
 
 ### خلاصه
-دسترسی به بخش Accounting فقط و فقط برای ۳ ایمیل زیر باز باشد:
-- `sattar@rebar.shop`
-- `neel@rebar.shop`
-- `vicky@rebar.shop`
-
-هیچ کاربر دیگری، حتی ادمین‌ها، نباید این بخش را ببینند یا به آن دسترسی داشته باشند.
+شماره دلیوری از فرمت فعلی `DEL-MM0W5IRV` (تصادفی) به فرمت `[invoice_number]-[01]` تغییر می‌کند. شماره اینویس توسط کاربر به صورت دستی وارد می‌شود.
 
 ### تغییرات
 
-**1. `src/components/layout/AppSidebar.tsx`**
-- به `NavItem` فیلد اختیاری `allowedEmails?: string[]` اضافه شود
-- آیتم Accounting: حذف `roles` و اضافه `allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"]`
-- در تابع `hasAccess`: اگر `allowedEmails` وجود داشته باشد، فقط ایمیل کاربر چک شود (بدون توجه به نقش admin)
+**1. `src/pages/LoadingStation.tsx`**
+- اضافه کردن یک فیلد ورودی (Input) برای شماره اینویس در بخش progress/bundle info
+- این فیلد قبل از دکمه "Create Delivery" نمایش داده می‌شود
+- دکمه Create Delivery غیرفعال می‌ماند تا شماره اینویس وارد شود
+- مقدار invoiceNumber به `createDeliveryFromBundle` پاس داده می‌شود
 
-**2. `src/pages/AccountingWorkspace.tsx`**
-- تغییر خط 170: `hasAccess` از role-based به email-based
-- ثابت `ACCOUNTING_EMAILS = ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"]`
-- `const hasAccess = ACCOUNTING_EMAILS.includes(user?.email ?? "")`
-- حذف وابستگی به `isAdmin` و `hasRole("accounting")` برای دسترسی
+**2. `src/hooks/useDeliveryActions.ts`**
+- تابع `createDeliveryFromBundle` یک پارامتر جدید `invoiceNumber: string` دریافت می‌کند
+- به جای `DEL-{random}`:
+  - شمارش تعداد دلیوری‌های موجود با همان شماره اینویس (prefix match) در دیتابیس
+  - ساخت شماره ترتیبی دو رقمی: `01`, `02`, `03`, ...
+  - فرمت نهایی: `{invoiceNumber}-{sequence}` (مثلاً `2348-01`)
+- شماره پکینگ اسلیپ نیز متناظر تغییر می‌کند: `PS-{invoiceNumber}-{sequence}`
 
-**3. `src/components/auth/RoleGuard.tsx`**
-- اضافه کردن محافظت مسیر `/accounting` برای ایمیل‌های غیرمجاز (ریدایرکت به `/home`)
+**3. `src/hooks/useCompletedBundles.ts`** (بدون تغییر)
+
+### جریان جدید
+
+```text
+1. کاربر باندل را انتخاب می‌کند
+2. چک‌لیست لود را تکمیل می‌کند
+3. شماره اینویس (مثلاً 2348) را در فیلد جدید وارد می‌کند
+4. دکمه Create Delivery فعال می‌شود
+5. سیستم تعداد دلیوری‌های موجود با prefix "2348-" را شمارش می‌کند → sequence = 01
+6. شماره دلیوری: 2348-01
+7. شماره پکینگ اسلیپ: PS-2348-01
+```
 
 ### جزئیات فنی
 
 | فایل | تغییر |
 |------|-------|
-| `AppSidebar.tsx` خط 21-29 | اضافه `allowedEmails` به `NavItem` |
-| `AppSidebar.tsx` خط 159 | تغییر آیتم Accounting به `allowedEmails` |
-| `AppSidebar.tsx` خط 190-197 | تغییر `hasAccess` برای چک `allowedEmails` |
-| `AccountingWorkspace.tsx` خط 170 | تغییر `hasAccess` به email-based |
-| `RoleGuard.tsx` | اضافه بلاک ریدایرکت `/accounting` برای ایمیل‌های غیرمجاز |
+| `LoadingStation.tsx` خطوط 75-81 و 193-206 | اضافه state `invoiceNumber`، فیلد Input، پاس دادن به hook |
+| `useDeliveryActions.ts` خطوط 13-22 | اضافه پارامتر `invoiceNumber`، کوئری count برای sequence، حذف فرمت قدیمی |
 
-### نتیجه
-- فقط Sattar، Neel و Vicky آیتم Accounting را در سایدبار می‌بینند
-- فقط همین ۳ نفر می‌توانند وارد صفحه `/accounting` شوند
-- ادمین‌ها و سایر کاربران حتی آیتم را در منو نمی‌بینند
+### Validation
+- فیلد اینویس الزامی است (نباید خالی باشد)
+- اگر اینویس قبلاً دلیوری داشته باشد، sequence خودکار افزایش می‌یابد (مثلاً `2348-02`)
