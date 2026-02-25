@@ -32,22 +32,27 @@ import { format, isPast, isToday, startOfDay } from "date-fns";
 
 // ─── Helpers ─────────────────────────────────────────────
 function getTaskCreatorName(task: TaskRow): string | null {
-  // 1. metadata.submitter_name (new feedback tasks)
-  if (task.source === "screenshot_feedback") {
-    try {
-      const meta = typeof task.metadata === "string" ? JSON.parse(task.metadata) : task.metadata;
-      if (meta?.submitter_name && meta.submitter_name !== "Unknown") return meta.submitter_name;
-    } catch {}
-    // 2. Extract From: line from description (legacy feedback)
-    const fromMatch = task.description?.match(/From:\s*(.+)/);
-    if (fromMatch?.[1]) {
-      const name = fromMatch[1].trim();
-      if (name && name !== "Unknown" && name !== "Ai") return name;
-    }
-  }
-  // 3. Fallback to joined profile
+  const isInvalidName = (name?: string | null) => {
+    const n = (name || "").trim().toLowerCase();
+    return !n || n === "unknown" || n === "ai";
+  };
+
+  // 1) metadata.submitter_name (new/updated feedback tasks)
+  try {
+    const meta = typeof task.metadata === "string" ? JSON.parse(task.metadata) : task.metadata;
+    const metaName = meta?.submitter_name as string | undefined;
+    if (!isInvalidName(metaName)) return metaName!.trim();
+  } catch {}
+
+  // 2) Extract "From: ..." from description (legacy feedback tasks)
+  const fromMatch = task.description?.match(/(?:^|\n)From:\s*([^\n]+)/i);
+  const fromName = fromMatch?.[1]?.trim();
+  if (!isInvalidName(fromName)) return fromName!;
+
+  // 3) Fallback to joined creator profile (but never show AI placeholder)
   const profileName = task.created_by_profile?.full_name;
-  if (profileName && profileName !== "Ai") return profileName;
+  if (!isInvalidName(profileName)) return profileName!.trim();
+
   return null;
 }
 
@@ -1054,11 +1059,14 @@ export default function Tasks() {
                                 <span className="text-sm line-through text-muted-foreground block truncate">
                                   {task.title}
                                 </span>
-                                {task.created_by_profile?.full_name && (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    by {task.created_by_profile.full_name}
-                                  </span>
-                                )}
+                                {(() => {
+                                  const name = getTaskCreatorName(task);
+                                  return name ? (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      by {name}
+                                    </span>
+                                  ) : null;
+                                })()}
                               </button>
                               <button
                                 onClick={() => deleteTask(task.id)}
