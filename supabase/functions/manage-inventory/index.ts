@@ -361,8 +361,8 @@ serve(async (req) => {
       // ─── CUT COMPLETION: remnant or scrap ──────────────────────────
       case "cut-complete": {
         const { machineRunId, barCode, stockLengthMm, cutLengthMm, piecesPerBar, bars } = body;
-        if (!machineRunId || !barCode || !cutLengthMm) {
-          return json({ error: "Missing: machineRunId, barCode, cutLengthMm" }, 400);
+        if (!barCode || !cutLengthMm) {
+          return json({ error: "Missing: barCode, cutLengthMm" }, 400);
         }
 
         const stockLen = stockLengthMm || DEFAULT_STOCK_LENGTH_MM;
@@ -379,7 +379,7 @@ serve(async (req) => {
           .from("cut_output_batches")
           .insert({
             company_id: companyId,
-            machine_run_id: machineRunId,
+            machine_run_id: machineRunId || null,
             bar_code: barCode,
             cut_length_mm: cutLengthMm,
             qty_produced: totalPiecesProduced,
