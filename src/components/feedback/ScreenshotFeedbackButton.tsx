@@ -54,6 +54,16 @@ export function ScreenshotFeedbackButton() {
         .forEach(el => expand(el, "; overflow: visible !important; height: auto !important;"));
       target.querySelectorAll<HTMLElement>('[data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-y-scroll, .overflow-auto')
         .forEach(el => expand(el, "; overflow: visible !important; max-height: none !important; height: auto !important;"));
+
+      // Walk up ancestors to remove clipping
+      let parent = target.parentElement;
+      while (parent && parent !== document.body) {
+        const cs = getComputedStyle(parent);
+        if (cs.overflow !== "visible" || cs.overflowY !== "visible" || cs.overflowX !== "visible") {
+          expand(parent, "; overflow: visible !important; max-height: none !important; height: auto !important;");
+        }
+        parent = parent.parentElement;
+      }
     }
 
     const captureWidth  = isOverlay ? window.innerWidth  : target.scrollWidth;
