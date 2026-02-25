@@ -1,147 +1,198 @@
 
 
-## Full Pipeline Audit: Extractor → Delivery — All Problems Found
+## Full Pipeline Audit: Extract → Delivery — New Bugs Found
 
-I traced the entire pipeline (extract → cut plan → cutter station → bender station → clearance → loading → delivery) and cross-referenced with edge function logs, database triggers, and UI code. Here are all the problems identified, ranked by severity.
-
----
-
-### CRITICAL — Actively breaking in production
-
-#### 1. `manage-machine`: activity_events missing `company_id` (every run start/complete fails to log)
-
-**Evidence**: Every single edge function log shows:
-```
-null value in column "company_id" of relation "activity_events" violates not-null constraint
-```
-
-**Root cause**: Line 547 in `manage-machine/index.ts`:
-```typescript
-.insert(events.map((e: any) => ({ ...e, source: "system" })));
-```
-It does NOT add `company_id`. The machine object has `machine.company_id` available, but it's never injected into the events array.
-
-Compare to `manage-inventory/index.ts` line 178 which correctly does:
-```typescript
-.insert(events.map((e: any) => ({ ...e, source: "system", company_id: companyId })));
-```
-
-**Impact**: Zero activity audit trail for ALL machine operations. Every start-run, complete-run, pause-run, operator-assign, and capability-violation event silently fails. This means production analytics, shift reports, and activity feeds are empty.
-
-**Fix**: Add `company_id: machine.company_id` to the events insert at line 547.
+After tracing every code path from AI extraction through cut planning, cutter/bender stations, clearance, loading, delivery creation, and driver POD capture, here are the additional bugs beyond the 6 already fixed.
 
 ---
 
-#### 2. `manage-machine`: capability violation events also miss `company_id`
+### CRITICAL — Will cause runtime failures
 
-Lines 206-209 and 244-249 insert early-return events for capability violations with the same missing `company_id`:
+#### 1. `manage-extract` reject handler: `company_id` missing from activity_events insert
+
+**File**: `supabase/functions/manage-extract/index.ts` line 719
+
+The `rejectExtract` function only selects `id, name, status` from the session (line 699):
 ```typescript
-.insert(events.map((e: any) => ({ ...e, source: "system" })));
+const { data: session } = await sb
+  .from("extract_sessions")
+  .select("id, name, status")  // ← no company_id
+  .eq("id", sessionId)
+  .single();
 ```
 
-And line 381 in `start-queued-run`:
+Then at line 719 it inserts an activity event WITHOUT `company_id`:
 ```typescript
-await supabaseService.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system" })));
+await sb.from("activity_events").insert({
+  entity_type: "extract_session",
+  entity_id: sessionId,
+  event_type: "rejected",
+  // ... NO company_id
+});
 ```
 
-Same fix needed in all 3 locations.
+This will fail with a not-null constraint violation — the same bug class as the `manage-machine` fix already applied.
+
+**Fix**: Add `company_id` to the session select, and include it in the event insert.
 
 ---
 
-#### 3. Bender `handleDone` still sets `phase: "bending"` — can trigger `block_production_without_approval`
+#### 2. `auto_advance_item_phase` trigger: bending completion only fires when phase is `bending` — but bender items may still be in `cut_done`
 
-**File**: `BenderStationView.tsx` line 107:
-```typescript
-.update({ bend_completed_pieces: newCount, phase: "bending" } as any)
+**File**: Migration `20260207210138` — trigger function
+
+The trigger at line 21-25:
+```sql
+IF NEW.bend_completed_pieces >= NEW.total_pieces 
+   AND NEW.total_pieces > 0
+   AND NEW.phase = 'bending' THEN   -- ← ONLY fires if phase is already 'bending'
+  NEW.phase := 'clearance';
+END IF;
 ```
 
-If the item's current phase is `cut_done` and the order has `shop_drawing_status: 'draft'`, this `cut_done → bending` transition goes through `block_production_without_approval`. The trigger currently only checks `NEW.phase = 'cutting'`, so bending is NOT blocked — BUT the explicit `phase: "bending"` set is still unnecessary and can conflict with `auto_advance_item_phase` when `bend_completed_pieces >= total_pieces`.
+But the bender `handleDone` (correctly) no longer sets `phase: "bending"`. Items arrive at the bender with `phase = 'cut_done'`. When the operator completes all bending (bend_completed_pieces = total_pieces), the trigger checks `NEW.phase = 'bending'` — which is FALSE because the item is still in `cut_done`. The item **never advances to clearance**.
 
-When the bender completes (bend_completed_pieces = total_pieces), the `auto_advance_item_phase` trigger should advance to `clearance`. But the manual `phase: "bending"` fights with the trigger. The trigger fires BEFORE UPDATE and may set phase to `clearance`, then this explicit `phase: "bending"` overwrites it.
+This means completed bend items remain stuck in `cut_done` forever, still visible on the bender station.
 
-**Fix**: Remove `phase: "bending"` from the bender update — let the trigger handle phase transitions (same pattern as the cutter fix already applied).
+**Fix**: Update the trigger to also accept `cut_done`:
+```sql
+IF NEW.bend_completed_pieces >= NEW.total_pieces 
+   AND NEW.total_pieces > 0
+   AND NEW.phase IN ('bending', 'cut_done') THEN
+  NEW.phase := 'clearance';
+END IF;
+```
 
 ---
 
-### HIGH — Data integrity / silent failures
+### HIGH — Data integrity / functional gaps
 
-#### 4. `CutterStationView`: `handleRecordStroke` uses fire-and-forget without error handling
+#### 3. `manage-extract` approve: `pieces_per_bar` never calculated for cut_plan_items
 
-Line 227-231:
+**File**: `supabase/functions/manage-extract/index.ts` line 565-578
+
+When creating `cut_plan_items` during approval:
 ```typescript
-supabase
-  .from("cut_plan_items")
-  .update({ completed_pieces: newCompleted } as any)
-  .eq("id", currentItem.id)
-  .then(); // fire-and-forget, don't block UI
+const cutItems = rows.map((row: any) => ({
+  cut_plan_id: cutPlan.id,
+  bar_code: row.bar_size_mapped || row.bar_size || "10M",
+  qty_bars: row.quantity || 1,        // ← sets qty_bars = quantity (total pieces)
+  cut_length_mm: row.total_length_mm || 0,
+  total_pieces: row.quantity || 1,
+  // pieces_per_bar is NOT set — defaults to DB default or null
+}));
 ```
 
-If this fails (e.g., RLS policy, network blip), the operator sees progress locally via `slotTracker` but the DB never updates. When `handleCompleteRun` later calculates `newCompleted` from `completedAtRunStart + totalOutput`, the final DB write succeeds but intermediate progress is lost. If the browser crashes between strokes, all progress since `completedAtRunStart` is lost.
+`qty_bars` is set to the row quantity (total pieces), but this should be bars needed, not pieces. `pieces_per_bar` is never calculated. The cutter station's Foreman Brain uses these values for run planning. With `qty_bars = total_pieces` and no `pieces_per_bar`, the run plan will compute incorrect bar counts.
 
-**Fix**: At minimum, add `.then(({ error }) => { if (error) console.error(...) })` and consider a retry queue.
-
-#### 5. `CutterStationView`: `currentIndex` not clamped on item change
-
-Same issue as bender — already fixed in `BenderStationView` but NOT in `CutterStationView`. If a completed item is removed from the items array (phase moves to `cut_done`/`complete`), `currentIndex` can point beyond the array.
-
-The `useEffect` fix was planned but I don't see it in the current `CutterStationView.tsx`. The cutter relies on manual navigation and auto-advance on complete, but if realtime removes the item mid-run, the view can break.
-
-**Fix**: Add the same `useEffect` clamping pattern from `BenderStationView`.
-
-#### 6. Delivery creation: `useDeliveryActions` uses `as any` everywhere to bypass type safety
-
-Lines like:
+**Fix**: Calculate `pieces_per_bar` from stock length and cut length:
 ```typescript
-.insert({ ... } as any)
-.from("packing_slips" as any)
+const stockLength = 12000; // default
+const piecesPerBar = row.total_length_mm > 0 
+  ? Math.floor(stockLength / row.total_length_mm) 
+  : 1;
+const qtyBars = Math.ceil((row.quantity || 1) / Math.max(piecesPerBar, 1));
 ```
 
-This hides any schema mismatches. If the `deliveries` or `packing_slips` table schema changes, errors will only surface at runtime.
+#### 4. `manage-extract` approve: `production_tasks.project_id` is set to `workOrder.id` instead of actual `projectId`
+
+**File**: `supabase/functions/manage-extract/index.ts` line 590
+
+```typescript
+const tasks = savedItems.map((item: any) => ({
+  company_id: session.company_id,
+  project_id: workOrder.id,          // ← BUG: this is work_order.id, not project_id
+  work_order_id: item.work_order_id || workOrder.id,
+}));
+```
+
+This means all production tasks have their `project_id` set to a work order UUID, breaking any project-based filtering or reporting.
+
+**Fix**: Change to `project_id: projectId,`
+
+#### 5. `useCompletedBundles`: includes `clearance` phase items — but these haven't passed QC yet
+
+**File**: `src/hooks/useCompletedBundles.ts` line 37
+
+```typescript
+.in("phase", ["clearance", "complete"])
+```
+
+Items in `clearance` are awaiting QC verification. Including them in "completed bundles" at the Loading Station means operators can load items onto the truck before QC has signed off. The loading station then creates deliveries for unverified items.
+
+**Fix**: Change to `.eq("phase", "complete")` only, or add a QC verification check.
+
+#### 6. `useDeliveryActions`: delivery `cut_plan_id` set but not typed correctly
+
+**File**: `src/hooks/useDeliveryActions.ts` line 39
+
+```typescript
+.insert({
+  company_id: companyId,
+  delivery_number: deliveryNumber,
+  status: "pending",
+  scheduled_date: scheduledDate,
+  cut_plan_id: bundle.cutPlanId,   // ← cast as `any` to bypass type check
+} as any)
+```
+
+The `deliveries` table may not have a `cut_plan_id` column in the type definitions. If the column doesn't exist, this insert silently ignores it. If it does exist but the type is wrong, the insert fails silently because errors from `as any` are opaque.
 
 ---
 
-### MEDIUM — Functional gaps / edge cases
+### MEDIUM — Edge cases / UX issues
 
-#### 7. Extract → Cut Plan pipeline: no automatic flow
+#### 7. `CutterStationView`: `queryClient.invalidateQueries` in `handleCompleteRun` includes wrong key
 
-The extraction pipeline (`extractService.ts`) creates `extract_sessions` and `extract_rows`, but there's no code path that automatically converts approved extract rows into `cut_plan_items`. The `approveExtract` function calls `manage-extract` with `action: "approve"`, but the edge function's approve handler likely only updates the session status. Items must be manually created.
+**File**: `src/components/shopfloor/CutterStationView.tsx` line 324
 
-#### 8. Bender station: items query includes `phase.eq.bending` but completed items stay visible
-
-When `bend_completed_pieces >= total_pieces`, the `auto_advance_item_phase` trigger should change phase to `clearance`, filtering the item out. BUT if the trigger doesn't fire on `bend_completed_pieces` updates (it only fires on `phase` or `completed_pieces` changes), the bender item stays visible with phase `bending` even after completion.
-
-Check: The trigger `auto_advance_item_phase` may only watch `completed_pieces`, not `bend_completed_pieces`. This would mean bend items never auto-advance unless phase is explicitly changed.
-
-#### 9. `StationView`: `selectedItemId` auto-clear only works when `filteredItems.length > 0`
-
-Line 119:
 ```typescript
-if (selectedItemId && filteredItems.length > 0 && !filteredItems.some(...))
+queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "cutter"] });
 ```
 
-If ALL items complete and `filteredItems` becomes empty (`length === 0`), the condition short-circuits — `selectedItemId` is NOT cleared, and the user is stuck viewing `BenderStationView` with no items and no way back (except the Back button).
+But the actual query key in `useStationData` is `["station-data", machineId, machineType, companyId, projectId]`. The invalidation uses only 3 elements vs. the 5-element key. TanStack Query uses prefix matching, so this works by accident — but if TanStack changes prefix matching behavior, it would break.
 
-**Fix**: Remove the `filteredItems.length > 0` guard, or add an additional branch for empty arrays.
+#### 8. Packing slip `Total Length` column is misleading
 
-#### 10. `StationView` realtime subscription: channel name collisions
+**File**: `src/components/delivery/DeliveryPackingSlip.tsx` line 135
 
-Line 122: The channel name `station-${machineId}` doesn't include `machineType` or `projectId`. If the same machine is opened in multiple tabs with different filters, they share the same channel — harmless but the invalidation query key includes `projectId`, so a filter change would miss invalidation from the shared channel.
+```typescript
+<td className="py-3 text-right tabular-nums">
+  {(item.cut_length_mm / 1000).toFixed(2)} m
+</td>
+```
 
----
+The column header says "Total Length" but displays `cut_length_mm` (per piece). The actual total length should be `cut_length_mm * total_pieces`. This is confusing on the packing slip — the customer sees per-piece length under a "Total" header.
 
-### LOW — Warnings / code quality
+#### 9. `extract-manifest`: no retry on AI token limit truncation for large barlists
 
-#### 11. Console warnings: `StationHeader` and `CutEngine` can't receive refs
+**File**: `supabase/functions/extract-manifest/index.ts` lines 202-215
 
-Both components are function components without `forwardRef`, but `CutterStationView` passes refs to them. This generates React warnings on every render.
+When JSON is truncated due to token limits, the code tries to repair it by finding the last `},` and appending `]}`. This discards the `summary` and all items after the truncation point. For large barlists (200+ items), this can silently lose 50%+ of the data with no warning to the user.
 
-#### 12. `manage-machine`: no `company_id` validation for capability violation early returns
+**Fix**: Add a warning to the response indicating truncation occurred and how many items were recovered vs. expected.
 
-Lines 206-209 and 381 — events are inserted without try/catch wrapping, which could crash the function if the insert throws (though in practice the missing `company_id` causes a softer "Failed to log" error).
+#### 10. `LoadingStation`: no deduplication protection on `handleCreateDelivery`
 
-#### 13. `useDeliveryActions`: site_address lookup silently catches all errors
+**File**: `src/pages/LoadingStation.tsx` line 78-84
 
-The `try/catch` block around project lookup (line ~56) catches everything silently. If the project lookup fails, the delivery and packing slip are created without an address — which means the driver has no delivery location.
+Double-clicking "Create Delivery" can create duplicate deliveries because the `creating` flag may not update fast enough. The button is disabled by `creating`, but rapid clicks can bypass this.
+
+**Fix**: Add a guard at the start of `handleCreateDelivery`:
+```typescript
+if (creating) return;
+```
+
+#### 11. `PODCaptureDialog`: sets `arrival_time` and `departure_time` to the same timestamp
+
+**File**: `src/components/delivery/PODCaptureDialog.tsx` lines 79-80
+
+```typescript
+arrival_time: new Date().toISOString(),
+departure_time: new Date().toISOString(),
+```
+
+Both are identical, making it impossible to track actual time at the delivery site. Arrival should be recorded when the driver arrives, not when they complete the POD.
 
 ---
 
@@ -149,10 +200,23 @@ The `try/catch` block around project lookup (line ~56) catches everything silent
 
 | # | Severity | Fix | File |
 |---|----------|-----|------|
-| 1 | CRITICAL | Add `company_id: machine.company_id` to ALL event inserts | `manage-machine/index.ts` (lines 207, 247, 381, 547) |
-| 2 | CRITICAL | Remove `phase: "bending"` from bender DONE handler | `BenderStationView.tsx` line 107 |
-| 3 | HIGH | Add `currentIndex` clamping useEffect | `CutterStationView.tsx` |
-| 4 | HIGH | Add error callback to fire-and-forget stroke persistence | `CutterStationView.tsx` line 227 |
-| 5 | MEDIUM | Fix `selectedItemId` clear when `filteredItems` is empty | `StationView.tsx` line 119 |
-| 6 | LOW | Add `forwardRef` to `StationHeader` and `CutEngine` | Both components |
+| 1 | CRITICAL | Update `auto_advance_item_phase` trigger to accept `cut_done` phase for bending completion | DB migration |
+| 2 | CRITICAL | Add `company_id` to `rejectExtract` session select and event insert | `manage-extract/index.ts` line 699, 719 |
+| 3 | HIGH | Fix `production_tasks.project_id` — use `projectId` not `workOrder.id` | `manage-extract/index.ts` line 590 |
+| 4 | HIGH | Calculate `pieces_per_bar` and correct `qty_bars` in approve handler | `manage-extract/index.ts` line 565 |
+| 5 | HIGH | Remove `clearance` from completed bundles query — only show `complete` items | `useCompletedBundles.ts` line 37 |
+| 6 | MEDIUM | Fix packing slip "Total Length" to show per-piece length or rename column | `DeliveryPackingSlip.tsx` line 135 |
+| 7 | MEDIUM | Add truncation warning to `extract-manifest` response | `extract-manifest/index.ts` |
+| 8 | MEDIUM | Fix `arrival_time` vs `departure_time` in POD capture | `PODCaptureDialog.tsx` line 79 |
+| 9 | LOW | Guard against double-click on Create Delivery | `LoadingStation.tsx` |
+| 10 | LOW | Fix `queryClient.invalidateQueries` key to match actual query key structure | `CutterStationView.tsx` line 324 |
+
+### Most Urgent: Bug #1 — Bender items stuck forever
+
+The `auto_advance_item_phase` trigger bug (#1) is the most impactful. With the previous fix removing `phase: "bending"` from the bender handler, items now complete bending while still in `cut_done` phase. The trigger never fires the clearance transition because it requires `phase = 'bending'`. This means:
+
+- All bent items stay in `cut_done` forever
+- They remain visible on the bender station after completion
+- They never appear in clearance or loading station
+- The entire post-bending pipeline is broken
 
