@@ -1,66 +1,55 @@
 
 
-## دو اصلاح: حذف عنوان اسلات از کپشن + اطمینان از نمایش ترجمه فارسی
+## سه اصلاح: حذف تکرار در Content + جابجایی ترجمه فارسی + تقویت لوگو
 
-### مشکل اول: عنوان اسلات در کپشن و content
-خط `### Slot 1 — 06:30 AM | Rebar Stirrups` بخشی از خروجی markdown ایجنت است و در `extractPostData` حذف نمی‌شود. این باعث می‌شود:
-- در کارت پست Pixel، کپشن با این عنوان شروع شود
-- در `social_posts.title` این متن ذخیره شود
-- در `social_posts.content` هم تکرار شود
+### مشکل ۱: تکراری شدن متن در بخش Content (سوشیال مدیا منیجر)
+در اسکرین‌شات مشخص است که `title` و `content` هر دو همان متن کپشن را نشان می‌دهند. دلیل: در `AgentWorkspace.tsx` هنگام Approve، `title` از اولین خط `caption` ساخته می‌شود و `content` هم همان `caption` کامل است. در `PostReviewPanel.tsx` خط ۲۷۴-۲۷۷ هر دو نمایش داده می‌شوند.
 
-### مشکل دوم: ترجمه فارسی
-کد فعلی `PixelPostCard` و `PixelChatRenderer` از نظر ساختاری درست هستند — `persianTranslation` جدا شده و نمایش داده می‌شود. اما اگر ایجنت `---PERSIAN---` separator را تولید نکند، ترجمه فارسی داخل caption اصلی می‌ماند. باید مطمئن شویم prompt به درستی این separator را الزامی کرده.
+**راه‌حل**: در `AgentWorkspace.tsx`، `title` را یک عنوان کوتاه و معنادار بسازیم (مثلاً نام محصول یا اولین ۵۰ کاراکتر بدون ایموجی) و از `content` جدا باشد. همچنین اگر `title` زیرمجموعه‌ای از `content` بود، آن را از `content` حذف کنیم تا تکرار نشود.
 
----
+### مشکل ۲: ترجمه فارسی باید زیر دکمه‌های Approve/Regenerate باشد
+در `PixelPostCard.tsx` فعلی، بخش `persianTranslation` بین هشتگ‌ها و دکمه‌ها قرار دارد (خط ۶۱-۶۸). کاربر می‌خواهد **زیر** دکمه‌ها نمایش داده شود.
 
-### تغییرات
+**راه‌حل**: بلوک `persianTranslation` را از بخش Caption+Hashtags (خط ۶۱-۶۸) به بعد از بلوک Action icons (بعد از خط ۹۸) منتقل می‌کنیم.
 
-#### 1. `src/components/social/PixelChatRenderer.tsx` — حذف خطوط Slot header
+### مشکل ۳: لوگو در تولید تصویر
+کد فعلی در `ai-agent/index.ts` لوگو را از `knowledge` table یا fallback path پیدا می‌کند و به مدل AI ارسال می‌کند. اما attempt اول با `useLogo: true` است و اگر fail شود، attempt های بعدی بدون لوگو هستند. باید همه attempt ها با لوگو باشند.
 
-در تابع `extractPostData`، بعد از حذف image markdown، خطوطی که با `### Slot` یا `## Slot` شروع می‌شوند حذف شوند:
-
-```
-textContent = textContent.replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-].*/gm, "");
-```
-
-این regex تمام خطوط header مثل `### Slot 1 — 06:30 AM | Rebar Stirrups` را حذف می‌کند.
-
-همچنین خطوط `**Caption:**` و `**Hashtags:**` را هم حذف می‌کنیم:
-```
-textContent = textContent.replace(/\*\*Caption:\*\*/g, "");
-textContent = textContent.replace(/\*\*Hashtags:\*\*/g, "");
-```
-
-#### 2. `src/pages/AgentWorkspace.tsx` — تمیزکردن title هنگام ذخیره
-
-در `handleApprovePost`، فیلد `title` باید از اولین خط معنادار caption (بدون slot header) ساخته شود. یک تابع کمکی اضافه می‌شود که اولین خط غیرخالی و غیر-slot-header را پیدا کند:
-
-```typescript
-// Clean caption: remove slot headers before saving
-const cleanCaption = (post.caption || "")
-  .replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-].*$/gm, "")
-  .replace(/\*\*Caption:\*\*/g, "")
-  .replace(/\*\*Hashtags:\*\*/g, "")
-  .replace(/\n{3,}/g, "\n\n")
-  .trim();
-
-const title = cleanCaption.split("\n").find(l => l.trim().length > 0)?.slice(0, 80) || "Pixel Post";
-```
-
-و `content` هم از `cleanCaption` استفاده کند.
-
-#### 3. `supabase/functions/_shared/agents/marketing.ts` — تقویت دستور ترجمه فارسی
-
-بررسی prompt نشان می‌دهد که separator `---PERSIAN---` قبلاً در prompt تعریف شده. اما باید مطمئن شویم که AI همیشه آن را تولید می‌کند. یک جمله تاکیدی اضافه می‌شود:
-- "The `---PERSIAN---` separator is MANDATORY in every response that contains a generated image"
+**راه‌حل**: در `generatePixelImage` (خط ۱۷۷-۱۸۱)، همه attempt ها را `useLogo: true` کنیم تا لوگو همیشه ارسال شود. همچنین prompt تقویت شود.
 
 ---
 
-### فایل‌های تغییریافته
+### تغییرات فایل‌ها
 
 | فایل | تغییر |
 |------|-------|
-| `src/components/social/PixelChatRenderer.tsx` | حذف خطوط Slot header و markdown formatting از caption |
-| `src/pages/AgentWorkspace.tsx` | تمیزکردن caption قبل از ذخیره در social_posts |
-| `supabase/functions/_shared/agents/marketing.ts` | تاکید بر الزامی بودن separator فارسی |
+| `src/components/social/PixelPostCard.tsx` | انتقال بلوک ترجمه فارسی به **زیر** دکمه‌های Approve/Regenerate |
+| `src/pages/AgentWorkspace.tsx` | اصلاح ساخت `title`: استخراج عنوان کوتاه و حذف تکرار با content |
+| `supabase/functions/ai-agent/index.ts` | تغییر همه attempt ها به `useLogo: true` |
 
+### جزییات فنی
+
+**PixelPostCard.tsx — جابجایی ترجمه فارسی:**
+بلوک `persianTranslation` (خطوط ۶۱-۶۸) حذف شده و بعد از بلوک Action icons (بعد از خط ۹۸ — بعد از `</div>` دکمه‌ها) اضافه می‌شود.
+
+**AgentWorkspace.tsx — رفع تکرار title/content:**
+```text
+// Extract a short title: first emoji-free meaningful phrase, max 50 chars
+const lines = cleanCaption.split("\n").filter(l => l.trim().length > 0);
+const titleLine = lines[0] || "Pixel Post";
+// Remove emoji prefix for cleaner title
+const title = titleLine.replace(/^[\p{Emoji}\s]+/u, "").slice(0, 50) || "Pixel Post";
+// Content: if title is same as first line, remove it to avoid duplication
+const content = cleanCaption.startsWith(titleLine) 
+  ? cleanCaption.slice(titleLine.length).trim() || cleanCaption
+  : cleanCaption;
+```
+
+**ai-agent/index.ts — لوگو اجباری:**
+```text
+const attempts = [
+  { model: "google/gemini-2.5-flash-image", useLogo: true },
+  { model: "google/gemini-2.5-flash-image", useLogo: true },   // was false
+  { model: "google/gemini-3-pro-image-preview", useLogo: true }, // was false
+];
+```
