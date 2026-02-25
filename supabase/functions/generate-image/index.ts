@@ -69,7 +69,7 @@ serve(async (req) => {
         body: JSON.stringify({
           model: "gpt-image-1",
           prompt,
-          size: size || "1536x1024",
+          size: size || "1024x1024",
           quality: quality || "high",
           output_format: "png",
           n: 1,
@@ -107,7 +107,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "dall-e-3",
         prompt,
-        size: size || "1792x1024",
+        size: size || "1024x1024",
         quality: quality || "hd",
         style: style || "vivid",
         n: 1,
