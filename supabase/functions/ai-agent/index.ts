@@ -105,64 +105,10 @@ function extractImageFromAIResponse(aiData: any): string | null {
  * Searches knowledge for logo/favicon, generates fresh signed URLs if needed,
  * and falls back to a hardcoded branding path.
  */
-async function resolveLogoUrl(
-  svcClient: ReturnType<typeof createClient>,
-  companyId: string,
-): Promise<string | undefined> {
-  try {
-    // Search broader: logo OR favicon, for social agent images
-    const { data: logoRows } = await svcClient
-      .from("knowledge")
-      .select("source_url, title")
-      .eq("company_id", companyId)
-      .or("title.ilike.%logo%,title.ilike.%favicon%")
-      .eq("category", "image")
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    for (const row of logoRows || []) {
-      if (!row.source_url) continue;
-      const rawUrl = row.source_url;
-
-      let candidateUrl: string | undefined;
-
-      // If it's a storage path, generate a fresh signed URL
-      if (rawUrl.includes("estimation-files/")) {
-        const storagePath = rawUrl.split("/estimation-files/").pop()?.split("?")[0];
-        if (storagePath) {
-          const { data: signedData } = await svcClient.storage
-            .from("estimation-files")
-            .createSignedUrl(storagePath, 600);
-          candidateUrl = signedData?.signedUrl || undefined;
-        }
-      } else {
-        candidateUrl = rawUrl;
-      }
-
-      // Verify URL is reachable
-      if (candidateUrl) {
-        try {
-          const check = await fetch(candidateUrl, { method: "HEAD" });
-          if (check.ok) return candidateUrl;
-          console.warn(`Logo candidate ${row.title} returned ${check.status}, trying next`);
-        } catch { /* try next */ }
-      }
-    }
-  } catch (err) {
-    console.warn("Logo resolution error (non-fatal):", err);
-  }
-
-  // Fallback: use public branding path
+async function resolveLogoUrl(): Promise<string | undefined> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  if (supabaseUrl) {
-    const fallbackUrl = `${supabaseUrl}/storage/v1/object/public/social-images/brand/rebar-logo.png`;
-    try {
-      const check = await fetch(fallbackUrl, { method: "HEAD" });
-      if (check.ok) return fallbackUrl;
-    } catch { /* no fallback available */ }
-  }
-
-  return undefined;
+  if (!supabaseUrl) return undefined;
+  return `${supabaseUrl}/storage/v1/object/public/social-images/brand/company-logo.png`;
 }
 
 /**
@@ -180,8 +126,10 @@ async function generatePixelImage(
   }
 
   const fullPrompt = prompt +
-    "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image. " +
-    "Make it clearly visible but not obstructing the main scene.";
+    "\n\nMANDATORY: The attached company logo image MUST be placed EXACTLY as-is in the generated image, " +
+    "without ANY modification, distortion, or recreation. Place it in a visible corner as a watermark. " +
+    "Do NOT create or draw any other logo — ONLY use the provided logo image. " +
+    "Do NOT add text-based watermarks.";
 
   // Build attempts: model + whether to include logo
   const attempts: { model: string; useLogo: boolean }[] = [
@@ -201,7 +149,9 @@ async function generatePixelImage(
         contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
         contentParts.push({
           type: "text",
-          text: "Use the provided company logo image above and incorporate it into the generated image as a branded watermark in a visible corner.",
+          text: "CRITICAL: The logo image provided above is the ONLY authorized company logo. " +
+            "Place it EXACTLY as-is (no redrawing, no text replacement, no modification) in a visible corner of the generated image. " +
+            "Do NOT create any other logo or text-based watermark.",
         });
       }
 
@@ -466,7 +416,7 @@ Deno.serve(async (req) => {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered");
 
         // Resolve company logo using robust resolver
-        const logoUrl = await resolveLogoUrl(svcClient, companyId);
+        const logoUrl = await resolveLogoUrl();
 
         const slotsToGenerate = isAllSlots
           ? PIXEL_SLOTS
