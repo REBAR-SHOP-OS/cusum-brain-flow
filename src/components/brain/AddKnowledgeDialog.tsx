@@ -16,6 +16,12 @@ interface AddKnowledgeDialogProps {
   defaultMetadata?: Record<string, unknown>;
 }
 
+interface UploadedFile {
+  name: string;
+  url: string;
+  path: string;
+}
+
 const categoryOptions = [
   { value: "memory", label: "Memory", icon: Brain },
   { value: "image", label: "Image", icon: Image },
@@ -37,7 +43,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
   const [sourceUrl, setSourceUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; url: string; path: string } | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { companyId } = useCompanyId();
   const { toast } = useToast();
@@ -46,10 +52,11 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
 
   const supportsUpload = ["image", "document", "video"].includes(category);
   const showUrlField = ["image", "video", "webpage", "document"].includes(category);
+  const isMultiFile = uploadedFiles.length > 1;
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploading(true);
     try {
@@ -59,24 +66,37 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
         return;
       }
 
-      const ext = file.name.split(".").pop() || "bin";
-      const fileName = `${crypto.randomUUID()}.${ext}`;
-      const filePath = `${user.id}/brain/${fileName}`;
+      const newFiles: UploadedFile[] = [];
 
-      const { error: uploadError } = await supabase.storage
-        .from("estimation-files")
-        .upload(filePath, file);
+      for (const file of Array.from(files)) {
+        const ext = file.name.split(".").pop() || "bin";
+        const fileName = `${crypto.randomUUID()}.${ext}`;
+        const filePath = `${user.id}/brain/${fileName}`;
 
-      if (uploadError) throw uploadError;
+        const { error: uploadError } = await supabase.storage
+          .from("estimation-files")
+          .upload(filePath, file);
 
-      const { getSignedFileUrl } = await import("@/lib/storageUtils");
-      const publicUrl = await getSignedFileUrl(filePath);
+        if (uploadError) {
+          toast({ title: `Failed to upload ${file.name}`, description: uploadError.message, variant: "destructive" });
+          continue;
+        }
 
-      setUploadedFile({ name: file.name, url: publicUrl, path: filePath });
-      setSourceUrl(publicUrl);
-      if (!title.trim()) setTitle(file.name.replace(/\.[^/.]+$/, ""));
+        const { getSignedFileUrl } = await import("@/lib/storageUtils");
+        const publicUrl = await getSignedFileUrl(filePath);
+        newFiles.push({ name: file.name, url: publicUrl, path: filePath });
+      }
 
-      toast({ title: "File uploaded!" });
+      setUploadedFiles(prev => [...prev, ...newFiles]);
+
+      // Auto-fill title only if single file and title is empty
+      if (newFiles.length === 1 && uploadedFiles.length === 0 && !title.trim()) {
+        setTitle(newFiles[0].name.replace(/\.[^/.]+$/, ""));
+      }
+
+      if (newFiles.length > 0) {
+        toast({ title: `${newFiles.length} file${newFiles.length > 1 ? "s" : ""} uploaded!` });
+      }
     } catch (err) {
       toast({
         title: "Upload failed",
@@ -89,18 +109,19 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
     }
   };
 
-  const removeUploadedFile = async () => {
-    if (uploadedFile) {
+  const removeFile = async (index: number) => {
+    const file = uploadedFiles[index];
+    if (file) {
       try {
-        await supabase.storage.from("estimation-files").remove([uploadedFile.path]);
+        await supabase.storage.from("estimation-files").remove([file.path]);
       } catch {}
-      setUploadedFile(null);
-      setSourceUrl("");
+      setUploadedFiles(prev => prev.filter((_, i) => i !== index));
     }
   };
 
   const handleSave = async () => {
-    if (!title.trim()) {
+    // If multi-file, title is optional (each file uses its own name)
+    if (!isMultiFile && !title.trim()) {
       toast({ title: "Title is required", variant: "destructive" });
       return;
     }
@@ -111,26 +132,45 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
 
     setSaving(true);
     try {
-      const { error } = await supabase.from("knowledge").insert({
-        title: title.trim(),
-        content: content.trim() || null,
-        category,
-        source_url: sourceUrl.trim() || null,
-        metadata: (defaultMetadata || uploadedFile) ? {
-          ...(defaultMetadata || {}),
-          ...(uploadedFile ? { file_name: uploadedFile.name, file_type: uploadedFile.name.split(".").pop() } : {}),
-        } : null,
-        company_id: companyId,
-      });
+      if (uploadedFiles.length > 1) {
+        // Multi-file: create one record per file
+        const records = uploadedFiles.map(f => ({
+          title: f.name.replace(/\.[^/.]+$/, ""),
+          content: content.trim() || null,
+          category,
+          source_url: f.url,
+          metadata: {
+            ...(defaultMetadata || {}),
+            file_name: f.name,
+            file_type: f.name.split(".").pop(),
+          },
+          company_id: companyId,
+        }));
 
-      if (error) throw error;
+        const { error } = await supabase.from("knowledge").insert(records);
+        if (error) throw error;
+      } else {
+        // Single file or no file
+        const { error } = await supabase.from("knowledge").insert({
+          title: title.trim(),
+          content: content.trim() || null,
+          category,
+          source_url: uploadedFiles.length === 1 ? uploadedFiles[0].url : (sourceUrl.trim() || null),
+          metadata: (defaultMetadata || uploadedFiles.length > 0) ? {
+            ...(defaultMetadata || {}),
+            ...(uploadedFiles.length > 0 ? { file_name: uploadedFiles[0].name, file_type: uploadedFiles[0].name.split(".").pop() } : {}),
+          } : null,
+          company_id: companyId,
+        });
+        if (error) throw error;
+      }
 
       toast({ title: "Knowledge added!" });
       setTitle("");
       setContent("");
       setSourceUrl("");
       setCategory("memory");
-      setUploadedFile(null);
+      setUploadedFiles([]);
       onOpenChange(false);
       onSuccess();
     } catch (err) {
@@ -142,9 +182,12 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
 
   const handleCategoryChange = (value: string) => {
     setCategory(value);
-    // Clear upload when switching categories
-    if (uploadedFile) {
-      removeUploadedFile();
+    if (uploadedFiles.length > 0) {
+      // Clear all uploads when switching categories
+      uploadedFiles.forEach(f => {
+        supabase.storage.from("estimation-files").remove([f.path]).catch(() => {});
+      });
+      setUploadedFiles([]);
     }
   };
 
@@ -189,68 +232,77 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
           {/* File Upload Area */}
           {supportsUpload && (
             <div className="space-y-2">
-              <Label>Upload File</Label>
+              <Label>Upload File{uploadedFiles.length > 0 ? `s (${uploadedFiles.length})` : ""}</Label>
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept={acceptByCategory[category] || "*"}
                 onChange={handleFileUpload}
                 className="hidden"
               />
 
-              {uploadedFile ? (
-                <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl">
-                  <Paperclip className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span className="text-sm font-medium truncate flex-1">{uploadedFile.name}</span>
-                  <button
-                    onClick={removeUploadedFile}
-                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+              {/* Uploaded files list */}
+              {uploadedFiles.length > 0 && (
+                <div className="space-y-1.5">
+                  {uploadedFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-2.5 bg-primary/5 border border-primary/20 rounded-xl">
+                      <Paperclip className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span className="text-sm font-medium truncate flex-1">{file.name}</span>
+                      <button
+                        onClick={() => removeFile(idx)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className={cn(
-                    "w-full flex flex-col items-center gap-2 p-6 border-2 border-dashed border-border rounded-xl",
-                    "hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer",
-                    uploading && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  {uploading ? (
-                    <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
-                  ) : (
-                    <Upload className="w-6 h-6 text-muted-foreground" />
-                  )}
-                  <span className="text-sm text-muted-foreground">
-                    {uploading ? "Uploading..." : "Click to upload a file"}
-                  </span>
-                  <span className="text-xs text-muted-foreground/70">
-                    {category === "image" ? "JPG, PNG, WebP, SVG" :
-                     category === "video" ? "MP4, WebM, MOV" :
-                     "PDF, DOC, XLSX, CSV, TXT"}
-                  </span>
-                </button>
               )}
 
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground">or paste a URL</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
+              {/* Upload button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className={cn(
+                  "w-full flex flex-col items-center gap-2 p-6 border-2 border-dashed border-border rounded-xl",
+                  "hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer",
+                  uploading && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                {uploading ? (
+                  <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+                ) : (
+                  <Upload className="w-6 h-6 text-muted-foreground" />
+                )}
+                <span className="text-sm text-muted-foreground">
+                  {uploading ? "Uploading..." : uploadedFiles.length > 0 ? "Add more files" : "Click to upload files"}
+                </span>
+                <span className="text-xs text-muted-foreground/70">
+                  {category === "image" ? "JPG, PNG, WebP, SVG" :
+                   category === "video" ? "MP4, WebM, MOV" :
+                   "PDF, DOC, XLSX, CSV, TXT"}
+                </span>
+              </button>
+
+              {uploadedFiles.length === 0 && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">or paste a URL</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              )}
             </div>
           )}
 
           {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="knowledge-title">Title</Label>
+            <Label htmlFor="knowledge-title">Title {isMultiFile && <span className="text-xs text-muted-foreground">(optional for multi-file)</span>}</Label>
             <Input
               id="knowledge-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Language Preference, Target Customers..."
+              placeholder={isMultiFile ? "Each file will use its own name" : "e.g. Language Preference, Target Customers..."}
             />
           </div>
 
@@ -273,7 +325,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
           </div>
 
           {/* Source URL */}
-          {showUrlField && (
+          {showUrlField && uploadedFiles.length === 0 && (
             <div className="space-y-2">
               <Label htmlFor="knowledge-url">
                 {category === "image" ? "Image URL" :
@@ -291,7 +343,6 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
                   category === "webpage" ? "https://example.com" :
                   "https://example.com/document.pdf"
                 }
-                disabled={!!uploadedFile}
               />
             </div>
           )}
@@ -302,9 +353,13 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
           <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button className="flex-1 gap-2" onClick={handleSave} disabled={saving || !title.trim() || uploading}>
+          <Button
+            className="flex-1 gap-2"
+            onClick={handleSave}
+            disabled={saving || (!isMultiFile && !title.trim()) || uploading}
+          >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Add
+            {isMultiFile ? `Add ${uploadedFiles.length} Files` : "Add"}
           </Button>
         </div>
       </div>

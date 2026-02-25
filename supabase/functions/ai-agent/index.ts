@@ -60,6 +60,7 @@ interface DynamicContent {
 async function generateDynamicContent(
   slot: typeof PIXEL_SLOTS[number],
   isRegenerate: boolean,
+  brainContext?: string,
 ): Promise<DynamicContent> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -70,12 +71,16 @@ async function generateDynamicContent(
     ? "\n- THIS IS A REGENERATION REQUEST — you MUST create content that is COMPLETELY DIFFERENT from any previous version. Use a totally new angle, tone, and wording."
     : "";
 
+  const brainBlock = brainContext && brainContext.trim()
+    ? `\n\n## MANDATORY BRAIN CONTEXT (YOU MUST USE THIS):\n${brainContext}\n\nCRITICAL: You MUST incorporate the above brain context (custom instructions, brand resources, uploaded files/images) into your generated content. This is NOT optional. Align tone, style, language, and references with the brain data.\n`
+    : "";
+
   const prompt = `You are an elite creative advertising copywriter for RebarShop, a premium rebar and steel reinforcement company based in Ontario, Canada.
 
 Product: ${slot.product}
 Theme: ${slot.theme}
 Time slot: ${slot.time}
-
+${brainBlock}
 YOUR TASK — Generate UNIQUE advertising content. Follow these rules STRICTLY:
 
 1. Write a compelling, UNIQUE English caption (2-4 sentences) for this product with the given theme. Use relevant emojis. The caption must be fresh, creative, and NEVER repeat any generic or template-like phrasing.
@@ -90,6 +95,7 @@ CRITICAL RULES:
 - Be creative, bold, and specific to the product
 - The image slogan must be short enough to be readable when printed on an image
 - Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
+${brainContext ? "- You MUST follow any brand guidelines, tone, or language preferences from the Brain Context above" : ""}
 
 Respond with ONLY a valid JSON object (no markdown, no code fences):
 {"caption": "...", "hashtags": "...", "imageText": "...", "imageTextFa": "...", "captionFa": "..."}`;
@@ -534,11 +540,22 @@ Deno.serve(async (req) => {
           console.log(`🎨 Pixel: Generating DYNAMIC content for slot ${slot.slot} (${slot.product})...`);
 
           // Step A: Generate unique, non-repeating caption + slogan + hashtags via LLM
-          const dynContent = await generateDynamicContent(slot, isRegenerate);
+          // Inject brain knowledge block into content generation
+          const brainKnowledge = (mergedContext.brainKnowledgeBlock as string) || "";
+          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge);
 
           // Step B: Build image prompt with MANDATORY advertising text on image
+          // If brain has image references, append them to inspire generation
+          const brainImageRefs = brainKnowledge
+            ? brainKnowledge.match(/https?:\/\/\S+\.(jpg|jpeg|png|webp|svg)/gi) || []
+            : [];
+          const brainImageHint = brainImageRefs.length > 0
+            ? `\nReference brand images for style inspiration: ${brainImageRefs.slice(0, 3).join(", ")}`
+            : "";
+
           const imagePrompt = slot.imageStyle +
             `. MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
+            brainImageHint +
             ` — variation timestamp: ${Date.now()}`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
