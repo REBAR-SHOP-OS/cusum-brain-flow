@@ -394,6 +394,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     // Log project event
     if (projectId) {
       await sb.from("activity_events").insert({
+        company_id: session.company_id,
         entity_type: "project",
         entity_id: projectId,
         event_type: "project_created",
@@ -428,6 +429,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     // Log barlist_created event
     if (barlistId) {
       await sb.from("activity_events").insert({
+        company_id: session.company_id,
         entity_type: "barlist",
         entity_id: barlistId,
         event_type: "barlist_created",
@@ -463,6 +465,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 
     // Log barlist_approved event
     await sb.from("activity_events").insert({
+      company_id: session.company_id,
       entity_type: "barlist",
       entity_id: barlistId,
       event_type: "barlist_approved",
@@ -491,7 +494,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     } else {
       const { data: newCust } = await sb
         .from("customers")
-        .insert({ name: customerName })
+        .insert({ name: customerName, company_id: session.company_id })
         .select("id")
         .single();
       customerId = newCust?.id || null;
@@ -500,7 +503,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
   if (!customerId) {
     const { data: placeholderCust } = await sb
       .from("customers")
-      .insert({ name: session.name || "Unknown" })
+      .insert({ name: session.name || "Unknown", company_id: session.company_id })
       .select("id")
       .single();
     customerId = placeholderCust?.id;
@@ -516,6 +519,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     .insert({
       order_number: orderNumber,
       customer_id: customerId,
+      company_id: session.company_id,
       notes: `Auto-created from extract session: ${session.name}`,
       status: "pending",
     })
@@ -627,6 +631,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
   if (barlistId) {
     await sb.from("barlists").update({ status: "in_production" }).eq("id", barlistId);
     await sb.from("activity_events").insert({
+      company_id: session.company_id,
       entity_type: "barlist",
       entity_id: barlistId,
       event_type: "barlist_sent_to_production",
@@ -656,6 +661,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 
   // Log session event
   await sb.from("activity_events").insert({
+    company_id: session.company_id,
     entity_type: "extract_session",
     entity_id: sessionId,
     event_type: "approved",
