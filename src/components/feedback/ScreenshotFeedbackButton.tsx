@@ -66,8 +66,9 @@ export function ScreenshotFeedbackButton() {
       }
     }
 
-    const captureWidth  = isOverlay ? window.innerWidth  : target.scrollWidth;
-    const captureHeight = isOverlay ? window.innerHeight : target.scrollHeight;
+    const MAX_DIM = 8192;
+    const captureWidth  = isOverlay ? window.innerWidth  : Math.min(target.scrollWidth, MAX_DIM);
+    const captureHeight = isOverlay ? window.innerHeight : Math.min(target.scrollHeight, MAX_DIM);
     const targetRect    = isOverlay ? null : target.getBoundingClientRect();
     const captureX = 0;
     const captureY = 0;
@@ -77,6 +78,7 @@ export function ScreenshotFeedbackButton() {
       if (tag === "iframe" || tag === "embed" || tag === "object") return true;
       if (el.getAttribute?.("data-feedback-btn") === "true") return true;
       if (el.classList?.contains("floating-vizzy")) return true;
+      if (el.getAttribute?.("data-state") === "inactive" && el.getAttribute?.("role") === "tabpanel") return true;
       return false;
     };
 
@@ -113,6 +115,7 @@ export function ScreenshotFeedbackButton() {
 
     const totalCount = target.querySelectorAll("*").length;
     const isHeavyPage = totalCount > 3000;
+    const isExtremelyHeavy = totalCount > 6000;
 
     const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
       const ignoreElements = skipImages
@@ -149,7 +152,7 @@ export function ScreenshotFeedbackButton() {
 
       const opts = {
         ...baseOpts,
-        scale: isHeavyPage ? 0.75 : 1,
+        scale: isExtremelyHeavy ? 0.5 : (isHeavyPage ? 0.75 : 1),
         imageTimeout: skipImages ? 0 : (isHeavyPage ? 0 : 5000),
         ignoreElements,
         onclone,
