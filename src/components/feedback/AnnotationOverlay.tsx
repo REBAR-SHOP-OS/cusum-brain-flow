@@ -243,19 +243,24 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
 
       // Create tasks for both assignees
       for (const profileId of FEEDBACK_RECIPIENTS) {
-        const { error: taskErr } = await supabase.from("tasks").insert({
-          title: `Feedback: ${
-            description.trim().slice(0, 80) || "Screenshot annotation"
-          }`,
-          description: `${description.trim()}\n\nFrom: ${submitterName}\nPage: ${pagePath}\nScreenshot: ${publicUrl}`,
-          status: "pending",
-          priority: "high",
-          assigned_to: profileId,
-          company_id: resolvedCompanyId,
-          created_by_profile_id: submitterProfileId,
-          source: "screenshot_feedback",
-          attachment_url: publicUrl,
-        } as any);
+          const { error: taskErr } = await supabase.from("tasks").insert({
+            title: `Feedback: ${
+              description.trim().slice(0, 80) || "Screenshot annotation"
+            }`,
+            description: `${description.trim()}\n\nFrom: ${submitterName}\nPage: ${pagePath}\nScreenshot: ${publicUrl}`,
+            status: "pending",
+            priority: "high",
+            assigned_to: profileId,
+            company_id: resolvedCompanyId,
+            created_by_profile_id: submitterProfileId,
+            source: "screenshot_feedback",
+            attachment_url: publicUrl,
+            metadata: JSON.stringify({
+              submitter_name: submitterName,
+              submitter_email: user?.email,
+              submitter_profile_id: submitterProfileId,
+            }),
+          } as any);
         if (taskErr) throw taskErr;
       }
 

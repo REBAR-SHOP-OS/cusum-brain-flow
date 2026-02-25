@@ -30,6 +30,27 @@ import { cn } from "@/lib/utils";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { format, isPast, isToday, startOfDay } from "date-fns";
 
+// ─── Helpers ─────────────────────────────────────────────
+function getTaskCreatorName(task: TaskRow): string | null {
+  // 1. metadata.submitter_name (new feedback tasks)
+  if (task.source === "screenshot_feedback") {
+    try {
+      const meta = typeof task.metadata === "string" ? JSON.parse(task.metadata) : task.metadata;
+      if (meta?.submitter_name && meta.submitter_name !== "Unknown") return meta.submitter_name;
+    } catch {}
+    // 2. Extract From: line from description (legacy feedback)
+    const fromMatch = task.description?.match(/From:\s*(.+)/);
+    if (fromMatch?.[1]) {
+      const name = fromMatch[1].trim();
+      if (name && name !== "Unknown" && name !== "Ai") return name;
+    }
+  }
+  // 3. Fallback to joined profile
+  const profileName = task.created_by_profile?.full_name;
+  if (profileName && profileName !== "Ai") return profileName;
+  return null;
+}
+
 // ─── Types ──────────────────────────────────────────────
 interface TaskRow {
   id: string;
@@ -46,6 +67,7 @@ interface TaskRow {
   company_id: string;
   source?: string | null;
   attachment_url?: string | null;
+  metadata?: any;
   created_by_profile?: { id: string; full_name: string | null } | null;
 }
 
@@ -980,11 +1002,14 @@ export default function Tasks() {
                               {task.title}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {task.created_by_profile?.full_name && (
-                                <span className="text-[10px] text-muted-foreground">
-                                  by {task.created_by_profile.full_name}
-                                </span>
-                              )}
+                              {(() => {
+                                const name = getTaskCreatorName(task);
+                                return name ? (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    by {name}
+                                  </span>
+                                ) : null;
+                              })()}
                               {task.due_date && (
                                 <span className={cn(
                                   "text-[10px]",
