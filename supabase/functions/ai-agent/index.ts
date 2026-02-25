@@ -105,10 +105,25 @@ function extractImageFromAIResponse(aiData: any): string | null {
  * Searches knowledge for logo/favicon, generates fresh signed URLs if needed,
  * and falls back to a hardcoded branding path.
  */
-async function resolveLogoUrl(): Promise<string | undefined> {
+async function resolveLogoUrl(): Promise<string> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  if (!supabaseUrl) return undefined;
-  return `${supabaseUrl}/storage/v1/object/public/social-images/brand/company-logo.png`;
+  if (!supabaseUrl) throw new Error("SUPABASE_URL not configured");
+  const logoUrl = `${supabaseUrl}/storage/v1/object/public/social-images/brand/company-logo.png`;
+
+  // Preflight: verify the logo file actually exists before sending to the model
+  try {
+    const check = await fetch(logoUrl, { method: "HEAD" });
+    if (!check.ok) {
+      throw new Error(
+        `لوگوی رسمی شرکت در مخزن برند پیدا نشد (HTTP ${check.status})؛ لطفاً همگام‌سازی لوگو انجام شود.`
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("لوگوی رسمی")) throw err;
+    throw new Error("لوگوی رسمی شرکت در مخزن برند پیدا نشد؛ لطفاً همگام‌سازی لوگو انجام شود.");
+  }
+
+  return logoUrl;
 }
 
 /**
@@ -415,8 +430,16 @@ Deno.serve(async (req) => {
       if (slotMatch || isAllSlots || timeSlotNum) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered");
 
-        // Resolve company logo using robust resolver
-        const logoUrl = await resolveLogoUrl();
+        // Resolve company logo — abort early if missing
+        let logoUrl: string;
+        try {
+          logoUrl = await resolveLogoUrl();
+        } catch (logoErr) {
+          const errMsg = logoErr instanceof Error ? logoErr.message : "لوگوی رسمی شرکت در مخزن برند پیدا نشد.";
+          return new Response(JSON.stringify({ reply: `❌ ${errMsg}` }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
         const slotsToGenerate = isAllSlots
           ? PIXEL_SLOTS
