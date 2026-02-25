@@ -307,8 +307,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         .from("cut_plan_items")
         .update({
           completed_pieces: newCompleted,
-          phase: "cutting",  // trigger will auto-advance to cut_done/complete
-        } as any)
+        })
         .eq("id", currentItem.id);
       if (itemErr) throw itemErr;
 
