@@ -51,16 +51,30 @@ function getProviderConfig(provider: AIProvider): { url: string; apiKey: string 
 export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
   const provider = opts.provider || "gpt";
   const model = opts.model || "gpt-4o";
+  const maxRetries = 3;
 
-  try {
-    return await _callAISingle(provider, model, opts);
-  } catch (e) {
-    if (e instanceof AIError && e.status === 429 && opts.fallback) {
-      console.warn(`AI ${model} rate-limited, falling back to ${opts.fallback.provider}`);
-      return await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await _callAISingle(provider, model, opts);
+    } catch (e) {
+      if (e instanceof AIError) {
+        // Retry on transient errors (503/504) with exponential backoff
+        if ((e.status === 503 || e.status === 504) && attempt < maxRetries) {
+          const delay = 1000 * Math.pow(2, attempt);
+          console.warn(`AI ${model} returned ${e.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        // Fallback on 429 or exhausted 503 retries
+        if ((e.status === 429 || e.status === 503 || e.status === 504) && opts.fallback) {
+          console.warn(`AI ${model} error ${e.status}, falling back to ${opts.fallback.model}`);
+          return await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+        }
+      }
+      throw e;
     }
-    throw e;
   }
+  throw new Error("AI call exhausted all retries");
 }
 
 async function _callAISingle(provider: AIProvider, model: string, opts: AIRequestOptions): Promise<AIResult> {
