@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MessageSquare, Hash, Users, ChevronRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,7 +10,10 @@ import { useTeamChannels, useMyProfile } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useOpenDM } from "@/hooks/useChannelManagement";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import { toast } from "sonner";
+
+const CHAT_BTN_SIZE = 56;
 
 function getInitials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -35,6 +38,27 @@ export function DockChatBar() {
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
   const [launcherOpen, setLauncherOpen] = useState(false);
+
+  const { pos, handlers, wasDragged } = useDraggablePosition({
+    storageKey: "dock-chat-pos",
+    btnSize: CHAT_BTN_SIZE,
+    defaultPos: () => ({
+      x: typeof window !== "undefined" ? window.innerWidth - CHAT_BTN_SIZE - 24 : 300,
+      y: typeof window !== "undefined" ? window.innerHeight - CHAT_BTN_SIZE - 24 : 300,
+    }),
+  });
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (launcherOpen) setLauncherOpen(false);
+    handlers.onPointerDown(e);
+  }, [handlers, launcherOpen]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    handlers.onPointerUp(e);
+    if (!wasDragged.current) {
+      setLauncherOpen((prev) => !prev);
+    }
+  }, [handlers, wasDragged]);
 
   // Listen for dock-chat-open events from ChatPanelContext (notifications)
   useEffect(() => {
@@ -99,16 +123,26 @@ export function DockChatBar() {
         );
       })}
 
-      {/* Launcher pill */}
-      <div className="fixed bottom-0 right-4 z-[9998]">
-        <Popover open={launcherOpen} onOpenChange={setLauncherOpen}>
+      {/* Draggable floating chat button */}
+      <div
+        className="fixed z-[9998]"
+        style={{ left: pos.x, top: pos.y, touchAction: "none" }}
+      >
+        <Popover open={launcherOpen} onOpenChange={(open) => {
+          if (!wasDragged.current) setLauncherOpen(open);
+        }}>
           <PopoverTrigger asChild>
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-t-lg shadow-lg hover:bg-primary/90 transition-colors text-xs font-semibold">
-              <MessageSquare className="w-4 h-4" />
-              Chat
+            <button
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlers.onPointerMove}
+              onPointerUp={handlePointerUp}
+              className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing select-none hover:scale-110 transition-transform ring-2 ring-primary/30"
+              aria-label="Open Chat"
+            >
+              <MessageSquare className="w-6 h-6 pointer-events-none" />
             </button>
           </PopoverTrigger>
-          <PopoverContent side="top" align="end" className="w-[300px] p-0 mb-1">
+          <PopoverContent side="top" align="center" className="w-[300px] p-0 mb-2">
             <ScrollArea className="max-h-[400px]">
               {/* Team members - top for visibility */}
               <div className="px-2 pt-2 pb-2">
