@@ -500,7 +500,7 @@ export default function Tasks() {
   for (const t of tasks) {
     if (t.assigned_to && tasksByEmployee.has(t.assigned_to)) {
       // Hide automated feedback tasks from Sattar's column
-      if (t.assigned_to === SATTAR_PROFILE_ID && (t as any).source === "screenshot_feedback") continue;
+      if ((t as any).source === "screenshot_feedback" && t.assigned_to !== RADIN_PROFILE_ID) continue;
       tasksByEmployee.get(t.assigned_to)!.push(t);
     }
   }
