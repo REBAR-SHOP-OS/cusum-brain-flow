@@ -198,7 +198,7 @@ export function ScreenshotFeedbackButton() {
 
   return (
     <>
-      <FloatingMicButton onRecordingComplete={handleMicComplete} />
+      {overlayOpen && <FloatingMicButton onRecordingComplete={handleMicComplete} />}
 
       <button
         ref={btnRef}
