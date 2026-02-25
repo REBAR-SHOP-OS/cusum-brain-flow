@@ -3,10 +3,16 @@
  * Used by admin-chat, vizzy-daily-brief, and vizzy-context edge functions.
  * Limited to 50 knowledge entries and 50-char email previews for performance.
  */
+export interface VizzyContextOptions {
+  includeFinancials?: boolean;
+}
+
 export async function buildFullVizzyContext(
   supabase: any,
-  userId: string
+  userId: string,
+  options: VizzyContextOptions = {}
 ): Promise<string> {
+  const { includeFinancials = true } = options;
   const today = new Date().toISOString().split("T")[0];
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -83,18 +89,22 @@ export async function buildFullVizzyContext(
       .from("profiles")
       .select("id, full_name, user_id, email")
       .not("full_name", "is", null),
-    supabase
-      .from("accounting_mirror")
-      .select("balance, entity_type, data")
-      .eq("entity_type", "Invoice")
-      .gt("balance", 0)
-      .limit(50),
-    supabase
-      .from("accounting_mirror")
-      .select("balance, entity_type, data")
-      .eq("entity_type", "Vendor")
-      .gt("balance", 0)
-      .limit(50),
+    includeFinancials
+      ? supabase
+          .from("accounting_mirror")
+          .select("balance, entity_type, data")
+          .eq("entity_type", "Invoice")
+          .gt("balance", 0)
+          .limit(50)
+      : Promise.resolve({ data: null }),
+    includeFinancials
+      ? supabase
+          .from("accounting_mirror")
+          .select("balance, entity_type, data")
+          .eq("entity_type", "Vendor")
+          .gt("balance", 0)
+          .limit(50)
+      : Promise.resolve({ data: null }),
     supabase
       .from("communications")
       .select("subject, from_address, to_address, body_preview, received_at, ai_urgency")
@@ -294,13 +304,14 @@ export async function buildFullVizzyContext(
 
   return `═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
 
-📊 FINANCIALS
+${includeFinancials ? `📊 FINANCIALS
   Accounts Receivable: ${fmt(totalReceivable)}
   Accounts Payable: ${fmt(totalPayable)}
   Overdue Invoices: ${overdueInvoices.length} totaling ${fmt(overdueInvoices.reduce((s: number, i: any) => s + i.Balance, 0))}
 ${topOverdueCustomers || "    None"}
   Overdue Bills: ${overdueBills.length} totaling ${fmt(overdueBills.reduce((s: number, b: any) => s + b.Balance, 0))}
-${topOverdueVendors || "    None"}
+${topOverdueVendors || "    None"}` : `📊 FINANCIALS
+  Restricted — requires admin access`}
 
 🏭 PRODUCTION
   Active Cut Plans: ${activeCutPlans}

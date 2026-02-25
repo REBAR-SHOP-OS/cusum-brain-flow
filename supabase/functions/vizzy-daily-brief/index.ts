@@ -50,10 +50,26 @@ serve(async (req) => {
       );
     }
 
-    const context = await buildFullVizzyContext(supabase, user.id);
+    // Check if user has admin role
+    const { data: adminRole } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    const isAdmin = !!adminRole;
+
+    const context = await buildFullVizzyContext(supabase, user.id, {
+      includeFinancials: isAdmin,
+    });
 
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+    const financialBullet = isAdmin
+      ? "2. Financial health (AR/AP, overdue items)"
+      : "2. Inventory or stock highlights";
 
     // Gemini chosen: large context input (full business snapshot) is its strength
     const result = await callAI({
@@ -65,7 +81,7 @@ serve(async (req) => {
           content: `You are JARVIS, the CEO's AI assistant. Generate a concise daily briefing.
 Use the live data below. Return exactly 5 bullet points covering:
 1. Most urgent item requiring attention
-2. Financial health (AR/AP, overdue items)
+${financialBullet}
 3. Production status (bottlenecks, completions)
 4. Hot leads or CRM updates
 5. Team presence / notable events
