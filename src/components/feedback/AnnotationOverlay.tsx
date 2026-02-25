@@ -17,14 +17,15 @@ interface Props {
   open: boolean;
   onClose: () => void;
   screenshotDataUrl: string;
+  initialDescription?: string;
 }
 
-export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
+export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDescription }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgRef = useRef<HTMLImageElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [color, setColor] = useState<string>(COLORS[0]);
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(initialDescription ?? "");
   const [sending, setSending] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [history, setHistory] = useState<ImageData[]>([]);
