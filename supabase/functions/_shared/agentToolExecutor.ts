@@ -527,93 +527,135 @@ export async function executeToolCall(
           const imagePrompt = args.prompt || "A professional rebar construction image";
           const slot = args.slot || "";
 
-          // Fetch company logo for social agent
+          // Resolve logo for social agent (broader search: logo OR favicon)
           let logoUrl: string | undefined;
           if (agent === "social") {
             try {
-              const { data: logoKnowledge } = await svcClient
+              const { data: logoRows } = await svcClient
                 .from("knowledge")
-                .select("source_url")
+                .select("source_url, title")
                 .eq("company_id", companyId)
-                .ilike("title", "%logo%")
+                .or("title.ilike.%logo%,title.ilike.%favicon%")
+                .eq("category", "image")
                 .order("created_at", { ascending: false })
-                .limit(1);
-              if (logoKnowledge?.[0]?.source_url) {
-                const rawUrl = logoKnowledge[0].source_url;
+                .limit(5);
+
+              for (const row of logoRows || []) {
+                if (!row.source_url) continue;
+                const rawUrl = row.source_url;
+                let candidateUrl: string | undefined;
                 if (rawUrl.includes("estimation-files/")) {
                   const storagePath = rawUrl.split("/estimation-files/").pop()?.split("?")[0];
                   if (storagePath) {
                     const { data: signedData } = await svcClient.storage
                       .from("estimation-files")
-                      .createSignedUrl(storagePath, 300);
-                    logoUrl = signedData?.signedUrl || undefined;
+                      .createSignedUrl(storagePath, 600);
+                    candidateUrl = signedData?.signedUrl || undefined;
                   }
                 } else {
-                  logoUrl = rawUrl;
+                  candidateUrl = rawUrl;
+                }
+                if (candidateUrl) {
+                  try {
+                    const check = await fetch(candidateUrl, { method: "HEAD" });
+                    if (check.ok) { logoUrl = candidateUrl; break; }
+                  } catch { /* try next */ }
                 }
               }
             } catch (_) { /* non-fatal */ }
           }
 
-          // Build content parts
-          const contentParts: any[] = [];
           const fullPrompt = imagePrompt +
             "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image.";
-          contentParts.push({ type: "text", text: fullPrompt });
 
-          if (logoUrl) {
-            contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
-            contentParts.push({ type: "text", text: "Incorporate the provided company logo into the generated image as a branded watermark." });
-          }
+          // Retry pipeline: try multiple models
+          const attempts = [
+            { model: "google/gemini-2.5-flash-image", useLogo: true },
+            { model: "google/gemini-2.5-flash-image", useLogo: false },
+            { model: "google/gemini-3-pro-image-preview", useLogo: false },
+          ];
 
-          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash-image",
-              messages: [{ role: "user", content: contentParts }],
-              modalities: ["image", "text"],
-            }),
-          });
+          let generated = false;
+          let lastError = "Unknown";
 
-          if (!aiRes.ok) {
-            const errText = await aiRes.text();
-            result.result = { error: `Image generation failed: ${aiRes.status} — ${errText.slice(0, 200)}` };
-          } else {
+          for (const attempt of attempts) {
+            const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+            if (attempt.useLogo && logoUrl) {
+              contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+              contentParts.push({ type: "text", text: "Incorporate the provided company logo as a branded watermark." });
+            }
+
+            const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: attempt.model,
+                messages: [{ role: "user", content: contentParts }],
+                modalities: ["image", "text"],
+              }),
+            });
+
+            if (!aiRes.ok) { lastError = `${attempt.model}: ${aiRes.status}`; continue; }
+
             const aiData = await aiRes.json();
-            const images = aiData.choices?.[0]?.message?.images;
 
-            if (!images || images.length === 0) {
-              result.result = { error: "No image was generated by the model" };
-            } else {
-              const base64Url = images[0].image_url?.url;
-              if (!base64Url) {
-                result.result = { error: "Image data missing from response" };
-              } else {
-                const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, "");
-                const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
-                const imagePath = `pixel/${slot.replace(":", "")}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-
-                const { error: uploadError } = await svcClient.storage
-                  .from("social-images")
-                  .upload(imagePath, imageBytes, { contentType: "image/png" });
-
-                if (uploadError) {
-                  result.result = { error: `Upload failed: ${uploadError.message}` };
-                } else {
-                  const { data: urlData } = svcClient.storage.from("social-images").getPublicUrl(imagePath);
-                  result.result = {
-                    success: true,
-                    image_url: urlData.publicUrl,
-                    slot,
-                    message: `Image generated and uploaded successfully for slot ${slot}`,
-                  };
+            // Robust image extraction (multiple formats)
+            const msg = aiData?.choices?.[0]?.message;
+            let imageDataUrl: string | null = null;
+            // Format 1: images[]
+            imageDataUrl = msg?.images?.[0]?.image_url?.url || null;
+            // Format 2: parts[].inline_data
+            if (!imageDataUrl && Array.isArray(msg?.parts)) {
+              for (const part of msg.parts) {
+                if (part.inline_data?.data) {
+                  imageDataUrl = `data:${part.inline_data.mime_type || "image/png"};base64,${part.inline_data.data}`;
+                  break;
                 }
               }
             }
+            // Format 3: content[].image_url
+            if (!imageDataUrl && Array.isArray(msg?.content)) {
+              for (const block of msg.content) {
+                if (block.type === "image_url" && block.image_url?.url) { imageDataUrl = block.image_url.url; break; }
+              }
+            }
+
+            if (!imageDataUrl) { lastError = `${attempt.model}: no parseable image`; continue; }
+
+            // Upload
+            let imageBytes: Uint8Array;
+            if (imageDataUrl.startsWith("data:")) {
+              const b64 = imageDataUrl.replace(/^data:image\/\w+;base64,/, "");
+              imageBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+            } else {
+              const dl = await fetch(imageDataUrl);
+              if (!dl.ok) { lastError = "Failed to download image"; continue; }
+              imageBytes = new Uint8Array(await dl.arrayBuffer());
+            }
+
+            const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+            const { error: uploadError } = await svcClient.storage
+              .from("social-images")
+              .upload(imagePath, imageBytes, { contentType: "image/png" });
+
+            if (uploadError) { lastError = `Upload: ${uploadError.message}`; continue; }
+
+            const { data: urlData } = svcClient.storage.from("social-images").getPublicUrl(imagePath);
+            result.result = {
+              success: true,
+              image_url: urlData.publicUrl,
+              slot,
+              message: `Image generated and uploaded successfully for slot ${slot}`,
+            };
+            generated = true;
+            break;
+          }
+
+          if (!generated) {
+            result.result = { error: `All attempts failed. Last: ${lastError}` };
           }
         } catch (imgErr) {
           result.result = { error: `Image generation error: ${imgErr instanceof Error ? imgErr.message : String(imgErr)}` };
