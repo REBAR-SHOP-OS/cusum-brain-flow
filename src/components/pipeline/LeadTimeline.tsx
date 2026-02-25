@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,28 @@ interface AIAnalysis {
 export function LeadTimeline({ lead }: LeadTimelineProps) {
   const [newNote, setNewNote] = useState("");
   const [noteType, setNoteType] = useState("note");
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  const handleNoteChange = (val: string) => {
+    setNewNote(val);
+    const atMatch = val.match(/@(\w*)$/);
+    if (atMatch) { setMentionOpen(true); setMentionFilter(atMatch[1]); setMentionIndex(0); }
+    else { setMentionOpen(false); }
+  };
+
+  const handleMentionSelect = useCallback((item: { label: string }) => {
+    setNewNote(prev => prev.replace(/@\w*$/, `@${item.label} `));
+    setMentionOpen(false);
+  }, []);
+
+  const handleNoteKeyDown = (e: React.KeyboardEvent) => {
+    if (!mentionOpen) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => i + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(0, i - 1)); }
+    else if (e.key === "Escape") { e.preventDefault(); setMentionOpen(false); }
+  };
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -306,13 +329,23 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
               </SelectContent>
             </Select>
           </div>
-          <Textarea
-            value={newNote}
-            onChange={(e) => setNewNote(e.target.value)}
-            placeholder="Log activity details..."
-            rows={3}
-            className="text-sm"
-          />
+          <div className="relative">
+            <Textarea
+              value={newNote}
+              onChange={(e) => handleNoteChange(e.target.value)}
+              onKeyDown={handleNoteKeyDown}
+              placeholder="Log activity details..."
+              rows={3}
+              className="text-sm"
+            />
+            <MentionMenu
+              isOpen={mentionOpen}
+              filter={mentionFilter}
+              selectedIndex={mentionIndex}
+              onSelect={handleMentionSelect}
+              onClose={() => setMentionOpen(false)}
+            />
+          </div>
           <div className="flex items-center gap-2 justify-end">
             <Button size="sm" variant="ghost" onClick={() => { setIsAddingNote(false); setNewNote(""); }}>
               Cancel
