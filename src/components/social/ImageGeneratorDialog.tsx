@@ -48,7 +48,7 @@ const modelOptions: ModelOption[] = [
 export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: ImageGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("gpt-image-1");
-  const [size, setSize] = useState("1536x1024");
+  const [size, setSize] = useState("1024x1024");
   const [status, setStatus] = useState<Status>("idle");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [revisedPrompt, setRevisedPrompt] = useState<string | null>(null);
@@ -62,7 +62,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     setTimeout(() => {
       setPrompt("");
       setSelectedModel("gpt-image-1");
-      setSize("1536x1024");
+      setSize("1024x1024");
       setStatus("idle");
       setImageUrl(null);
       setRevisedPrompt(null);

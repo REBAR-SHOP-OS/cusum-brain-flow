@@ -24,7 +24,7 @@ const corsHeaders = {
 const PIXEL_SLOTS = [
   {
     slot: 1, time: "06:30 AM", theme: "Motivational / start of work day", product: "Rebar Stirrups",
-    imagePrompt: "Professional construction site at sunrise golden hour, perfectly arranged steel rebar stirrups in the foreground, workers arriving at a large concrete building project, motivational atmosphere, ultra high resolution, photorealistic, 16:9 aspect ratio",
+    imagePrompt: "Professional construction site at sunrise golden hour, perfectly arranged steel rebar stirrups in the foreground, workers arriving at a large concrete building project, motivational atmosphere, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
     caption: "🌅 Every great structure starts with strong foundations — and strong mornings.\n\nOur precision-cut Rebar Stirrups keep your columns and beams reinforced to perfection.",
     hashtags: "#RebarStirrups #ConstructionLife #MorningMotivation #SteelReinforcement #BuildingStrong #RebarShop #GTA #Toronto #Concrete #Infrastructure",
     imageTextFa: "هر سازه بزرگی با پایه‌های محکم شروع می‌شود",
@@ -32,7 +32,7 @@ const PIXEL_SLOTS = [
   },
   {
     slot: 2, time: "07:30 AM", theme: "Creative promotional", product: "Rebar Cages",
-    imagePrompt: "Dramatic close-up of a perfectly assembled steel rebar cage being lifted by a crane at a construction site, creative advertising angle, professional photography, golden light, ultra high resolution, photorealistic, 16:9 aspect ratio",
+    imagePrompt: "Dramatic close-up of a perfectly assembled steel rebar cage being lifted by a crane at a construction site, creative advertising angle, professional photography, golden light, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
     caption: "🏗️ Engineering excellence, delivered.\n\nOur custom Rebar Cages are pre-assembled to your exact specs — saving you time and labor on-site.",
     hashtags: "#RebarCages #Prefabricated #ConstructionEfficiency #SteelFabrication #RebarShop #BuildSmart #Ontario #StructuralEngineering #ConcreteReinforcement",
     imageTextFa: "تعالی مهندسی، تحویل داده شده",
@@ -40,7 +40,7 @@ const PIXEL_SLOTS = [
   },
   {
     slot: 3, time: "08:00 AM", theme: "Strength & scale", product: "Fiberglass Rebar (GFRP)",
-    imagePrompt: "Modern infrastructure project showcasing fiberglass GFRP rebar installation, vibrant green fiberglass bars contrasting with grey concrete, professional construction photography, strength and innovation theme, ultra high resolution, photorealistic, 16:9 aspect ratio",
+    imagePrompt: "Modern infrastructure project showcasing fiberglass GFRP rebar installation, vibrant green fiberglass bars contrasting with grey concrete, professional construction photography, strength and innovation theme, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
     caption: "💪 Stronger. Lighter. Corrosion-free.\n\nFiberglass Rebar (GFRP) is the future of reinforcement — ideal for parking structures, bridges, and marine environments.",
     hashtags: "#GFRP #FiberglassRebar #CorrosionFree #InfrastructureInnovation #RebarShop #GreenBuilding #Sustainability #StructuralStrength #ModernConstruction",
     imageTextFa: "قوی‌تر. سبک‌تر. ضد خوردگی.",
@@ -48,7 +48,7 @@ const PIXEL_SLOTS = [
   },
   {
     slot: 4, time: "12:30 PM", theme: "Innovation & efficiency", product: "Wire Mesh",
-    imagePrompt: "Overhead view of welded wire mesh sheets being laid on a large concrete slab pour, workers in safety gear, modern construction site, clean and organized, innovation and efficiency theme, ultra high resolution, photorealistic, 16:9 aspect ratio",
+    imagePrompt: "Overhead view of welded wire mesh sheets being laid on a large concrete slab pour, workers in safety gear, modern construction site, clean and organized, innovation and efficiency theme, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
     caption: "⚡ Speed up your concrete pours with precision-welded Wire Mesh.\n\nConsistent spacing, reliable strength — the smart choice for slabs, foundations, and walls.",
     hashtags: "#WireMesh #ConcreteSlab #ConstructionInnovation #WeldedMesh #RebarShop #Efficiency #FoundationWork #ConcretePouring #BuildFaster",
     imageTextFa: "بتن‌ریزی خود را سرعت ببخشید",
@@ -56,7 +56,7 @@ const PIXEL_SLOTS = [
   },
   {
     slot: 5, time: "02:30 PM", theme: "Product promotional", product: "Rebar Dowels",
-    imagePrompt: "Professional product photography of precision-cut steel rebar dowels arranged neatly, some installed in a concrete joint, afternoon lighting, clean industrial setting, promotional advertising style, ultra high resolution, photorealistic, 16:9 aspect ratio",
+    imagePrompt: "Professional product photography of precision-cut steel rebar dowels arranged neatly, some installed in a concrete joint, afternoon lighting, clean industrial setting, promotional advertising style, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
     caption: "🔩 Precision-cut Rebar Dowels for seamless load transfer across concrete joints.\n\nAvailable in all standard sizes — custom lengths on request.",
     hashtags: "#RebarDowels #LoadTransfer #ConcreteJoints #PrecisionCut #RebarShop #ConstructionSupply #SteelRebar #Toronto #GTA #BuiltToLast",
     imageTextFa: "دوبل‌های میلگرد با دقت برش داده شده",

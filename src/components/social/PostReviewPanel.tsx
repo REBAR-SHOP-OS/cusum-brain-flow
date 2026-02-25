@@ -209,7 +209,7 @@ export function PostReviewPanel({
                       {isVideo ? (
                         <video src={post.image_url} controls className="w-full aspect-video object-cover" />
                       ) : (
-                        <img src={post.image_url} alt="Post preview" className="w-full aspect-[4/3] object-cover" />
+                        <img src={post.image_url} alt="Post preview" className="w-full aspect-square object-cover" />
                       )}
                     </div>
                   ) : uploading ? (
