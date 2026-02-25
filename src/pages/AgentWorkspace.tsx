@@ -364,12 +364,19 @@ export default function AgentWorkspace() {
         .replace(/\*\*Hashtags:\*\*/g, "")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
-      const title = cleanCaption.split("\n").find(l => l.trim().length > 0)?.slice(0, 80) || "Pixel Post";
+      const lines = cleanCaption.split("\n").filter(l => l.trim().length > 0);
+      const titleLine = lines[0] || "Pixel Post";
+      // Remove emoji prefix for cleaner title
+      const title = titleLine.replace(/^[\p{Emoji}\s]+/u, "").slice(0, 50) || "Pixel Post";
+      // Content: if title is same as first line, remove it to avoid duplication
+      const content = cleanCaption.startsWith(titleLine)
+        ? cleanCaption.slice(titleLine.length).trim() || cleanCaption
+        : cleanCaption;
       const { error } = await supabase.from("social_posts").insert({
         platform: post.platform || "instagram",
         status: "draft",
         title,
-        content: cleanCaption,
+        content,
         image_url: post.imageUrl || null,
         hashtags,
         scheduled_date: selectedDate.toISOString(),

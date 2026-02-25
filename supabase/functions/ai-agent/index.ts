@@ -176,8 +176,8 @@ async function generatePixelImage(
   // Build attempts: model + whether to include logo
   const attempts: { model: string; useLogo: boolean }[] = [
     { model: "google/gemini-2.5-flash-image", useLogo: true },
-    { model: "google/gemini-2.5-flash-image", useLogo: false },
-    { model: "google/gemini-3-pro-image-preview", useLogo: false },
+    { model: "google/gemini-2.5-flash-image", useLogo: true },
+    { model: "google/gemini-3-pro-image-preview", useLogo: true },
   ];
 
   let lastError = "Unknown error";
