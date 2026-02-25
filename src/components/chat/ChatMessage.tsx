@@ -22,12 +22,14 @@ interface ChatMessageProps {
   onRegenerate?: () => void;
   onRegenerateImage?: (imageUrl: string, alt: string) => void;
   onViewPost?: (post: PixelPostData) => void;
+  onApprovePost?: (post: PixelPostData) => void;
+  onRegeneratePost?: (post: PixelPostData) => void;
   agentImage?: string;
   agentName?: string;
   isPixelAgent?: boolean;
 }
 
-export function ChatMessage({ message, onRegenerate, onRegenerateImage, onViewPost, agentImage, agentName, isPixelAgent }: ChatMessageProps) {
+export function ChatMessage({ message, onRegenerate, onRegenerateImage, onViewPost, onApprovePost, onRegeneratePost, agentImage, agentName, isPixelAgent }: ChatMessageProps) {
   const isUser = message.role === "user";
 
   return (
@@ -88,13 +90,15 @@ export function ChatMessage({ message, onRegenerate, onRegenerateImage, onViewPo
             <p className="text-sm leading-relaxed whitespace-pre-wrap">
               {message.content || (message.files?.length ? "📎 Files attached" : "")}
             </p>
-          ) : isPixelAgent && onViewPost && agentImage && agentName ? (
+          ) : isPixelAgent && agentImage && agentName ? (
             <PixelChatRenderer
               content={message.content || ""}
               agentImage={agentImage}
               agentName={agentName}
               onViewPost={onViewPost}
               onRegenerateImage={onRegenerateImage}
+              onApprovePost={onApprovePost}
+              onRegeneratePost={onRegeneratePost}
             />
           ) : (
             <RichMarkdown content={message.content || ""} onRegenerateImage={onRegenerateImage} />

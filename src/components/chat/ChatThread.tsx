@@ -1,14 +1,15 @@
 import { useRef, useEffect } from "react";
-import { Bot, CheckCircle } from "lucide-react";
+import { Bot } from "lucide-react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { PixelPostData } from "@/components/social/PixelPostCard";
-import { Button } from "@/components/ui/button";
 
 interface ChatThreadProps {
   messages: Message[];
   isLoading?: boolean;
   onRegenerateImage?: (imageUrl: string, alt: string) => void;
   onViewPost?: (post: PixelPostData) => void;
+  onApprovePost?: (post: PixelPostData) => void;
+  onRegeneratePost?: (post: PixelPostData) => void;
   agentImage?: string;
   agentName?: string;
   isPixelAgent?: boolean;
@@ -17,7 +18,7 @@ interface ChatThreadProps {
   onApprovePixelSlot?: () => void;
 }
 
-export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, agentImage, agentName, isPixelAgent, pendingPixelSlot, hasUnsavedPixelPost, onApprovePixelSlot }: ChatThreadProps) {
+export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, onApprovePost, onRegeneratePost, agentImage, agentName, isPixelAgent }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,37 +49,13 @@ export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost,
           message={message}
           onRegenerateImage={onRegenerateImage}
           onViewPost={onViewPost}
+          onApprovePost={onApprovePost}
+          onRegeneratePost={onRegeneratePost}
           agentImage={agentImage}
           agentName={agentName}
           isPixelAgent={isPixelAgent}
         />
       ))}
-      {/* Pixel Approve & Next button */}
-      {!isLoading && pendingPixelSlot && onApprovePixelSlot && (
-        <div className="flex justify-center py-3 animate-fade-in">
-          <Button
-            onClick={onApprovePixelSlot}
-            className="gap-2 px-6"
-            size="lg"
-          >
-            <CheckCircle className="w-5 h-5" />
-            Approve & Generate Post {pendingPixelSlot}/5
-          </Button>
-        </div>
-      )}
-      {/* Last post (slot 5) approve button */}
-      {!isLoading && !pendingPixelSlot && hasUnsavedPixelPost && onApprovePixelSlot && (
-        <div className="flex justify-center py-3 animate-fade-in">
-          <Button
-            onClick={onApprovePixelSlot}
-            className="gap-2 px-6"
-            size="lg"
-          >
-            <CheckCircle className="w-5 h-5" />
-            Approve Final Post ✅
-          </Button>
-        </div>
-      )}
       {isLoading && (
         <div className="flex gap-3 items-start animate-fade-in">
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">

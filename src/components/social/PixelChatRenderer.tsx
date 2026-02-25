@@ -6,8 +6,10 @@ interface PixelChatRendererProps {
   content: string;
   agentImage: string;
   agentName: string;
-  onViewPost: (post: PixelPostData) => void;
+  onViewPost?: (post: PixelPostData) => void;
   onRegenerateImage?: (imageUrl: string, alt: string) => void;
+  onApprovePost?: (post: PixelPostData) => void;
+  onRegeneratePost?: (post: PixelPostData) => void;
 }
 
 /** Extract social-images URLs and nearby hashtags from markdown content */
@@ -32,7 +34,7 @@ function extractPostData(content: string): { imageUrl: string; caption: string; 
 }
 
 const PixelChatRenderer = React.forwardRef<HTMLDivElement, PixelChatRendererProps>(
-  ({ content, agentImage, agentName, onViewPost, onRegenerateImage }, ref) => {
+  ({ content, agentImage, agentName, onViewPost, onRegenerateImage, onApprovePost, onRegeneratePost }, ref) => {
     const images = extractPostData(content);
 
     if (images.length === 0) {
@@ -74,6 +76,8 @@ const PixelChatRenderer = React.forwardRef<HTMLDivElement, PixelChatRendererProp
             key={post.id}
             post={post}
             onView={onViewPost}
+            onApprove={onApprovePost}
+            onRegenerate={onRegeneratePost}
           />
         ))}
       </div>
