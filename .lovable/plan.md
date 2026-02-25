@@ -1,36 +1,31 @@
 
 
-## فیلتر فیدبک‌ها: فقط به Radin و حذف از ستون Sattar
+## محدودسازی کامل دسترسی Accounting
 
 ### مشکل فعلی
-- فیدبک‌های کاربران (با عنوان "Feedback:") به هر دو Radin و Zahra ارسال می‌شود
-- ستون Sattar در صفحه Tasks ممکن است فیدبک‌های قدیمی یا اشتباهی را نمایش دهد
+- در سایدبار دسکتاپ، Accounting برای یوزرهای غیرمجاز به صورت "قفل‌شده" نمایش داده می‌شود (باید کاملا مخفی باشد)
+- در منوی موبایل، Accounting با نقش‌های `admin/accounting/office` قابل مشاهده است (باید فقط ایمیل‌محور باشد)
+- RoleGuard و AccountingWorkspace از قبل درست کار می‌کنند (فقط 3 ایمیل مجاز)
 
 ### تغییرات
 
-**1. `src/components/feedback/AnnotationOverlay.tsx`**
-- حذف `ZAHRA_PROFILE_ID` از آرایه `FEEDBACK_RECIPIENTS`
-- فیدبک‌ها فقط برای Radin ایجاد شوند
-- نوتیفیکیشن هم فقط برای Radin ارسال شود
+**1. `src/components/layout/AppSidebar.tsx`**
+- آیتم‌هایی که `allowedEmails` دارند و کاربر دسترسی ندارد، به جای نمایش قفل‌شده، کاملا مخفی شوند
+- در بخش رندر (خط 224-250): اگر `!accessible` و آیتم `allowedEmails` داشته باشد، اصلا رندر نشود (return null)
 
-**2. `src/pages/Tasks.tsx`**
-- ثابت `SATTAR_PROFILE_ID = "ee659c5c-20e1-4bf5-a01d-dedd886a4ad7"` اضافه شود
-- در بخش گروه‌بندی تسک‌ها (خط 467-476)، تسک‌هایی که `source === "screenshot_feedback"` هستند و `assigned_to` برابر Sattar است، فیلتر شوند
-- یعنی ستون Sattar هیچ فیدبک خودکاری نشان نمی‌دهد، فقط تسک‌های دستی
+**2. `src/components/layout/MobileNavV2.tsx`**
+- آیتم Accounting در `moreItems` (خط 21) از `roles` به `allowedEmails` تغییر کند
+- فیلتر مربوطه در رندر موبایل اضافه شود تا فقط 3 ایمیل مجاز ببینند
 
-**3. `src/components/panels/InboxPanel.tsx`**
-- به‌روزرسانی `FEEDBACK_RECIPIENTS` برای هماهنگی (فقط Radin)
-
-### جزئیات فنی
+### جزییات فنی
 
 | فایل | تغییر |
 |------|-------|
-| `AnnotationOverlay.tsx` خط 16 | `FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID]` (حذف Zahra) |
-| `InboxPanel.tsx` خط 271 | `FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID]` (حذف Zahra) |
-| `Tasks.tsx` خط 79-84 | اضافه `SATTAR_PROFILE_ID` |
-| `Tasks.tsx` خط 467-476 | فیلتر: اگر تسک `source === "screenshot_feedback"` باشد و `assigned_to === SATTAR_PROFILE_ID` باشد، نمایش داده نشود |
+| `AppSidebar.tsx` خط 230 | اضافه شرط: اگر `item.allowedEmails` وجود دارد و `!accessible`، return null (مخفی کامل) |
+| `MobileNavV2.tsx` خط 21 | تغییر به `allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"]` |
+| `MobileNavV2.tsx` فیلتر رندر | اضافه چک ایمیل برای آیتم‌های `allowedEmails` |
 
 ### نتیجه
-- فیدبک‌های جدید فقط به Radin ارسال می‌شوند
-- ستون Sattar هیچ فیدبک خودکاری نمایش نمی‌دهد
-- تسک‌های دستی که برای Sattar ایجاد شوند همچنان نمایش داده می‌شوند
+- Accounting فقط برای sattar، neel و vicky قابل مشاهده خواهد بود
+- سایر یوزرها (از جمله ادمین‌ها مثل radin) اصلا آن را نمی‌بینند
+- حفاظت route-level (RoleGuard) از قبل فعال است و تغییر نمی‌کند
