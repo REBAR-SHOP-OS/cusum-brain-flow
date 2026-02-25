@@ -1,68 +1,47 @@
 
 
-## Fix: Screenshot Crashes on Pipeline Intelligence Page
+## Plan: Viewport-Only Screenshot on Pipeline Page
 
-### Problem
+### What Changes
 
-Taking a screenshot on the Pipeline Intelligence page (`/pipeline-intelligence`) crashes the browser tab. The page has 13 tabs, each containing recharts charts (SVGs), and the total DOM element count is very high (likely 5000+).
+On the `/pipeline` route (and other heavy pages), skip the overflow expansion logic entirely and capture only the visible viewport area. This prevents crashes and captures exactly what the user sees.
 
-**Root causes:**
-
-1. **Unbounded canvas dimensions** — After the ancestor expansion logic removes all `overflow: hidden` constraints, `target.scrollHeight` can balloon to 10,000+ px. Combined with `scrollWidth`, this creates a canvas that exceeds the browser's maximum canvas size (~16384px or ~268 million pixels), causing an allocation failure that crashes the tab.
-
-2. **Hidden tab content rendered** — All 13 `TabsContent` components exist in the DOM simultaneously (Radix hides inactive ones with `display: none` or `data-state="inactive"`). When `overflow: visible` is applied globally, html2canvas still traverses all these nodes, multiplying the work.
-
-3. **Recharts SVGs** — Each chart generates complex SVG trees. html2canvas struggles with these, especially when dozens are present simultaneously.
-
-### Fix
+### How
 
 **File: `src/components/feedback/ScreenshotFeedbackButton.tsx`**
 
-#### Change 1: Cap maximum canvas dimensions (lines 69-70)
+#### 1. Detect heavy pages and skip expansion (lines 41-67)
 
-After calculating `captureWidth` and `captureHeight`, clamp them to a safe maximum to prevent browser canvas allocation failures:
-
-```typescript
-const MAX_DIM = 8192;
-const captureWidth  = isOverlay ? window.innerWidth  : Math.min(target.scrollWidth, MAX_DIM);
-const captureHeight = isOverlay ? window.innerHeight : Math.min(target.scrollHeight, MAX_DIM);
-```
-
-#### Change 2: Ignore hidden/inactive tab content in `baseIgnore` (lines 75-81)
-
-Add a check to skip elements inside inactive Radix `TabsContent` panels so html2canvas doesn't render content the user can't see:
+After determining the target, check if the page is heavy (>3000 elements). If so, skip all the `expand()` logic that removes overflow constraints on ancestors — this is what causes the canvas to balloon.
 
 ```typescript
-const baseIgnore = (el: Element) => {
-  const tag = el.tagName?.toLowerCase();
-  if (tag === "iframe" || tag === "embed" || tag === "object") return true;
-  if (el.getAttribute?.("data-feedback-btn") === "true") return true;
-  if (el.classList?.contains("floating-vizzy")) return true;
-  // Skip inactive tab panels (Radix TabsContent with data-state="inactive")
-  if (el.getAttribute?.("data-state") === "inactive" && el.getAttribute?.("role") === "tabpanel") return true;
-  return false;
-};
+const isHeavyRoute = target.querySelectorAll("*").length > 3000;
+
+// Only expand overflow on lighter pages
+if (!isOverlay && !isHeavyRoute && target instanceof HTMLElement) {
+  // ... existing expand logic stays
+}
 ```
 
-#### Change 3: Lower scale for extremely heavy pages (line 114-115, 152)
+#### 2. Use viewport dimensions for heavy pages (lines 69-71)
 
-Add a second tier for extremely heavy pages (>6000 elements) to use an even lower scale:
+For heavy pages, use `window.innerWidth` / `window.innerHeight` instead of `scrollWidth` / `scrollHeight`:
 
 ```typescript
-const totalCount = target.querySelectorAll("*").length;
-const isHeavyPage = totalCount > 3000;
-const isExtremelyHeavy = totalCount > 6000;
-
-// In captureOnce:
-scale: isExtremelyHeavy ? 0.5 : (isHeavyPage ? 0.75 : 1),
+const captureWidth  = (isOverlay || isHeavyRoute) ? window.innerWidth  : Math.min(target.scrollWidth, MAX_DIM);
+const captureHeight = (isOverlay || isHeavyRoute) ? window.innerHeight : Math.min(target.scrollHeight, MAX_DIM);
 ```
 
-### What stays the same
-- Overlay/dialog path (unaffected — uses viewport dimensions)
-- Restore logic in `finally` block
-- Retry-without-images fallback
-- Ancestor expansion for scroll capture on normal pages
+#### 3. Move `totalCount` / `isHeavyPage` detection earlier (line 116-118)
 
-### Files changed
-1. `src/components/feedback/ScreenshotFeedbackButton.tsx` — 3 targeted changes
+The element count check currently happens *after* the expansion. Move it before so we can use `isHeavyRoute` to gate expansion. Consolidate the two checks into one.
+
+### Result
+
+- Pipeline and other heavy pages: captures exactly what's on screen — fast, no crash
+- Normal pages: still captures full scrollable content as before
+- Overlay/dialog: unchanged
+
+### Files Changed
+1. `src/components/feedback/ScreenshotFeedbackButton.tsx` — reorganize element count detection and gate expansion + dimensions on it
 
