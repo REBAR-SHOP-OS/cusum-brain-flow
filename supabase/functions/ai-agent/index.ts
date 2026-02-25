@@ -20,49 +20,126 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ─── Pixel Slot Definitions ───
+// ─── Pixel Slot Template Definitions (no hardcoded captions — all generated dynamically) ───
 const PIXEL_SLOTS = [
   {
     slot: 1, time: "06:30 AM", theme: "Motivational / start of work day", product: "Rebar Stirrups",
-    imagePrompt: "Professional construction site at sunrise golden hour, perfectly arranged steel rebar stirrups in the foreground, workers arriving at a large concrete building project, motivational atmosphere, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
-    caption: "🌅 Every great structure starts with strong foundations — and strong mornings.\n\nOur precision-cut Rebar Stirrups keep your columns and beams reinforced to perfection.",
-    hashtags: "#RebarStirrups #ConstructionLife #MorningMotivation #SteelReinforcement #BuildingStrong #RebarShop #GTA #Toronto #Concrete #Infrastructure",
-    imageTextFa: "هر سازه بزرگی با پایه‌های محکم شروع می‌شود",
-    captionFa: "🌅 هر سازه بزرگی با پایه‌های محکم شروع می‌شود — و صبح‌های پرانرژی.\n\nخاموت‌های میلگرد ما با دقت برش داده شده و ستون‌ها و تیرهای شما را کاملاً مسلح می‌کنند."
+    imageStyle: "Professional construction site at sunrise golden hour, perfectly arranged steel rebar stirrups in the foreground, workers arriving at a large concrete building project, motivational atmosphere, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
   },
   {
     slot: 2, time: "07:30 AM", theme: "Creative promotional", product: "Rebar Cages",
-    imagePrompt: "Dramatic close-up of a perfectly assembled steel rebar cage being lifted by a crane at a construction site, creative advertising angle, professional photography, golden light, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
-    caption: "🏗️ Engineering excellence, delivered.\n\nOur custom Rebar Cages are pre-assembled to your exact specs — saving you time and labor on-site.",
-    hashtags: "#RebarCages #Prefabricated #ConstructionEfficiency #SteelFabrication #RebarShop #BuildSmart #Ontario #StructuralEngineering #ConcreteReinforcement",
-    imageTextFa: "تعالی مهندسی، تحویل داده شده",
-    captionFa: "🏗️ تعالی مهندسی، تحویل داده شده.\n\nقفس‌های میلگرد سفارشی ما طبق مشخصات دقیق شما از پیش مونتاژ شده‌اند — صرفه‌جویی در زمان و نیروی کار در سایت."
+    imageStyle: "Dramatic close-up of a perfectly assembled steel rebar cage being lifted by a crane at a construction site, creative advertising angle, professional photography, golden light, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
   },
   {
     slot: 3, time: "08:00 AM", theme: "Strength & scale", product: "Fiberglass Rebar (GFRP)",
-    imagePrompt: "Modern infrastructure project showcasing fiberglass GFRP rebar installation, vibrant green fiberglass bars contrasting with grey concrete, professional construction photography, strength and innovation theme, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
-    caption: "💪 Stronger. Lighter. Corrosion-free.\n\nFiberglass Rebar (GFRP) is the future of reinforcement — ideal for parking structures, bridges, and marine environments.",
-    hashtags: "#GFRP #FiberglassRebar #CorrosionFree #InfrastructureInnovation #RebarShop #GreenBuilding #Sustainability #StructuralStrength #ModernConstruction",
-    imageTextFa: "قوی‌تر. سبک‌تر. ضد خوردگی.",
-    captionFa: "💪 قوی‌تر. سبک‌تر. ضد خوردگی.\n\nمیلگرد فایبرگلاس (GFRP) آینده مسلح‌سازی است — ایده‌آل برای پارکینگ‌ها، پل‌ها و محیط‌های دریایی."
+    imageStyle: "Modern infrastructure project showcasing fiberglass GFRP rebar installation, vibrant green fiberglass bars contrasting with grey concrete, professional construction photography, strength and innovation theme, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
   },
   {
     slot: 4, time: "12:30 PM", theme: "Innovation & efficiency", product: "Wire Mesh",
-    imagePrompt: "Overhead view of welded wire mesh sheets being laid on a large concrete slab pour, workers in safety gear, modern construction site, clean and organized, innovation and efficiency theme, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
-    caption: "⚡ Speed up your concrete pours with precision-welded Wire Mesh.\n\nConsistent spacing, reliable strength — the smart choice for slabs, foundations, and walls.",
-    hashtags: "#WireMesh #ConcreteSlab #ConstructionInnovation #WeldedMesh #RebarShop #Efficiency #FoundationWork #ConcretePouring #BuildFaster",
-    imageTextFa: "بتن‌ریزی خود را سرعت ببخشید",
-    captionFa: "⚡ بتن‌ریزی خود را با مش جوشی دقیق سرعت ببخشید.\n\nفاصله‌گذاری یکنواخت، استحکام قابل اعتماد — انتخاب هوشمندانه برای دال‌ها، فونداسیون‌ها و دیوارها."
+    imageStyle: "Overhead view of welded wire mesh sheets being laid on a large concrete slab pour, workers in safety gear, modern construction site, clean and organized, innovation and efficiency theme, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
   },
   {
     slot: 5, time: "02:30 PM", theme: "Product promotional", product: "Rebar Dowels",
-    imagePrompt: "Professional product photography of precision-cut steel rebar dowels arranged neatly, some installed in a concrete joint, afternoon lighting, clean industrial setting, promotional advertising style, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
-    caption: "🔩 Precision-cut Rebar Dowels for seamless load transfer across concrete joints.\n\nAvailable in all standard sizes — custom lengths on request.",
-    hashtags: "#RebarDowels #LoadTransfer #ConcreteJoints #PrecisionCut #RebarShop #ConstructionSupply #SteelRebar #Toronto #GTA #BuiltToLast",
-    imageTextFa: "دوبل‌های میلگرد با دقت برش داده شده",
-    captionFa: "🔩 دوبل‌های میلگرد با دقت برش داده شده برای انتقال بار یکپارچه در درزهای بتنی.\n\nدر تمام سایزهای استاندارد موجود است — طول‌های سفارشی بنا به درخواست."
+    imageStyle: "Professional product photography of precision-cut steel rebar dowels arranged neatly, some installed in a concrete joint, afternoon lighting, clean industrial setting, promotional advertising style, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
   },
 ];
+
+interface DynamicContent {
+  caption: string;
+  hashtags: string;
+  imageText: string;
+  imageTextFa: string;
+  captionFa: string;
+}
+
+/**
+ * Generate unique, non-repeating advertising content for a Pixel slot.
+ * Calls Gemini to produce a fresh caption, hashtags, image slogan, and Farsi translations.
+ * NEVER returns hardcoded content — every call produces brand-new creative copy.
+ */
+async function generateDynamicContent(
+  slot: typeof PIXEL_SLOTS[number],
+  isRegenerate: boolean,
+): Promise<DynamicContent> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured — cannot generate dynamic content");
+  }
+
+  const regenerateInstruction = isRegenerate
+    ? "\n- THIS IS A REGENERATION REQUEST — you MUST create content that is COMPLETELY DIFFERENT from any previous version. Use a totally new angle, tone, and wording."
+    : "";
+
+  const prompt = `You are an elite creative advertising copywriter for RebarShop, a premium rebar and steel reinforcement company based in Ontario, Canada.
+
+Product: ${slot.product}
+Theme: ${slot.theme}
+Time slot: ${slot.time}
+
+YOUR TASK — Generate UNIQUE advertising content. Follow these rules STRICTLY:
+
+1. Write a compelling, UNIQUE English caption (2-4 sentences) for this product with the given theme. Use relevant emojis. The caption must be fresh, creative, and NEVER repeat any generic or template-like phrasing.
+2. Write a SHORT English advertising slogan (MAXIMUM 8 words) that will be printed directly ON the image. It must be catchy, memorable, and specific to the product.
+3. Write 8-12 relevant hashtags as a single string separated by spaces.
+4. Translate the caption to Farsi (Persian).
+5. Translate the image slogan to Farsi (Persian).
+
+CRITICAL RULES:
+- Every single call MUST produce COMPLETELY NEW and ORIGINAL content
+- NEVER use generic phrases like "Building strong" or "Engineering excellence"
+- Be creative, bold, and specific to the product
+- The image slogan must be short enough to be readable when printed on an image
+- Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
+
+Respond with ONLY a valid JSON object (no markdown, no code fences):
+{"caption": "...", "hashtags": "...", "imageText": "...", "imageTextFa": "...", "captionFa": "..."}`;
+
+  try {
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 1.0, // High temperature for maximum creativity/variation
+      }),
+    });
+
+    if (!aiRes.ok) {
+      console.warn(`generateDynamicContent: AI returned ${aiRes.status}`);
+      throw new Error(`AI returned ${aiRes.status}`);
+    }
+
+    const aiData = await aiRes.json();
+    const rawContent = aiData.choices?.[0]?.message?.content || "";
+
+    // Parse JSON from response (strip markdown fences if present)
+    const jsonStr = rawContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const parsed = JSON.parse(jsonStr) as DynamicContent;
+
+    // Validate required fields
+    if (!parsed.caption || !parsed.hashtags || !parsed.imageText) {
+      throw new Error("Missing required fields in AI response");
+    }
+
+    console.log(`  ✓ Dynamic content generated: imageText="${parsed.imageText}"`);
+    return parsed;
+  } catch (err) {
+    console.error("generateDynamicContent failed:", err);
+    // Fallback: generate minimal unique content deterministically
+    const ts = Date.now();
+    return {
+      caption: `🏗️ Premium ${slot.product} — built for strength, delivered with precision. Trust RebarShop for your next project. [${ts}]`,
+      hashtags: `#RebarShop #${slot.product.replace(/\s+/g, "")} #Construction #Steel #Ontario #Toronto #GTA #Quality`,
+      imageText: `${slot.product} — Built to Last`,
+      imageTextFa: `${slot.product} — ساخته شده برای ماندگاری`,
+      captionFa: `🏗️ ${slot.product} ممتاز — ساخته شده برای استحکام، تحویل داده شده با دقت. به ریبارشاپ اعتماد کنید.`,
+    };
+  }
+}
 
 const PIXEL_CONTACT_INFO = `\n\n📍 9 Cedar Ave, Thornhill, Ontario\n📞 647-260-9403\n🌐 www.rebar.shop`;
 
@@ -454,25 +531,31 @@ Deno.serve(async (req) => {
         const results: string[] = [];
 
         for (const slot of slotsToGenerate) {
-          console.log(`🎨 Pixel: Generating image for slot ${slot.slot} (${slot.product})...`);
-          // For regenerate: add variation suffix to prompt to ensure unique output
-          const variationSuffix = isRegenerate
-            ? ` — Create a COMPLETELY DIFFERENT and UNIQUE variation with a different camera angle, different composition, different lighting, different arrangement. Timestamp: ${Date.now()}`
-            : "";
-          const imgResult = await generatePixelImage(slot.imagePrompt + variationSuffix, svcClient, logoUrl);
+          console.log(`🎨 Pixel: Generating DYNAMIC content for slot ${slot.slot} (${slot.product})...`);
+
+          // Step A: Generate unique, non-repeating caption + slogan + hashtags via LLM
+          const dynContent = await generateDynamicContent(slot, isRegenerate);
+
+          // Step B: Build image prompt with MANDATORY advertising text on image
+          const imagePrompt = slot.imageStyle +
+            `. MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
+            ` — variation timestamp: ${Date.now()}`;
+
+          console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
+          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
 
           // Only show imageTextFa line if it has actual content
-          const hasImageText = slot.imageTextFa && slot.imageTextFa.trim() !== "" && slot.imageTextFa.trim() !== "-";
+          const hasImageText = dynContent.imageTextFa && dynContent.imageTextFa.trim() !== "" && dynContent.imageTextFa.trim() !== "-";
           const persianBlock = `\n\n---PERSIAN---\n` +
-            (hasImageText ? `🖼️ متن روی عکس: ${slot.imageTextFa}\n` : "") +
-            `📝 ترجمه کپشن: ${slot.captionFa}`;
+            (hasImageText ? `🖼️ متن روی عکس: ${dynContent.imageTextFa}\n` : "") +
+            `📝 ترجمه کپشن: ${dynContent.captionFa}`;
 
           if (imgResult.imageUrl) {
             results.push(
               `### Slot ${slot.slot} — ${slot.time} | ${slot.product}\n\n` +
               `![${slot.product}](${imgResult.imageUrl})\n\n` +
-              `**Caption:**\n${slot.caption}\n\n` +
-              `**Hashtags:**\n${slot.hashtags}` +
+              `**Caption:**\n${dynContent.caption}\n\n` +
+              `**Hashtags:**\n${dynContent.hashtags}` +
               PIXEL_CONTACT_INFO +
               persianBlock
             );
@@ -480,8 +563,8 @@ Deno.serve(async (req) => {
             results.push(
               `### Slot ${slot.slot} — ${slot.time} | ${slot.product}\n\n` +
               `⚠️ Image generation failed: ${imgResult.error || "Unknown error"}\n\n` +
-              `**Caption:**\n${slot.caption}\n\n` +
-              `**Hashtags:**\n${slot.hashtags}` +
+              `**Caption:**\n${dynContent.caption}\n\n` +
+              `**Hashtags:**\n${dynContent.hashtags}` +
               PIXEL_CONTACT_INFO +
               persianBlock
             );
