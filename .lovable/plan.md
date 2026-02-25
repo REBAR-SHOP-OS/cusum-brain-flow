@@ -1,60 +1,42 @@
 
 
-## بهبود کیفیت پرامپت Generate Fix
+## حل مشکل نمایش متن غیر انگلیسی در Inbox
 
-### مشکل فعلی
-پرامپت‌های تولیدی ناقص هستند چون:
-1. سیستم پرامپت محدودیت ۴۰۰ کلمه‌ای دارد که باعث کوتاهی بیش از حد می‌شود
-2. اطلاعات کافی به AI ارسال نمی‌شود (attachment ها، اولویت، وضعیت تسک)
-3. مدل ضعیف‌تر (`gpt-4o-mini`) برای تسک‌های بدون اسکرین‌شات استفاده می‌شود
-4. حداکثر توکن خروجی ۱۲۰۰ است که کم است
+### مشکل
+یک DB trigger روی جدول `notifications` وجود دارد که هنگام INSERT، فانکشن `translate-notification` را فراخوانی می‌کند. این فانکشن فیلدهای `title` و `description` را با ترجمه فارسی **بازنویسی** می‌کند. چون Inbox مستقیماً از `item.title` و `item.description` استفاده می‌کند، متن فارسی نمایش داده می‌شود.
+
+### راه‌حل
+ترجمه را در فیلدهای جداگانه ذخیره کنیم و Inbox همیشه نسخه انگلیسی را نشان دهد، در حالی که toast/browser notifications از نسخه ترجمه‌شده استفاده کنند.
 
 ### تغییرات
 
-**1. `supabase/functions/generate-fix-prompt/index.ts`**
+**1. Migration: اضافه کردن ستون‌های ترجمه**
+- اضافه کردن `title_local` و `description_local` به جدول `notifications`
+- این ستون‌ها ترجمه را نگه می‌دارند بدون اینکه متن اصلی انگلیسی تغییر کند
 
-- سیستم پرامپت بازنویسی شود:
-  - محدودیت ۴۰۰ کلمه‌ای حذف شود و به ۸۰۰ کلمه افزایش یابد
-  - بخش جدید `ROOT CAUSE ANALYSIS` اضافه شود
-  - بخش `CONTEXT` اضافه شود برای ذکر اینکه این یک اپلیکیشن React/TypeScript/Supabase با ساختار خاص است
-  - دستورالعمل برای تحلیل عمیق‌تر: بررسی اینکه آیا مشکل فرانت‌اند است یا بک‌اند، آیا مربوط به RLS/دیتابیس/UI/API است
-  - بخش `TESTING` اضافه شود: چگونه صحت رفع مشکل تایید شود
-- مدل برای همه درخواست‌ها (حتی بدون اسکرین‌شات) به `gpt-4o` یا `gemini-2.5-pro` ارتقا یابد
-- `maxTokens` از ۱۲۰۰ به ۲۵۰۰ افزایش یابد
-- ورودی `priority`، `status`، `attachment_urls` به پیام اضافه شود
+**2. `supabase/functions/translate-notification/index.ts`**
+- به جای بازنویسی `title` و `description`، ترجمه را در `title_local` و `description_local` ذخیره کند
+- متن اصلی انگلیسی دست‌نخورده باقی بماند
 
-**2. `src/pages/Tasks.tsx`**
+**3. `src/components/panels/InboxPanel.tsx`** (بدون تغییر)
+- چون `title` و `description` همیشه انگلیسی باقی می‌مانند، نیازی به تغییر UI نیست
 
-- هنگام فراخوانی edge function، اطلاعات بیشتر ارسال شود:
-  - `priority`: اولویت تسک
-  - `status`: وضعیت فعلی تسک
-  - `attachment_urls`: لینک فایل‌های ضمیمه شده
-  - `source`: منبع تسک (دستی، AI، ایمیل و غیره)
+**4. `src/hooks/useNotifications.ts`**
+- Toast notifications از `title_local` (در صورت وجود) استفاده کنند تا کاربر در toast پیام ترجمه‌شده ببیند
+
+**5. `src/lib/browserNotification.ts`** (بدون تغییر اساسی)
+- Browser notifications نیز می‌توانند از `title_local` استفاده کنند
 
 ### جزئیات فنی
 
 | فایل | تغییر |
 |------|-------|
-| `generate-fix-prompt/index.ts` خط ۱۰-۲۷ | بازنویسی SYSTEM_PROMPT با تحلیل عمیق‌تر |
-| `generate-fix-prompt/index.ts` خط ۹۳-۱۰۱ | تغییر مدل به gemini-2.5-pro و افزایش maxTokens |
-| `generate-fix-prompt/index.ts` خط ۳۵-۵۸ | اضافه کردن priority/status/attachments به evidence |
-| `Tasks.tsx` خط ۱۳۳۶-۱۳۴۳ | ارسال فیلدهای اضافی (priority, status, attachment_urls, source) |
-
-### ساختار جدید پرامپت خروجی
-
-```text
-**PROBLEM:** خلاصه یک خطی
-**ROOT CAUSE:** تحلیل ریشه‌ای مشکل
-**FILE/COMPONENT:** مسیر دقیق فایل‌ها
-**FIX:** دستورالعمل گام‌به‌گام دقیق
-**TESTING:** نحوه تایید رفع مشکل
-**DO NOT TOUCH:** لیست فایل‌هایی که نباید تغییر کنند
-**SURGICAL LAW:** فقط بخش‌های ذکر شده تغییر کنند
-```
+| Migration SQL | `ALTER TABLE notifications ADD COLUMN title_local TEXT, ADD COLUMN description_local TEXT` |
+| `translate-notification/index.ts` خط 66-69 | `update({ title_local, description_local })` به جای `update({ title, description })` |
+| `useNotifications.ts` خط 151-165 | Toast از `title_local \|\| title` استفاده کند |
 
 ### نتیجه
-- پرامپت‌ها کامل‌تر و جامع‌تر خواهند بود
-- تحلیل ریشه‌ای مشکل ارائه می‌شود
-- دستورالعمل تست اضافه می‌شود
-- مدل قوی‌تر خروجی بهتری تولید می‌کند
+- Inbox همیشه متن انگلیسی نمایش می‌دهد (از `title`/`description`)
+- Toast و browser notifications همچنان می‌توانند ترجمه نشان دهند
+- داده‌های موجود فارسی در `title` باقی می‌مانند — برای رفع آنها یک UPDATE اجرا می‌شود تا ردیف‌های فعلی که فارسی شده‌اند اصلاح شوند (اگر نسخه اصلی انگلیسی قابل بازیابی نباشد، باید دستی بررسی شوند)
 
