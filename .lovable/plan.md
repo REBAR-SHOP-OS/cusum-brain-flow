@@ -1,49 +1,30 @@
 
 
-## اضافه کردن تقویم و گزینه "Post Now" به بخش Publish Date
+## تبدیل zahra@rebar.shop به ادمین
 
-### مشکل فعلی
-آیکون تقویم در بخش "Publish date" فقط نمایشی است و هیچ عملکردی ندارد. کاربر نمی‌تواند تاریخ را تغییر دهد یا پست را فوری ارسال کند.
+### وضعیت فعلی
+- کاربر `zahra@rebar.shop` در `auth.users` وجود دارد (ID: `efa6bd05-e0e6-47f9-8309-12d3e4b4a347`)
+- **پروفایل ندارد** در جدول `profiles`
+- **هیچ نقشی ندارد** در جدول `user_roles`
+- به همین دلیل خطای 403 در Edge Function ها دریافت می‌کند
 
-### راه‌حل
+### اقدامات لازم
 
-#### فایل: `src/components/social/PostReviewPanel.tsx`
+1. **ساخت پروفایل** در جدول `profiles`:
+   - `user_id`: `efa6bd05-e0e6-47f9-8309-12d3e4b4a347`
+   - `email`: `zahra@rebar.shop`
+   - `full_name`: `Zahra`
+   - `company_id`: `a0000000-0000-0000-0000-000000000001` (شرکت پیش‌فرض)
 
-1. **تبدیل بخش Publish date به یک Popover** با تقویم داخلی:
-   - وقتی کاربر روی آیکون تقویم یا بخش تاریخ کلیک کند، یک Popover باز شود
-   - داخل Popover:
-     - کامپوننت `Calendar` (از `react-day-picker`) برای انتخاب تاریخ
-     - فیلد ساعت و دقیقه برای تنظیم زمان دقیق
-     - دکمه **"Post Now"** برای ارسال فوری پست (بدون زمان‌بندی)
-     - دکمه **"Set Date"** برای تایید تاریخ انتخاب شده
+2. **اضافه کردن نقش admin** در جدول `user_roles`:
+   - `user_id`: `efa6bd05-e0e6-47f9-8309-12d3e4b4a347`
+   - `role`: `admin`
 
-2. **عملکرد "Post Now":**
-   - تاریخ را به همین لحظه (`new Date()`) تنظیم می‌کند
-   - پست را مستقیماً publish می‌کند (مثل دکمه Publish فعلی)
+### روش اجرا
+هر دو عملیات با ابزار insert (عملیات داده‌ای) انجام می‌شود، نیاز به migration ندارد.
 
-3. **عملکرد "Set Date":**
-   - تاریخ انتخاب شده + ساعت را ذخیره می‌کند
-   - وضعیت پست را آپدیت می‌کند
-
-4. **Import‌های جدید:**
-   - `Popover`, `PopoverTrigger`, `PopoverContent` از `@/components/ui/popover`
-   - `Calendar` از `@/components/ui/calendar`
-
-### ساختار UI داخل Popover
-
-```text
-+---------------------------+
-|       [  Calendar  ]      |
-|                           |
-|  Time: [HH] : [MM]  AM/PM|
-|                           |
-|  [Post Now]  [Set Date]   |
-+---------------------------+
-```
-
-### فایل‌های تغییریافته
-
-| فایل | تغییر |
-|------|-------|
-| `src/components/social/PostReviewPanel.tsx` | اضافه کردن Popover با Calendar + Time picker + دکمه Post Now |
+### نتیجه
+- کاربر zahra@rebar.shop به عنوان ادمین شناسایی خواهد شد
+- دسترسی کامل به تمام بخش‌ها از جمله Edge Function ها خواهد داشت
+- خطای 403 رفع می‌شود
 
