@@ -19,7 +19,7 @@ const moreItems = [
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
   { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"] },
-  { name: "CEO Portal", href: "/ceo", icon: BarChart3, roles: ["admin"] },
+  { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"] },
   { name: "Deliveries", href: "/deliveries", icon: Truck },
   { name: "Calls", href: "/phonecalls", icon: Phone },
   { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
