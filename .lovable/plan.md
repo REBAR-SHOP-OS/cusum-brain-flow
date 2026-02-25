@@ -1,30 +1,48 @@
 
 
-## رفع خطای حذف مشتری - NOT NULL constraint روی orders
+## افزودن انتخاب نوع Packing Slip به صفحه Pickup
 
 ### مشکل
-ستون `customer_id` در جدول `orders` به صورت `NOT NULL` تعریف شده، اما FK آن `ON DELETE SET NULL` است. هنگام حذف مشتری، دیتابیس سعی می‌کند `customer_id` را NULL کند ولی constraint اجازه نمی‌دهد.
-
-همین مشکل احتمالاً برای جداول دیگر هم وجود دارد (`quotes`, `leads`, `communications`, `tasks`, `delivery_stops`, `pickup_orders`, `estimation_projects`, `accounting_mirror`, `recurring_transactions`).
+در صفحه Pickup، هنگام کلیک روی "Create Pickup Packing Slip"، مستقیماً یک packing slip جدولی ساده نمایش داده می‌شود. امکان انتخاب نوع slip (مثلاً با عکس) وجود ندارد.
 
 ### راه‌حل
-یک migration اجرا شود که ستون `customer_id` را در تمام جداولی که FK آنها `ON DELETE SET NULL` است، nullable کند:
+اضافه کردن یک مرحله میانی قبل از نمایش packing slip که کاربر بتواند نوع slip را انتخاب کند:
+- **Standard** — همان جدول فعلی (DeliveryPackingSlip)
+- **With Photos** — نمای جدید شامل عکس‌های بارگذاری هر آیتم از loading_checklist
 
-```sql
-ALTER TABLE public.orders ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.quotes ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.leads ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.communications ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.tasks ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.delivery_stops ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.pickup_orders ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.estimation_projects ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.accounting_mirror ALTER COLUMN customer_id DROP NOT NULL;
-ALTER TABLE public.recurring_transactions ALTER COLUMN customer_id DROP NOT NULL;
+### تغییرات
+
+#### 1. کامپوننت جدید: `src/components/delivery/PhotoPackingSlip.tsx`
+یک packing slip جدید با فرمت عکس‌دار:
+- هر آیتم در یک کارت با عکس (از photoUrls)، mark number، barcode، طول و تعداد نمایش داده می‌شود
+- طراحی بهینه برای پرینت (A4)
+- همان هدر و فوتر DeliveryPackingSlip
+
+#### 2. کامپوننت جدید: `src/components/delivery/PackingSlipTypeSelector.tsx`
+یک دیالوگ/مودال ساده با دو گزینه:
+- "Standard Table" — آیکون جدول
+- "With Loading Photos" — آیکون عکس
+- دکمه Generate
+
+#### 3. تغییر `src/pages/PickupStation.tsx`
+- state جدید: `slipType: "standard" | "photo" | null`
+- وقتی "Create Pickup Packing Slip" کلیک می‌شود، به جای `setShowPackingSlip(true)` مستقیم، ابتدا selector نمایش داده شود
+- بعد از انتخاب نوع، بر اساس نوع انتخابی یکی از دو کامپوننت render شود
+- `photoUrls` که از قبل در state موجود است، به PhotoPackingSlip پاس داده شود
+
+### جزئیات فنی
+
+```text
+User clicks "Create Pickup Packing Slip"
+            |
+   PackingSlipTypeSelector (modal)
+      |                    |
+  "Standard"          "With Photos"
+      |                    |
+DeliveryPackingSlip   PhotoPackingSlip
 ```
 
-### نتیجه
-- حذف مشتری بدون خطا انجام می‌شود
-- سفارشات و فاکتورهای قبلی حفظ می‌شوند (فقط `customer_id` آنها NULL می‌شود)
-- بدون تغییر کد فرانت‌اند
+- بدون تغییر دیتابیس
+- بدون تغییر در flow دلیوری (Deliveries.tsx بدون تغییر باقی می‌ماند)
+- PhotoPackingSlip از همان `photoUrls` Map که در PickupStation محاسبه شده استفاده می‌کند
 
