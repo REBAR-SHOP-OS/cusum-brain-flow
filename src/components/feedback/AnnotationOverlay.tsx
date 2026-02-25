@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect, useImperativeHandle } from "react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Undo2, Trash2, Send, Loader2 } from "lucide-react";
@@ -351,6 +351,9 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
         <DialogTitle className="text-sm font-semibold">
           Annotate & Describe the Change
         </DialogTitle>
+        <DialogDescription className="sr-only">
+          Draw on the screenshot and describe the change you need
+        </DialogDescription>
 
         {/* Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">

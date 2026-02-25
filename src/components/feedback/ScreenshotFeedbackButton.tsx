@@ -41,10 +41,13 @@ export function ScreenshotFeedbackButton() {
     const target = hasOverlay ? document.body : (document.getElementById("main-content") || document.body);
     const isOverlay = !!hasOverlay;
 
-    // Detect heavy pages early so we can skip expansion and use viewport dims
+    // Route-enforced viewport mode: pipeline always captures viewport only
+    const path = window.location.pathname;
+    const isPipelineRoute = path === "/pipeline" || path.startsWith("/pipeline/");
     const totalCount = target.querySelectorAll("*").length;
     const isHeavyRoute = totalCount > 3000;
     const isExtremelyHeavy = totalCount > 6000;
+    const forceViewportOnly = isOverlay || isPipelineRoute || isHeavyRoute;
 
     // --- Pre-capture: temporarily expand overflow-hidden containers ---
     const expandedEls: { el: HTMLElement; orig: string }[] = [];
@@ -53,8 +56,8 @@ export function ScreenshotFeedbackButton() {
       el.style.cssText += css;
     };
 
-    // Only expand overflow on lighter pages — heavy pages capture viewport only
-    if (!isOverlay && !isHeavyRoute && target instanceof HTMLElement) {
+    // Only expand overflow on lighter pages — viewport-only pages skip expansion entirely
+    if (!forceViewportOnly && target instanceof HTMLElement) {
       expand(target, "; overflow: visible !important; height: auto !important;");
       target.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-x-scroll')
         .forEach(el => expand(el, "; overflow: visible !important; height: auto !important;"));
@@ -73,8 +76,8 @@ export function ScreenshotFeedbackButton() {
     }
 
     const MAX_DIM = 8192;
-    const captureWidth  = (isOverlay || isHeavyRoute) ? window.innerWidth  : Math.min(target.scrollWidth, MAX_DIM);
-    const captureHeight = (isOverlay || isHeavyRoute) ? window.innerHeight : Math.min(target.scrollHeight, MAX_DIM);
+    const captureWidth  = forceViewportOnly ? window.innerWidth  : Math.min(target.scrollWidth, MAX_DIM);
+    const captureHeight = forceViewportOnly ? window.innerHeight : Math.min(target.scrollHeight, MAX_DIM);
     const targetRect    = isOverlay ? null : target.getBoundingClientRect();
     const captureX = 0;
     const captureY = 0;
@@ -156,7 +159,9 @@ export function ScreenshotFeedbackButton() {
 
       const opts = {
         ...baseOpts,
-        scale: isExtremelyHeavy ? 0.5 : (isHeavyPage ? 0.75 : 1),
+        scale: forceViewportOnly
+          ? Math.min(window.devicePixelRatio || 1, 1.5)
+          : (isExtremelyHeavy ? 0.5 : (isHeavyPage ? 0.75 : 1)),
         imageTimeout: skipImages ? 0 : (isHeavyPage ? 0 : 5000),
         ignoreElements,
         onclone,
