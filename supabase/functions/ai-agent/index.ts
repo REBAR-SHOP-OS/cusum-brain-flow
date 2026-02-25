@@ -158,6 +158,39 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Deterministic Guardrail: Pixel Schedule (Step 1) ───
+    // If agent=social and message is a generic schedule request (e.g. New Chat auto-message),
+    // return a hardcoded schedule immediately — never let the LLM decide.
+    if (agent === "social") {
+      const msgLower = message.trim().toLowerCase();
+      const isScheduleRequest = (
+        history.length === 0 || // new chat
+        /\b(content\s*schedule|schedule\s*for\s*today|today|program|برنامه)\b/i.test(msgLower)
+      ) && !/^\d$/.test(msgLower) && msgLower !== "all"; // not a slot selection
+
+      if (isScheduleRequest) {
+        const scheduleDate = (userContext?.selectedDate as string) ||
+          new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Toronto" });
+
+        const scheduleReply = `📅 **Content Schedule — ${scheduleDate}**
+
+| # | Time (EST) | Theme | Product |
+|---|-----------|-------|---------|
+| 1 | 06:30 AM | Motivational / start of work day | Rebar Stirrups |
+| 2 | 07:30 AM | Creative promotional | Rebar Cages |
+| 3 | 08:00 AM | Strength & scale | Fiberglass Rebar (GFRP) |
+| 4 | 12:30 PM | Innovation & efficiency | Wire Mesh |
+| 5 | 02:30 PM | Product promotional | Rebar Dowels |
+
+**Which slot? (Enter 1-5, a time, or "all")**`;
+
+        return new Response(
+          JSON.stringify({ reply: scheduleReply, context: mergedContext, modelUsed: "deterministic" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Prepare System Prompt
     const basePrompt = agentPrompts[agent] || agentPrompts.sales;
     
