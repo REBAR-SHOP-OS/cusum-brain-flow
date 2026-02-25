@@ -1,43 +1,44 @@
 
-## نمایش نام واقعی ایجادکننده در کارت‌های تسک
+هدف: رفع کامل مشکل «STILL SAME» برای نمایش نام کاربر زیر فیدبک در صفحه `/tasks`.
 
-### مشکل
-در صفحه `/tasks`، تسک‌های فیدبک "by Ai" نشان می‌دهند چون `created_by_profile_id` به پروفایل "Ai" (ai@rebar.shop) اشاره دارد. همچنین حدود نیمی از تسک‌ها اصلاً `created_by_profile_id` ندارند و نام ایجادکننده نمایش داده نمی‌شود.
+آنچه پیدا شد:
+- تغییر قبلی فقط در لیست تسک‌های باز اعمال شده است.
+- در بخش تسک‌های Completed هنوز کد قدیمی وجود دارد و مستقیم `task.created_by_profile.full_name` را نمایش می‌دهد.
+- نتیجه: برای بخشی از تسک‌ها هنوز همان رفتار قبلی دیده می‌شود (خصوصاً جایی که نام creator روی "Ai" است یا creator واقعی در description/metadata است).
 
-### راه‌حل
+برنامه اجرا:
 
-#### 1. تغییر در `src/components/feedback/AnnotationOverlay.tsx`
-- فیلد `metadata` به insert تسک اضافه شود تا نام و ایمیل فرستنده به صورت ساختاریافته ذخیره شود:
-  ```typescript
-  metadata: JSON.stringify({
-    submitter_name: submitterName,
-    submitter_email: user?.email,
-    submitter_profile_id: submitterProfileId,
-  })
-  ```
+1) یکپارچه‌سازی نمایش نام در هر دو لیست Open و Completed
+- فایل: `src/pages/Tasks.tsx`
+- همان helper فعلی `getTaskCreatorName(task)` که برای لیست Open استفاده شده، در رندر Completed هم استفاده می‌شود.
+- جایگزینی بلوک قدیمی خطوط Completed:
+  - حذف:
+    - `task.created_by_profile?.full_name`
+  - افزودن:
+    - `const name = getTaskCreatorName(task)` و نمایش `by {name}` در صورت وجود.
 
-#### 2. تغییر در `src/pages/Tasks.tsx` - نمایش نام ایجادکننده
-- در بخش نمایش کارت تسک (خطوط 982-987)، منطق نمایش نام را بهبود دهیم:
-  - اگر تسک `source === "screenshot_feedback"` باشد و `metadata` شامل `submitter_name` باشد، آن نام را نشان بده
-  - اگر `created_by_profile.full_name` برابر "Ai" باشد، از فیلد `From:` در description نام را استخراج کن (fallback)
-  - در غیر این صورت `created_by_profile.full_name` عادی نشان داده شود
+2) سخت‌کردن fallback برای تسک‌های فیدبک قدیمی/جدید
+- فایل: `src/pages/Tasks.tsx`
+- helper فعلی حفظ می‌شود ولی برای پایداری بهتر:
+  - ابتدا `metadata.submitter_name`
+  - سپس parse از `description` با `From: ...`
+  - سپس `created_by_profile.full_name` (به‌جز "Ai")
+- اگر هیچ‌کدام نبود، نمایش ندادن نام (به‌جای نام اشتباه).
 
-#### 3. تابع کمکی `extractSubmitterName`
-- یک تابع helper اضافه شود که از description تسک‌های فیدبک، نام فرستنده (`From: ...`) را parse کند
-- این برای تسک‌های قدیمی که metadata ندارند کار می‌کند
+3) بررسی سازگاری با داده‌های جدیدی که از AnnotationOverlay ذخیره می‌شوند
+- فایل: `src/components/feedback/AnnotationOverlay.tsx`
+- تأیید می‌شود که `metadata.submitter_name/submitter_email/submitter_profile_id` روی تسک‌های جدید ذخیره می‌شود (همان تغییری که قبلاً اعمال شده) تا از این به بعد نام همیشه قابل نمایش باشد.
 
-### جزئیات فنی
+4) اعتبارسنجی نهایی سناریوها
+- سناریو A: تسک فیدبک جدید (با metadata) → نام واقعی نمایش داده شود.
+- سناریو B: تسک فیدبک قدیمی (بدون metadata ولی با `From:`) → نام از description استخراج شود.
+- سناریو C: تسک Completed همانند Open رفتار صحیح داشته باشد.
+- سناریو D: اگر creator = "Ai" و fallback انسانی موجود است، نام انسانی نمایش داده شود.
 
-**فایل‌های تغییر:**
-1. `src/components/feedback/AnnotationOverlay.tsx` - اضافه کردن metadata به insert
-2. `src/pages/Tasks.tsx` - بهبود منطق نمایش نام ایجادکننده
+ریسک و اثر:
+- بدون تغییر دیتابیس.
+- تغییر فقط در منطق نمایش UI است.
+- اثر جانبی کم و محدود به صفحه Tasks.
 
-**بدون تغییر دیتابیس** - فیلد `metadata` قبلاً در جدول tasks وجود دارد (به صورت jsonb).
-
-**منطق نمایش نام:**
-```text
-1. اگر metadata.submitter_name موجود باشد -> آن را نشان بده
-2. اگر description شامل "From: ..." باشد -> نام را از آن استخراج کن
-3. اگر created_by_profile.full_name موجود باشد -> آن را نشان بده
-4. در غیر این صورت -> چیزی نشان نده
-```
+خروجی مورد انتظار بعد از اعمال:
+- دیگر هیچ بخشی از صفحه Tasks (نه Open و نه Completed) نام "Ai" را به‌جای نام واقعی submitter فیدبک نشان ندهد، مگر واقعاً submitter ناشناخته باشد.
