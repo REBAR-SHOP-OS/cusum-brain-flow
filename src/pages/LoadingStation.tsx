@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
   Camera,
@@ -27,6 +28,7 @@ export default function LoadingStation() {
   const navigate = useNavigate();
   const { bundles, isLoading: bundlesLoading } = useCompletedBundles();
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
+  const [invoiceNumber, setInvoiceNumber] = useState("");
   const { createDeliveryFromBundle, creating } = useDeliveryActions();
   const { companyId } = useCompanyId();
 
@@ -70,11 +72,12 @@ export default function LoadingStation() {
 
   const totalItems = checklistItems.length;
   const allLoaded = totalItems > 0 && loadedCount >= totalItems && photoCount >= totalItems;
+  const canCreate = allLoaded && invoiceNumber.trim().length > 0;
   const progressPct = totalItems > 0 ? Math.round((loadedCount / totalItems) * 100) : 0;
 
   const handleCreateDelivery = async () => {
-    if (!selectedBundle) return;
-    const result = await createDeliveryFromBundle(selectedBundle);
+    if (!selectedBundle || !invoiceNumber.trim()) return;
+    const result = await createDeliveryFromBundle(selectedBundle, invoiceNumber.trim());
     if (result) {
       navigate("/deliveries");
     }
@@ -190,10 +193,18 @@ export default function LoadingStation() {
           </ScrollArea>
 
           {/* Bottom Action */}
-          <div className="px-4 sm:px-6 py-4 border-t border-border bg-card">
+          <div className="px-4 sm:px-6 py-4 border-t border-border bg-card space-y-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Invoice Number</label>
+              <Input
+                placeholder="e.g. 2348"
+                value={invoiceNumber}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+              />
+            </div>
             <Button
               className="w-full gap-2"
-              disabled={!allLoaded || creating}
+              disabled={!canCreate || creating}
               onClick={handleCreateDelivery}
             >
               {creating ? (
@@ -201,7 +212,7 @@ export default function LoadingStation() {
               ) : (
                 <Truck className="w-4 h-4" />
               )}
-              {allLoaded ? "Create Delivery" : `${totalItems - Math.min(loadedCount, photoCount)} items remaining`}
+              {canCreate ? "Create Delivery" : !allLoaded ? `${totalItems - Math.min(loadedCount, photoCount)} items remaining` : "Enter invoice number"}
             </Button>
           </div>
         </>

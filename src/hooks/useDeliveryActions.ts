@@ -10,7 +10,7 @@ export function useDeliveryActions() {
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
-  const createDeliveryFromBundle = async (bundle: CompletedBundle) => {
+  const createDeliveryFromBundle = async (bundle: CompletedBundle, invoiceNumber: string) => {
     if (!companyId) {
       toast.error("Company not found");
       return null;
@@ -18,8 +18,16 @@ export function useDeliveryActions() {
 
     setCreating(true);
     try {
-      const deliveryNumber = `DEL-${Date.now().toString(36).toUpperCase()}`;
-      const slipNumber = `PS-${Date.now().toString(36).toUpperCase()}`;
+      // Count existing deliveries with this invoice prefix to determine sequence
+      const { count, error: countErr } = await supabase
+        .from("deliveries")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId)
+        .like("delivery_number", `${invoiceNumber}-%`);
+      if (countErr) throw countErr;
+      const seq = String((count ?? 0) + 1).padStart(2, "0");
+      const deliveryNumber = `${invoiceNumber}-${seq}`;
+      const slipNumber = `PS-${invoiceNumber}-${seq}`;
 
       const scheduledDate = new Date().toISOString().split("T")[0];
 
