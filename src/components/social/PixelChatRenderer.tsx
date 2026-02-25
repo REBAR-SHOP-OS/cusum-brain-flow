@@ -31,6 +31,13 @@ function extractPostData(content: string): { imageUrl: string; caption: string; 
   if (persianIdx !== -1) {
     persianTranslation = content.slice(persianIdx + persianSeparator.length).trim();
     mainContent = content.slice(0, persianIdx).trim();
+  } else {
+    // Fallback: detect Persian markers without separator
+    const persianMarkerMatch = content.match(/(🖼️\s*متن روی عکس:[\s\S]*)/);
+    if (persianMarkerMatch) {
+      persianTranslation = persianMarkerMatch[1].trim();
+      mainContent = content.slice(0, persianMarkerMatch.index).trim();
+    }
   }
 
   // Extract hashtags from main content only
