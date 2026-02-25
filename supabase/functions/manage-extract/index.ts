@@ -562,19 +562,27 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 
   // ── Create cut_plan_items + production_tasks ──────────────
   if (cutPlan) {
-    const cutItems = rows.map((row: any) => ({
-      cut_plan_id: cutPlan.id,
-      bar_code: row.bar_size_mapped || row.bar_size || "10M",
-      qty_bars: row.quantity || 1,
-      cut_length_mm: row.total_length_mm || 0,
-      mark_number: row.mark,
-      drawing_ref: row.dwg,
-      bend_type: row.shape_code_mapped ? "bend" : "straight",
-      asa_shape_code: row.shape_code_mapped || null,
-      total_pieces: row.quantity || 1,
-      work_order_id: workOrder.id,
-      bend_dimensions: buildDimensions(row),
-    }));
+    const STOCK_LENGTH_MM = 12000;
+    const cutItems = rows.map((row: any) => {
+      const cutLen = row.total_length_mm || 0;
+      const totalPieces = row.quantity || 1;
+      const piecesPerBar = cutLen > 0 ? Math.floor(STOCK_LENGTH_MM / cutLen) : 1;
+      const qtyBars = Math.ceil(totalPieces / Math.max(piecesPerBar, 1));
+      return {
+        cut_plan_id: cutPlan.id,
+        bar_code: row.bar_size_mapped || row.bar_size || "10M",
+        qty_bars: qtyBars,
+        pieces_per_bar: piecesPerBar,
+        cut_length_mm: cutLen,
+        mark_number: row.mark,
+        drawing_ref: row.dwg,
+        bend_type: row.shape_code_mapped ? "bend" : "straight",
+        asa_shape_code: row.shape_code_mapped || null,
+        total_pieces: totalPieces,
+        work_order_id: workOrder.id,
+        bend_dimensions: buildDimensions(row),
+      };
+    });
 
     await sb.from("cut_plan_items").insert(cutItems);
 
@@ -587,7 +595,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     if (savedItems?.length) {
       const tasks = savedItems.map((item: any) => ({
         company_id: session.company_id,
-        project_id: workOrder.id,
+        project_id: projectId,
         work_order_id: item.work_order_id || workOrder.id,
         barlist_id: barlistId,
         cut_plan_id: cutPlan.id,
@@ -696,7 +704,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 async function rejectExtract(sb: any, sessionId: string, userId: string, reason?: string) {
   const { data: session } = await sb
     .from("extract_sessions")
-    .select("id, name, status")
+    .select("id, name, status, company_id")
     .eq("id", sessionId)
     .single();
 
@@ -716,17 +724,22 @@ async function rejectExtract(sb: any, sessionId: string, userId: string, reason?
     .eq("session_id", sessionId);
 
   // Log event
-  await sb.from("activity_events").insert({
-    entity_type: "extract_session",
-    entity_id: sessionId,
-    event_type: "rejected",
-    actor_id: userId,
-    actor_type: "user",
-    description: `Rejected session "${session.name}"${reason ? `: ${reason}` : ""}`,
-    metadata: { reason: reason || null, previous_status: session.status },
-    source: "system",
-    dedupe_key: `extract_session:${sessionId}:rejected`,
-  });
+  try {
+    await sb.from("activity_events").insert({
+      entity_type: "extract_session",
+      entity_id: sessionId,
+      event_type: "rejected",
+      actor_id: userId,
+      actor_type: "user",
+      company_id: session.company_id,
+      description: `Rejected session "${session.name}"${reason ? `: ${reason}` : ""}`,
+      metadata: { reason: reason || null, previous_status: session.status },
+      source: "system",
+      dedupe_key: `extract_session:${sessionId}:rejected`,
+    });
+  } catch (logErr) {
+    console.error("Failed to log reject event:", logErr);
+  }
 
   return jsonResponse({ success: true, status: "rejected" });
 }
