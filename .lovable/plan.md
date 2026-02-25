@@ -1,71 +1,70 @@
 
 
-## اتصال واقعی انتخاب‌گر مدل (Gemini/ChatGPT) به بک‌اند
+## رفع مشکل: حذف ساعت از کپشن + انتقال صحیح کپشن به Social Media Post
 
-### مشکل فعلی
-انتخاب‌گر مدل در Pixel (Gemini / ChatGPT) فقط ظاهری است. وقتی کاربر ChatGPT را انتخاب می‌کند، بک‌اند همچنان از Gemini استفاده می‌کند. دلیل: مقدار `aiModel` هرگز به تابع `sendAgentMessage` و سپس به Edge Function ارسال نمی‌شود.
+### مشکل‌های فعلی
+1. کپشن تولید شده توسط Pixel شامل اطلاعات ساعت اسلات (مثلاً "06:30 AM") و هدرهای قالبی (`Slot 1 — 06:30 AM | Rebar Stirrups`) می‌شود
+2. بعد از تایید (Approve)، کپشن تمیز نمی‌شود و اطلاعات اضافی مثل ساعت و عنوان اسلات هم در `social_posts` ذخیره می‌شود
+3. در پنل Social Media Post، محتوای نمایش داده شده شامل اطلاعات غیرضروری است
 
 ### راه‌حل
-زنجیره کامل انتقال مدل انتخابی از UI تا بک‌اند:
 
-### ۱. فایل: `src/lib/agent.ts`
-- اضافه کردن پارامتر `preferredModel?: string` به تابع `sendAgentMessage`
-- ارسال آن در بدنه درخواست به Edge Function:
+#### ۱. فایل: `supabase/functions/ai-agent/index.ts` — حذف ساعت از خروجی Pixel
+در بخش ساخت خروجی (خطوط ~571-589)، هدر اسلات را بدون ساعت بسازیم:
 
+**قبل:**
 ```text
-body: { agent, message, history, context, attachedFiles, pixelSlot, preferredModel }
+`### Slot ${slot.slot} — ${slot.time} | ${slot.product}`
 ```
 
-### ۲. فایل: `src/pages/AgentWorkspace.tsx`
-- ارسال `aiModel` به `sendAgentMessage` در `handleSendInternal`:
-
+**بعد:**
 ```text
-const response = await sendAgentMessage(
-  config.agentType, content, history, extraContext, attachedFiles, slotOverride, aiModel
-);
+`### Slot ${slot.slot} — ${slot.product}`
 ```
 
-### ۳. فایل: `supabase/functions/ai-agent/index.ts`
-- دریافت `preferredModel` از بدنه درخواست
-- اگر `preferredModel` مشخص باشد، از آن به جای `selectModel` خودکار استفاده شود:
+این تغییر باعث می‌شود ساعت اصلاً در متن خروجی وجود نداشته باشد.
 
+#### ۲. فایل: `src/pages/AgentWorkspace.tsx` — بهبود پاکسازی کپشن در `handleApprovePost`
+تابع `handleApprovePost` باید کپشن را به طور کامل تمیز کند:
+
+- حذف هدرهای Slot (با یا بدون ساعت): `### Slot 1 — 06:30 AM | Rebar Stirrups` یا `### Slot 1 — Rebar Stirrups`
+- حذف لیبل‌های `**Caption:**` و `**Hashtags:**`
+- حذف خطوط هشتگ
+- حذف اطلاعات تماس (آدرس، تلفن، وبسایت) از کپشن — چون اینها جداگانه مدیریت می‌شوند
+- حذف بخش Persian translation (`---PERSIAN---`)
+- نگه داشتن فقط متن تبلیغاتی خالص
+
+**منطق جدید پاکسازی:**
 ```text
-// اگر کاربر مدل انتخاب کرده، از آن استفاده کن
-if (preferredModel === "chatgpt") {
-  modelConfig = { provider: "gpt", model: "gpt-4o", maxTokens: 4000, temperature: 0.5 };
-} else if (preferredModel === "gemini") {
-  modelConfig = { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 4000, temperature: 0.5 };
-} else {
-  modelConfig = selectModel(agent, message, ...);
-}
+cleanCaption:
+1. حذف بخش ---PERSIAN--- و هرچه بعدش هست
+2. حذف هدرهای ### Slot ...
+3. حذف ![alt](url) تصاویر
+4. حذف **Caption:** و **Hashtags:**
+5. حذف خطوطی که فقط هشتگ دارند
+6. حذف PIXEL_CONTACT_INFO خطوط (آدرس/تلفن/وبسایت)
+7. trim نهایی
 ```
 
-- همچنین در `generateDynamicContent` (تولید کپشن Pixel)، مدل انتخابی را منتقل کن تا کپشن هم با همان مدل تولید شود
-- مپینگ مدل‌ها:
-  - `"gemini"` → `provider: "gemini"`, `model: "gemini-2.5-flash"` (پیش‌فرض فعلی)
-  - `"chatgpt"` → از Lovable AI Gateway با `model: "openai/gpt-5-mini"` (چون پروژه از GPT_API_KEY مستقیم و هم از Lovable Gateway استفاده می‌کند)
+**تنظیم `title`:** از اولین جمله تبلیغاتی (حداکثر 50 کاراکتر)
+**تنظیم `content`:** کل متن تبلیغاتی تمیز شده (بدون ساعت، بدون هدر، بدون اطلاعات تماس)
 
-### ۴. فایل: `supabase/functions/ai-agent/index.ts` — تابع `generateDynamicContent`
-- اضافه کردن پارامتر `preferredModel` به تابع
-- اگر `chatgpt` انتخاب شده باشد، مدل Lovable Gateway را به `openai/gpt-5-mini` تغییر بده
-- اگر `gemini` باشد، از `google/gemini-2.5-flash` فعلی استفاده کن
+#### ۳. فایل: `src/components/social/PixelChatRenderer.tsx` — بهبود `extractPostData`
+تابع `extractPostData` هم باید بهتر ساعت و هدرها را پاک کند تا در کارت‌های نمایشی Pixel هم ساعت دیده نشود:
 
-### نکته مهم: دوگانگی API
-- پروژه از دو سیستم AI استفاده می‌کند:
-  1. **aiRouter مستقیم** (`callAI`) — با GPT_API_KEY و GEMINI_API_KEY مستقیماً با OpenAI/Google صحبت می‌کند
-  2. **Lovable AI Gateway** — برای `generateDynamicContent` از Gateway استفاده می‌شود
-- برای ChatGPT: در `callAI` از `provider: "gpt"` و در Gateway از `openai/gpt-5-mini` استفاده می‌شود
-- برای Gemini: در `callAI` از `provider: "gemini"` و در Gateway از `google/gemini-2.5-flash` استفاده می‌شود
+- Regex هدر اسلات را بهبود بده تا شامل ساعت هم باشد: `/^#{1,4}\s*Slot\s*\d+\s*[—\-]\s*(\d{1,2}:\d{2}\s*(AM|PM)\s*\|?\s*)?.*/gm`
+- خطوط اطلاعات تماس را هم حذف کن
 
 ### فایل‌های تغییریافته
 
 | فایل | تغییر |
 |------|-------|
-| `src/lib/agent.ts` | اضافه شدن پارامتر `preferredModel` |
-| `src/pages/AgentWorkspace.tsx` | ارسال `aiModel` به `sendAgentMessage` |
-| `supabase/functions/ai-agent/index.ts` | استفاده از `preferredModel` در مسیریابی مدل + generateDynamicContent |
+| `supabase/functions/ai-agent/index.ts` | حذف ساعت از هدر خروجی Pixel |
+| `src/pages/AgentWorkspace.tsx` | پاکسازی کامل کپشن هنگام approve (بدون ساعت، بدون هدر، بدون اطلاعات تماس) |
+| `src/components/social/PixelChatRenderer.tsx` | بهبود regex حذف هدر اسلات (شامل ساعت) |
 
 ### نتیجه
-- وقتی Gemini انتخاب شود → واقعاً Gemini 2.5 Flash استفاده می‌شود
-- وقتی ChatGPT انتخاب شود → واقعاً GPT (OpenAI) استفاده می‌شود
-- هم چت اصلی و هم تولید محتوای Pixel از مدل انتخابی کاربر استفاده می‌کنند
+- کپشن در کارت‌های Pixel: فقط متن تبلیغاتی + هشتگ
+- کپشن در Social Media Post بعد از تایید: فقط متن تبلیغاتی خالص بدون ساعت، هدر، یا اطلاعات اضافی
+- هشتگ‌ها جداگانه ذخیره و نمایش داده می‌شوند
+
