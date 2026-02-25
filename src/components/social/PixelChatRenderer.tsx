@@ -51,7 +51,13 @@ function extractPostData(content: string): { imageUrl: string; caption: string; 
   });
   textContent = textContent.replace(/\[⬇️ Download\]\([^)]*social-images[^)]*\)/g, "");
   textContent = textContent.replace(/🔄\s*Regenerate/g, "");
-  textContent = textContent.replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-].*/gm, "");
+  textContent = textContent.replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-]\s*(\d{1,2}:\d{2}\s*(AM|PM)\s*\|?\s*)?.*/gm, "");
+  // Remove contact info lines
+  textContent = textContent.replace(/^.*📍.*$/gm, "");
+  textContent = textContent.replace(/^.*📞.*$/gm, "");
+  textContent = textContent.replace(/^.*🌐.*$/gm, "");
+  textContent = textContent.replace(/^.*9 Cedar Ave.*$/gim, "");
+  textContent = textContent.replace(/^.*647[-.\s]?260[-.\s]?9403.*$/gm, "");
   textContent = textContent.replace(/\*\*Caption:\*\*/g, "");
   textContent = textContent.replace(/\*\*Hashtags:\*\*/g, "");
   textContent = textContent.replace(/^[\s]*#[a-zA-Z]\w*(\s+#[a-zA-Z]\w*)*[\s]*$/gm, "");
