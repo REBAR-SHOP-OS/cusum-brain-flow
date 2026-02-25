@@ -60,27 +60,29 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
         </div>
 
         {/* Action icons */}
-        <div className="flex items-center gap-1 px-3 pb-2.5">
+        <div className="flex items-center gap-3 px-4 pb-4">
           {approved ? (
-            <span className="text-xs text-primary font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4 fill-primary/20" />
+            <span className="text-sm text-emerald-500 font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6 fill-emerald-500/20" />
               Saved to calendar
             </span>
           ) : (
             <>
               <button
                 onClick={handleApprove}
-                className="p-1.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25 transition-colors font-medium text-sm"
                 aria-label="Approve post"
               >
-                <CheckCircle2 className="w-5 h-5" />
+                <CheckCircle2 className="w-7 h-7" />
+                Approve
               </button>
               <button
                 onClick={handleRegenerate}
-                className="p-1.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500/15 text-orange-500 hover:bg-orange-500/25 transition-colors font-medium text-sm"
                 aria-label="Regenerate post"
               >
-                <RefreshCw className="w-5 h-5" />
+                <RefreshCw className="w-7 h-7" />
+                Regenerate
               </button>
             </>
           )}

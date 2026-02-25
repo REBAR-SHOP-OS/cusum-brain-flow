@@ -12,7 +12,7 @@ interface PixelChatRendererProps {
   onRegeneratePost?: (post: PixelPostData) => void;
 }
 
-/** Extract social-images URLs and nearby hashtags from markdown content */
+/** Extract social-images URLs, full caption text, and hashtags from markdown content */
 function extractPostData(content: string): { imageUrl: string; caption: string; hashtags: string }[] {
   const imgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]*social-images[^\s)]*)\)/g;
   const results: { imageUrl: string; caption: string; hashtags: string }[] = [];
@@ -21,13 +21,29 @@ function extractPostData(content: string): { imageUrl: string; caption: string; 
     results.push({ caption: match[1], imageUrl: match[2], hashtags: "" });
   }
 
+  if (results.length === 0) return results;
+
   // Extract hashtags from content (lines or inline sequences of #word)
   const hashtagMatches = content.match(/#[a-zA-Z]\w*/g);
   const allHashtags = hashtagMatches ? hashtagMatches.join(" ") : "";
 
-  // Distribute hashtags to posts (simple: all hashtags go to all posts for now)
+  // Build full caption: remove image markdown, download/regen links, and hashtag lines
+  let textContent = content;
+  results.forEach(({ imageUrl, caption }) => {
+    textContent = textContent.replace(`![${caption}](${imageUrl})`, "");
+  });
+  textContent = textContent.replace(/\[⬇️ Download\]\([^)]*social-images[^)]*\)/g, "");
+  textContent = textContent.replace(/🔄\s*Regenerate/g, "");
+  textContent = textContent.replace(/^[\s]*#[a-zA-Z]\w*(\s+#[a-zA-Z]\w*)*[\s]*$/gm, "");
+  textContent = textContent.replace(/\n{3,}/g, "\n\n").trim();
+
+  // Assign full caption text to posts
   results.forEach((r) => {
     r.hashtags = allHashtags;
+    // Use the cleaned text content as the full caption (instead of just alt text)
+    if (textContent) {
+      r.caption = textContent;
+    }
   });
 
   return results;
@@ -45,19 +61,7 @@ const PixelChatRenderer = React.forwardRef<HTMLDivElement, PixelChatRendererProp
       );
     }
 
-    // Remove image markdown from content and show as text + post cards
-    let textContent = content;
-    images.forEach(({ imageUrl, caption }) => {
-      textContent = textContent.replace(`![${caption}](${imageUrl})`, "");
-    });
-
-    // Clean up leftover empty lines and download/regen links tied to images
-    textContent = textContent.replace(/\[⬇️ Download\]\([^)]*social-images[^)]*\)/g, "");
-    textContent = textContent.replace(/🔄\s*Regenerate/g, "");
-    // Remove standalone hashtag lines (they're shown on the card)
-    textContent = textContent.replace(/^[\s]*#[a-zA-Z]\w*(\s+#[a-zA-Z]\w*)*[\s]*$/gm, "");
-    textContent = textContent.trim();
-
+    // Caption text is already embedded in each image's caption field from extractPostData
     const posts: PixelPostData[] = images.map((img, i) => ({
       id: `post-${i}-${img.imageUrl.slice(-8)}`,
       imageUrl: img.imageUrl,
@@ -68,9 +72,6 @@ const PixelChatRenderer = React.forwardRef<HTMLDivElement, PixelChatRendererProp
 
     return (
       <div ref={ref} className="space-y-2">
-        {textContent && (
-          <RichMarkdown content={textContent} onRegenerateImage={onRegenerateImage} />
-        )}
         {posts.map((post) => (
           <PixelPostCard
             key={post.id}
