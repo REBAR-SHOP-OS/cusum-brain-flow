@@ -1,50 +1,50 @@
 
 
-## Fix: Plans Not Appearing on Machine Stations
+## Fix: Bender Shows "No Items" After Completing a Bend
 
 ### Root Cause
-The active plan "1000197066 ONTARIO INC." has `machine_id = NULL` (unassigned). The station view strictly filters by `machine_id`, so when you enter any machine like GENSCO DTX 400, it correctly shows nothing — the plan was never assigned to it.
 
-This also causes ActiveProductionHub to show "No machines currently running" since it only tracks machines with assigned plans.
+When a bend completes (`bend_completed_pieces >= total_pieces`), a database trigger changes the item's phase from `"bending"` to `"clearance"`. The bender query only fetches items with `phase = cut_done` or `phase = bending`, so the completed item disappears from the `items` array after the next refetch.
 
-### Solution: Two Changes
+The `BenderStationView` keeps `currentIndex` unchanged. If the completed item was the last (or only) item, `items[currentIndex]` becomes `undefined` → `currentItem = null` → "No items queued to this bender" is shown, even though other items (like B1503) still exist in the list or should be navigated back to.
 
-**1. ActiveProductionHub — Show unassigned running plans (lines 76-82)**
+### Solution
 
-Add an "Unassigned Active Jobs" card when plans are running without a machine. Include a dropdown to assign them to a machine directly from the hub.
+**File: `src/components/shopfloor/BenderStationView.tsx`**
 
-```text
-Active Production Hub
-├── Machine cards (existing, for assigned plans)
-└── NEW: "Unassigned Active Jobs" card
-    ├── Plan name + status
-    ├── "Assign to Machine" dropdown (Select component)
-    └── On assign → updates cut_plans.machine_id → plan appears on machine station
+Add a `useEffect` that watches `items.length` and `currentIndex` to keep the index in bounds:
+
+```typescript
+// Keep currentIndex in bounds when items change (e.g. completed item removed)
+useEffect(() => {
+  if (items.length > 0 && currentIndex >= items.length) {
+    setCurrentIndex(items.length - 1);
+  }
+}, [items.length, currentIndex]);
 ```
 
-**2. MachineGroupSection "Unassigned" section — Add machine assignment**
+This ensures:
+- If the completed item is removed and there are remaining items → index resets to last valid item
+- If ALL items are done → `items.length === 0` → the existing `!currentItem` empty state shows correctly, but now the `onBack` button is available to return to the pool view
 
-In the UNASSIGNED section at the bottom of Station Dashboard (where the plan currently shows), add a "Assign to Machine" dropdown on each plan row so operators can quickly route work to a specific machine.
+**File: `src/pages/StationView.tsx`**
 
-### Changes by File
+After the last bend item completes and `items` becomes empty in the bender context, auto-clear `selectedItemId` so the user returns to the item list (not stuck in BenderStationView):
 
-**`src/components/shopfloor/ActiveProductionHub.tsx`**
-- Filter unassigned running plans: `activePlans.filter(p => !p.machine_id && p.status === "running")`
-- Change empty state condition to also check unassigned plans
-- Add an "Unassigned Jobs" card with each plan showing a machine selector dropdown
-- On selection, update `cut_plans.machine_id` via Supabase and invalidate queries
+Add logic in the effect that watches `filteredItems`: if `selectedItemId` is set but the selected item no longer exists in `filteredItems`, clear it to go back to the grid/list view.
 
-**`src/components/shopfloor/MachineGroupSection.tsx`**
-- Accept optional `machines` prop (list of available machines)
-- When `machineName === "Unassigned"`, show a small "Assign" dropdown next to each PlanRow
-- Dropdown lists all available machines; selecting one updates `cut_plans.machine_id`
-
-**`src/pages/StationDashboard.tsx`**
-- Pass `machines` list to the Unassigned `MachineGroupSection` so the assign dropdown has data
+```typescript
+useEffect(() => {
+  if (selectedItemId && filteredItems.length > 0 
+      && !filteredItems.some(i => i.id === selectedItemId)) {
+    setSelectedItemId(null);
+  }
+}, [filteredItems, selectedItemId]);
+```
 
 ### Technical Details
-- Assignment updates `cut_plans.machine_id` via `supabase.from("cut_plans").update({ machine_id }).eq("id", planId)`
-- Realtime subscriptions already listen to `cut_plans` changes, so the UI will auto-refresh
-- No database schema changes needed — `machine_id` column already exists on `cut_plans`
-- After assignment, the plan will immediately appear on that machine's station view (existing query on line 79 of `useStationData.ts` handles this)
+- Two small `useEffect` additions — no database or edge function changes
+- The DB trigger `auto_advance_item_phase` correctly moves completed bends to `"clearance"` — this is expected behavior
+- The bender query correctly excludes `"clearance"` items — no change needed there
+- Fix is purely about keeping the UI index/state in sync when items disappear from the filtered list
 
