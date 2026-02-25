@@ -21,6 +21,7 @@ export interface ClearanceItem {
   tag_scan_url: string | null;
   evidence_status: string;
   verified_at: string | null;
+  verified_by_name: string | null;
 }
 
 export function useClearanceData() {
@@ -51,6 +52,20 @@ export function useClearanceData() {
         (evidence || []).map((e: any) => [e.cut_plan_item_id, e])
       );
 
+      // Fetch verifier names
+      const verifierIds = [...new Set(
+        (evidence || []).map((e: any) => e.verified_by).filter(Boolean)
+      )] as string[];
+
+      const profileMap = new Map<string, string>();
+      if (verifierIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", verifierIds);
+        (profiles || []).forEach((p: any) => profileMap.set(p.id, p.full_name));
+      }
+
       return items.map((item: any) => {
         const ev = evidenceMap.get(item.id);
         return {
@@ -70,6 +85,7 @@ export function useClearanceData() {
           tag_scan_url: ev?.tag_scan_url || null,
           evidence_status: ev?.status || "pending",
           verified_at: ev?.verified_at || null,
+          verified_by_name: ev?.verified_by ? profileMap.get(ev.verified_by) || null : null,
         } as ClearanceItem;
       });
     },
