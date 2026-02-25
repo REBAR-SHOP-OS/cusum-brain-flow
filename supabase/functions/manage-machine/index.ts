@@ -450,6 +450,11 @@ serve(async (req) => {
       case "block-run":
       case "complete-run": {
         if (!machine.current_run_id) {
+          // No formal run was started — for complete-run this is OK
+          // (cuts were tracked directly via cut_plan_items), just return success
+          if (action === "complete-run") {
+            break;
+          }
           return json({ error: "No active run on this machine" }, 400);
         }
 
