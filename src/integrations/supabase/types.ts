@@ -6589,7 +6589,7 @@ export type Database = {
           company_id: string | null
           created_at: string
           customer_approved_at: string | null
-          customer_id: string
+          customer_id: string | null
           customer_revision_count: number
           id: string
           lead_id: string | null
@@ -6614,7 +6614,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           customer_approved_at?: string | null
-          customer_id: string
+          customer_id?: string | null
           customer_revision_count?: number
           id?: string
           lead_id?: string | null
@@ -6639,7 +6639,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           customer_approved_at?: string | null
-          customer_id?: string
+          customer_id?: string | null
           customer_revision_count?: number
           id?: string
           lead_id?: string | null
