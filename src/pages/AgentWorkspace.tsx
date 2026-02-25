@@ -135,7 +135,11 @@ export default function AgentWorkspace() {
     setMessages([]);
     setActiveSessionId(null);
     setAutoBriefingSent(true); // don't auto-brief on manual new chat
-  }, []);
+    // Auto-show schedule for Pixel agent
+    if (agentId === "social") {
+      setTimeout(() => sendRef.current?.("Content schedule for today"), 100);
+    }
+  }, [agentId]);
 
   // Auto-send initial message from Quick Actions
   useEffect(() => {
