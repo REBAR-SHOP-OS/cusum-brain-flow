@@ -83,8 +83,8 @@ function NotificationItem({
         item.priority === "high" && "border-l-2 border-destructive",
         item.priority === "low" && "opacity-75",
         item.status === "unread"
-          ? "bg-primary/10 hover:bg-primary/15"
-          : "bg-secondary/50 hover:bg-secondary"
+          ? "bg-primary/15 hover:bg-primary/20 border border-primary/20"
+          : "bg-secondary/30 hover:bg-secondary/50"
       )}
     >
       <div
@@ -111,7 +111,7 @@ function NotificationItem({
             {item.status === "unread" && (
               <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
             )}
-            <p className="text-sm font-medium truncate">{item.title}</p>
+            <p className="text-sm font-medium line-clamp-2">{item.title}</p>
           </div>
           <p className="text-xs text-muted-foreground">
             {item.agentName ?? "System"} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
@@ -444,7 +444,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
               </div>
             ) : (
               <ScrollArea className="flex-1">
-                <div className="p-4 space-y-2" role="tabpanel" aria-label={`${activeTab} list`}>
+                <div className="p-4 space-y-3" role="tabpanel" aria-label={`${activeTab} list`}>
                   {activeItems.length > 0 && (
                     <div className="flex items-center justify-end gap-2 mb-1">
                       {unreadInTab > 0 && (
@@ -462,8 +462,9 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                     <EmptyState tab={activeTab} />
                   ) : (
                     groupedItems.map((group) => (
-                      <div key={group.label}>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-2 mb-1">{group.label}</p>
+                      <div key={group.label} className="first:mt-0 mt-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 pb-1.5 border-b border-border/60">{group.label}</p>
+                        <div className="space-y-1.5">
                         {group.items.map((item) => (
                           <NotificationItem
                             key={item.id}
@@ -477,6 +478,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                             onReReport={handleReReport}
                           />
                         ))}
+                        </div>
                       </div>
                     ))
                   )}
