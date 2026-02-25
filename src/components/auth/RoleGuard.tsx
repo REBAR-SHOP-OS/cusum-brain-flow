@@ -98,6 +98,12 @@ export function RoleGuard({ children }: RoleGuardProps) {
     return <>{children}</>;
   }
 
+  // Accounting: email-only access (overrides all roles including admin)
+  const ACCOUNTING_EMAILS = ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"];
+  if (location.pathname.startsWith("/accounting") && !ACCOUNTING_EMAILS.includes(email.toLowerCase())) {
+    return <Navigate to="/home" replace />;
+  }
+
   // Internal users: wait for roles to load
   if (isLoading) return <>{children}</>;
 

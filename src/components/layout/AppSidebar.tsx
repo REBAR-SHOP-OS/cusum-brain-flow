@@ -23,6 +23,7 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   roles?: string[];
+  allowedEmails?: string[];
   badge?: number;
   tourId?: string;
   lockReason?: string; // shown when user lacks access
@@ -156,7 +157,7 @@ export function AppSidebar() {
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], lockReason: "Requires Sales or Office role", tourId: "nav-pipeline" },
         { name: "Lead Scoring", href: "/lead-scoring", icon: Zap, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Admin role", tourId: "nav-lead-scoring" },
         { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers" },
-        { name: "Accounting", href: "/accounting", icon: DollarSign, roles: ["admin", "accounting", "office"], lockReason: "Requires Accounting role", tourId: "nav-accounting" },
+        { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"], lockReason: "Restricted access", tourId: "nav-accounting" },
       ],
     },
     {
@@ -191,6 +192,9 @@ export function AppSidebar() {
   ];
 
   const hasAccess = (item: NavItem) => {
+    if (item.allowedEmails) {
+      return item.allowedEmails.includes(email.toLowerCase());
+    }
     if (!item.roles) return true;
     if (isAdmin) return true;
     return item.roles.some((r) => roles.includes(r as any));
