@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, FolderOpen, Layers, FileText, Play, Pause, CheckCircle2, Cpu } from "lucide-react";
+import { ChevronDown, FolderOpen, Layers, FileText, Play, Pause, CheckCircle2, Cpu, ChevronRight } from "lucide-react";
 import { CutPlan } from "@/hooks/useCutPlans";
 
 interface MachineGroupSectionProps {
@@ -19,6 +19,18 @@ const statusMap: Record<string, { label: string; color: string }> = {
   queued: { label: "QUEUED", color: "bg-primary/20 text-primary" },
 };
 
+function groupByProject(plans: CutPlan[]): [string, CutPlan[]][] {
+  const map = new Map<string, CutPlan[]>();
+  for (const plan of plans) {
+    const key = plan.project_name || plan.customer_name || "Unassigned";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(plan);
+  }
+  return [...map.entries()].sort((a, b) =>
+    a[0] === "Unassigned" ? 1 : b[0] === "Unassigned" ? -1 : a[0].localeCompare(b[0])
+  );
+}
+
 export function MachineGroupSection({
   machineName,
   runningPlans,
@@ -30,6 +42,9 @@ export function MachineGroupSection({
   const totalJobs = runningPlans.length + queuedPlans.length;
 
   if (totalJobs === 0) return null;
+
+  const runningGroups = groupByProject(runningPlans);
+  const queuedGroups = groupByProject(queuedPlans);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="border border-border rounded-lg bg-card">
@@ -54,14 +69,8 @@ export function MachineGroupSection({
               </div>
               <span className="text-xs font-bold uppercase tracking-wider text-success">Live</span>
             </div>
-            {runningPlans.map(plan => (
-              <PlanRow
-                key={plan.id}
-                plan={plan}
-                variant="running"
-                onUpdateStatus={onUpdateStatus}
-                onStatusChanged={onStatusChanged}
-              />
+            {runningGroups.map(([projectName, plans]) => (
+              <ProjectFolder key={projectName} projectName={projectName} plans={plans} variant="running" onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
             ))}
           </div>
         )}
@@ -75,17 +84,45 @@ export function MachineGroupSection({
               </div>
               <span className="text-xs font-bold uppercase tracking-wider text-primary">Queued</span>
             </div>
-            {queuedPlans.map(plan => (
-              <PlanRow
-                key={plan.id}
-                plan={plan}
-                variant="queued"
-                onUpdateStatus={onUpdateStatus}
-                onStatusChanged={onStatusChanged}
-              />
+            {queuedGroups.map(([projectName, plans]) => (
+              <ProjectFolder key={projectName} projectName={projectName} plans={plans} variant="queued" onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
             ))}
           </div>
         )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ProjectFolder({
+  projectName,
+  plans,
+  variant,
+  onUpdateStatus,
+  onStatusChanged,
+}: {
+  projectName: string;
+  plans: CutPlan[];
+  variant: "running" | "queued";
+  onUpdateStatus: (id: string, status: string) => Promise<boolean>;
+  onStatusChanged: (name: string, action: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="ml-2">
+      <CollapsibleTrigger className="flex items-center gap-2 w-full py-1 px-1.5 rounded hover:bg-muted/30 transition-colors">
+        {open ? <ChevronDown className="w-3 h-3 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 text-muted-foreground" />}
+        <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold text-foreground truncate flex-1 text-left">{projectName}</span>
+        <Badge variant="outline" className="text-[9px] tracking-wider shrink-0 h-4 px-1.5">
+          {plans.length}
+        </Badge>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="ml-4 space-y-1 mt-1">
+        {plans.map(plan => (
+          <PlanRow key={plan.id} plan={plan} variant={variant} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+        ))}
       </CollapsibleContent>
     </Collapsible>
   );
@@ -117,25 +154,6 @@ function PlanRow({
       <Badge className={`${st.color} text-[10px] tracking-wider shrink-0`}>{st.label}</Badge>
       <div className="flex-1 min-w-0">
         <h3 className="text-sm font-bold text-foreground truncate">{plan.name}</h3>
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-0.5">
-          {plan.customer_name && (
-            <span className="flex items-center gap-1 truncate">
-              <FolderOpen className="w-3 h-3 shrink-0" />
-              {plan.customer_name}
-            </span>
-          )}
-          {plan.project_name && (
-            <span className="flex items-center gap-1 truncate">
-              <Layers className="w-3 h-3 shrink-0" />
-              {plan.project_name}
-            </span>
-          )}
-          {!plan.customer_name && !plan.project_name && (
-            <span className="flex items-center gap-1">
-              <FileText className="w-3 h-3" /> Unassigned
-            </span>
-          )}
-        </div>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         {isRunning ? (
