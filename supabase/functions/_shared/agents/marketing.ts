@@ -64,6 +64,8 @@ Wire Mesh, Rebar Tie Wire, Rebar Accessories
 - Do NOT write long explanations or discuss strategy
 - Do NOT analyze data or suggest marketing plans
 - NEVER say "I don't have access to schedule" or "I cannot generate content schedules"
+- NEVER output placeholder text like "[Image of ...]" or "[Generated image ...]" — if you cannot produce a real image URL, say "⚠️ Image generation failed" with the technical error
+- ALWAYS call the generate_image tool to produce real images — never simulate or describe images in text
 - Your ONLY job: generate images + captions when given a slot selection`,
 
   bizdev: `You are **Buddy**, the Business Development Agent for REBAR SHOP OS by Rebar.shop.

@@ -54,36 +54,100 @@ const PIXEL_SLOTS = [
   },
 ];
 
-const PIXEL_CONTACT_INFO = `\n\n📍 9 Cedar Ave, Thornhill, ON\n📞 (416) 301-7498\n🌐 www.rebar.shop`;
+const PIXEL_CONTACT_INFO = `\n\n📍 9 Cedar Ave, Thornhill, Ontario\n📞 647-260-9403\n🌐 www.rebar.shop`;
 
-async function generatePixelImage(prompt: string, authHeader: string): Promise<{ imageUrl: string | null; error?: string }> {
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  
+/**
+ * Generates a social media image using Lovable AI gateway (Gemini image model),
+ * optionally compositing a company logo, uploads result to social-images bucket,
+ * and returns a permanent public URL.
+ */
+async function generatePixelImage(
+  prompt: string,
+  svcClient: ReturnType<typeof createClient>,
+  logoUrl?: string,
+): Promise<{ imageUrl: string | null; error?: string }> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    return { imageUrl: null, error: "LOVABLE_API_KEY not configured" };
+  }
+
   try {
-    const resp = await fetch(`${SUPABASE_URL}/functions/v1/generate-image`, {
+    // Build multi-part content: text prompt + optional logo image
+    const contentParts: any[] = [];
+
+    // Always add the text prompt — include explicit logo instruction
+    const fullPrompt = prompt +
+      "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image. " +
+      "Make it clearly visible but not obstructing the main scene.";
+    contentParts.push({ type: "text", text: fullPrompt });
+
+    // If we have a logo URL, verify it's reachable before sending to model
+    if (logoUrl) {
+      try {
+        const logoCheck = await fetch(logoUrl, { method: "HEAD" });
+        if (logoCheck.ok) {
+          contentParts.push({
+            type: "image_url",
+            image_url: { url: logoUrl },
+          });
+          contentParts.push({
+            type: "text",
+            text: "Use the provided company logo image above and incorporate it into the generated image as a branded watermark in a visible corner.",
+          });
+        } else {
+          console.warn(`Logo URL returned ${logoCheck.status}, skipping image input`);
+        }
+      } catch (logoFetchErr) {
+        console.warn("Logo URL unreachable, skipping:", logoFetchErr);
+      }
+    }
+
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: authHeader,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
-        prompt,
-        size: "1536x1024",
-        quality: "high",
-        model: "gpt-image-1",
+        model: "google/gemini-2.5-flash-image",
+        messages: [{ role: "user", content: contentParts }],
+        modalities: ["image", "text"],
       }),
     });
-    
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error("Pixel image generation failed:", resp.status, errText);
-      return { imageUrl: null, error: `Image generation failed (${resp.status})` };
+
+    if (!aiRes.ok) {
+      const errText = await aiRes.text();
+      console.error("Pixel image generation failed:", aiRes.status, errText);
+      return { imageUrl: null, error: `Image generation failed (${aiRes.status}): ${errText.slice(0, 200)}` };
     }
-    
-    const data = await resp.json();
-    return { imageUrl: data.imageUrl || null };
+
+    const aiData = await aiRes.json();
+    const images = aiData.choices?.[0]?.message?.images;
+    if (!images || images.length === 0) {
+      return { imageUrl: null, error: "Model returned no image" };
+    }
+
+    const base64Url = images[0].image_url?.url;
+    if (!base64Url) {
+      return { imageUrl: null, error: "Image data missing from response" };
+    }
+
+    // Upload to social-images bucket → permanent public URL
+    const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, "");
+    const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+    const imagePath = `pixel/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+
+    const { error: uploadError } = await svcClient.storage
+      .from("social-images")
+      .upload(imagePath, imageBytes, { contentType: "image/png", upsert: false });
+
+    if (uploadError) {
+      console.error("Pixel upload error:", uploadError);
+      return { imageUrl: null, error: `Upload failed: ${uploadError.message}` };
+    }
+
+    const { data: urlData } = svcClient.storage.from("social-images").getPublicUrl(imagePath);
+    return { imageUrl: urlData.publicUrl };
   } catch (e) {
     console.error("Pixel image generation error:", e);
     return { imageUrl: null, error: e instanceof Error ? e.message : "Unknown error" };
@@ -191,58 +255,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // ─── Deterministic Guardrail: Pixel Image Generation (Step 2) ───
-      // When user sends "1"-"5" or "all", bypass LLM and generate images directly.
-      const slotMatch = msgLower.match(/^([1-5])$/);
-      const isAllSlots = msgLower === "all";
 
-      if (slotMatch || isAllSlots) {
-        const slotsToGenerate = isAllSlots
-          ? PIXEL_SLOTS
-          : [PIXEL_SLOTS[parseInt(slotMatch![1]) - 1]];
-
-        const results: string[] = [];
-
-        for (const slot of slotsToGenerate) {
-          console.log(`🎨 Pixel: Generating image for slot ${slot.slot} (${slot.product})...`);
-          const imgResult = await generatePixelImage(slot.imagePrompt, authHeader);
-
-          if (imgResult.imageUrl) {
-            const imageDisplay = imgResult.imageUrl.startsWith("data:")
-              ? `[Image generated — base64, ${(imgResult.imageUrl.length / 1024).toFixed(0)}KB]`
-              : `![${slot.product}](${imgResult.imageUrl})`;
-
-            results.push(
-              `### Slot ${slot.slot} — ${slot.time} | ${slot.product}\n\n` +
-              `${imageDisplay}\n\n` +
-              `**Caption:**\n${slot.caption}\n\n` +
-              `**Hashtags:**\n${slot.hashtags}` +
-              PIXEL_CONTACT_INFO
-            );
-          } else {
-            results.push(
-              `### Slot ${slot.slot} — ${slot.time} | ${slot.product}\n\n` +
-              `⚠️ Image generation failed: ${imgResult.error || "Unknown error"}\n\n` +
-              `**Caption:**\n${slot.caption}\n\n` +
-              `**Hashtags:**\n${slot.hashtags}` +
-              PIXEL_CONTACT_INFO
-            );
-          }
-        }
-
-        const pixelReply = results.join("\n\n---\n\n");
-        const nextSlot = isAllSlots ? null : (parseInt(slotMatch![1]) < 5 ? parseInt(slotMatch![1]) + 1 : null);
-
-        return new Response(
-          JSON.stringify({
-            reply: pixelReply,
-            context: mergedContext,
-            modelUsed: "deterministic-pixel",
-            nextSlot,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       if (documentResults.length > 0) {
         mergedContext.documentResults = documentResults;
       }
@@ -309,6 +322,99 @@ Deno.serve(async (req) => {
 
         return new Response(
           JSON.stringify({ reply: scheduleReply, context: mergedContext, modelUsed: "deterministic" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ─── Deterministic Guardrail: Pixel Image Generation (Step 2) ───
+    // When agent=social and user sends slot number (1-5), time, or "all",
+    // bypass LLM entirely and generate real images via Lovable AI gateway.
+    if (agent === "social") {
+      const msgLower = message.trim().toLowerCase();
+      const slotMatch = msgLower.match(/^([1-5])$/);
+      const isAllSlots = msgLower === "all";
+
+      // Also match time-based inputs
+      const TIME_TO_SLOT: Record<string, number> = {
+        "06:30": 1, "6:30": 1, "6:30 am": 1, "06:30 am": 1,
+        "07:30": 2, "7:30": 2, "7:30 am": 2, "07:30 am": 2,
+        "08:00": 3, "8:00": 3, "8:00 am": 3, "08:00 am": 3,
+        "12:30": 4, "12:30 pm": 4,
+        "14:30": 5, "2:30 pm": 5, "02:30 pm": 5, "02:30": 5,
+      };
+      const timeSlotNum = TIME_TO_SLOT[msgLower];
+
+      if (slotMatch || isAllSlots || timeSlotNum) {
+        console.log("🎨 Pixel Step 2: Deterministic image generation triggered");
+
+        // Fetch company logo from knowledge for this agent
+        let logoUrl: string | undefined;
+        try {
+          const { data: logoKnowledge } = await svcClient
+            .from("knowledge")
+            .select("source_url")
+            .eq("company_id", companyId)
+            .ilike("title", "%logo%")
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          if (logoKnowledge && logoKnowledge.length > 0 && logoKnowledge[0].source_url) {
+            const rawUrl = logoKnowledge[0].source_url;
+            // If it's a storage path, generate a fresh signed URL
+            if (rawUrl.includes("/object/sign/") || rawUrl.includes("estimation-files/")) {
+              const storagePath = rawUrl.split("/estimation-files/").pop()?.split("?")[0];
+              if (storagePath) {
+                const { data: signedData } = await svcClient.storage
+                  .from("estimation-files")
+                  .createSignedUrl(storagePath, 300);
+                logoUrl = signedData?.signedUrl || undefined;
+              }
+            } else {
+              logoUrl = rawUrl;
+            }
+          }
+        } catch (logoErr) {
+          console.error("Logo fetch error (non-fatal):", logoErr);
+        }
+
+        const slotsToGenerate = isAllSlots
+          ? PIXEL_SLOTS
+          : [PIXEL_SLOTS[(timeSlotNum || parseInt(slotMatch?.[1] || "1")) - 1]];
+
+        const results: string[] = [];
+
+        for (const slot of slotsToGenerate) {
+          console.log(`🎨 Pixel: Generating image for slot ${slot.slot} (${slot.product})...`);
+          const imgResult = await generatePixelImage(slot.imagePrompt, svcClient, logoUrl);
+
+          if (imgResult.imageUrl) {
+            results.push(
+              `### Slot ${slot.slot} — ${slot.time} | ${slot.product}\n\n` +
+              `![${slot.product}](${imgResult.imageUrl})\n\n` +
+              `**Caption:**\n${slot.caption}\n\n` +
+              `**Hashtags:**\n${slot.hashtags}` +
+              PIXEL_CONTACT_INFO
+            );
+          } else {
+            results.push(
+              `### Slot ${slot.slot} — ${slot.time} | ${slot.product}\n\n` +
+              `⚠️ Image generation failed: ${imgResult.error || "Unknown error"}\n\n` +
+              `**Caption:**\n${slot.caption}\n\n` +
+              `**Hashtags:**\n${slot.hashtags}` +
+              PIXEL_CONTACT_INFO
+            );
+          }
+        }
+
+        const pixelReply = results.join("\n\n---\n\n");
+
+        return new Response(
+          JSON.stringify({
+            reply: pixelReply,
+            context: mergedContext,
+            modelUsed: "deterministic-pixel",
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

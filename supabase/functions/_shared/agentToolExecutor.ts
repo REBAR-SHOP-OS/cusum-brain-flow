@@ -527,7 +527,45 @@ export async function executeToolCall(
           const imagePrompt = args.prompt || "A professional rebar construction image";
           const slot = args.slot || "";
 
-          // Call Gemini image generation via Lovable AI gateway
+          // Fetch company logo for social agent
+          let logoUrl: string | undefined;
+          if (agent === "social") {
+            try {
+              const { data: logoKnowledge } = await svcClient
+                .from("knowledge")
+                .select("source_url")
+                .eq("company_id", companyId)
+                .ilike("title", "%logo%")
+                .order("created_at", { ascending: false })
+                .limit(1);
+              if (logoKnowledge?.[0]?.source_url) {
+                const rawUrl = logoKnowledge[0].source_url;
+                if (rawUrl.includes("estimation-files/")) {
+                  const storagePath = rawUrl.split("/estimation-files/").pop()?.split("?")[0];
+                  if (storagePath) {
+                    const { data: signedData } = await svcClient.storage
+                      .from("estimation-files")
+                      .createSignedUrl(storagePath, 300);
+                    logoUrl = signedData?.signedUrl || undefined;
+                  }
+                } else {
+                  logoUrl = rawUrl;
+                }
+              }
+            } catch (_) { /* non-fatal */ }
+          }
+
+          // Build content parts
+          const contentParts: any[] = [];
+          const fullPrompt = imagePrompt +
+            "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image.";
+          contentParts.push({ type: "text", text: fullPrompt });
+
+          if (logoUrl) {
+            contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+            contentParts.push({ type: "text", text: "Incorporate the provided company logo into the generated image as a branded watermark." });
+          }
+
           const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -535,20 +573,15 @@ export async function executeToolCall(
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "google/gemini-3-pro-image-preview",
-              messages: [
-                {
-                  role: "user",
-                  content: imagePrompt,
-                },
-              ],
+              model: "google/gemini-2.5-flash-image",
+              messages: [{ role: "user", content: contentParts }],
               modalities: ["image", "text"],
             }),
           });
 
           if (!aiRes.ok) {
             const errText = await aiRes.text();
-            result.result = { error: `Image generation failed: ${aiRes.status} — ${errText}` };
+            result.result = { error: `Image generation failed: ${aiRes.status} — ${errText.slice(0, 200)}` };
           } else {
             const aiData = await aiRes.json();
             const images = aiData.choices?.[0]?.message?.images;
@@ -560,10 +593,9 @@ export async function executeToolCall(
               if (!base64Url) {
                 result.result = { error: "Image data missing from response" };
               } else {
-                // Convert base64 to bytes and upload to social-images bucket
                 const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, "");
                 const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
-                const imagePath = `pixel/${slot.replace(":", "")}/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+                const imagePath = `pixel/${slot.replace(":", "")}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
 
                 const { error: uploadError } = await svcClient.storage
                   .from("social-images")
