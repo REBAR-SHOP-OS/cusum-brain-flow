@@ -1,23 +1,16 @@
 import { useCallback, useRef } from "react";
 import { Mic, MicOff } from "lucide-react";
-import { toast } from "sonner";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 
 const BTN_SIZE = 56;
 
 interface FloatingMicButtonProps {
-  onRecordingComplete: (transcript: string) => void;
+  onToggleVoice: () => void;
+  isListening: boolean;
+  isSupported: boolean;
 }
 
-export function FloatingMicButton({ onRecordingComplete }: FloatingMicButtonProps) {
-  const transcriptRef = useRef("");
-
-  const speech = useSpeechRecognition({
-    lang: "fa-IR",
-    onError: (err) => toast.error(err),
-  });
-
+export function FloatingMicButton({ onToggleVoice, isListening, isSupported }: FloatingMicButtonProps) {
   const { pos, handlers, wasDragged } = useDraggablePosition({
     storageKey: "feedback-mic-pos",
     btnSize: BTN_SIZE,
@@ -27,46 +20,36 @@ export function FloatingMicButton({ onRecordingComplete }: FloatingMicButtonProp
     }),
   });
 
-  // Keep transcript ref in sync
-  transcriptRef.current = speech.fullTranscript;
-
-  const toggleRecording = useCallback(() => {
-    if (speech.isListening) {
-      speech.stop();
-      const text = transcriptRef.current.trim();
-      if (text) {
-        onRecordingComplete(text);
-      }
-      speech.reset();
-    } else {
-      speech.reset();
-      speech.start();
-    }
-  }, [speech.isListening, speech.stop, speech.start, speech.reset, onRecordingComplete]);
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation(); // Prevent Radix Dialog from detecting outside click
+    handlers.onPointerDown(e);
+  }, [handlers]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     handlers.onPointerUp(e);
     if (!wasDragged.current) {
-      toggleRecording();
+      onToggleVoice();
     }
-  }, [handlers, toggleRecording, wasDragged]);
+  }, [handlers, onToggleVoice, wasDragged]);
+
+  if (!isSupported) return null;
 
   return (
     <button
       data-feedback-btn="true"
-      onPointerDown={handlers.onPointerDown}
+      onPointerDown={handlePointerDown}
       onPointerMove={handlers.onPointerMove}
       onPointerUp={handlePointerUp}
       className={`fixed z-[9999] w-14 h-14 rounded-full shadow-lg ring-1 ring-white/30 flex items-center justify-center hover:scale-110 transition-transform cursor-grab active:cursor-grabbing select-none ${
-        speech.isListening
+        isListening
           ? "bg-destructive text-destructive-foreground animate-pulse"
           : "bg-primary text-primary-foreground"
       }`}
       style={{ left: pos.x, top: pos.y, touchAction: "none", pointerEvents: "auto" }}
-      aria-label={speech.isListening ? "Stop voice recording" : "Start voice recording"}
-      title={speech.isListening ? "Tap to stop recording" : "Tap to start voice feedback"}
+      aria-label={isListening ? "Stop voice recording" : "Start voice recording"}
+      title={isListening ? "Tap to stop recording" : "Tap to start voice feedback"}
     >
-      {speech.isListening ? (
+      {isListening ? (
         <MicOff className="w-7 h-7 pointer-events-none" />
       ) : (
         <Mic className="w-7 h-7 pointer-events-none" />
@@ -74,4 +57,3 @@ export function FloatingMicButton({ onRecordingComplete }: FloatingMicButtonProp
     </button>
   );
 }
-

@@ -1,8 +1,8 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useImperativeHandle } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Undo2, Trash2, Send, Loader2, Mic, MicOff } from "lucide-react";
+import { Undo2, Trash2, Send, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -13,14 +13,22 @@ const LINE_WIDTH = 8;
 
 const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
 
+export interface SpeechControls {
+  toggle: () => void;
+  isListening: boolean;
+  isSupported: boolean;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   screenshotDataUrl: string;
   initialDescription?: string;
+  speechControlRef?: React.MutableRefObject<SpeechControls | null>;
+  onSpeechStateChange?: (state: { isListening: boolean; isSupported: boolean }) => void;
 }
 
-export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDescription }: Props) {
+export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDescription, speechControlRef, onSpeechStateChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgRef = useRef<HTMLImageElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -325,6 +333,18 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
     }
   }, [speech.isListening, speech.start, speech.stop]);
 
+  // Expose speech controls to parent via ref
+  useEffect(() => {
+    if (speechControlRef) {
+      speechControlRef.current = {
+        toggle: toggleVoice,
+        isListening: speech.isListening,
+        isSupported: speech.isSupported,
+      };
+    }
+    onSpeechStateChange?.({ isListening: speech.isListening, isSupported: speech.isSupported });
+  }, [speechControlRef, toggleVoice, speech.isListening, speech.isSupported, onSpeechStateChange]);
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-3 gap-2 overflow-hidden">
@@ -392,29 +412,6 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
               </div>
             )}
           </div>
-
-          {/* Voice button */}
-          <Button
-            type="button"
-            variant={speech.isListening ? "destructive" : "outline"}
-            size="icon"
-            onClick={toggleVoice}
-            disabled={!speech.isSupported}
-            title={
-              !speech.isSupported
-                ? "Voice input not supported in this browser"
-                : speech.isListening
-                ? "Stop voice input"
-                : "Start voice input (supports Farsi & English)"
-            }
-            className="shrink-0 !w-20 !h-20 rounded-2xl"
-          >
-            {speech.isListening ? (
-              <MicOff className="w-10 h-10 animate-pulse" />
-            ) : (
-              <Mic className="w-10 h-10" />
-            )}
-          </Button>
 
           {/* Send button */}
           <Button
