@@ -1,56 +1,55 @@
 
 
-## Remove "Inbox" Feature from Application
+## Fix Screenshot Feedback Send Error
 
-### Summary
-Remove the Inbox page, its navigation links, route definitions, and all references across the app. The `src/components/inbox/` folder and its 30+ component files will NOT be deleted since they may be used elsewhere (e.g., `InboxView` is rendered inside `Inbox.tsx` page, and `InboxPanel` is a notification panel used in Sidebar/TopBar which is separate from the Inbox page).
+### Root Cause
 
-### Files to Modify
+The screenshot feedback send fails because of a **storage upload RLS policy restriction**:
 
-#### 1. `src/App.tsx`
-- Remove `import Inbox from "./pages/Inbox"`
-- Remove route: `<Route path="/inbox" ...>`
-- Remove legacy redirect: `<Route path="/inbox-manager" ...>`
-- Change redirect `<Route path="/emails/*" ...>` to point to `/home` instead of `/inbox`
+The `clearance-photos` bucket upload policy (`Admin and workshop can upload clearance photos`) only allows users with `admin` or `workshop` roles:
 
-#### 2. `src/components/layout/AppSidebar.tsx`
-- Remove the `{ name: "Inbox", href: "/inbox", icon: Inbox, ... }` item from the nav items array
-- Clean up unused `Inbox` icon import if no longer used
+```sql
+WITH CHECK (bucket_id = 'clearance-photos' AND has_any_role(auth.uid(), ARRAY['admin', 'workshop']))
+```
 
-#### 3. `src/components/layout/Sidebar.tsx`
-- Remove `{ name: "Inbox", href: "/inbox", icon: Inbox }` from `crmNav` array
-- Change `navigate("/inbox", ...)` in `handleSelectSession` to `/home`
-- Clean up unused `Inbox` icon import
+Internal `@rebar.shop` users who don't have `admin` or `workshop` roles (e.g., estimators, sales staff) will get a permission denied error when trying to upload the screenshot blob. The error cascades and shows as "Failed to send feedback".
 
-#### 4. `src/components/layout/MobileNav.tsx`
-- Remove `{ name: "Inbox", href: "/inbox", icon: Inbox }` from `primaryNav`
+### Fix
 
-#### 5. `src/components/layout/MobileNavV2.tsx`
-- Remove `{ name: "Inbox", href: "/inbox", icon: Inbox }` from `primaryNav`
+**1. Update storage RLS policy** (SQL migration)
 
-#### 6. `src/components/layout/CommandBar.tsx`
-- Remove `{ label: "Inbox", icon: Inbox, href: "/inbox", ... }` from `navCommands`
+Broaden the upload policy for the `feedback-screenshots/` path within the `clearance-photos` bucket to allow any authenticated user, while keeping the existing restriction for other paths:
 
-#### 7. `src/hooks/useActiveModule.ts`
-- Remove `"/inbox"` entry
-- Update `"/tasks"` moduleRoute from `"/inbox"` to `"/tasks"`
+```sql
+DROP POLICY "Admin and workshop can upload clearance photos" ON storage.objects;
 
-#### 8. `src/lib/notificationRouting.ts`
-- Change `/emails` redirect destination from `"/inbox"` to `"/home"`
-- Change `/inbox/[uuid]` redirect destination from `"/inbox"` to `"/home"`
+CREATE POLICY "Upload clearance photos"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'clearance-photos'
+  AND (
+    -- Feedback screenshots: any authenticated user
+    (storage.foldername(name))[1] = 'feedback-screenshots'
+    OR
+    -- All other paths: admin or workshop only
+    has_any_role(auth.uid(), ARRAY['admin'::app_role, 'workshop'::app_role])
+  )
+);
+```
 
-#### 9. `src/pages/IntegrationCallback.tsx`
-- Change Gmail callback redirect from `"/inbox"` to `"/home"`
+**2. No code changes needed**
 
-#### 10. `src/components/auth/RoleGuard.tsx`
-- Remove `"/inbox"` from all allowed-route arrays (3 occurrences)
+The existing `AnnotationOverlay.tsx` and `ScreenshotFeedbackButton.tsx` code is correct. Once the RLS policy allows authenticated users to upload to the `feedback-screenshots/` path, the flow will work end-to-end:
 
-#### 11. `src/components/integrations/AutomationsSection.tsx`
-- Change route from `"/inbox"` to `"/home"` for the inbox automation entry
+1. Screenshot captured via html2canvas
+2. Canvas exported as PNG blob
+3. Uploaded to `clearance-photos/feedback-screenshots/{companyId}/{timestamp}.png`
+4. Public URL retrieved
+5. Task + notification created for Radin
 
-### Files NOT Modified (as per instructions)
-- `src/components/inbox/*` -- 30 component files left untouched
-- `src/pages/SupportInbox.tsx` -- completely separate feature, not related
-- Database schema, edge functions, and all other features remain unchanged
-- `src/pages/Inbox.tsx` will be deleted (the page file itself)
-
+### What Stays the Same
+- `AnnotationOverlay.tsx` -- no changes
+- `ScreenshotFeedbackButton.tsx` -- no changes
+- `tasks` table policies -- already allow inserts for same-company users
+- `notifications` table -- unchanged
+- All other storage policies -- unchanged
