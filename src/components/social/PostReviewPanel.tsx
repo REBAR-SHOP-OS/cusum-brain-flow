@@ -390,8 +390,8 @@ export function PostReviewPanel({
                         <PopoverContent className="w-auto p-0" align="start" side="left">
                           <DateSchedulePopover
                             post={post}
-                            onPublishNow={async () => {
-                              const success = await publishPost(post);
+                           onPublishNow={async () => {
+                              const success = await publishPost({ ...post, page_name: localPage });
                               if (success) onClose();
                             }}
                             publishing={publishing}
@@ -449,7 +449,7 @@ export function PostReviewPanel({
                     <Button
                       className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
                       onClick={async () => {
-                        const success = await publishPost(post);
+                        const success = await publishPost({ ...post, page_name: localPage });
                         if (success) onClose();
                       }}
                       disabled={publishing}

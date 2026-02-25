@@ -15,6 +15,7 @@ export function usePublishPost() {
     title: string;
     hashtags: string[];
     image_url: string | null;
+    page_name?: string;
   }) => {
     setPublishing(true);
     try {
@@ -29,6 +30,7 @@ export function usePublishPost() {
           message,
           image_url: post.image_url,
           post_id: post.id,
+          page_name: post.page_name,
         },
       });
 
