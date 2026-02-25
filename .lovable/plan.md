@@ -1,30 +1,42 @@
 
-## Auto-redirect Tablet Users to Shop Floor
+
+## Restrict Financial Data in Daily Briefing for Non-Admin Users
 
 ### Problem
-After login, tablet users land on the general "Select Interface" dashboard (`/home`) and must manually navigate to the Shop Floor. This adds an unnecessary step for shop floor operators who exclusively use tablets.
+The `vizzy-daily-brief` edge function returns sensitive financial data (AR/AP, overdue invoices, bills) to any authenticated user. While the frontend gates the component to super admins, the backend has no role-based filtering — a shop floor user could call the function directly and receive financial data.
 
 ### Solution
-Add a `useEffect` in `src/pages/Home.tsx` that detects tablet-sized viewports (width <= 1024px) and automatically redirects to `/shop-floor`. This uses the existing `useMediaQuery` hook already in the project.
+Add a role check inside the `vizzy-daily-brief` edge function. After authenticating the user, query `user_roles` for their roles. If they lack the `admin` role, strip financial data from the context and adjust the AI prompt to skip the Financials bullet point.
 
 ### Changes
 
-**File: `src/pages/Home.tsx`**
-- Import the existing `useMediaQuery` hook from `@/hooks/useMediaQuery`
-- Add a `useEffect` that checks if the viewport matches tablet size (`(max-width: 1024px)`) and navigates to `/shop-floor` using the existing `useNavigate` hook
-- The redirect happens only on initial render, so desktop users resizing their window are not affected unexpectedly
+**File: `supabase/functions/vizzy-daily-brief/index.ts`**
+
+1. After getting the user, query `user_roles` to check if the user has the `admin` role
+2. Pass the role info to `buildFullVizzyContext` (or apply filtering after)
+3. If user is NOT admin:
+   - Remove the FINANCIALS section from the context string (replace it with a placeholder like "FINANCIALS: Access restricted")
+   - Modify the system prompt to replace bullet point #2 (Financial health) with an operational item (e.g., "Inventory or stock status")
+
+**File: `supabase/functions/_shared/vizzyFullContext.ts`**
+
+Add an optional `options` parameter with `{ includeFinancials?: boolean }`:
+- When `includeFinancials` is false, skip the accounting_mirror queries entirely (don't even fetch the data)
+- Replace the FINANCIALS section in the output with "FINANCIALS: Restricted — requires admin access"
 
 ### Technical Details
 
-The redirect logic:
 ```text
-User lands on /home
-  -> useMediaQuery("(max-width: 1024px)") returns true?
-     -> Yes: navigate("/shop-floor", { replace: true })
-     -> No: render normal Home page
+User calls vizzy-daily-brief
+  -> Authenticate user
+  -> Query user_roles for admin role
+  -> If admin: full context + full prompt (current behavior)
+  -> If not admin: context without financials + adjusted prompt
 ```
 
-- The `useMediaQuery` hook already exists at `src/hooks/useMediaQuery.ts`
-- Uses `replace: true` so the user cannot "back" into the home page
-- No database changes required
-- No new dependencies
+In `vizzyFullContext.ts`, the change is to conditionally skip the two `accounting_mirror` queries (lines 86-97) and the financials computation (lines 130-171), replacing the output section (lines 297-303) with a restricted notice.
+
+In `vizzy-daily-brief/index.ts`, the system prompt bullet #2 changes from "Financial health (AR/AP, overdue items)" to "Inventory or stock highlights" for non-admin users.
+
+No database changes required. The `user_roles` table already exists.
+
