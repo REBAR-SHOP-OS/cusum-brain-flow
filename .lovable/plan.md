@@ -1,47 +1,112 @@
 
+## Audit Findings (why it is still low quality + crashing)
 
-## Plan: Viewport-Only Screenshot on Pipeline Page
+1. Current capture logic is still **heuristic-based** (`isHeavyRoute = elementCount > 3000`).
+2. On `/pipeline`, crash can still happen even when element count is under threshold because:
+   - the board is very wide (`PipelineBoard` uses `min-w-max` with many fixed-width columns),
+   - and if heavy detection misses, capture can still use large `scrollWidth/scrollHeight`.
+3. Low quality is currently expected on heavy pages because scale drops to `0.75` or `0.5`.
+4. Your requirement is explicit: on pipeline, capture **only what is visible on screen**.  
+   The current logic still does this only conditionally, not route-enforced.
 
-### What Changes
+## Implementation Plan (step-by-step)
 
-On the `/pipeline` route (and other heavy pages), skip the overflow expansion logic entirely and capture only the visible viewport area. This prevents crashes and captures exactly what the user sees.
+### 1) Introduce explicit route-based viewport mode in screenshot capture
+**File:** `src/components/feedback/ScreenshotFeedbackButton.tsx`
 
-### How
+- Add route detection near the top of `capture()`:
+  - `const path = window.location.pathname`
+  - `const isPipelineRoute = path === "/pipeline" || path.startsWith("/pipeline/")`
+- Create a single mode flag:
+  - `const forceViewportOnly = isOverlay || isPipelineRoute || isHeavyRoute`
 
-**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`**
+Why: this guarantees `/pipeline` always uses viewport-only capture regardless of DOM count.
 
-#### 1. Detect heavy pages and skip expansion (lines 41-67)
+---
 
-After determining the target, check if the page is heavy (>3000 elements). If so, skip all the `expand()` logic that removes overflow constraints on ancestors — this is what causes the canvas to balloon.
+### 2) Skip all overflow expansion when viewport-only mode is active
+**Same file**
 
-```typescript
-const isHeavyRoute = target.querySelectorAll("*").length > 3000;
+- Update expansion gate from:
+  - `if (!isOverlay && !isHeavyRoute && target instanceof HTMLElement)`
+- To:
+  - `if (!forceViewportOnly && target instanceof HTMLElement)`
 
-// Only expand overflow on lighter pages
-if (!isOverlay && !isHeavyRoute && target instanceof HTMLElement) {
-  // ... existing expand logic stays
-}
+Why: overflow expansion is what can balloon render size and trigger memory crashes.
+
+---
+
+### 3) Force viewport dimensions whenever viewport-only mode is active
+**Same file**
+
+- Keep full-page capture behavior for non-viewport routes.
+- For viewport-only mode, always use:
+  - `captureWidth = window.innerWidth`
+  - `captureHeight = window.innerHeight`
+
+Why: canvas stays bounded to visible screen area.
+
+---
+
+### 4) Improve quality specifically for viewport-only captures
+**Same file**
+
+- Add a dedicated scale branch:
+  - `viewportScale = Math.min(window.devicePixelRatio || 1, 1.5)` (or 2 if testing is stable)
+- Use:
+  - if `forceViewportOnly` → `scale: viewportScale`
+  - else keep existing heavy/full-page tiered scale logic
+
+Why: this restores readability while still keeping memory bounded because viewport dimensions are fixed.
+
+---
+
+### 5) Keep crash-safe fallback path intact
+**Same file**
+
+- Preserve existing retry path (`captureOnce(false)` then `captureOnce(true)`).
+- Preserve timeout guard.
+- Optionally use slightly shorter timeout for viewport-only mode (faster fail/retry), but keep current timeout if stability is preferred.
+
+Why: this is already good defensive behavior and should remain.
+
+---
+
+### 6) (Secondary but important) clean annotation dialog warnings
+**File:** `src/components/feedback/AnnotationOverlay.tsx`
+
+- Fix Radix dialog accessibility warning by adding a `DialogDescription` (or `aria-describedby={undefined}` intentionally).
+- Investigate and resolve `Function components cannot be given refs` warning originating around `Dialog` usage in `AnnotationOverlay`.
+
+Why: not the root crash cause, but these warnings add noise during debugging and can mask real errors.
+
+## Technical Details (for dev review)
+
+```text
+Current:
+- Mode decision tied mainly to element count threshold.
+- Quality reduced on heavy pages by design (0.75/0.5 scale).
+- Pipeline can still slip into non-viewport path if threshold not met.
+
+Planned:
+- Route-enforced mode for /pipeline:
+  forceViewportOnly = isOverlay || isPipelineRoute || isHeavyRoute
+- No overflow expansion in forceViewportOnly mode.
+- Canvas dimensions fixed to viewport in forceViewportOnly mode.
+- Higher render scale for viewport captures only (quality without huge memory).
 ```
 
-#### 2. Use viewport dimensions for heavy pages (lines 69-71)
+## Validation Checklist (must pass)
 
-For heavy pages, use `window.innerWidth` / `window.innerHeight` instead of `scrollWidth` / `scrollHeight`:
-
-```typescript
-const captureWidth  = (isOverlay || isHeavyRoute) ? window.innerWidth  : Math.min(target.scrollWidth, MAX_DIM);
-const captureHeight = (isOverlay || isHeavyRoute) ? window.innerHeight : Math.min(target.scrollHeight, MAX_DIM);
-```
-
-#### 3. Move `totalCount` / `isHeavyPage` detection earlier (line 116-118)
-
-The element count check currently happens *after* the expansion. Move it before so we can use `isHeavyRoute` to gate expansion. Consolidate the two checks into one.
-
-### Result
-
-- Pipeline and other heavy pages: captures exactly what's on screen — fast, no crash
-- Normal pages: still captures full scrollable content as before
-- Overlay/dialog: unchanged
-
-### Files Changed
-1. `src/components/feedback/ScreenshotFeedbackButton.tsx` — reorganize element count detection and gate expansion + dimensions on it
-
+1. On `/pipeline`, click screenshot:
+   - captures only visible region (not full scrollable board),
+   - no tab crash,
+   - text is readable.
+2. Horizontally scroll pipeline board, then screenshot:
+   - captured image matches what is currently visible.
+3. On non-pipeline lighter pages:
+   - full-page (scroll) capture still works as before.
+4. On very heavy non-pipeline pages:
+   - no crash, fallback behavior still works.
+5. Open annotation dialog:
+   - no new console errors; accessibility warning resolved.
