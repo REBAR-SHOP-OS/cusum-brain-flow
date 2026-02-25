@@ -1,52 +1,71 @@
 
 
-## آپلود چند فایل در Pixel Brain + الزام استفاده از Brain در تولید محتوا
+## اتصال واقعی انتخاب‌گر مدل (Gemini/ChatGPT) به بک‌اند
 
-### بخش ۱: آپلود چندین فایل همزمان
+### مشکل فعلی
+انتخاب‌گر مدل در Pixel (Gemini / ChatGPT) فقط ظاهری است. وقتی کاربر ChatGPT را انتخاب می‌کند، بک‌اند همچنان از Gemini استفاده می‌کند. دلیل: مقدار `aiModel` هرگز به تابع `sendAgentMessage` و سپس به Edge Function ارسال نمی‌شود.
 
-#### فایل: `src/components/brain/AddKnowledgeDialog.tsx`
+### راه‌حل
+زنجیره کامل انتقال مدل انتخابی از UI تا بک‌اند:
 
-1. **تبدیل `uploadedFile` از تک‌فایل به آرایه**: `uploadedFiles: { name, url, path }[]`
-2. **اضافه کردن `multiple` به input فایل**: `<input multiple ...>`
-3. **آپلود حلقه‌ای**: در `handleFileUpload`، تمام فایل‌های انتخاب شده را یکی‌یکی آپلود و به آرایه اضافه کن
-4. **نمایش لیست فایل‌ها**: به جای نمایش یک فایل، لیستی از فایل‌های آپلود شده نمایش داده شود با دکمه حذف برای هرکدام
-5. **حذف تکی**: تابع `removeFile(index)` برای حذف یک فایل خاص از آرایه
-6. **ذخیره‌سازی**: در `handleSave`، برای هر فایل آپلود شده یک رکورد knowledge جداگانه ایجاد شود (هرکدام با عنوان فایل و metadata خودش)
-7. **اگر فقط یک فایل باشد**: رفتار فعلی حفظ شود (title از نام فایل پر شود)
-8. **اگر چند فایل باشد**: title اختیاری شود و هر فایل با نام خودش ذخیره شود
-
-### بخش ۲: الزام استفاده از Brain در تولید محتوا (قاعده الزام‌آور)
-
-#### فایل: `supabase/functions/ai-agent/index.ts`
-
-در تابع `generateDynamicContent` تغییرات زیر اعمال می‌شود:
-
-1. **پارامتر جدید**: `brainContext: string` اضافه شود به تابع
-2. **تزریق Brain به prompt**: اگر `brainContext` خالی نباشد، بلوک زیر به prompt اضافه شود:
+### ۱. فایل: `src/lib/agent.ts`
+- اضافه کردن پارامتر `preferredModel?: string` به تابع `sendAgentMessage`
+- ارسال آن در بدنه درخواست به Edge Function:
 
 ```text
-## MANDATORY BRAIN CONTEXT (YOU MUST USE THIS):
-{brainContext}
-
-CRITICAL: You MUST incorporate the above brain context (custom instructions, brand resources, uploaded files/images) 
-into your generated content. This is NOT optional. Align tone, style, language, and references with the brain data.
+body: { agent, message, history, context, attachedFiles, pixelSlot, preferredModel }
 ```
 
-3. **محل فراخوانی**: در بخش Pixel Step 2 (خط ~537)، قبل از فراخوانی `generateDynamicContent`، متغیر `mergedContext.brainKnowledgeBlock` (که قبلاً توسط `agentContext.ts` ساخته شده) به تابع پاس داده شود:
+### ۲. فایل: `src/pages/AgentWorkspace.tsx`
+- ارسال `aiModel` به `sendAgentMessage` در `handleSendInternal`:
 
 ```text
-const dynContent = await generateDynamicContent(slot, isRegenerate, mergedContext.brainKnowledgeBlock || "");
+const response = await sendAgentMessage(
+  config.agentType, content, history, extraContext, attachedFiles, slotOverride, aiModel
+);
 ```
 
-4. **تزریق در image prompt هم**: اگر Brain شامل لینک تصاویر مرجع باشد، آن لینک‌ها به `imagePrompt` اضافه شوند تا Gemini هنگام تولید عکس از آن‌ها الهام بگیرد
+### ۳. فایل: `supabase/functions/ai-agent/index.ts`
+- دریافت `preferredModel` از بدنه درخواست
+- اگر `preferredModel` مشخص باشد، از آن به جای `selectModel` خودکار استفاده شود:
+
+```text
+// اگر کاربر مدل انتخاب کرده، از آن استفاده کن
+if (preferredModel === "chatgpt") {
+  modelConfig = { provider: "gpt", model: "gpt-4o", maxTokens: 4000, temperature: 0.5 };
+} else if (preferredModel === "gemini") {
+  modelConfig = { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 4000, temperature: 0.5 };
+} else {
+  modelConfig = selectModel(agent, message, ...);
+}
+```
+
+- همچنین در `generateDynamicContent` (تولید کپشن Pixel)، مدل انتخابی را منتقل کن تا کپشن هم با همان مدل تولید شود
+- مپینگ مدل‌ها:
+  - `"gemini"` → `provider: "gemini"`, `model: "gemini-2.5-flash"` (پیش‌فرض فعلی)
+  - `"chatgpt"` → از Lovable AI Gateway با `model: "openai/gpt-5-mini"` (چون پروژه از GPT_API_KEY مستقیم و هم از Lovable Gateway استفاده می‌کند)
+
+### ۴. فایل: `supabase/functions/ai-agent/index.ts` — تابع `generateDynamicContent`
+- اضافه کردن پارامتر `preferredModel` به تابع
+- اگر `chatgpt` انتخاب شده باشد، مدل Lovable Gateway را به `openai/gpt-5-mini` تغییر بده
+- اگر `gemini` باشد، از `google/gemini-2.5-flash` فعلی استفاده کن
+
+### نکته مهم: دوگانگی API
+- پروژه از دو سیستم AI استفاده می‌کند:
+  1. **aiRouter مستقیم** (`callAI`) — با GPT_API_KEY و GEMINI_API_KEY مستقیماً با OpenAI/Google صحبت می‌کند
+  2. **Lovable AI Gateway** — برای `generateDynamicContent` از Gateway استفاده می‌شود
+- برای ChatGPT: در `callAI` از `provider: "gpt"` و در Gateway از `openai/gpt-5-mini` استفاده می‌شود
+- برای Gemini: در `callAI` از `provider: "gemini"` و در Gateway از `google/gemini-2.5-flash` استفاده می‌شود
 
 ### فایل‌های تغییریافته
 
 | فایل | تغییر |
 |------|-------|
-| `src/components/brain/AddKnowledgeDialog.tsx` | پشتیبانی از آپلود چند فایل همزمان |
-| `supabase/functions/ai-agent/index.ts` | تزریق الزامی Brain context به generateDynamicContent و imagePrompt |
+| `src/lib/agent.ts` | اضافه شدن پارامتر `preferredModel` |
+| `src/pages/AgentWorkspace.tsx` | ارسال `aiModel` به `sendAgentMessage` |
+| `supabase/functions/ai-agent/index.ts` | استفاده از `preferredModel` در مسیریابی مدل + generateDynamicContent |
 
 ### نتیجه
-- کاربر می‌تواند چندین فایل (عکس، سند، ...) را یکجا در Brain آپلود کند
-- هر بار که Pixel محتوا تولید می‌کند (کپشن + عکس)، الزاماً از اطلاعات Brain (دستورات سفارشی + فایل‌ها + منابع) استفاده می‌کند
+- وقتی Gemini انتخاب شود → واقعاً Gemini 2.5 Flash استفاده می‌شود
+- وقتی ChatGPT انتخاب شود → واقعاً GPT (OpenAI) استفاده می‌شود
+- هم چت اصلی و هم تولید محتوای Pixel از مدل انتخابی کاربر استفاده می‌کنند
