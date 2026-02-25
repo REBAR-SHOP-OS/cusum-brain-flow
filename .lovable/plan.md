@@ -1,47 +1,41 @@
 
+## محدود کردن دسترسی اکانتینگ به ۳ کاربر خاص
 
-## ارسال واقعی پست به اکانت اینستاگرام انتخاب‌شده
+### خلاصه
+دسترسی به بخش Accounting فقط و فقط برای ۳ ایمیل زیر باز باشد:
+- `sattar@rebar.shop`
+- `neel@rebar.shop`
+- `vicky@rebar.shop`
 
-### مشکل فعلی
-وقتی "Publish" زده می‌شود، سیستم همیشه پست را به **اولین اکانت اینستاگرام** (Ontario Steel Detailing) ارسال می‌کند. انتخاب صفحه (Pages) در پنل کنار فقط ظاهری است و هیچ تأثیری در ارسال ندارد.
-
-### راه‌حل
-انتخاب صفحه (`localPage`) را به edge function منتقل می‌کنیم تا پست به اکانت صحیح ارسال شود.
+هیچ کاربر دیگری، حتی ادمین‌ها، نباید این بخش را ببینند یا به آن دسترسی داشته باشند.
 
 ### تغییرات
 
-**1. `src/components/social/PostReviewPanel.tsx`**
-- مقدار `localPage` (نام صفحه انتخاب‌شده) را به `publishPost` پاس بدهیم
+**1. `src/components/layout/AppSidebar.tsx`**
+- به `NavItem` فیلد اختیاری `allowedEmails?: string[]` اضافه شود
+- آیتم Accounting: حذف `roles` و اضافه `allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"]`
+- در تابع `hasAccess`: اگر `allowedEmails` وجود داشته باشد، فقط ایمیل کاربر چک شود (بدون توجه به نقش admin)
 
-**2. `src/hooks/usePublishPost.ts`**
-- پارامتر جدید `page_name` را به body درخواست edge function اضافه کنیم
+**2. `src/pages/AccountingWorkspace.tsx`**
+- تغییر خط 170: `hasAccess` از role-based به email-based
+- ثابت `ACCOUNTING_EMAILS = ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"]`
+- `const hasAccess = ACCOUNTING_EMAILS.includes(user?.email ?? "")`
+- حذف وابستگی به `isAdmin` و `hasRole("accounting")` برای دسترسی
 
-**3. `supabase/functions/social-publish/index.ts`**
-- پارامتر `page_name` را از body بخوانیم (اختیاری)
-- اگر `page_name` ارسال شده، به جای `pages[0]`، صفحه‌ای که `name` آن مطابقت دارد را پیدا کنیم
-- برای اینستاگرام: اکانت اینستاگرام مرتبط با آن صفحه (از طریق `pageId`) را انتخاب کنیم
-- برای فیسبوک: همان `pageId` مطابقت‌یافته استفاده شود
+**3. `src/components/auth/RoleGuard.tsx`**
+- اضافه کردن محافظت مسیر `/accounting` برای ایمیل‌های غیرمجاز (ریدایرکت به `/home`)
 
 ### جزئیات فنی
 
 | فایل | تغییر |
 |------|-------|
-| `PostReviewPanel.tsx` خطوط 451-453 و 393-395 | پاس دادن `page_name: localPage` به `publishPost` |
-| `usePublishPost.ts` خط 11-18 و 26-33 | اضافه کردن `page_name?: string` به تایپ ورودی و ارسال آن در body |
-| `social-publish/index.ts` خطوط 43-48 | اضافه `page_name` به schema (اختیاری) |
-| `social-publish/index.ts` خطوط 86-88 | پیدا کردن `pageId` براساس `page_name` به جای `pages[0]` |
-| `social-publish/index.ts` خطوط 103-111 | پیدا کردن `igAccount` مرتبط با `pageId` انتخاب‌شده |
+| `AppSidebar.tsx` خط 21-29 | اضافه `allowedEmails` به `NavItem` |
+| `AppSidebar.tsx` خط 159 | تغییر آیتم Accounting به `allowedEmails` |
+| `AppSidebar.tsx` خط 190-197 | تغییر `hasAccess` برای چک `allowedEmails` |
+| `AccountingWorkspace.tsx` خط 170 | تغییر `hasAccess` به email-based |
+| `RoleGuard.tsx` | اضافه بلاک ریدایرکت `/accounting` برای ایمیل‌های غیرمجاز |
 
-### جریان جدید
-
-```text
-1. کاربر صفحه "Rebar.shop" را در پنل انتخاب می‌کند
-2. دکمه Publish → page_name: "Rebar.shop" ارسال می‌شود
-3. Edge function صفحه با name "Rebar.shop" را پیدا می‌کند → pageId: 101433255155689
-4. برای اینستاگرام: igAccount با pageId مطابق → id: 17841446948101406 (username: rebar.shop)
-5. پست واقعاً به @rebar.shop در اینستاگرام ارسال می‌شود
-```
-
-### نکات
-- اگر `page_name` ارسال نشود، رفتار فعلی (اولین صفحه) حفظ می‌شود (backward compatible)
-- هیچ تغییری در دیتابیس لازم نیست
+### نتیجه
+- فقط Sattar، Neel و Vicky آیتم Accounting را در سایدبار می‌بینند
+- فقط همین ۳ نفر می‌توانند وارد صفحه `/accounting` شوند
+- ادمین‌ها و سایر کاربران حتی آیتم را در منو نمی‌بینند
