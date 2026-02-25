@@ -1,30 +1,31 @@
 
 
-## فیلتر کردن تسک‌های فیدبک اسکرین‌شات فقط برای ستون Radin
+## رفع خطای ارسال فیدبک: ستون `metadata` وجود ندارد
 
 ### مشکل
-تسک‌های فیدبک اسکرین‌شات (`source: "screenshot_feedback"`) در ستون‌های تسک سایر یوزرها هم نمایش داده می‌شوند. این تسک‌ها باید فقط در ستون Radin باشند.
+خطای `"Could not find the 'metadata' column of 'tasks' in the schema cache"` هنگام ارسال فیدبک اسکرین‌شات رخ می‌دهد. جدول `tasks` ستون `metadata` ندارد ولی کد سعی می‌کند این فیلد را وارد کند.
 
 ### تغییرات
 
-**فایل: `src/pages/Tasks.tsx`**
+**فایل: `src/components/feedback/AnnotationOverlay.tsx`** (خطوط 246-263)
 
-در بخش گروه‌بندی تسک‌ها (خط 500-505)، فیلتر فعلی فقط ستون Sattar را بررسی می‌کند:
+فیلد `metadata` از دستور insert حذف شده و اطلاعات submitter به جای آن در فیلد `description` (که وجود دارد) ذخیره می‌شود:
 
+```typescript
+// قبل (خطا دارد):
+metadata: JSON.stringify({
+  submitter_name: submitterName,
+  submitter_email: user?.email,
+  submitter_profile_id: submitterProfileId,
+}),
+
+// بعد: فیلد metadata حذف و اطلاعات در description اضافه می‌شود
 ```
-if (t.assigned_to === SATTAR_PROFILE_ID && (t as any).source === "screenshot_feedback") continue;
-```
 
-این خط تغییر می‌کند به فیلتر عمومی‌تر: اگر source برابر `screenshot_feedback` باشد و تسک به Radin اختصاص نداشته باشد، از نمایش آن در ستون صرف‌نظر شود:
-
-```
-if ((t as any).source === "screenshot_feedback" && t.assigned_to !== RADIN_PROFILE_ID) continue;
-```
-
-این تضمین می‌کند که تسک‌های فیدبک اسکرین‌شات فقط و فقط در ستون Radin نمایش داده شوند.
+اطلاعات submitter از قبل در فیلد `description` موجود هست (`From: ${submitterName}`). فقط `metadata` حذف می‌شود.
 
 ### جزییات فنی
-- تغییر فقط یک خط در `src/pages/Tasks.tsx` (خط 503)
-- بدون تغییر دیتابیس
-- تسک‌های `feedback_verification` (بررسی فیدبک توسط گزارش‌دهنده) تحت تاثیر قرار نمی‌گیرند چون source آنها متفاوت است
+- ستون‌های موجود در جدول `tasks`: `id, title, description, status, priority, due_date, assigned_to, customer_id, source, source_ref, agent_type, created_at, updated_at, completed_at, company_id, attachment_url, resolution_note, created_by_profile_id, attachment_urls`
+- ستون `metadata` وجود ندارد — `as any` خطای TypeScript را مخفی می‌کرد
+- فقط یک تغییر کوچک: حذف سه خط `metadata: JSON.stringify(...)` از insert
 
