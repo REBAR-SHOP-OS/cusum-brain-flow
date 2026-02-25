@@ -44,6 +44,9 @@ function extractPostData(content: string): { imageUrl: string; caption: string; 
   });
   textContent = textContent.replace(/\[⬇️ Download\]\([^)]*social-images[^)]*\)/g, "");
   textContent = textContent.replace(/🔄\s*Regenerate/g, "");
+  textContent = textContent.replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-].*/gm, "");
+  textContent = textContent.replace(/\*\*Caption:\*\*/g, "");
+  textContent = textContent.replace(/\*\*Hashtags:\*\*/g, "");
   textContent = textContent.replace(/^[\s]*#[a-zA-Z]\w*(\s+#[a-zA-Z]\w*)*[\s]*$/gm, "");
   textContent = textContent.replace(/\n{3,}/g, "\n\n").trim();
 
