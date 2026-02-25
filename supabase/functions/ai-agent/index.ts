@@ -57,9 +57,107 @@ const PIXEL_SLOTS = [
 const PIXEL_CONTACT_INFO = `\n\n📍 9 Cedar Ave, Thornhill, Ontario\n📞 647-260-9403\n🌐 www.rebar.shop`;
 
 /**
- * Generates a social media image using Lovable AI gateway (Gemini image model),
- * optionally compositing a company logo, uploads result to social-images bucket,
- * and returns a permanent public URL.
+ * Extract image data URL from various AI response formats.
+ * Supports: images[], parts[].inline_data, content[].image_url
+ */
+function extractImageFromAIResponse(aiData: any): string | null {
+  const msg = aiData?.choices?.[0]?.message;
+  if (!msg) return null;
+
+  // Format 1: images[].image_url.url (standard Lovable gateway)
+  const img = msg.images?.[0]?.image_url?.url;
+  if (img) return img;
+
+  // Format 2: parts[].inline_data.data (Gemini native)
+  if (Array.isArray(msg.parts)) {
+    for (const part of msg.parts) {
+      if (part.inline_data?.data) {
+        const mime = part.inline_data.mime_type || "image/png";
+        return `data:${mime};base64,${part.inline_data.data}`;
+      }
+    }
+  }
+
+  // Format 3: content[] array with image_url objects
+  if (Array.isArray(msg.content)) {
+    for (const block of msg.content) {
+      if (block.type === "image_url" && block.image_url?.url) {
+        return block.image_url.url;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a stable logo URL for the social agent.
+ * Searches knowledge for logo/favicon, generates fresh signed URLs if needed,
+ * and falls back to a hardcoded branding path.
+ */
+async function resolveLogoUrl(
+  svcClient: ReturnType<typeof createClient>,
+  companyId: string,
+): Promise<string | undefined> {
+  try {
+    // Search broader: logo OR favicon, for social agent images
+    const { data: logoRows } = await svcClient
+      .from("knowledge")
+      .select("source_url, title")
+      .eq("company_id", companyId)
+      .or("title.ilike.%logo%,title.ilike.%favicon%")
+      .eq("category", "image")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    for (const row of logoRows || []) {
+      if (!row.source_url) continue;
+      const rawUrl = row.source_url;
+
+      let candidateUrl: string | undefined;
+
+      // If it's a storage path, generate a fresh signed URL
+      if (rawUrl.includes("estimation-files/")) {
+        const storagePath = rawUrl.split("/estimation-files/").pop()?.split("?")[0];
+        if (storagePath) {
+          const { data: signedData } = await svcClient.storage
+            .from("estimation-files")
+            .createSignedUrl(storagePath, 600);
+          candidateUrl = signedData?.signedUrl || undefined;
+        }
+      } else {
+        candidateUrl = rawUrl;
+      }
+
+      // Verify URL is reachable
+      if (candidateUrl) {
+        try {
+          const check = await fetch(candidateUrl, { method: "HEAD" });
+          if (check.ok) return candidateUrl;
+          console.warn(`Logo candidate ${row.title} returned ${check.status}, trying next`);
+        } catch { /* try next */ }
+      }
+    }
+  } catch (err) {
+    console.warn("Logo resolution error (non-fatal):", err);
+  }
+
+  // Fallback: use public branding path
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  if (supabaseUrl) {
+    const fallbackUrl = `${supabaseUrl}/storage/v1/object/public/social-images/brand/rebar-logo.png`;
+    try {
+      const check = await fetch(fallbackUrl, { method: "HEAD" });
+      if (check.ok) return fallbackUrl;
+    } catch { /* no fallback available */ }
+  }
+
+  return undefined;
+}
+
+/**
+ * Generates a social media image with retry pipeline and robust parsing.
+ * Attempts multiple models and logo configurations before failing.
  */
 async function generatePixelImage(
   prompt: string,
@@ -71,87 +169,96 @@ async function generatePixelImage(
     return { imageUrl: null, error: "LOVABLE_API_KEY not configured" };
   }
 
-  try {
-    // Build multi-part content: text prompt + optional logo image
-    const contentParts: any[] = [];
+  const fullPrompt = prompt +
+    "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image. " +
+    "Make it clearly visible but not obstructing the main scene.";
 
-    // Always add the text prompt — include explicit logo instruction
-    const fullPrompt = prompt +
-      "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image. " +
-      "Make it clearly visible but not obstructing the main scene.";
-    contentParts.push({ type: "text", text: fullPrompt });
+  // Build attempts: model + whether to include logo
+  const attempts: { model: string; useLogo: boolean }[] = [
+    { model: "google/gemini-2.5-flash-image", useLogo: true },
+    { model: "google/gemini-2.5-flash-image", useLogo: false },
+    { model: "google/gemini-3-pro-image-preview", useLogo: false },
+  ];
 
-    // If we have a logo URL, verify it's reachable before sending to model
-    if (logoUrl) {
-      try {
-        const logoCheck = await fetch(logoUrl, { method: "HEAD" });
-        if (logoCheck.ok) {
-          contentParts.push({
-            type: "image_url",
-            image_url: { url: logoUrl },
-          });
-          contentParts.push({
-            type: "text",
-            text: "Use the provided company logo image above and incorporate it into the generated image as a branded watermark in a visible corner.",
-          });
-        } else {
-          console.warn(`Logo URL returned ${logoCheck.status}, skipping image input`);
-        }
-      } catch (logoFetchErr) {
-        console.warn("Logo URL unreachable, skipping:", logoFetchErr);
+  let lastError = "Unknown error";
+
+  for (const attempt of attempts) {
+    try {
+      const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+
+      // Optionally attach logo
+      if (attempt.useLogo && logoUrl) {
+        contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+        contentParts.push({
+          type: "text",
+          text: "Use the provided company logo image above and incorporate it into the generated image as a branded watermark in a visible corner.",
+        });
       }
+
+      console.log(`  → Attempt: ${attempt.model}, logo=${attempt.useLogo && !!logoUrl}`);
+
+      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: attempt.model,
+          messages: [{ role: "user", content: contentParts }],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (!aiRes.ok) {
+        lastError = `${attempt.model} returned ${aiRes.status}`;
+        console.warn(`  ✗ ${lastError}`);
+        continue;
+      }
+
+      const aiData = await aiRes.json();
+      const imageDataUrl = extractImageFromAIResponse(aiData);
+
+      if (!imageDataUrl) {
+        lastError = `${attempt.model} returned no parseable image`;
+        console.warn(`  ✗ ${lastError}`);
+        continue;
+      }
+
+      // Upload to social-images bucket
+      let imageBytes: Uint8Array;
+      if (imageDataUrl.startsWith("data:")) {
+        const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, "");
+        imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      } else {
+        // Remote URL
+        const imgResp = await fetch(imageDataUrl);
+        if (!imgResp.ok) { lastError = "Failed to download generated image"; continue; }
+        const buf = await imgResp.arrayBuffer();
+        imageBytes = new Uint8Array(buf);
+      }
+
+      const imagePath = `pixel/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+      const { error: uploadError } = await svcClient.storage
+        .from("social-images")
+        .upload(imagePath, imageBytes, { contentType: "image/png", upsert: false });
+
+      if (uploadError) {
+        lastError = `Upload failed: ${uploadError.message}`;
+        console.warn(`  ✗ ${lastError}`);
+        continue;
+      }
+
+      const { data: urlData } = svcClient.storage.from("social-images").getPublicUrl(imagePath);
+      console.log(`  ✓ Image generated and uploaded: ${urlData.publicUrl}`);
+      return { imageUrl: urlData.publicUrl };
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      console.warn(`  ✗ Attempt error: ${lastError}`);
     }
-
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: contentParts }],
-        modalities: ["image", "text"],
-      }),
-    });
-
-    if (!aiRes.ok) {
-      const errText = await aiRes.text();
-      console.error("Pixel image generation failed:", aiRes.status, errText);
-      return { imageUrl: null, error: `Image generation failed (${aiRes.status}): ${errText.slice(0, 200)}` };
-    }
-
-    const aiData = await aiRes.json();
-    const images = aiData.choices?.[0]?.message?.images;
-    if (!images || images.length === 0) {
-      return { imageUrl: null, error: "Model returned no image" };
-    }
-
-    const base64Url = images[0].image_url?.url;
-    if (!base64Url) {
-      return { imageUrl: null, error: "Image data missing from response" };
-    }
-
-    // Upload to social-images bucket → permanent public URL
-    const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, "");
-    const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
-    const imagePath = `pixel/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-
-    const { error: uploadError } = await svcClient.storage
-      .from("social-images")
-      .upload(imagePath, imageBytes, { contentType: "image/png", upsert: false });
-
-    if (uploadError) {
-      console.error("Pixel upload error:", uploadError);
-      return { imageUrl: null, error: `Upload failed: ${uploadError.message}` };
-    }
-
-    const { data: urlData } = svcClient.storage.from("social-images").getPublicUrl(imagePath);
-    return { imageUrl: urlData.publicUrl };
-  } catch (e) {
-    console.error("Pixel image generation error:", e);
-    return { imageUrl: null, error: e instanceof Error ? e.message : "Unknown error" };
   }
+
+  return { imageUrl: null, error: `All generation attempts failed. Last: ${lastError}` };
 }
 
 // Main Handler
@@ -348,35 +455,8 @@ Deno.serve(async (req) => {
       if (slotMatch || isAllSlots || timeSlotNum) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered");
 
-        // Fetch company logo from knowledge for this agent
-        let logoUrl: string | undefined;
-        try {
-          const { data: logoKnowledge } = await svcClient
-            .from("knowledge")
-            .select("source_url")
-            .eq("company_id", companyId)
-            .ilike("title", "%logo%")
-            .order("created_at", { ascending: false })
-            .limit(1);
-
-          if (logoKnowledge && logoKnowledge.length > 0 && logoKnowledge[0].source_url) {
-            const rawUrl = logoKnowledge[0].source_url;
-            // If it's a storage path, generate a fresh signed URL
-            if (rawUrl.includes("/object/sign/") || rawUrl.includes("estimation-files/")) {
-              const storagePath = rawUrl.split("/estimation-files/").pop()?.split("?")[0];
-              if (storagePath) {
-                const { data: signedData } = await svcClient.storage
-                  .from("estimation-files")
-                  .createSignedUrl(storagePath, 300);
-                logoUrl = signedData?.signedUrl || undefined;
-              }
-            } else {
-              logoUrl = rawUrl;
-            }
-          }
-        } catch (logoErr) {
-          console.error("Logo fetch error (non-fatal):", logoErr);
-        }
+        // Resolve company logo using robust resolver
+        const logoUrl = await resolveLogoUrl(svcClient, companyId);
 
         const slotsToGenerate = isAllSlots
           ? PIXEL_SLOTS
