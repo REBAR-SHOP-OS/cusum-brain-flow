@@ -416,6 +416,9 @@ Deno.serve(async (req) => {
       const msgLower = message.trim().toLowerCase();
       const slotMatch = msgLower.match(/^([1-5])$/);
       const isAllSlots = msgLower === "all";
+      // Detect regenerate requests: "regenerate slot 3", "regenerate slot3", etc.
+      const regenMatch = msgLower.match(/regenerate\s*(?:slot\s*)?([1-5])/i);
+      const isRegenerate = !!regenMatch;
 
       // Also match time-based inputs
       const TIME_TO_SLOT: Record<string, number> = {
@@ -427,8 +430,8 @@ Deno.serve(async (req) => {
       };
       const timeSlotNum = TIME_TO_SLOT[msgLower];
 
-      if (slotMatch || isAllSlots || timeSlotNum) {
-        console.log("🎨 Pixel Step 2: Deterministic image generation triggered");
+      if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
+        console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
 
         // Resolve company logo — abort early if missing
         let logoUrl: string;
@@ -441,17 +444,28 @@ Deno.serve(async (req) => {
           });
         }
 
+        const resolvedSlotNum = isRegenerate
+          ? parseInt(regenMatch![1])
+          : (timeSlotNum || parseInt(slotMatch?.[1] || "1"));
         const slotsToGenerate = isAllSlots
           ? PIXEL_SLOTS
-          : [PIXEL_SLOTS[(timeSlotNum || parseInt(slotMatch?.[1] || "1")) - 1]];
+          : [PIXEL_SLOTS[resolvedSlotNum - 1]];
 
         const results: string[] = [];
 
         for (const slot of slotsToGenerate) {
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot} (${slot.product})...`);
-          const imgResult = await generatePixelImage(slot.imagePrompt, svcClient, logoUrl);
+          // For regenerate: add variation suffix to prompt to ensure unique output
+          const variationSuffix = isRegenerate
+            ? ` — Create a COMPLETELY DIFFERENT and UNIQUE variation with a different camera angle, different composition, different lighting, different arrangement. Timestamp: ${Date.now()}`
+            : "";
+          const imgResult = await generatePixelImage(slot.imagePrompt + variationSuffix, svcClient, logoUrl);
 
-          const persianBlock = `\n\n---PERSIAN---\n🖼️ متن روی عکس: ${slot.imageTextFa}\n📝 ترجمه کپشن: ${slot.captionFa}`;
+          // Only show imageTextFa line if it has actual content
+          const hasImageText = slot.imageTextFa && slot.imageTextFa.trim() !== "" && slot.imageTextFa.trim() !== "-";
+          const persianBlock = `\n\n---PERSIAN---\n` +
+            (hasImageText ? `🖼️ متن روی عکس: ${slot.imageTextFa}\n` : "") +
+            `📝 ترجمه کپشن: ${slot.captionFa}`;
 
           if (imgResult.imageUrl) {
             results.push(

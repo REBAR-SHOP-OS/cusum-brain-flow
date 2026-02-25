@@ -350,7 +350,11 @@ export default function AgentWorkspace() {
   }, [pendingPixelSlot, pixelDateMessage, handleSendInternal, lastPixelPost, user, selectedDate]);
 
   const handleRegenerateImage = useCallback((imageUrl: string, alt: string) => {
-    handleSendInternal(`regenerate random`);
+    // Try to extract slot number from the alt text (product name matches PIXEL_SLOTS)
+    const slotProducts = ["Rebar Bundles", "Stirrups", "Rebar Cages", "Wire Mesh", "Rebar Dowels"];
+    const idx = slotProducts.findIndex(p => alt.toLowerCase().includes(p.toLowerCase()));
+    const slotNum = idx >= 0 ? idx + 1 : 1;
+    handleSendInternal(`regenerate slot ${slotNum}`);
   }, [handleSendInternal]);
 
   const handleApprovePost = useCallback(async (post: import("@/components/social/PixelPostCard").PixelPostData) => {
@@ -395,7 +399,12 @@ export default function AgentWorkspace() {
   }, [user, selectedDate]);
 
   const handleRegeneratePost = useCallback((post: import("@/components/social/PixelPostCard").PixelPostData) => {
-    handleSendInternal(`Regenerate image and caption for: ${post.caption?.slice(0, 60) || "this post"}`);
+    // Extract slot number from post id (format: post-0-...) or caption
+    const idMatch = post.id?.match(/^post-(\d+)/);
+    const slotProducts = ["Rebar Bundles", "Stirrups", "Rebar Cages", "Wire Mesh", "Rebar Dowels"];
+    const captionIdx = slotProducts.findIndex(p => (post.caption || "").toLowerCase().includes(p.toLowerCase()));
+    const slotNum = captionIdx >= 0 ? captionIdx + 1 : (idMatch ? parseInt(idMatch[1]) + 1 : 1);
+    handleSendInternal(`regenerate slot ${slotNum}`);
   }, [handleSendInternal]);
 
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
