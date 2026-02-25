@@ -12,6 +12,7 @@ import { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/lib/auth";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
@@ -162,12 +163,14 @@ export default function AccountingWorkspace() {
   const { pendingCount } = usePennyQueue();
   const { startOAuth } = useIntegrations();
   const { isAdmin, hasRole, isLoading: rolesLoading } = useUserRole();
+  const { user } = useAuth();
   const [webPhoneState, webPhoneActions] = useWebPhone();
   const [lastRefreshTime, setLastRefreshTime] = useState<string | null>(() => {
     try { return localStorage.getItem(QB_LAST_LOAD_TIME_KEY); } catch { return null; }
   });
 
-  const hasAccess = isAdmin || hasRole("accounting");
+  const ACCOUNTING_EMAILS = ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"];
+  const hasAccess = ACCOUNTING_EMAILS.includes(user?.email?.toLowerCase() ?? "");
 
   // Stable refs for init-once logic
   const loadAllRef = useRef(qb.loadAll);
