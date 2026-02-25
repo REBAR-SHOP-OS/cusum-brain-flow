@@ -360,7 +360,7 @@ export default function AgentWorkspace() {
       const { error } = await supabase.from("social_posts").insert({
         platform: post.platform || "instagram",
         status: "draft",
-        title: (post.caption || "Pixel Post").slice(0, 50),
+        title: (post.caption || "Pixel Post").split("\n")[0].slice(0, 80),
         content: post.caption || "",
         image_url: post.imageUrl || null,
         hashtags,
