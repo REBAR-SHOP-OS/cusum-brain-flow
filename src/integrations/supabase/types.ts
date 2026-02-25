@@ -6373,6 +6373,7 @@ export type Database = {
           assigned_to: string | null
           created_at: string
           description: string | null
+          description_local: string | null
           expires_at: string | null
           id: string
           link_to: string | null
@@ -6381,6 +6382,7 @@ export type Database = {
           reminder_at: string | null
           status: string | null
           title: string
+          title_local: string | null
           type: string
           updated_at: string
           user_id: string
@@ -6391,6 +6393,7 @@ export type Database = {
           assigned_to?: string | null
           created_at?: string
           description?: string | null
+          description_local?: string | null
           expires_at?: string | null
           id?: string
           link_to?: string | null
@@ -6399,6 +6402,7 @@ export type Database = {
           reminder_at?: string | null
           status?: string | null
           title: string
+          title_local?: string | null
           type: string
           updated_at?: string
           user_id: string
@@ -6409,6 +6413,7 @@ export type Database = {
           assigned_to?: string | null
           created_at?: string
           description?: string | null
+          description_local?: string | null
           expires_at?: string | null
           id?: string
           link_to?: string | null
@@ -6417,6 +6422,7 @@ export type Database = {
           reminder_at?: string | null
           status?: string | null
           title?: string
+          title_local?: string | null
           type?: string
           updated_at?: string
           user_id?: string

@@ -197,7 +197,10 @@ export function useNotifications() {
           if (payload.eventType === "INSERT") {
             playMockingjayWhistle();
             const newRow = payload.new as any;
-            showBrowserNotification(newRow.title, newRow.description, newRow.link_to);
+            // Use translated version for browser/toast notifications, English for Inbox
+            const toastTitle = newRow.title_local || newRow.title;
+            const toastDesc = newRow.description_local || newRow.description;
+            showBrowserNotification(toastTitle, toastDesc, newRow.link_to);
 
             // Team chat messages: dispatch custom event for ChatPanelContext
             const metadata = newRow.metadata as Record<string, unknown> | null;
@@ -205,13 +208,13 @@ export function useNotifications() {
               window.dispatchEvent(new CustomEvent("team-chat-incoming", {
                 detail: {
                   channelId: metadata.channel_id,
-                  title: newRow.title,
-                  description: newRow.description,
+                  title: toastTitle,
+                  description: toastDesc,
                 },
               }));
             } else {
-              toast(newRow.title, {
-                description: newRow.description || undefined,
+              toast(toastTitle, {
+                description: toastDesc || undefined,
                 duration: 8000,
             action: newRow.link_to ? {
                   label: "View",

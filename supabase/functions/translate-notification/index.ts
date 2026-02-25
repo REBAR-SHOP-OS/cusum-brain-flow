@@ -61,11 +61,11 @@ serve(async (req) => {
       lang
     );
 
-    // Only update if translation actually changed something
+    // Store translation in separate columns, never overwrite original English
     if (localTitle !== title || localBody !== (description || "")) {
       const { error } = await svc
         .from("notifications")
-        .update({ title: localTitle, description: localBody })
+        .update({ title_local: localTitle, description_local: localBody })
         .eq("id", notifId);
 
       if (error) {
