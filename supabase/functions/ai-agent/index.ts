@@ -61,6 +61,7 @@ async function generateDynamicContent(
   slot: typeof PIXEL_SLOTS[number],
   isRegenerate: boolean,
   brainContext?: string,
+  preferredModel?: string,
 ): Promise<DynamicContent> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -108,7 +109,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: preferredModel === "chatgpt" ? "openai/gpt-5-mini" : "google/gemini-2.5-flash",
         messages: [{ role: "user", content: prompt }],
         temperature: 1.0, // High temperature for maximum creativity/variation
       }),
@@ -326,7 +327,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { agent, message, history = [], context: userContext = {}, attachedFiles = [], pixelSlot } = await req.json() as AgentRequest;
+    const { agent, message, history = [], context: userContext = {}, attachedFiles = [], pixelSlot, preferredModel } = await req.json() as AgentRequest;
     
     // Auth check
     const authHeader = req.headers.get("Authorization");
@@ -542,7 +543,7 @@ Deno.serve(async (req) => {
           // Step A: Generate unique, non-repeating caption + slogan + hashtags via LLM
           // Inject brain knowledge block into content generation
           const brainKnowledge = (mergedContext.brainKnowledgeBlock as string) || "";
-          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge);
+          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel);
 
           // Step B: Build image prompt with MANDATORY advertising text on image
           // If brain has image references, append them to inspire generation
@@ -658,8 +659,15 @@ Deno.serve(async (req) => {
       { role: "user", content: message },
     ];
 
-    // Model Routing
-    const modelConfig = selectModel(agent, message, attachedFiles.length > 0, history.length);
+    // Model Routing — respect user's preferred model if set
+    let modelConfig;
+    if (preferredModel === "chatgpt") {
+      modelConfig = { provider: "gpt" as AIProvider, model: "gpt-4o", maxTokens: 4000, temperature: 0.5, reason: "user-selected ChatGPT" };
+    } else if (preferredModel === "gemini") {
+      modelConfig = { provider: "gemini" as AIProvider, model: "gemini-2.5-flash", maxTokens: 4000, temperature: 0.5, reason: "user-selected Gemini" };
+    } else {
+      modelConfig = selectModel(agent, message, attachedFiles.length > 0, history.length);
+    }
     console.log(`🧠 Model routing: ${agent} → ${modelConfig.model} (${modelConfig.reason})`);
 
     // Tools

@@ -36,7 +36,8 @@ export async function sendAgentMessage(
   history?: ChatMessage[],
   context?: Record<string, unknown>,
   attachedFiles?: AttachedFile[],
-  pixelSlot?: number
+  pixelSlot?: number,
+  preferredModel?: string
 ): Promise<AgentResponse> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 55_000);
@@ -44,7 +45,7 @@ export async function sendAgentMessage(
   let data: unknown, invokeError: unknown;
   try {
     ({ data, error: invokeError } = await supabase.functions.invoke("ai-agent", {
-      body: { agent, message, history, context, attachedFiles, pixelSlot },
+      body: { agent, message, history, context, attachedFiles, pixelSlot, preferredModel },
       signal: controller.signal,
     }));
   } catch (err: unknown) {
