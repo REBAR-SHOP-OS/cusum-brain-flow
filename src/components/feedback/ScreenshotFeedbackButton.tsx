@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
-import { AnnotationOverlay } from "./AnnotationOverlay";
+import { AnnotationOverlay, SpeechControls } from "./AnnotationOverlay";
 import { FloatingMicButton } from "./FloatingMicButton";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 
@@ -15,6 +15,8 @@ export function ScreenshotFeedbackButton() {
   const [capturing, setCapturing] = useState(false);
   const [initialDescription, setInitialDescription] = useState("");
   const cooldown = useRef(false);
+  const speechControlRef = useRef<SpeechControls | null>(null);
+  const [speechState, setSpeechState] = useState({ isListening: false, isSupported: true });
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
     storageKey: "feedback-btn-pos",
@@ -54,7 +56,6 @@ export function ScreenshotFeedbackButton() {
         .forEach(el => expand(el, "; overflow: visible !important; max-height: none !important; height: auto !important;"));
     }
 
-    // Measure AFTER expansion so dimensions reflect full content
     const captureWidth  = isOverlay ? window.innerWidth  : target.scrollWidth;
     const captureHeight = isOverlay ? window.innerHeight : target.scrollHeight;
     const targetRect    = isOverlay ? null : target.getBoundingClientRect();
@@ -63,7 +64,6 @@ export function ScreenshotFeedbackButton() {
 
     const baseIgnore = (el: Element) => {
       const tag = el.tagName?.toLowerCase();
-      // Always ignore iframes, embeds, objects (cross-origin crash prevention)
       if (tag === "iframe" || tag === "embed" || tag === "object") return true;
       if (el.getAttribute?.("data-feedback-btn") === "true") return true;
       if (el.classList?.contains("floating-vizzy")) return true;
@@ -101,7 +101,6 @@ export function ScreenshotFeedbackButton() {
       },
     };
 
-    // Fast element count to determine strategy
     const totalCount = target.querySelectorAll("*").length;
     const isHeavyPage = totalCount > 3000;
 
@@ -189,16 +188,23 @@ export function ScreenshotFeedbackButton() {
     }
   }, [handlers, capture, wasDragged]);
 
-  const handleMicComplete = useCallback((transcript: string) => {
-    setInitialDescription(transcript);
-    capture().then(() => {
-      // capture sets overlayOpen via setOverlayOpen(true) internally
-    });
-  }, [capture]);
+  const handleToggleVoice = useCallback(() => {
+    speechControlRef.current?.toggle();
+  }, []);
+
+  const handleSpeechStateChange = useCallback((state: { isListening: boolean; isSupported: boolean }) => {
+    setSpeechState(state);
+  }, []);
 
   return (
     <>
-      {overlayOpen && <FloatingMicButton onRecordingComplete={handleMicComplete} />}
+      {overlayOpen && (
+        <FloatingMicButton
+          onToggleVoice={handleToggleVoice}
+          isListening={speechState.isListening}
+          isSupported={speechState.isSupported}
+        />
+      )}
 
       <button
         ref={btnRef}
@@ -224,6 +230,8 @@ export function ScreenshotFeedbackButton() {
           onClose={() => { setOverlayOpen(false); setInitialDescription(""); }}
           screenshotDataUrl={screenshot}
           initialDescription={initialDescription}
+          speechControlRef={speechControlRef}
+          onSpeechStateChange={handleSpeechStateChange}
         />
       )}
     </>
