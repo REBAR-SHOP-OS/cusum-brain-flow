@@ -11,7 +11,6 @@ const WORKSHOP_ALLOWED = [
   "/timeclock",
   "/team-hub",
   "/settings",
-  "/inbox",
   "/phonecalls",
   "/agent",
   "/tasks",
@@ -28,7 +27,6 @@ const SALES_ALLOWED = [
   "/pipeline",
   "/customers",
   "/office",
-  "/inbox",
   "/phonecalls",
   "/settings",
   "/home",
@@ -86,7 +84,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
     }
 
     // External shop supervisor → extended workshop routes
-    const EXTERNAL_SUPERVISOR_ALLOWED = ["/timeclock", "/team-hub", "/shop-floor", "/shopfloor", "/home", "/inbox", "/tasks", "/deliveries", "/settings"];
+    const EXTERNAL_SUPERVISOR_ALLOWED = ["/timeclock", "/team-hub", "/shop-floor", "/shopfloor", "/home", "/tasks", "/deliveries", "/settings"];
     if (isShopSupervisor) {
       const isAllowed = EXTERNAL_SUPERVISOR_ALLOWED.some((p) => location.pathname.startsWith(p));
       if (!isAllowed) return <Navigate to="/shop-floor" replace />;

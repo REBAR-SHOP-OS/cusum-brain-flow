@@ -149,7 +149,7 @@ export function AppSidebar() {
       label: "Office",
       items: [
         { name: "Dashboard", href: "/home", icon: Home, tourId: "nav-dashboard" },
-        { name: "Inbox", href: "/inbox", icon: Inbox, badge: unreadCount || undefined, tourId: "nav-inbox" },
+        
         { name: "Business Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
         { name: "CEO Portal", href: "/ceo", icon: BarChart3, roles: ["admin"], lockReason: "Requires Admin role", tourId: "nav-ceo" },
         { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-support" },

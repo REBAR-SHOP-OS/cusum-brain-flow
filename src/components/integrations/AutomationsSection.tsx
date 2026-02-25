@@ -35,7 +35,7 @@ const defaultAutomations: Automation[] = [
     enabled: true,
     color: "blue",
     icon: "inbox",
-    route: "/inbox",
+    route: "/home",
   },
   {
     id: "daily-summarizer",

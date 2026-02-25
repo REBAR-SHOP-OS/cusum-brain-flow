@@ -26,7 +26,7 @@ export default function IntegrationCallback() {
         try { window.opener.postMessage({ type: "oauth-success" }, "*"); } catch {}
         setTimeout(() => window.close(), 1500);
       } else {
-        setTimeout(() => navigate(integration === "gmail" ? "/inbox" : "/integrations"), 2000);
+        setTimeout(() => navigate(integration === "gmail" ? "/home" : "/integrations"), 2000);
       }
       return;
     }

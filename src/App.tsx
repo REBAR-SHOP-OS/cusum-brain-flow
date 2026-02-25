@@ -16,7 +16,6 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Home from "./pages/Home";
 import AgentWorkspace from "./pages/AgentWorkspace";
-import Inbox from "./pages/Inbox";
 import Tasks from "./pages/Tasks";
 import Pipeline from "./pages/Pipeline";
 import Prospecting from "./pages/Prospecting";
@@ -121,7 +120,7 @@ const App = () => (
                     {/* Core */}
                     <Route path="/home" element={<P><Home /></P>} />
                     <Route path="/ceo" element={<P><CEOPortal /></P>} />
-                    <Route path="/inbox" element={<P><Inbox /></P>} />
+                    
                     <Route path="/tasks" element={<P><Tasks /></P>} />
                     <Route path="/phonecalls" element={<P><Phonecalls /></P>} />
 
@@ -195,7 +194,7 @@ const App = () => (
                     <Route path="/chat" element={<P><LiveChat /></P>} />
 
                     {/* Legacy redirects */}
-                    <Route path="/inbox-manager" element={<Navigate to="/inbox" replace />} />
+                    <Route path="/inbox-manager" element={<Navigate to="/home" replace />} />
 
                     {/* Public pages */}
                     <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -219,7 +218,7 @@ const App = () => (
                     <Route path="/invoices/*" element={<Navigate to="/accounting" replace />} />
                     <Route path="/intelligence" element={<Navigate to="/brain" replace />} />
                     <Route path="/inventory" element={<Navigate to="/shop-floor" replace />} />
-                    <Route path="/emails/*" element={<Navigate to="/inbox" replace />} />
+                    <Route path="/emails/*" element={<Navigate to="/home" replace />} />
 
                     <Route path="*" element={<NotFound />} />
                   </Routes>

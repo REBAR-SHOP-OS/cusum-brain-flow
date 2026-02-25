@@ -6,7 +6,6 @@ import { Brain, Settings, Plug, Factory, Truck, Users, Shield } from "lucide-rea
 
 const primaryNav = [
   { name: "Home", href: "/home", icon: Home },
-  { name: "Inbox", href: "/inbox", icon: Inbox },
   { name: "Calls", href: "/phonecalls", icon: Phone },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "More", href: "#more", icon: Menu },

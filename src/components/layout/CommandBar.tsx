@@ -31,7 +31,7 @@ interface NavCommand {
 
 const navCommands: NavCommand[] = [
   { label: "Dashboard", icon: Home, href: "/home", group: "Navigate" },
-  { label: "Inbox", icon: Inbox, href: "/inbox", group: "Navigate" },
+  
   { label: "Business Tasks", icon: CheckSquare, href: "/tasks", group: "Navigate" },
   { label: "Pipeline", icon: Kanban, href: "/pipeline", roles: ["admin", "sales", "office"], group: "Navigate" },
   { label: "Customers", icon: Users, href: "/customers", group: "Navigate" },
