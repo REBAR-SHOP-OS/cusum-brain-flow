@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw, Sparkles, Calendar, Trash2, Loader2, Send, ImageIcon, Video, ChevronDown } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, Send, ImageIcon, Video, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePublishPost } from "@/hooks/usePublishPost";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { format } from "date-fns";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
 import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
 import { SelectionSubPanel, type SelectionOption } from "./SelectionSubPanel";
@@ -50,6 +53,78 @@ const PAGES_OPTIONS: SelectionOption[] = [
 ];
 
 type SubPanelView = null | "content_type" | "platform" | "pages";
+
+/* ── Date Schedule Popover ── */
+function DateSchedulePopover({
+  post,
+  onPublishNow,
+  publishing,
+  onSetDate,
+}: {
+  post: SocialPost;
+  onPublishNow: () => void;
+  publishing: boolean;
+  onSetDate: (date: Date) => void;
+}) {
+  const initDate = post.scheduled_date ? new Date(post.scheduled_date) : new Date();
+  const [selectedDate, setSelectedDate] = useState<Date>(initDate);
+  const [hour, setHour] = useState(initDate.getHours().toString().padStart(2, "0"));
+  const [minute, setMinute] = useState(initDate.getMinutes().toString().padStart(2, "0"));
+
+  const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
+  const minutes = Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, "0"));
+
+  const handleSetDate = () => {
+    const d = new Date(selectedDate);
+    d.setHours(parseInt(hour), parseInt(minute), 0, 0);
+    onSetDate(d);
+  };
+
+  return (
+    <div className="p-3 space-y-3">
+      <Calendar
+        mode="single"
+        selected={selectedDate}
+        onSelect={(d) => d && setSelectedDate(d)}
+        initialFocus
+        className={cn("p-3 pointer-events-auto")}
+      />
+      <div className="flex items-center gap-2 px-1">
+        <span className="text-xs text-muted-foreground font-medium">Time:</span>
+        <select
+          value={hour}
+          onChange={(e) => setHour(e.target.value)}
+          className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          {hours.map((h) => <option key={h} value={h}>{h}</option>)}
+        </select>
+        <span className="text-muted-foreground font-bold">:</span>
+        <select
+          value={minute}
+          onChange={(e) => setMinute(e.target.value)}
+          className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          {minutes.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className="flex-1 gap-1.5"
+          onClick={onPublishNow}
+          disabled={publishing}
+        >
+          {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+          Post Now
+        </Button>
+        <Button size="sm" className="flex-1" onClick={handleSetDate}>
+          Set Date
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function PostReviewPanel({
   post,
@@ -298,17 +373,34 @@ export function PostReviewPanel({
                     {/* ── Fields Section ── */}
                     <div className="px-4 pt-4 pb-4 space-y-3">
                       {/* Publish date */}
-                      <div className="rounded-lg border bg-card p-3">
-                        <p className="text-xs text-muted-foreground mb-1">Publish date</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">
-                            {post.scheduled_date
-                              ? format(new Date(post.scheduled_date), "MMMM d, yyyy 'at' h:mm a")
-                              : "Not scheduled"}
-                          </span>
-                          <Calendar className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                      </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors">
+                            <p className="text-xs text-muted-foreground mb-1">Publish date</p>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">
+                                {post.scheduled_date
+                                  ? format(new Date(post.scheduled_date), "MMMM d, yyyy 'at' h:mm a")
+                                  : "Not scheduled"}
+                              </span>
+                              <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                            </div>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start" side="left">
+                          <DateSchedulePopover
+                            post={post}
+                            onPublishNow={async () => {
+                              const success = await publishPost(post);
+                              if (success) onClose();
+                            }}
+                            publishing={publishing}
+                            onSetDate={(date) => {
+                              updatePost.mutate({ id: post.id, scheduled_date: date.toISOString(), status: "scheduled" });
+                            }}
+                          />
+                        </PopoverContent>
+                      </Popover>
 
                       {/* Content type – clickable */}
                       <button
