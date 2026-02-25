@@ -1,6 +1,7 @@
 // forwardRef cache bust
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { routeToAgent } from "@/lib/agentRouter";
 import { Card } from "@/components/ui/card";
@@ -89,7 +90,14 @@ const helpers: Helper[] = [
 
 export default function Home() {
   const navigate = useNavigate();
+  const isTablet = useMediaQuery("(max-width: 1024px)");
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (isTablet) {
+      navigate("/shop-floor", { replace: true });
+    }
+  }, [isTablet, navigate]);
 
   const mapping = getUserAgentMapping(user?.email);
   const { isSuperAdmin } = useSuperAdmin();
