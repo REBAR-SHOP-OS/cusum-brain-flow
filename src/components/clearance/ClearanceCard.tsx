@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   XCircle,
 } from "lucide-react";
+import { format } from "date-fns";
 import type { ClearanceItem } from "@/hooks/useClearanceData";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -304,6 +305,16 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
         {/* Validation result banner */}
         {validationResult && !isCleared && (
           <ValidationBanner result={validationResult} />
+        )}
+
+        {/* Cleared by info */}
+        {isCleared && (item.verified_by_name || item.verified_at) && (
+          <p className="text-[10px] text-muted-foreground">
+            {item.verified_by_name
+              ? `Cleared by ${item.verified_by_name}`
+              : "Cleared"}
+            {item.verified_at && ` · ${format(new Date(item.verified_at), "MMM d, yyyy")}`}
+          </p>
         )}
 
         {/* Actions */}
