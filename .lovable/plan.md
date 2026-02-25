@@ -1,33 +1,40 @@
 
 
-## Fix: Crop Screenshot to Main Content (Remove Sidebar Bleed)
+## Fix: Text Not Visible in Screenshots on Heavy Pages
 
 ### Problem
 
-The screenshot now captures full-page height correctly, but the left sidebar icons are bleeding into the captured image. The user wants the screenshot cropped tightly to just the main content area.
-
-### Root Cause
-
-When `html2canvas` is called with `target = #main-content`, the `x` and `y` crop coordinates are set to `targetRect.left` and `targetRect.top` — which includes the sidebar width (~64px) and topbar height. But `html2canvas` renders **relative to the target element**, so these offsets are wrong. Setting `x = 64` tells html2canvas to start 64px *into* the target, while the ancestor expansion with `overflow: visible` causes sibling elements (the sidebar) to bleed into the render.
+The CEO Portal `/home` page has over 3000 DOM elements, triggering the `isHeavyPage` flag. This sets `html2canvas` `scale` to `0.4`, which renders the screenshot at 40% resolution — making all text blurry and unreadable.
 
 ### Fix
 
-**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`** — Lines 72-73
+**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`** — Line 152
 
-Change the capture origin to `(0, 0)` for non-overlay mode, since html2canvas already scopes rendering to the target element:
+Increase the heavy-page scale from `0.4` to `0.75` so text remains legible while still keeping capture performant:
 
 ```typescript
 // Before
-const captureX = isOverlay ? 0 : (targetRect!.left + target.scrollLeft);
-const captureY = isOverlay ? 0 : (targetRect!.top  + target.scrollTop);
+scale: isHeavyPage ? 0.4 : 1,
 
 // After
-const captureX = 0;
-const captureY = 0;
+scale: isHeavyPage ? 0.75 : 1,
 ```
 
-This removes the sidebar/topbar offset that was causing content outside `#main-content` to appear in the capture. Both overlay and non-overlay paths now use `(0, 0)` as origin.
+Also increase the heavy-page timeout from 8s to 12s (line 159) to accommodate the higher resolution:
 
-### Files Changed
-1. `src/components/feedback/ScreenshotFeedbackButton.tsx` — 2 lines changed
+```typescript
+// Before
+isHeavyPage ? 8000 : 15000
+
+// After
+isHeavyPage ? 12000 : 15000
+```
+
+### Why 0.75
+
+- `0.4` — text unreadable (current)
+- `0.75` — text clear, file size reasonable, capture still fast enough
+- `1.0` — risks timeout on very heavy pages
+
+Two lines changed in one file.
 
