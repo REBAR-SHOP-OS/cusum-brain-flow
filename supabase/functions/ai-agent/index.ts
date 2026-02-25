@@ -80,7 +80,6 @@ async function generateDynamicContent(
 
 Product: ${slot.product}
 Theme: ${slot.theme}
-Time slot: ${slot.time}
 ${brainBlock}
 YOUR TASK — Generate UNIQUE advertising content. Follow these rules STRICTLY:
 
@@ -95,6 +94,7 @@ CRITICAL RULES:
 - NEVER use generic phrases like "Building strong" or "Engineering excellence"
 - Be creative, bold, and specific to the product
 - The image slogan must be short enough to be readable when printed on an image
+- NEVER mention any posting time, schedule time, or clock time in the caption or slogan
 - Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
 ${brainContext ? "- You MUST follow any brand guidelines, tone, or language preferences from the Brain Context above" : ""}
 
