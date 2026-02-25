@@ -1,31 +1,58 @@
 
 
-## رفع خطای ارسال فیدبک: ستون `metadata` وجود ندارد
+## Group Machine Queues by Project Name
 
-### مشکل
-خطای `"Could not find the 'metadata' column of 'tasks' in the schema cache"` هنگام ارسال فیدبک اسکرین‌شات رخ می‌دهد. جدول `tasks` ستون `metadata` ندارد ولی کد سعی می‌کند این فیلد را وارد کند.
+### Problem
+Within each machine section on the Station Dashboard, plans are listed flat without any project grouping. The user wants plans organized into project name folders inside each machine.
 
-### تغییرات
+### Changes
 
-**فایل: `src/components/feedback/AnnotationOverlay.tsx`** (خطوط 246-263)
+**File: `src/components/shopfloor/MachineGroupSection.tsx`**
 
-فیلد `metadata` از دستور insert حذف شده و اطلاعات submitter به جای آن در فیلد `description` (که وجود دارد) ذخیره می‌شود:
+Modify the component to sub-group plans by `project_name` (or `customer_name`) within both the "Live" and "Queued" sections:
 
-```typescript
-// قبل (خطا دارد):
-metadata: JSON.stringify({
-  submitter_name: submitterName,
-  submitter_email: user?.email,
-  submitter_profile_id: submitterProfileId,
-}),
+1. Add a helper function to group `CutPlan[]` by `project_name`:
+   ```typescript
+   function groupByProject(plans: CutPlan[]) {
+     const map = new Map<string, CutPlan[]>();
+     for (const plan of plans) {
+       const key = plan.project_name || plan.customer_name || "Unassigned";
+       if (!map.has(key)) map.set(key, []);
+       map.get(key)!.push(plan);
+     }
+     return [...map.entries()].sort((a, b) => 
+       a[0] === "Unassigned" ? 1 : b[0] === "Unassigned" ? -1 : a[0].localeCompare(b[0])
+     );
+   }
+   ```
 
-// بعد: فیلد metadata حذف و اطلاعات در description اضافه می‌شود
+2. Replace flat `runningPlans.map(...)` and `queuedPlans.map(...)` with nested rendering:
+   - Each project group gets a collapsible folder header with `FolderOpen` icon and project name
+   - Plans within each folder are rendered as `PlanRow` components
+   - Badge showing count of plans per project folder
+
+```text
+Machine Section (e.g. "GENSCO DTX 400")
+├── LIVE (2)
+│   ├── 📁 Project Alpha (1)
+│   │   └── PlanRow: Cut Plan #1
+│   └── 📁 Project Beta (1)
+│       └── PlanRow: Cut Plan #2
+└── QUEUED (5)
+    ├── 📁 Project Alpha (3)
+    │   ├── PlanRow: Cut Plan #3
+    │   ├── PlanRow: Cut Plan #4
+    │   └── PlanRow: Cut Plan #5
+    └── 📁 Project Beta (2)
+        ├── PlanRow: Cut Plan #6
+        └── PlanRow: Cut Plan #7
 ```
 
-اطلاعات submitter از قبل در فیلد `description` موجود هست (`From: ${submitterName}`). فقط `metadata` حذف می‌شود.
+3. Project folders default to open, each with a small collapsible toggle
 
-### جزییات فنی
-- ستون‌های موجود در جدول `tasks`: `id, title, description, status, priority, due_date, assigned_to, customer_id, source, source_ref, agent_type, created_at, updated_at, completed_at, company_id, attachment_url, resolution_note, created_by_profile_id, attachment_urls`
-- ستون `metadata` وجود ندارد — `as any` خطای TypeScript را مخفی می‌کرد
-- فقط یک تغییر کوچک: حذف سه خط `metadata: JSON.stringify(...)` از insert
+### Technical Details
+- Single file change: `src/components/shopfloor/MachineGroupSection.tsx`
+- Groups by `plan.project_name`, falls back to `plan.customer_name`, then "Unassigned"
+- No database changes needed
+- Sorting within folders preserved (existing `sortPlans` logic in parent)
 
