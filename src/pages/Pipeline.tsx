@@ -177,18 +177,15 @@ export default function Pipeline() {
       let allLeads: LeadWithCustomer[] = [];
       let from = 0;
 
+      // Always fetch all leads (no server-side text filter) so we can match
+      // on joined customer name/company which can't be filtered server-side.
       while (true) {
-        let query = supabase
+        const { data, error } = await supabase
           .from("leads")
           .select("*, customers(name, company_name)")
           .order("updated_at", { ascending: false })
           .range(from, from + PAGE - 1);
 
-        if (debouncedSearch) {
-          query = query.or(`title.ilike.%${debouncedSearch}%,description.ilike.%${debouncedSearch}%,source.ilike.%${debouncedSearch}%,notes.ilike.%${debouncedSearch}%`);
-        }
-
-        const { data, error } = await query;
         if (error) throw error;
         if (!data || data.length === 0) break;
         allLeads = allLeads.concat(data as LeadWithCustomer[]);
@@ -196,12 +193,10 @@ export default function Pipeline() {
         from += PAGE;
       }
 
-      // Client-side filter for customer name/company (joined table can't be filtered server-side)
+      // Client-side search across lead fields + customer name/company
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase();
         allLeads = allLeads.filter((lead) => {
-          // Already matched by server-side filter on title/description/source/notes
-          // But also include if customer name or company matches
           const titleMatch = lead.title?.toLowerCase().includes(q);
           const descMatch = lead.description?.toLowerCase().includes(q);
           const sourceMatch = lead.source?.toLowerCase().includes(q);
