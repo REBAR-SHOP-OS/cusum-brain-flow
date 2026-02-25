@@ -80,7 +80,8 @@ interface EmployeeProfile {
 const NEEL_PROFILE_ID = "a94932c5-e873-46fd-9658-dc270f6f5ff3";
 const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
 const ZAHRA_PROFILE_ID = "2356f04b-0e8d-4b50-bd62-1aa0420f74ab";
-const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID, ZAHRA_PROFILE_ID];
+const SATTAR_PROFILE_ID = "ee659c5c-20e1-4bf5-a01d-dedd886a4ad7";
+const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID];
 const EXCLUDED_EMAILS = ["ai@rebar.shop", "kourosh@rebar.shop"];
 
 const COLUMN_COLORS = [
@@ -471,6 +472,8 @@ export default function Tasks() {
   }
   for (const t of tasks) {
     if (t.assigned_to && tasksByEmployee.has(t.assigned_to)) {
+      // Hide automated feedback tasks from Sattar's column
+      if (t.assigned_to === SATTAR_PROFILE_ID && (t as any).source === "screenshot_feedback") continue;
       tasksByEmployee.get(t.assigned_to)!.push(t);
     }
   }
