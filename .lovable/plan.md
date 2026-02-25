@@ -1,41 +1,30 @@
 
-
-## Show Verifier Name on Clearance Cards
+## Auto-redirect Tablet Users to Shop Floor
 
 ### Problem
-When items are cleared on the Clearance Station, the card shows a "Cleared" status but does not display who performed the verification. The `verified_by` user ID is stored in `clearance_evidence` but the verifier's name is never fetched or shown.
+After login, tablet users land on the general "Select Interface" dashboard (`/home`) and must manually navigate to the Shop Floor. This adds an unnecessary step for shop floor operators who exclusively use tablets.
 
 ### Solution
-Two changes are needed:
+Add a `useEffect` in `src/pages/Home.tsx` that detects tablet-sized viewports (width <= 1024px) and automatically redirects to `/shop-floor`. This uses the existing `useMediaQuery` hook already in the project.
 
-### 1. Update `src/hooks/useClearanceData.ts` — fetch verifier name
+### Changes
 
-Modify the query to join `clearance_evidence` with `profiles` on `verified_by` to retrieve `full_name`.
-
-- After fetching `clearance_evidence`, collect all non-null `verified_by` user IDs
-- Query `profiles` table for those IDs to get `full_name`
-- Map the verifier name into each `ClearanceItem`
-- Add `verified_by_name: string | null` to the `ClearanceItem` interface
-
-### 2. Update `src/components/clearance/ClearanceCard.tsx` — display verifier name
-
-When the item is cleared (`isCleared === true`), show the verifier's name and timestamp below the "Cleared" button or in the header area:
-
-```text
-Cleared by John Smith · Feb 25, 2026
-```
+**File: `src/pages/Home.tsx`**
+- Import the existing `useMediaQuery` hook from `@/hooks/useMediaQuery`
+- Add a `useEffect` that checks if the viewport matches tablet size (`(max-width: 1024px)`) and navigates to `/shop-floor` using the existing `useNavigate` hook
+- The redirect happens only on initial render, so desktop users resizing their window are not affected unexpectedly
 
 ### Technical Details
 
-**`useClearanceData.ts` changes:**
-- Add `verified_by_name: string | null` to `ClearanceItem` interface
-- After fetching evidence, collect unique `verified_by` IDs
-- Query `profiles` for `id, full_name` where `id` in those IDs
-- Build a lookup map and attach `verified_by_name` to each item
+The redirect logic:
+```text
+User lands on /home
+  -> useMediaQuery("(max-width: 1024px)") returns true?
+     -> Yes: navigate("/shop-floor", { replace: true })
+     -> No: render normal Home page
+```
 
-**`ClearanceCard.tsx` changes:**
-- Access `item.verified_by_name` and `item.verified_at`
-- When `isCleared`, render a small text line showing verifier name and date
-- Format: `"Cleared by {name} · {date}"` or `"Cleared · {date}"` if name unavailable
-
-No database changes required — the `verified_by` column already exists and stores user IDs. The `profiles` table already has `full_name`.
+- The `useMediaQuery` hook already exists at `src/hooks/useMediaQuery.ts`
+- Uses `replace: true` so the user cannot "back" into the home page
+- No database changes required
+- No new dependencies
