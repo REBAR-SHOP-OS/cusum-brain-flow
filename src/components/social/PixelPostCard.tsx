@@ -7,6 +7,7 @@ export interface PixelPostData {
   imageUrl: string;
   caption: string;
   hashtags?: string;
+  persianTranslation?: string;
   platform?: string;
   status: "published" | "scheduled" | "draft";
 }
@@ -56,6 +57,14 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
             <p className="text-xs text-primary/70 leading-tight mt-1">
               {post.hashtags}
             </p>
+          )}
+          {post.persianTranslation && (
+            <div className="mt-2 p-2 rounded-lg bg-muted/50 border border-border/50">
+              <p className="text-xs font-medium text-muted-foreground mb-1">🇮🇷 Persian Translation (internal)</p>
+              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                {post.persianTranslation}
+              </p>
+            </div>
           )}
         </div>
 

@@ -13,22 +13,32 @@ interface PixelChatRendererProps {
 }
 
 /** Extract social-images URLs, full caption text, and hashtags from markdown content */
-function extractPostData(content: string): { imageUrl: string; caption: string; hashtags: string }[] {
+function extractPostData(content: string): { imageUrl: string; caption: string; hashtags: string; persianTranslation: string }[] {
   const imgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]*social-images[^\s)]*)\)/g;
-  const results: { imageUrl: string; caption: string; hashtags: string }[] = [];
+  const results: { imageUrl: string; caption: string; hashtags: string; persianTranslation: string }[] = [];
   let match;
   while ((match = imgRegex.exec(content)) !== null) {
-    results.push({ caption: match[1], imageUrl: match[2], hashtags: "" });
+    results.push({ caption: match[1], imageUrl: match[2], hashtags: "", persianTranslation: "" });
   }
 
   if (results.length === 0) return results;
 
-  // Extract hashtags from content (lines or inline sequences of #word)
-  const hashtagMatches = content.match(/#[a-zA-Z]\w*/g);
+  // Separate Persian translation section
+  const persianSeparator = "---PERSIAN---";
+  let mainContent = content;
+  let persianTranslation = "";
+  const persianIdx = content.indexOf(persianSeparator);
+  if (persianIdx !== -1) {
+    persianTranslation = content.slice(persianIdx + persianSeparator.length).trim();
+    mainContent = content.slice(0, persianIdx).trim();
+  }
+
+  // Extract hashtags from main content only
+  const hashtagMatches = mainContent.match(/#[a-zA-Z]\w*/g);
   const allHashtags = hashtagMatches ? hashtagMatches.join(" ") : "";
 
   // Build full caption: remove image markdown, download/regen links, and hashtag lines
-  let textContent = content;
+  let textContent = mainContent;
   results.forEach(({ imageUrl, caption }) => {
     textContent = textContent.replace(`![${caption}](${imageUrl})`, "");
   });
@@ -37,10 +47,10 @@ function extractPostData(content: string): { imageUrl: string; caption: string; 
   textContent = textContent.replace(/^[\s]*#[a-zA-Z]\w*(\s+#[a-zA-Z]\w*)*[\s]*$/gm, "");
   textContent = textContent.replace(/\n{3,}/g, "\n\n").trim();
 
-  // Assign full caption text to posts
+  // Assign full caption text and Persian translation to posts
   results.forEach((r) => {
     r.hashtags = allHashtags;
-    // Use the cleaned text content as the full caption (instead of just alt text)
+    r.persianTranslation = persianTranslation;
     if (textContent) {
       r.caption = textContent;
     }
@@ -67,6 +77,7 @@ const PixelChatRenderer = React.forwardRef<HTMLDivElement, PixelChatRendererProp
       imageUrl: img.imageUrl,
       caption: img.caption,
       hashtags: img.hashtags,
+      persianTranslation: img.persianTranslation,
       status: "draft" as const,
     }));
 
