@@ -55,6 +55,25 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     });
   }
 
+  // Social / Pixel — Image Generation
+  if (agent === "social") {
+    tools.push({
+      type: "function" as const,
+      function: {
+        name: "generate_image",
+        description: "Generate a promotional image for social media. The image will be created with English text overlay and the REBAR.SHOP logo. Returns a public URL of the generated image.",
+        parameters: {
+          type: "object",
+          properties: {
+            prompt: { type: "string", description: "Detailed description of the image to generate (scene, product, mood, text overlay)" },
+            slot: { type: "string", description: "Time slot identifier (e.g. '06:30', '07:30', '08:00', '12:30', '14:30')" }
+          },
+          required: ["prompt"]
+        }
+      }
+    });
+  }
+
   // Shop Floor Tools
   if (agent === "shopfloor") {
     tools.push({
