@@ -1,76 +1,45 @@
 
 
-## اضافه کردن دکمه‌های تایید و بازسازی زیر هر پست Pixel و ذخیره در تقویم
+## دو اصلاح: آیکون‌های بزرگ‌تر + کپشن کامل در تقویم
 
-### وضعیت فعلی
-- بعد از تولید عکس و کپشن، `PixelChatRenderer` آن‌ها را به صورت `PixelPostCard` کوچک نمایش می‌دهد (فقط thumbnail + متن + یک دکمه تیک).
-- دکمه‌های Approve بزرگ در انتهای ChatThread نمایش داده می‌شوند (خارج از پیام).
-- `onViewPost` اصلاً به ChatThread پاس داده نمی‌شود (خط ۵۴۴ فایل AgentWorkspace).
-- وقتی کاربر Approve می‌زند، `handleApprovePixelSlot` پست را در `social_posts` ذخیره می‌کند.
+### مشکل اول: آیکون‌های Approve و Regenerate خیلی کوچک هستند
+در `PixelPostCard.tsx` آیکون‌ها `w-5 h-5` هستند و padding کم دارند (`p-1.5`). باید بزرگ‌تر و به‌صورت دکمه‌های مجزا با پس‌زمینه رنگی نمایش داده شوند.
 
-### هدف
-- زیر هر تصویر + کپشن تولیدشده، دو آیکون نمایش داده شود:
-  1. **تایید (Approve)**: ذخیره پست در جدول `social_posts` برای همان روز انتخاب‌شده و نمایش در تقویم Social Media Manager
-  2. **بازسازی (Regenerate)**: ارسال دستور بازسازی تصویر و کپشن به ایجنت
+### مشکل دوم: کپشن کامل در تقویم ذخیره نمی‌شود
+در `PixelChatRenderer.tsx` خط 21، مقدار `caption` فقط از alt text تصویر markdown (`![alt text](url)`) خوانده می‌شود که معمولا یک عنوان کوتاه مثل "Rebar Stirrups" است. متن اصلی کپشن (شامل contact info و توضیحات) به‌عنوان `textContent` جدا استخراج و فقط در RichMarkdown نمایش داده می‌شود، اما به `PixelPostData.caption` منتقل نمی‌شود. وقتی کاربر Approve می‌زند، همین caption کوتاه در `social_posts.content` ذخیره می‌شود.
+
+---
 
 ### تغییرات
 
-#### 1. بازطراحی `PixelPostCard` (فایل: `src/components/social/PixelPostCard.tsx`)
-- نمایش تصویر بزرگ‌تر (نه فقط thumbnail) در بالا
-- نمایش کپشن و هشتگ زیر تصویر
-- اضافه کردن دو آیکون زیر کپشن:
-  - آیکون **CheckCircle** (تایید): با کلیک، callback `onApprove(post)` صدا زده می‌شود
-  - آیکون **RefreshCw** (بازسازی): با کلیک، callback `onRegenerate(post)` صدا زده می‌شود
-- بعد از تایید، آیکون تایید سبز شود و غیرفعال گردد و متن "Saved to calendar" نمایش داده شود
+#### 1. `src/components/social/PixelPostCard.tsx` - آیکون‌های بزرگ و مجزا
 
-#### 2. به‌روزرسانی `PixelChatRenderer` (فایل: `src/components/social/PixelChatRenderer.tsx`)
-- اضافه کردن prop جدید `onApprovePost: (post: PixelPostData) => void`
-- اضافه کردن prop جدید `onRegeneratePost: (post: PixelPostData) => void`
-- پاس دادن این دو callback به هر `PixelPostCard`
+- آیکون‌ها را از `w-5 h-5` به `w-7 h-7` بزرگ‌تر می‌کنیم
+- دکمه‌ها از `p-1.5 rounded-full` به `p-3 rounded-xl` با پس‌زمینه مشخص تغییر می‌کنند
+- دکمه Approve: پس‌زمینه سبز ملایم (`bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25`)
+- دکمه Regenerate: پس‌زمینه نارنجی ملایم (`bg-orange-500/15 text-orange-500 hover:bg-orange-500/25`)
+- فاصله بین دکمه‌ها بیشتر (`gap-3`) و padding پایین بیشتر (`pb-4 px-4`)
+- حالت "Saved to calendar": آیکون بزرگ‌تر با رنگ سبز
 
-#### 3. به‌روزرسانی `ChatMessage` (فایل: `src/components/chat/ChatMessage.tsx`)
-- اضافه کردن props `onApprovePost` و `onRegeneratePost` به interface
-- پاس دادن آن‌ها به `PixelChatRenderer`
+#### 2. `src/components/social/PixelChatRenderer.tsx` - استخراج کپشن کامل
 
-#### 4. به‌روزرسانی `ChatThread` (فایل: `src/components/chat/ChatThread.tsx`)
-- اضافه کردن props `onApprovePost` و `onRegeneratePost`
-- پاس دادن آن‌ها به هر `ChatMessage`
-- حذف دکمه‌های بزرگ Approve از انتهای thread (چون حالا هر پست دکمه خودش را دارد)
+- در تابع `extractPostData`، بعد از استخراج تصاویر، متن باقی‌مانده (بدون markdown تصویر، بدون هشتگ‌ها) را به‌عنوان `fullCaption` استخراج می‌کنیم
+- اگر فقط یک تصویر وجود دارد، کل متن باقی‌مانده caption آن می‌شود
+- اگر چند تصویر وجود دارد، متن به‌طور مساوی بین تصاویر تقسیم می‌شود (یا هر بخش متنی قبل از تصویر بعدی به آن تصویر تعلق می‌گیرد)
+- `textContent` دیگر در RichMarkdown جداگانه نمایش داده نمی‌شود، بلکه روی کارت پست نمایش داده می‌شود
+- نتیجه: وقتی `onApprovePost(post)` صدا زده می‌شود، `post.caption` حاوی کل کپشن واقعی است
 
-#### 5. به‌روزرسانی `AgentWorkspace` (فایل: `src/pages/AgentWorkspace.tsx`)
-- ایجاد `handleApprovePost` callback:
-  - دریافت `PixelPostData` (شامل imageUrl, caption, hashtags)
-  - ذخیره در `social_posts` با status `draft`، تاریخ `selectedDate`، و `user_id`
-  - نمایش toast موفقیت
-- ایجاد `handleRegeneratePost` callback:
-  - ارسال پیام `regenerate` به ایجنت (از طریق `handleSendInternal`)
-- پاس دادن این دو callback به `ChatThread`
+#### 3. `src/pages/AgentWorkspace.tsx` - ذخیره کپشن کامل
 
-### جزییات فنی ذخیره پست در تقویم
+- در `handleApprovePost`، فیلد `content` از `post.caption` (که حالا کامل است) پر می‌شود
+- فیلد `title` از اولین خط caption یا alt text استفاده می‌کند (حداکثر 80 کاراکتر)
 
-هنگام تایید، این فیلدها در `social_posts` ذخیره می‌شود:
-```text
-platform: "instagram" (پیش‌فرض)
-status: "draft"
-title: caption (اولین ۵۰ کاراکتر)
-content: caption کامل
-image_url: imageUrl از پست
-hashtags: آرایه هشتگ‌ها (split از string)
-scheduled_date: selectedDate (تاریخ انتخاب‌شده در تقویم Pixel)
-user_id: user.id
-```
+---
 
 ### فایل‌های تغییریافته
 
 | فایل | تغییر |
 |------|-------|
-| `src/components/social/PixelPostCard.tsx` | بازطراحی UI + اضافه کردن دکمه approve و regenerate |
-| `src/components/social/PixelChatRenderer.tsx` | اضافه کردن props و پاس دادن callbackها |
-| `src/components/chat/ChatMessage.tsx` | اضافه کردن props جدید |
-| `src/components/chat/ChatThread.tsx` | اضافه کردن props + حذف دکمه‌های بزرگ قبلی |
-| `src/pages/AgentWorkspace.tsx` | ایجاد handleApprovePost و handleRegeneratePost |
-
-### نکات مهم
-- سایر ایجنت‌ها تغییری نمی‌کنند (props اختیاری هستند)
-- تغییرات دیتابیس نیاز نیست (جدول `social_posts` از قبل موجود است)
-- بعد از ذخیره، پست در صفحه `/social-media-manager` در تقویم هفتگی قابل مشاهده خواهد بود
+| `src/components/social/PixelPostCard.tsx` | آیکون‌های بزرگ‌تر با رنگ‌بندی مجزا |
+| `src/components/social/PixelChatRenderer.tsx` | استخراج کپشن کامل از محتوای markdown |
+| `src/pages/AgentWorkspace.tsx` | ذخیره صحیح title و content |
