@@ -1,46 +1,30 @@
 
-## اضافه کردن دیالوگ بررسی فیدبک برای آیتم‌های To-do
+
+## فیلتر کردن تسک‌های فیدبک اسکرین‌شات فقط برای ستون Radin
 
 ### مشکل
-آیتم‌های To-do مربوط به فیدبک (مثل "Approve & Close: Feedback:...") وقتی کلیک می‌شوند، کاربر را به صفحه `/tasks` منتقل می‌کنند. کاربر باید بتواند مستقیماً از اینباکس فیدبک را بررسی کند.
-
-### راه‌حل
-وقتی کاربر روی یک To-do فیدبکی کلیک می‌کند، اطلاعات تسک مرتبط از دیتابیس خوانده شده و دیالوگ FeedbackReviewDialog باز می‌شود. کاربر می‌تواند:
-1. **تأیید**: تسک به حالت completed تغییر کرده و نوتیفیکیشن حذف می‌شود
-2. **رد با نظر**: تسک جدید با اولویت بالا برای Radin ساخته می‌شود
+تسک‌های فیدبک اسکرین‌شات (`source: "screenshot_feedback"`) در ستون‌های تسک سایر یوزرها هم نمایش داده می‌شوند. این تسک‌ها باید فقط در ستون Radin باشند.
 
 ### تغییرات
 
-**فایل: `src/components/panels/InboxPanel.tsx`**
+**فایل: `src/pages/Tasks.tsx`**
 
-1. در تابع `handleToggle`: شناسایی To-do آیتم‌های فیدبکی با بررسی `metadata.category === "task_approval"` و عنوان شامل "Feedback:"
-2. وقتی شناسایی شد: با استفاده از `metadata.human_task_id` اطلاعات تسک (اسکرین‌شات، توضیحات) از جدول `tasks` خوانده می‌شود
-3. ساخت یک آبجکت موقت با metadata مناسب برای FeedbackReviewDialog و باز کردن دیالوگ
-4. در `handleConfirmFixed`: علاوه بر dismiss نوتیفیکیشن، تسک مرتبط نیز به حالت `completed` آپدیت شود
-5. در `handleReReport`: تسک فعلی را completed کرده و تسک جدید برای Radin بسازد
+در بخش گروه‌بندی تسک‌ها (خط 500-505)، فیلتر فعلی فقط ستون Sattar را بررسی می‌کند:
 
-### جزییات فنی
-
-```text
-کلیک روی To-do فیدبکی
-  -> بررسی: metadata.category === "task_approval" && title شامل "Feedback:"
-  -> بله: fetch task by human_task_id از جدول tasks
-     -> ساخت reviewItem با metadata شامل:
-        - original_title: task.title
-        - original_description: task.description
-        - original_attachment_url: task.attachment_url
-        - human_task_id: task.id
-     -> باز کردن FeedbackReviewDialog
-  -> خیر: رفتار عادی (navigate یا expand)
-
-تأیید:
-  -> UPDATE tasks SET status='completed' WHERE id=human_task_id
-  -> dismiss notification
-
-رد:
-  -> INSERT new task for Radin with comment
-  -> UPDATE current task SET status='completed'
-  -> dismiss notification
+```
+if (t.assigned_to === SATTAR_PROFILE_ID && (t as any).source === "screenshot_feedback") continue;
 ```
 
-بدون تغییر دیتابیس. فقط تغییر در فایل InboxPanel.tsx.
+این خط تغییر می‌کند به فیلتر عمومی‌تر: اگر source برابر `screenshot_feedback` باشد و تسک به Radin اختصاص نداشته باشد، از نمایش آن در ستون صرف‌نظر شود:
+
+```
+if ((t as any).source === "screenshot_feedback" && t.assigned_to !== RADIN_PROFILE_ID) continue;
+```
+
+این تضمین می‌کند که تسک‌های فیدبک اسکرین‌شات فقط و فقط در ستون Radin نمایش داده شوند.
+
+### جزییات فنی
+- تغییر فقط یک خط در `src/pages/Tasks.tsx` (خط 503)
+- بدون تغییر دیتابیس
+- تسک‌های `feedback_verification` (بررسی فیدبک توسط گزارش‌دهنده) تحت تاثیر قرار نمی‌گیرند چون source آنها متفاوت است
+
