@@ -12,18 +12,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, AlertTriangle, LayoutGrid, Unlock, Lock } from "lucide-react";
+import { Loader2, AlertTriangle, LayoutGrid, Unlock, Lock, FolderOpen, ArrowLeft } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export default function StationView() {
   const { machineId } = useParams<{ machineId: string }>();
   const navigate = useNavigate();
   const { machines, isLoading: machinesLoading } = useLiveMonitorData();
   const machine = machines.find((m) => m.id === machineId);
-  const { activeProjectId } = useWorkspace();
-  const { groups, items, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type, activeProjectId);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  // Fetch ALL items for this machine (no project filter) so we can extract projects
+  const { groups: allGroups, items: allItems, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type, null);
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
   const [activeTab, setActiveTab] = useState("production");
@@ -33,7 +33,55 @@ export default function StationView() {
   const { pinnedMachineId, unpinMachine } = useTabletPin();
   const isPinned = pinnedMachineId === machineId;
 
-  // Compute distinct bar lists (scopes) from items
+  // Compute distinct projects from all items
+  const projects = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    for (const item of allItems) {
+      // Use cut_plan's project_name or "Unassigned"
+      const projKey = item.project_name || "__unassigned__";
+      const existing = map.get(projKey);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(projKey, {
+          id: projKey,
+          name: item.project_name || "Unassigned",
+          count: 1,
+        });
+      }
+    }
+    return [...map.values()];
+  }, [allItems]);
+
+  // Auto-select if only one project
+  useEffect(() => {
+    if (projects.length === 1) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects]);
+
+  // Filter items by selected project
+  const items = useMemo(() => {
+    if (!selectedProjectId) return allItems;
+    return allItems.filter((i) => {
+      const projKey = i.project_name || "__unassigned__";
+      return projKey === selectedProjectId;
+    });
+  }, [allItems, selectedProjectId]);
+
+  // Recompute groups from filtered items
+  const groups = useMemo(() => {
+    if (!selectedProjectId) return allGroups;
+    return allGroups
+      .map((g) => ({
+        ...g,
+        bendItems: g.bendItems.filter((i) => (i.project_name || "__unassigned__") === selectedProjectId),
+        straightItems: g.straightItems.filter((i) => (i.project_name || "__unassigned__") === selectedProjectId),
+      }))
+      .filter((g) => g.bendItems.length > 0 || g.straightItems.length > 0);
+  }, [allGroups, selectedProjectId]);
+
+  // Compute distinct bar lists (scopes) from filtered items
   const barLists = useMemo(() => {
     const map = new Map<string, { id: string; name: string; projectName: string | null; count: number }>();
     for (const item of items) {
@@ -61,7 +109,7 @@ export default function StationView() {
     }
   }, [barLists, selectedBarListId]);
 
-  // Filtered views
+  // Filtered views by barlist
   const filteredItems = selectedBarListId
     ? items.filter((i) => i.cut_plan_id === selectedBarListId)
     : items;
@@ -104,6 +152,56 @@ export default function StationView() {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
         Machine not found
+      </div>
+    );
+  }
+
+  // PROJECT PICKER — shown when multiple projects and none selected
+  if (projects.length > 1 && !selectedProjectId) {
+    return (
+      <div className="flex flex-col h-full">
+        <StationHeader
+          machineName={machine.name}
+          machineModel={machine.model}
+          canWrite={canWrite}
+          isSupervisor={isSupervisor}
+          onToggleSupervisor={() => setIsSupervisor((v) => !v)}
+          showBedsSuffix={false}
+        />
+        <div className="flex-1 overflow-auto p-4 sm:p-6">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-primary" />
+              <h2 className="text-sm font-bold tracking-wider uppercase text-foreground">
+                Select Active Project
+              </h2>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This machine has items from multiple projects. Select one to avoid mixing barlists.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {projects.map((proj) => (
+                <button
+                  key={proj.id}
+                  onClick={() => setSelectedProjectId(proj.id)}
+                  className="flex items-center gap-4 p-4 rounded-xl border-2 border-border bg-card hover:border-primary hover:bg-primary/5 transition-all text-left group"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                    <FolderOpen className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-foreground truncate">
+                      {proj.name}
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-0.5">
+                      {proj.count} {proj.count === 1 ? "ITEM" : "ITEMS"}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -156,7 +254,30 @@ export default function StationView() {
         isSupervisor={isSupervisor}
         onToggleSupervisor={() => setIsSupervisor((v) => !v)}
         showBedsSuffix={true}
+        workspaceName={selectedProjectId && selectedProjectId !== "__unassigned__" ? selectedProjectId : undefined}
       />
+
+      {/* Back to project picker (only if multiple projects) */}
+      {projects.length > 1 && selectedProjectId && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-border">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-[10px] gap-1 px-2 text-primary hover:text-primary hover:bg-primary/10"
+            onClick={() => {
+              setSelectedProjectId(null);
+              setSelectedBarListId(null);
+              setSelectedItemId(null);
+            }}
+          >
+            <ArrowLeft className="w-3 h-3" />
+            Switch Project
+          </Button>
+          <span className="text-[10px] tracking-wider uppercase font-bold text-primary truncate">
+            {projects.find(p => p.id === selectedProjectId)?.name}
+          </span>
+        </div>
+      )}
 
       {/* Pinned indicator + unpin (supervisor only) */}
       {isPinned && (
