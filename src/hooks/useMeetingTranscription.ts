@@ -91,7 +91,7 @@ export function useMeetingTranscription(
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    // lang not set — browser auto-detects spoken language
 
     recognition.onstart = () => setIsTranscribing(true);
 

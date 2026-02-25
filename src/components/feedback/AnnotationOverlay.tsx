@@ -43,7 +43,6 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
 
   // Web Speech API — Google Voice, supports Farsi + English, no WebSocket errors
   const speech = useSpeechRecognition({
-    lang: "fa-IR",
     onError: (err) => toast.error(err),
   });
 
