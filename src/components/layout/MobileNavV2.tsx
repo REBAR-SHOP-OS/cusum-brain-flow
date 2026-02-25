@@ -9,7 +9,6 @@ import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
 
 const primaryNav = [
   { name: "Home", href: "/home", icon: Home },
-  { name: "Inbox", href: "/inbox", icon: Inbox },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Driver", href: "/driver", icon: Truck },
   { name: "More", href: "#more", icon: Menu },

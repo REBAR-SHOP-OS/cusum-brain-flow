@@ -12,7 +12,6 @@ import brandLogo from "@/assets/brand-logo.png";
 // Odoo-style nav grouping: CRM, Operations, Admin
 const crmNav = [
   { name: "Home", href: "/home", icon: Home },
-  { name: "Inbox", href: "/inbox", icon: Inbox },
   { name: "Business Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Phonecalls", href: "/phonecalls", icon: Phone },
   { name: "Pipeline", href: "/pipeline", icon: Kanban },
@@ -53,7 +52,7 @@ export function Sidebar() {
 
   const handleSelectSession = (sessionId: string) => {
     setHistoryPanelOpen(false);
-    navigate("/inbox", { state: { sessionId } });
+    navigate("/home", { state: { sessionId } });
   };
 
   return (

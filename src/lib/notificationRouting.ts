@@ -7,8 +7,8 @@ export function normalizeNotificationRoute(linkTo: string, type?: string): strin
   else if (/^\/accounting\/(bills|invoices)(\/|$)/.test(dest)) dest = "/accounting";
   else if (/^\/intelligence(\/|$)/.test(dest)) dest = "/brain";
   else if (/^\/inventory(\/|$)/.test(dest)) dest = "/shop-floor";
-  else if (/^\/emails(\/|$)/.test(dest)) dest = "/inbox";
-  else if (/^\/inbox\/[a-f0-9-]+$/i.test(dest)) dest = "/inbox";
+  else if (/^\/emails(\/|$)/.test(dest)) dest = "/home";
+  else if (/^\/inbox\/[a-f0-9-]+$/i.test(dest)) dest = "/home";
   // To-do items must never land on /brain
   if (type === "todo" && dest === "/brain") dest = "/tasks";
   return dest;
