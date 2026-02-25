@@ -1,32 +1,59 @@
 
 
-## Investigation: "Feedback Section" Text Invisible on /home
+## Fix: Stale/Duplicate Suggestions + Auto-Create Next Activity on Comment
 
-### Finding: No "Feedback Section" Exists on /home
+### Problem 1: Stale Suggestions Still Showing
 
-After a thorough audit of every component rendered on the `/home` page, there is **no component called "Feedback"** and no section labeled "Feedback" on that page. The components on `/home` are:
+The auto-resolve code we added to `generate-suggestions` works correctly but has two issues:
 
-1. **Hero/Chat input** — uses `text-foreground`, `text-muted-foreground` (theme-aware)
-2. **VizzyDailyBriefing** — uses `text-foreground`, `text-muted-foreground`, `RichMarkdown` (all theme-aware)
-3. **AgentSuggestionsPanel / AgentSuggestionCard** — uses `text-foreground`, `text-muted-foreground` (theme-aware)
-4. **Workspaces grid** — uses `text-white` on gradient backgrounds (fine)
-5. **AutomationsSection** — uses `text-white` on gradient backgrounds (fine)
-6. **HelperCard** — uses `text-white` on mobile (with black gradient overlay), `text-foreground` on desktop (theme-aware)
+- **Threshold too strict**: It only resolves when `balance <= 0`, but there are invoices with trivial balances ($0.01, $0.66, $1.00) that are essentially paid. These should be auto-resolved too.
+- **Never ran yet**: The edge function hasn't been triggered since the code was deployed. We need to trigger it and also do a one-time database cleanup for the 3 near-zero-balance suggestions.
 
-The only "Feedback" in the codebase related to `/home` is the tiny "Was this helpful?" section inside `DigestContent.tsx` (line 543-554), which uses `text-muted-foreground` — already theme-aware and visible in dark mode.
+**Fix**: Change the auto-resolve threshold from `balance <= 0` to `balance < 2` (under $2 is effectively paid). Then run immediate cleanup.
 
-The attached screenshot from Sattar's feedback tool is **completely blank/white**, meaning the screenshot tool likely captured an empty area or the issue is intermittent.
+**File: `supabase/functions/generate-suggestions/index.ts`** (~line 93)
+```
+// Before:
+if (balance === undefined || balance === null || balance <= 0)
 
-### Conclusion
+// After:
+if (balance === undefined || balance === null || balance < 2)
+```
 
-**No code change is needed.** All text on `/home` uses semantic Tailwind theme variables (`text-foreground`, `text-muted-foreground`, `text-primary`) that automatically adapt to dark mode. There are no hardcoded dark colors (`text-gray-800`, `text-black`, `text-gray-900`) anywhere on the `/home` page.
+**One-time data fix**: Resolve the 3 suggestions where balance < $2 (GTC-CANADA $0.01, COSS $0.66, 1000558934 $1.00).
 
-Possible explanations for what Sattar experienced:
-- A **transient rendering glitch** (e.g., theme flash during load)
-- A **browser-specific issue** (some browsers handle CSS custom properties differently)
-- Confusion with a different page or component
+---
 
-### Recommendation
+### Problem 2: No "Next Activity" Auto-Created After Comment
 
-If the issue persists, we need Sattar to provide a **non-blank screenshot** or specify exactly which text is invisible. Without being able to reproduce the problem, there's nothing to fix — the code is already correct.
+When a user posts a comment on a task, no follow-up activity is scheduled. The fix adds automatic creation of a "follow_up" scheduled activity due the next business day after each comment.
+
+**File: `src/pages/Tasks.tsx`** — in the `postComment` function (after successful insert, ~line 434):
+
+```typescript
+// After comment is saved successfully, auto-create a follow-up activity
+await supabase.from("scheduled_activities").insert({
+  company_id: companyRes.data?.company_id,
+  entity_type: "task",
+  entity_id: selectedTask.id,
+  activity_type: "follow_up",
+  summary: `Follow up on comment`,
+  due_date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), // tomorrow
+  assigned_to: currentProfileId,
+  status: "planned",
+  created_by: user?.id,
+});
+```
+
+This ensures every comment triggers a visible follow-up reminder in the task's activity section.
+
+---
+
+### Summary of Changes
+
+| File | Change |
+|------|--------|
+| `supabase/functions/generate-suggestions/index.ts` | Raise auto-resolve threshold from `<= 0` to `< 2` |
+| `src/pages/Tasks.tsx` | Auto-create follow-up scheduled activity after posting a comment |
+| Database (one-time) | Resolve 3 near-zero-balance suggestions immediately |
 
