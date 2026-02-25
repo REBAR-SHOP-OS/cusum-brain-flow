@@ -228,6 +228,8 @@ export function AppSidebar() {
                     (item.href !== "/home" && location.pathname.startsWith(item.href));
 
                   if (!accessible) {
+                    // Items restricted by allowedEmails should be completely hidden
+                    if (item.allowedEmails) return null;
                     return (
                       <Tooltip key={item.name + item.href} delayDuration={200}>
                         <TooltipTrigger asChild>

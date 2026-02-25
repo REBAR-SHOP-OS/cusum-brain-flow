@@ -18,7 +18,7 @@ const moreItems = [
   { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "shop_supervisor"] },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
-  { name: "Accounting", href: "/accounting", icon: DollarSign, roles: ["admin", "accounting", "office"] },
+  { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"] },
   { name: "CEO Portal", href: "/ceo", icon: BarChart3, roles: ["admin"] },
   { name: "Deliveries", href: "/deliveries", icon: Truck },
   { name: "Calls", href: "/phonecalls", icon: Phone },
@@ -124,7 +124,10 @@ export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV
 
   const isMoreActive = moreItems.some((item) => location.pathname === item.href);
 
-  const isVisible = (item: { roles?: string[] }) => {
+  const isVisible = (item: { roles?: string[]; allowedEmails?: string[] }) => {
+    if (item.allowedEmails) {
+      return item.allowedEmails.includes(email.toLowerCase());
+    }
     if (!item.roles) return true;
     if (isAdmin) return true;
     return item.roles.some((r) => roles.includes(r as any));
