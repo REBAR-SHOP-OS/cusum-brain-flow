@@ -1,50 +1,33 @@
 
 
-## Fix: Screenshot Captures Full Scrollable Page Content
+## Fix: Crop Screenshot to Main Content (Remove Sidebar Bleed)
 
 ### Problem
 
-When taking a screenshot from the bottom of the `/home` page, only the visible viewport area is captured. The content above/below the fold is cut off.
+The screenshot now captures full-page height correctly, but the left sidebar icons are bleeding into the captured image. The user wants the screenshot cropped tightly to just the main content area.
 
-**Root cause:** The layout has multiple nested `overflow-hidden` containers:
+### Root Cause
 
-```text
-div.flex.flex-col.h-screen          ← h-screen
-  div.flex.flex-1.overflow-hidden   ← clips content
-    main#main-content.overflow-hidden  ← clips content
-      <ScrollArea>                     ← Radix scroll viewport
-        <actual page content>          ← full height
-```
-
-The current capture code expands the `main-content` target and its inner scroll containers, but does **not** walk up the DOM to expand ancestor containers that also clip with `overflow-hidden`. So even though the Radix scroll viewport gets expanded, the parent `div` and `main` still clip the rendered output.
+When `html2canvas` is called with `target = #main-content`, the `x` and `y` crop coordinates are set to `targetRect.left` and `targetRect.top` — which includes the sidebar width (~64px) and topbar height. But `html2canvas` renders **relative to the target element**, so these offsets are wrong. Setting `x = 64` tells html2canvas to start 64px *into* the target, while the ancestor expansion with `overflow: visible` causes sibling elements (the sidebar) to bleed into the render.
 
 ### Fix
 
-**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`**
+**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`** — Lines 72-73
 
-After expanding the target and its children, also walk **up** the DOM from the target to `document.body`, expanding any ancestor that has `overflow: hidden`, `overflow: auto`, or `overflow: scroll`, plus removing fixed `height` constraints like `h-screen`.
-
-Add this block after the existing child-expansion logic (after line 56):
+Change the capture origin to `(0, 0)` for non-overlay mode, since html2canvas already scopes rendering to the target element:
 
 ```typescript
-// Walk up ancestors to remove clipping
-let parent = target.parentElement;
-while (parent && parent !== document.body) {
-  const cs = getComputedStyle(parent);
-  if (cs.overflow !== "visible" || cs.overflowY !== "visible" || cs.overflowX !== "visible") {
-    expand(parent, "; overflow: visible !important; max-height: none !important; height: auto !important;");
-  }
-  parent = parent.parentElement;
-}
+// Before
+const captureX = isOverlay ? 0 : (targetRect!.left + target.scrollLeft);
+const captureY = isOverlay ? 0 : (targetRect!.top  + target.scrollTop);
+
+// After
+const captureX = 0;
+const captureY = 0;
 ```
 
-This ensures that every clipping ancestor (the `flex-1 overflow-hidden` wrapper, the `h-screen` root) temporarily allows content to overflow during capture, then gets restored in the `finally` block.
+This removes the sidebar/topbar offset that was causing content outside `#main-content` to appear in the capture. Both overlay and non-overlay paths now use `(0, 0)` as origin.
 
-### What stays the same
-- Overlay/dialog screenshot logic (uses `window.innerWidth/Height`, unaffected)
-- The restore logic in `finally` already handles all expanded elements
-- Retry-without-images fallback, timeouts, heavy page detection
-
-### Technical detail
-The `expandedEls` array already tracks every modified element and restores `style.cssText` in the `finally` block, so this change is safe — no permanent layout side effects.
+### Files Changed
+1. `src/components/feedback/ScreenshotFeedbackButton.tsx` — 2 lines changed
 
