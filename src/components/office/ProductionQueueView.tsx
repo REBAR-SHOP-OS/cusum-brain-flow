@@ -65,9 +65,10 @@ export function ProductionQueueView() {
   const queryClient = useQueryClient();
 
   const handleDeleteBarlist = async (barlistId: string) => {
-    // Delete work orders referencing this barlist first
-    await supabase.from("work_orders").delete().eq("barlist_id", barlistId);
-    await supabase.from("barlist_items").delete().eq("barlist_id", barlistId);
+    // Work orders SET NULL via FK, machine_queue_items & production_tasks & barlist_items CASCADE via FK
+    const { error: woErr } = await supabase.from("work_orders").delete().eq("barlist_id", barlistId);
+    if (woErr) { toast({ title: "Error cleaning work orders", description: woErr.message, variant: "destructive" }); return; }
+
     const { error } = await supabase.from("barlists").delete().eq("id", barlistId);
     if (error) {
       toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" });
@@ -75,34 +76,31 @@ export function ProductionQueueView() {
     }
     toast({ title: "Barlist deleted" });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
+    queryClient.invalidateQueries({ queryKey: ["production-queues"] });
   };
 
   const handleDeleteProject = async (projectId: string): Promise<boolean> => {
-    // 1. Delete work orders referencing this project (and its barlists)
-    await supabase.from("work_orders").delete().eq("project_id", projectId);
-    
-    // 2. Delete barlists and their items
+    // 1. Work orders: SET NULL via FK on project delete, but explicit delete for barlist-linked ones
     const projectBarlists = barlists.filter(b => b.project_id === projectId);
     for (const b of projectBarlists) {
-      await supabase.from("work_orders").delete().eq("barlist_id", b.id);
-      await supabase.from("barlist_items").delete().eq("barlist_id", b.id);
-      await supabase.from("barlists").delete().eq("id", b.id);
+      const { error: woErr } = await supabase.from("work_orders").delete().eq("barlist_id", b.id);
+      if (woErr) { toast({ title: "Error cleaning work orders", description: woErr.message, variant: "destructive" }); return false; }
     }
-    
-    // 3. Delete cut plan items (incl. clearance evidence) then cut plans
+
+    // 2. Delete barlists (CASCADE handles barlist_items, machine_queue_items, production_tasks)
+    for (const b of projectBarlists) {
+      const { error } = await supabase.from("barlists").delete().eq("id", b.id);
+      if (error) { toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" }); return false; }
+    }
+
+    // 3. Delete cut plans (CASCADE handles cut_plan_items → clearance_evidence, cut_output_batches, inventory_reservations, loading_checklist)
     const projectPlans = plans.filter(p => p.project_id === projectId);
     for (const p of projectPlans) {
-      // Delete clearance evidence for each item
-      const { data: items } = await supabase.from("cut_plan_items").select("id").eq("cut_plan_id", p.id);
-      if (items && items.length > 0) {
-        const itemIds = items.map(i => i.id);
-        await supabase.from("clearance_evidence").delete().in("cut_plan_item_id", itemIds);
-      }
-      await supabase.from("cut_plan_items").delete().eq("cut_plan_id", p.id);
-      await supabase.from("cut_plans").delete().eq("id", p.id);
+      const { error } = await supabase.from("cut_plans").delete().eq("id", p.id);
+      if (error) { toast({ title: "Error deleting cut plan", description: error.message, variant: "destructive" }); return false; }
     }
-    
-    // 4. Delete the project itself
+
+    // 4. Delete project (CASCADE handles project_events, project_milestones, project_tasks; work_orders SET NULL)
     const { error } = await supabase.from("projects").delete().eq("id", projectId);
     if (error) {
       toast({ title: "Error deleting project", description: error.message, variant: "destructive" });
@@ -112,6 +110,7 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
+    queryClient.invalidateQueries({ queryKey: ["production-queues"] });
     return true;
   };
 
