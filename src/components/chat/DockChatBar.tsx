@@ -11,6 +11,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { useOpenDM } from "@/hooks/useChannelManagement";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
+import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
 const CHAT_BTN_SIZE = 56;
@@ -35,6 +36,8 @@ export function DockChatBar() {
   const { channels } = useTeamChannels();
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
+  const { user } = useAuth();
+  const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
   const [launcherOpen, setLauncherOpen] = useState(false);
@@ -73,14 +76,19 @@ export function DockChatBar() {
     return () => window.removeEventListener("dock-chat-open", handler);
   }, [channels, openChat]);
 
+  // Filter profiles based on domain
+  const visibleProfiles = profiles.filter((p) => {
+    if (p.id === myProfile?.id) return false;
+    if (p.is_active === false) return false;
+    if (isInternal) return p.email?.endsWith("@rebar.shop");
+    return true;
+  });
+
   const groupChannels = channels.filter((c) => c.channel_type === "group");
-  // Hide DM channels where the other member is inactive (user_id null or is_active false)
-  // We detect this by checking if the channel name matches any active non-self profile
   const dmChannels = channels.filter((c) => {
     if (c.channel_type !== "dm") return false;
-    // A DM is valid if at least one active non-self profile's name appears in the channel name
-    return profiles.some(
-      (p) => p.id !== myProfile?.id && p.is_active !== false && c.name.includes(p.full_name)
+    return visibleProfiles.some(
+      (p) => c.name.includes(p.full_name)
     );
   });
 
@@ -147,9 +155,7 @@ export function DockChatBar() {
               {/* Team members - top for visibility */}
               <div className="px-2 pt-2 pb-2">
                 <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Start a Chat</p>
-                {profiles
-                  .filter((p) => p.is_active !== false && p.id !== myProfile?.id)
-                  .map((p) => (
+                {visibleProfiles.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => handleOpenDM(p.id, p.full_name)}
