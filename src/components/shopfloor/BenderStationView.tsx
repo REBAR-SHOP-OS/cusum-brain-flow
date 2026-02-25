@@ -34,6 +34,13 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
   const [submitting, setSubmitting] = useState(false);
   const [unitCount, setUnitCount] = useState(1);
 
+  // Keep currentIndex in bounds when items change (e.g. completed item removed)
+  useEffect(() => {
+    if (items.length > 0 && currentIndex >= items.length) {
+      setCurrentIndex(items.length - 1);
+    }
+  }, [items.length, currentIndex]);
+
   const currentItem = items[currentIndex] || null;
   const cutPlanId = currentItem?.cut_plan_id || null;
   const barCode = currentItem?.bar_code;
