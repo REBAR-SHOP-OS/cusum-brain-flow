@@ -570,7 +570,7 @@ Deno.serve(async (req) => {
 
           if (imgResult.imageUrl) {
             results.push(
-              `### Slot ${slot.slot} — ${slot.time} | ${slot.product}\n\n` +
+              `### Slot ${slot.slot} — ${slot.product}\n\n` +
               `![${slot.product}](${imgResult.imageUrl})\n\n` +
               `**Caption:**\n${dynContent.caption}\n\n` +
               `**Hashtags:**\n${dynContent.hashtags}` +
@@ -579,7 +579,7 @@ Deno.serve(async (req) => {
             );
           } else {
             results.push(
-              `### Slot ${slot.slot} — ${slot.time} | ${slot.product}\n\n` +
+              `### Slot ${slot.slot} — ${slot.product}\n\n` +
               `⚠️ Image generation failed: ${imgResult.error || "Unknown error"}\n\n` +
               `**Caption:**\n${dynContent.caption}\n\n` +
               `**Hashtags:**\n${dynContent.hashtags}` +

@@ -361,21 +361,37 @@ export default function AgentWorkspace() {
     if (!user) return;
     try {
       const hashtags = post.hashtags ? post.hashtags.split(/\s+/).filter((h: string) => h.startsWith("#")) : [];
-      // Clean caption: remove slot headers and formatting labels before saving
-      const cleanCaption = (post.caption || "")
-        .replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-].*$/gm, "")
-        .replace(/\*\*Caption:\*\*/g, "")
-        .replace(/\*\*Hashtags:\*\*/g, "")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
+      // Clean caption: remove all non-advertising content before saving
+      let rawCaption = post.caption || "";
+      // 1. Remove Persian translation block
+      const persianIdx = rawCaption.indexOf("---PERSIAN---");
+      if (persianIdx !== -1) rawCaption = rawCaption.slice(0, persianIdx);
+      // Also remove fallback Persian markers
+      rawCaption = rawCaption.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
+      // 2. Remove slot headers (with or without time)
+      rawCaption = rawCaption.replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-]\s*(\d{1,2}:\d{2}\s*(AM|PM)\s*\|?\s*)?.*/gm, "");
+      // 3. Remove image markdown
+      rawCaption = rawCaption.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+      // 4. Remove download/regen links
+      rawCaption = rawCaption.replace(/\[⬇️ Download\]\([^)]*\)/g, "");
+      rawCaption = rawCaption.replace(/🔄\s*Regenerate/g, "");
+      // 5. Remove labels
+      rawCaption = rawCaption.replace(/\*\*Caption:\*\*/g, "");
+      rawCaption = rawCaption.replace(/\*\*Hashtags:\*\*/g, "");
+      // 6. Remove lines that are only hashtags
+      rawCaption = rawCaption.replace(/^[\s]*#[a-zA-Z]\w*(\s+#[a-zA-Z]\w*)*[\s]*$/gm, "");
+      // 7. Remove contact info lines (address, phone, website)
+      rawCaption = rawCaption.replace(/^.*📍.*$/gm, "");
+      rawCaption = rawCaption.replace(/^.*📞.*$/gm, "");
+      rawCaption = rawCaption.replace(/^.*🌐.*$/gm, "");
+      rawCaption = rawCaption.replace(/^.*9 Cedar Ave.*$/gim, "");
+      rawCaption = rawCaption.replace(/^.*647[-.\s]?260[-.\s]?9403.*$/gm, "");
+      // 8. Clean up whitespace
+      const cleanCaption = rawCaption.replace(/\n{3,}/g, "\n\n").trim();
       const lines = cleanCaption.split("\n").filter(l => l.trim().length > 0);
       const titleLine = lines[0] || "Pixel Post";
-      // Remove emoji prefix for cleaner title
       const title = titleLine.replace(/^[\p{Emoji}\s]+/u, "").slice(0, 50) || "Pixel Post";
-      // Content: if title is same as first line, remove it to avoid duplication
-      const content = cleanCaption.startsWith(titleLine)
-        ? cleanCaption.slice(titleLine.length).trim() || cleanCaption
-        : cleanCaption;
+      const content = cleanCaption;
       const { error } = await supabase.from("social_posts").insert({
         platform: post.platform || "instagram",
         status: "draft",
