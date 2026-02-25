@@ -1339,6 +1339,10 @@ export default function Tasks() {
                           description: selectedTask.description || "",
                           comments: commentTexts,
                           screenshots,
+                          priority: (selectedTask as any).priority || undefined,
+                          status: (selectedTask as any).status || undefined,
+                          attachment_urls: (selectedTask as any).attachment_urls || undefined,
+                          source: (selectedTask as any).source || undefined,
                         },
                       });
                       if (error) throw error;
