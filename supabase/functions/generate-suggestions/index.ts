@@ -69,6 +69,109 @@ serve(async (req) => {
       if (key.includes(":missing_qb:")) existingTaskKeys.delete(key);
     }
 
+    // ========== AUTO-RESOLVE stale suggestions ==========
+    // Close invoice suggestions where balance is now 0 or invoice deleted
+    const { data: openInvoiceSuggestions } = await supabase
+      .from("suggestions")
+      .select("id, entity_id")
+      .in("status", ["open", "new"])
+      .eq("entity_type", "invoice");
+
+    if (openInvoiceSuggestions && openInvoiceSuggestions.length > 0) {
+      const entityIds = openInvoiceSuggestions.map((s: any) => s.entity_id).filter(Boolean);
+      const { data: currentInvoices } = await supabase
+        .from("accounting_mirror")
+        .select("id, balance")
+        .in("id", entityIds);
+
+      const balanceMap = new Map((currentInvoices || []).map((i: any) => [i.id, i.balance]));
+      const toResolveInv: string[] = [];
+      const toResolveInvEntityIds: string[] = [];
+
+      for (const s of openInvoiceSuggestions) {
+        const balance = balanceMap.get(s.entity_id);
+        if (balance === undefined || balance === null || balance <= 0) {
+          toResolveInv.push(s.id);
+          if (s.entity_id) toResolveInvEntityIds.push(s.entity_id);
+        }
+      }
+
+      if (toResolveInv.length > 0) {
+        await supabase
+          .from("suggestions")
+          .update({ status: "resolved", resolved_at: now.toISOString() })
+          .in("id", toResolveInv);
+        // Also resolve matching human_tasks
+        if (toResolveInvEntityIds.length > 0) {
+          await supabase
+            .from("human_tasks")
+            .update({ status: "resolved", resolved_at: now.toISOString() })
+            .eq("entity_type", "invoice")
+            .in("entity_id", toResolveInvEntityIds)
+            .in("status", ["open", "snoozed"]);
+        }
+        console.log(`Auto-resolved ${toResolveInv.length} stale invoice suggestions`);
+        // Remove resolved from dedup sets so we don't skip fresh re-generation
+        for (const s of openInvoiceSuggestions) {
+          if (toResolveInv.includes(s.id)) {
+            existingSuggestions.delete(`invoice:${s.entity_id}:overdue_ar`);
+            existingSuggestions.delete(`invoice:${s.entity_id}:penny_overdue_ar`);
+          }
+        }
+      }
+    }
+
+    // Close order suggestions where order is now completed/cancelled/delivered
+    const { data: openOrderSuggestions } = await supabase
+      .from("suggestions")
+      .select("id, entity_id")
+      .in("status", ["open", "new"])
+      .eq("entity_type", "order");
+
+    if (openOrderSuggestions && openOrderSuggestions.length > 0) {
+      const orderIds = openOrderSuggestions.map((s: any) => s.entity_id).filter(Boolean);
+      const { data: currentOrders } = await supabase
+        .from("orders")
+        .select("id, status")
+        .in("id", orderIds);
+
+      const statusMap = new Map((currentOrders || []).map((o: any) => [o.id, o.status]));
+      const toResolveOrd: string[] = [];
+      const toResolveOrdEntityIds: string[] = [];
+
+      for (const s of openOrderSuggestions) {
+        const status = statusMap.get(s.entity_id);
+        if (status === undefined || ["completed", "cancelled", "delivered"].includes(status)) {
+          toResolveOrd.push(s.id);
+          if (s.entity_id) toResolveOrdEntityIds.push(s.entity_id);
+        }
+      }
+
+      if (toResolveOrd.length > 0) {
+        await supabase
+          .from("suggestions")
+          .update({ status: "resolved", resolved_at: now.toISOString() })
+          .in("id", toResolveOrd);
+        if (toResolveOrdEntityIds.length > 0) {
+          await supabase
+            .from("human_tasks")
+            .update({ status: "resolved", resolved_at: now.toISOString() })
+            .eq("entity_type", "order")
+            .in("entity_id", toResolveOrdEntityIds)
+            .in("status", ["open", "snoozed"]);
+        }
+        console.log(`Auto-resolved ${toResolveOrd.length} stale order suggestions`);
+        for (const s of openOrderSuggestions) {
+          if (toResolveOrd.includes(s.id)) {
+            for (const key of existingSuggestions) {
+              if (key.startsWith(`order:${s.entity_id}:`)) existingSuggestions.delete(key);
+            }
+          }
+        }
+      }
+    }
+    // ========== END AUTO-RESOLVE ==========
+
     const isDuplicate = (entityType: string, entityId: string, category: string) =>
       existingSuggestions.has(`${entityType}:${entityId}:${category}`);
 
