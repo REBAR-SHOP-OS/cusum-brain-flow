@@ -1,62 +1,56 @@
 
 
-## Fix Call Analytics + Add Email Analytics Page
+## Remove "Inbox" Feature from Application
 
-### Problem 1: Call Analytics Shows 0
+### Summary
+Remove the Inbox page, its navigation links, route definitions, and all references across the app. The `src/components/inbox/` folder and its 30+ component files will NOT be deleted since they may be used elsewhere (e.g., `InboxView` is rendered inside `Inbox.tsx` page, and `InboxPanel` is a notification panel used in Sidebar/TopBar which is separate from the Inbox page).
 
-**Root Cause**: The database has **446 calls** in the last 30 days, but the dashboard shows 0. The `useCallAnalytics` hook queries the `communications` table directly from the frontend, where RLS restricts results to `user_id = auth.uid()` (only admin users see all company calls). If the logged-in user isn't an admin or doesn't have call records under their user_id, they see nothing.
+### Files to Modify
 
-**Fix**: Create a backend function `ringcentral-call-analytics` that queries with the service role key (bypassing per-user RLS) and returns aggregated analytics for the entire company. The frontend hook will call this function instead of querying the table directly.
+#### 1. `src/App.tsx`
+- Remove `import Inbox from "./pages/Inbox"`
+- Remove route: `<Route path="/inbox" ...>`
+- Remove legacy redirect: `<Route path="/inbox-manager" ...>`
+- Change redirect `<Route path="/emails/*" ...>` to point to `/home` instead of `/inbox`
 
-### Problem 2: Email Analytics Page Missing
+#### 2. `src/components/layout/AppSidebar.tsx`
+- Remove the `{ name: "Inbox", href: "/inbox", icon: Inbox, ... }` item from the nav items array
+- Clean up unused `Inbox` icon import if no longer used
 
-**Solution**: Build an `EmailAnalyticsDashboard` component (similar structure to `CallAnalyticsDashboard`) and a corresponding `useEmailAnalytics` hook, showing:
-- Total emails received (last 30 days)
-- Daily volume chart
-- Top senders
-- AI category distribution (once AI categorization populates)
-- Response rate metrics
+#### 3. `src/components/layout/Sidebar.tsx`
+- Remove `{ name: "Inbox", href: "/inbox", icon: Inbox }` from `crmNav` array
+- Change `navigate("/inbox", ...)` in `handleSelectSession` to `/home`
+- Clean up unused `Inbox` icon import
 
----
+#### 4. `src/components/layout/MobileNav.tsx`
+- Remove `{ name: "Inbox", href: "/inbox", icon: Inbox }` from `primaryNav`
 
-### Technical Details
+#### 5. `src/components/layout/MobileNavV2.tsx`
+- Remove `{ name: "Inbox", href: "/inbox", icon: Inbox }` from `primaryNav`
 
-#### Files to Create
+#### 6. `src/components/layout/CommandBar.tsx`
+- Remove `{ label: "Inbox", icon: Inbox, href: "/inbox", ... }` from `navCommands`
 
-1. **`supabase/functions/ringcentral-call-analytics/index.ts`**
-   - Accepts authenticated requests, verifies user belongs to a company
-   - Queries `communications` table with service role (all company calls, type=call, last N days)
-   - Returns pre-aggregated analytics: daily volume, totals, outcomes, top contacts, avg duration
+#### 7. `src/hooks/useActiveModule.ts`
+- Remove `"/inbox"` entry
+- Update `"/tasks"` moduleRoute from `"/inbox"` to `"/tasks"`
 
-2. **`src/hooks/useEmailAnalytics.ts`**
-   - Similar pattern to `useCallAnalytics` but for `source = 'gmail'`
-   - Also uses a backend function for company-wide data
-   - Computes: daily email volume, top senders, category distribution
+#### 8. `src/lib/notificationRouting.ts`
+- Change `/emails` redirect destination from `"/inbox"` to `"/home"`
+- Change `/inbox/[uuid]` redirect destination from `"/inbox"` to `"/home"`
 
-3. **`supabase/functions/email-analytics/index.ts`**
-   - Backend function for email analytics (same pattern as call analytics)
-   - Aggregates gmail communications for the company
+#### 9. `src/pages/IntegrationCallback.tsx`
+- Change Gmail callback redirect from `"/inbox"` to `"/home"`
 
-4. **`src/components/inbox/EmailAnalyticsDashboard.tsx`**
-   - Dialog-based dashboard (same pattern as `CallAnalyticsDashboard`)
-   - KPI cards: Total Emails, Inbound, Action Required %, Avg Response Time
-   - Daily volume bar chart
-   - Top senders list
-   - Category pie chart
+#### 10. `src/components/auth/RoleGuard.tsx`
+- Remove `"/inbox"` from all allowed-route arrays (3 occurrences)
 
-#### Files to Modify
+#### 11. `src/components/integrations/AutomationsSection.tsx`
+- Change route from `"/inbox"` to `"/home"` for the inbox automation entry
 
-5. **`src/hooks/useCallAnalytics.ts`**
-   - Replace direct Supabase query with `supabase.functions.invoke("ringcentral-call-analytics")`
-   - Keep the same `CallAnalyticsData` interface
-
-6. **`src/components/inbox/InboxView.tsx`**
-   - Add "Email Analytics" button next to "Analytics" button in the toolbar
-   - Import and render `EmailAnalyticsDashboard` dialog
-
-### What Stays the Same
-- `CallAnalyticsDashboard.tsx` UI component (unchanged -- only the data source changes via the hook)
-- Database schema (no migrations needed)
-- RLS policies (unchanged)
-- All other components
+### Files NOT Modified (as per instructions)
+- `src/components/inbox/*` -- 30 component files left untouched
+- `src/pages/SupportInbox.tsx` -- completely separate feature, not related
+- Database schema, edge functions, and all other features remain unchanged
+- `src/pages/Inbox.tsx` will be deleted (the page file itself)
 
