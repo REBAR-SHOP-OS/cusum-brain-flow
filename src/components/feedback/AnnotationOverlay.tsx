@@ -12,6 +12,8 @@ const COLORS = ["#ef4444", "#3b82f6", "#eab308"] as const;
 const LINE_WIDTH = 8;
 
 const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
+const ZAHRA_PROFILE_ID = "2356f04b-0e8d-4b50-bd62-1aa0420f74ab";
+const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID, ZAHRA_PROFILE_ID];
 
 export interface SpeechControls {
   toggle: () => void;
@@ -241,7 +243,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
       const pagePath = window.location.pathname;
 
       // Create tasks for both assignees
-      for (const profileId of [RADIN_PROFILE_ID]) {
+      for (const profileId of FEEDBACK_RECIPIENTS) {
         const { error: taskErr } = await supabase.from("tasks").insert({
           title: `Feedback: ${
             description.trim().slice(0, 80) || "Screenshot annotation"
@@ -259,7 +261,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
       }
 
       // Create notifications — translated to each recipient's preferred_language
-      for (const profileId of [RADIN_PROFILE_ID]) {
+      for (const profileId of FEEDBACK_RECIPIENTS) {
         const { data: targetProf } = await supabase
           .from("profiles")
           .select("user_id, preferred_language")

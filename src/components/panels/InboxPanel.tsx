@@ -267,6 +267,8 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   };
 
   const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
+  const ZAHRA_PROFILE_ID = "2356f04b-0e8d-4b50-bd62-1aa0420f74ab";
+  const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID, ZAHRA_PROFILE_ID];
 
   const handleConfirmFixed = useCallback((id: string) => {
     dismiss(id);
@@ -288,17 +290,19 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      await supabase.from("tasks").insert({
-        title: (meta.original_title as string) || "گزارش مجدد باگ",
-        description: (meta.original_description as string) || null,
-        attachment_url: (meta.original_attachment_url as string) || null,
-        source: "screenshot_feedback",
-        assigned_to: RADIN_PROFILE_ID,
-        created_by_profile_id: profile?.id || null,
-        status: "pending",
-        priority: "high",
-        company_id: companyId,
-      } as any);
+      for (const recipientId of FEEDBACK_RECIPIENTS) {
+        await supabase.from("tasks").insert({
+          title: (meta.original_title as string) || "گزارش مجدد باگ",
+          description: (meta.original_description as string) || null,
+          attachment_url: (meta.original_attachment_url as string) || null,
+          source: "screenshot_feedback",
+          assigned_to: recipientId,
+          created_by_profile_id: profile?.id || null,
+          status: "pending",
+          priority: "high",
+          company_id: companyId,
+        } as any);
+      }
 
       dismiss(item.id);
       toast.success("مشکل مجدداً گزارش شد");
