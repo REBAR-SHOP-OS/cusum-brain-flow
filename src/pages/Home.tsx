@@ -133,7 +133,7 @@ export default function Home() {
   // heroTitle is now rendered inline in JSX (no dangerouslySetInnerHTML)
 
   // Shopfloor-only dashboard for workshop users
-  if (isWorkshop && !isAdmin) {
+  if (isWorkshop && !isAdmin && !hasRole("office") && !hasRole("sales") && !hasRole("accounting")) {
     const shopfloorCards = [
       { label: "MATERIAL POOL", subtitle: "STAGING & FLOW", icon: <Factory className="w-7 h-7" />, to: "/shopfloor/pool" },
       { label: "SHOP FLOOR", subtitle: "MACHINES & STATIONS", icon: <Factory className="w-7 h-7" />, to: "/shopfloor/station" },
