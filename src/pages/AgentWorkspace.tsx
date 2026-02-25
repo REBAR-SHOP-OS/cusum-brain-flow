@@ -196,7 +196,7 @@ export default function AgentWorkspace() {
       }));
 
       const attachedFiles = files?.map(f => ({ name: f.name, url: f.url }));
-      const response = await sendAgentMessage(config.agentType, content, history, extraContext, attachedFiles, slotOverride);
+      const response = await sendAgentMessage(config.agentType, content, history, extraContext, attachedFiles, slotOverride, aiModel);
 
       // Track pixel sequential flow
       if (agentId === "social" && response.nextSlot) {
@@ -291,7 +291,7 @@ export default function AgentWorkspace() {
     } finally {
       setIsLoading(false);
     }
-  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate]);
+  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate, aiModel]);
 
   // Keep ref in sync
   useEffect(() => { sendRef.current = handleSendInternal; }, [handleSendInternal]);

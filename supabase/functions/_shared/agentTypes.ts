@@ -12,6 +12,7 @@ export interface AgentRequest {
   context?: Record<string, unknown>;
   attachedFiles?: { name: string; url: string }[];
   pixelSlot?: number;
+  preferredModel?: string;
 }
 
 export interface RebarStandard {
