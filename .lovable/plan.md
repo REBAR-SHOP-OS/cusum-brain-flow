@@ -1,50 +1,74 @@
 
 
-## Fix: Bender Shows "No Items" After Completing a Bend
+## Fix: "Production blocked: shop drawing not approved" Error on Complete Run
 
 ### Root Cause
 
-When a bend completes (`bend_completed_pieces >= total_pieces`), a database trigger changes the item's phase from `"bending"` to `"clearance"`. The bender query only fetches items with `phase = cut_done` or `phase = bending`, so the completed item disappears from the `items` array after the next refetch.
-
-The `BenderStationView` keeps `currentIndex` unchanged. If the completed item was the last (or only) item, `items[currentIndex]` becomes `undefined` → `currentItem = null` → "No items queued to this bender" is shown, even though other items (like B1503) still exist in the list or should be navigated back to.
-
-### Solution
-
-**File: `src/components/shopfloor/BenderStationView.tsx`**
-
-Add a `useEffect` that watches `items.length` and `currentIndex` to keep the index in bounds:
+In `CutterStationView.tsx` line 310, when completing a run, the code always sets `phase: "cutting"`:
 
 ```typescript
-// Keep currentIndex in bounds when items change (e.g. completed item removed)
-useEffect(() => {
-  if (items.length > 0 && currentIndex >= items.length) {
-    setCurrentIndex(items.length - 1);
-  }
-}, [items.length, currentIndex]);
+.update({
+  completed_pieces: newCompleted,
+  phase: "cutting",  // ← ALWAYS sets this
+})
 ```
 
-This ensures:
-- If the completed item is removed and there are remaining items → index resets to last valid item
-- If ALL items are done → `items.length === 0` → the existing `!currentItem` empty state shows correctly, but now the `onBack` button is available to return to the pool view
+If the item's current phase is `queued` (which it is for all BS09 items), this triggers the `block_production_without_approval` database trigger, which checks:
+- `shop_drawing_status` on the linked order → currently `draft`
+- `qc_internal_approved_at` → currently `null`
 
-**File: `src/pages/StationView.tsx`**
+The trigger correctly raises: `"Production blocked: shop drawing not approved (status: draft)"`
 
-After the last bend item completes and `items` becomes empty in the bender context, auto-clear `selectedItemId` so the user returns to the item list (not stuck in BenderStationView):
+The order `ORD-MM2MM060` genuinely has `shop_drawing_status = 'draft'` and `qc_internal_approved_at = NULL` in the database. So the trigger is working as designed — but the shop floor is already running production, creating a conflict.
 
-Add logic in the effect that watches `filteredItems`: if `selectedItemId` is set but the selected item no longer exists in `filteredItems`, clear it to go back to the grid/list view.
+### Two-Part Fix
+
+**1. `src/components/shopfloor/CutterStationView.tsx` (line 306-312)**
+
+Stop forcing `phase: "cutting"` on complete. The `auto_advance_item_phase` trigger already handles phase advancement based on `completed_pieces`. Just update `completed_pieces` and let the trigger do its job:
 
 ```typescript
-useEffect(() => {
-  if (selectedItemId && filteredItems.length > 0 
-      && !filteredItems.some(i => i.id === selectedItemId)) {
-    setSelectedItemId(null);
-  }
-}, [filteredItems, selectedItemId]);
+// Before:
+.update({
+  completed_pieces: newCompleted,
+  phase: "cutting",  // trigger will auto-advance
+})
+
+// After:
+.update({
+  completed_pieces: newCompleted,
+})
 ```
+
+This removes the `queued → cutting` transition that fires the blocking trigger. The `auto_advance_item_phase` trigger will advance from `queued` → `cut_done`/`complete` directly when pieces are done.
+
+**2. Database trigger `block_production_without_approval`**
+
+Relax the trigger to only block the FIRST transition into cutting (i.e., when starting to cut), not when items are being completed. The real gate should be at run start, not run completion. Update the trigger condition:
+
+```sql
+-- Only block when moving INTO cutting from a non-production phase
+IF NEW.phase = 'cutting' AND OLD.phase = 'queued' THEN
+```
+
+This is actually already handled by fix #1 (not setting phase to cutting on complete). But as a safety net, also add a bypass when the item already has completed pieces (production already started):
+
+```sql
+IF NEW.phase = 'cutting' AND (OLD.phase IS DISTINCT FROM 'cutting') 
+   AND COALESCE(OLD.completed_pieces, 0) = 0 THEN
+```
+
+### Changes Summary
+
+| File | Change |
+|------|--------|
+| `src/components/shopfloor/CutterStationView.tsx` | Remove `phase: "cutting"` from the complete-run update — let the auto-advance trigger handle phase transitions |
+| DB migration | Update `block_production_without_approval` to skip check when `OLD.completed_pieces > 0` (production already underway) |
 
 ### Technical Details
-- Two small `useEffect` additions — no database or edge function changes
-- The DB trigger `auto_advance_item_phase` correctly moves completed bends to `"clearance"` — this is expected behavior
-- The bender query correctly excludes `"clearance"` items — no change needed there
-- Fix is purely about keeping the UI index/state in sync when items disappear from the filtered list
+
+- The `auto_advance_item_phase` trigger (on `cut_plan_items` BEFORE UPDATE) already handles: if `completed_pieces >= total_pieces` and phase is `queued` or `cutting`, advance to `cut_done` (if bend) or `complete` (if straight)
+- By removing the explicit `phase: "cutting"`, we avoid the blocking trigger entirely — the only phase change comes from auto-advance, which transitions to `cut_done`/`complete`, not to `cutting`
+- The DB trigger change is a safety net: if any other code path sets `phase = cutting`, it won't block items that already have production progress
+- No data loss risk — `completed_pieces` still gets persisted correctly
 
