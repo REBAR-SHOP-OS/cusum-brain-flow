@@ -1,48 +1,41 @@
 
 
-## افزودن انتخاب نوع Packing Slip به صفحه Pickup
+## Show Verifier Name on Clearance Cards
 
-### مشکل
-در صفحه Pickup، هنگام کلیک روی "Create Pickup Packing Slip"، مستقیماً یک packing slip جدولی ساده نمایش داده می‌شود. امکان انتخاب نوع slip (مثلاً با عکس) وجود ندارد.
+### Problem
+When items are cleared on the Clearance Station, the card shows a "Cleared" status but does not display who performed the verification. The `verified_by` user ID is stored in `clearance_evidence` but the verifier's name is never fetched or shown.
 
-### راه‌حل
-اضافه کردن یک مرحله میانی قبل از نمایش packing slip که کاربر بتواند نوع slip را انتخاب کند:
-- **Standard** — همان جدول فعلی (DeliveryPackingSlip)
-- **With Photos** — نمای جدید شامل عکس‌های بارگذاری هر آیتم از loading_checklist
+### Solution
+Two changes are needed:
 
-### تغییرات
+### 1. Update `src/hooks/useClearanceData.ts` — fetch verifier name
 
-#### 1. کامپوننت جدید: `src/components/delivery/PhotoPackingSlip.tsx`
-یک packing slip جدید با فرمت عکس‌دار:
-- هر آیتم در یک کارت با عکس (از photoUrls)، mark number، barcode، طول و تعداد نمایش داده می‌شود
-- طراحی بهینه برای پرینت (A4)
-- همان هدر و فوتر DeliveryPackingSlip
+Modify the query to join `clearance_evidence` with `profiles` on `verified_by` to retrieve `full_name`.
 
-#### 2. کامپوننت جدید: `src/components/delivery/PackingSlipTypeSelector.tsx`
-یک دیالوگ/مودال ساده با دو گزینه:
-- "Standard Table" — آیکون جدول
-- "With Loading Photos" — آیکون عکس
-- دکمه Generate
+- After fetching `clearance_evidence`, collect all non-null `verified_by` user IDs
+- Query `profiles` table for those IDs to get `full_name`
+- Map the verifier name into each `ClearanceItem`
+- Add `verified_by_name: string | null` to the `ClearanceItem` interface
 
-#### 3. تغییر `src/pages/PickupStation.tsx`
-- state جدید: `slipType: "standard" | "photo" | null`
-- وقتی "Create Pickup Packing Slip" کلیک می‌شود، به جای `setShowPackingSlip(true)` مستقیم، ابتدا selector نمایش داده شود
-- بعد از انتخاب نوع، بر اساس نوع انتخابی یکی از دو کامپوننت render شود
-- `photoUrls` که از قبل در state موجود است، به PhotoPackingSlip پاس داده شود
+### 2. Update `src/components/clearance/ClearanceCard.tsx` — display verifier name
 
-### جزئیات فنی
+When the item is cleared (`isCleared === true`), show the verifier's name and timestamp below the "Cleared" button or in the header area:
 
 ```text
-User clicks "Create Pickup Packing Slip"
-            |
-   PackingSlipTypeSelector (modal)
-      |                    |
-  "Standard"          "With Photos"
-      |                    |
-DeliveryPackingSlip   PhotoPackingSlip
+Cleared by John Smith · Feb 25, 2026
 ```
 
-- بدون تغییر دیتابیس
-- بدون تغییر در flow دلیوری (Deliveries.tsx بدون تغییر باقی می‌ماند)
-- PhotoPackingSlip از همان `photoUrls` Map که در PickupStation محاسبه شده استفاده می‌کند
+### Technical Details
 
+**`useClearanceData.ts` changes:**
+- Add `verified_by_name: string | null` to `ClearanceItem` interface
+- After fetching evidence, collect unique `verified_by` IDs
+- Query `profiles` for `id, full_name` where `id` in those IDs
+- Build a lookup map and attach `verified_by_name` to each item
+
+**`ClearanceCard.tsx` changes:**
+- Access `item.verified_by_name` and `item.verified_at`
+- When `isCleared`, render a small text line showing verifier name and date
+- Format: `"Cleared by {name} · {date}"` or `"Cleared · {date}"` if name unavailable
+
+No database changes required — the `verified_by` column already exists and stores user IDs. The `profiles` table already has `full_name`.
