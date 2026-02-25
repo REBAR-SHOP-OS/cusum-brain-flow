@@ -78,6 +78,7 @@ interface EmployeeProfile {
 
 // ─── Constants ──────────────────────────────────────────
 const NEEL_PROFILE_ID = "a94932c5-e873-46fd-9658-dc270f6f5ff3";
+const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
 const EXCLUDED_EMAILS = ["ai@rebar.shop", "kourosh@rebar.shop"];
 
 const COLUMN_COLORS = [
@@ -555,6 +556,32 @@ export default function Tasks() {
       } catch (e) {
         console.error("Failed to create approval task", e);
       }
+
+      // Create feedback verification task for original reporter
+      if ((task as any).source === "screenshot_feedback" && task.created_by_profile_id) {
+        try {
+          await supabase.from("tasks").insert({
+            title: `✅ بازخورد شما بررسی شد: ${task.title}`,
+            description: task.description || null,
+            assigned_to: task.created_by_profile_id,
+            created_by_profile_id: task.assigned_to,
+            priority: "high",
+            status: "open",
+            company_id: task.company_id,
+            source: "feedback_verification",
+            attachment_url: (task as any).attachment_url || null,
+            metadata: {
+              original_task_id: task.id,
+              original_title: task.title,
+              original_description: task.description || null,
+              original_attachment_url: (task as any).attachment_url || null,
+              original_assigned_to: task.assigned_to,
+            },
+          } as any);
+        } catch (e) {
+          console.error("Failed to create feedback verification task", e);
+        }
+      }
     }
 
     // Dismiss related notifications when reopening
@@ -564,6 +591,50 @@ export default function Tasks() {
 
     toast.success(isCompleted ? "Task reopened" : "Task completed");
     loadData();
+  };
+
+  const confirmFeedbackFix = async (task: TaskRow) => {
+    const { error } = await supabase.from("tasks").update({
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", task.id);
+    if (error) { toast.error(error.message); return; }
+    await writeAudit(task.id, "complete", "status", "open", "completed");
+    toast.success("فیدبک تأیید شد ✅");
+    loadData();
+  };
+
+  const reReportFeedback = async (task: TaskRow) => {
+    const meta = (task as any).metadata as any;
+    if (!meta) { toast.error("Missing metadata"); return; }
+    try {
+      // Create new high-priority task for original assignee (Radin/Sattar)
+      const assignTo = meta.original_assigned_to || RADIN_PROFILE_ID;
+      await supabase.from("tasks").insert({
+        title: `🔄 مشکل حل نشده: ${meta.original_title || task.title}`,
+        description: meta.original_description || task.description || null,
+        assigned_to: assignTo,
+        created_by_profile_id: task.assigned_to, // the reporter
+        priority: "high",
+        status: "open",
+        company_id: task.company_id,
+        source: "screenshot_feedback",
+        attachment_url: meta.original_attachment_url || null,
+      } as any);
+
+      // Complete the verification task
+      await supabase.from("tasks").update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", task.id);
+      await writeAudit(task.id, "re_reported", "status", "open", "completed");
+      toast.success("مشکل دوباره گزارش شد 🔄");
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to re-report");
+    }
   };
 
   const approveAndClose = async (task: TaskRow) => {
@@ -853,25 +924,52 @@ export default function Tasks() {
                         <p className="text-xs text-muted-foreground text-center py-4">No tasks</p>
                       )}
 
-                      {activeTasks.map(task => (
+                      {activeTasks.map(task => {
+                        const isFeedbackVerification = (task as any).source === "feedback_verification";
+                        return (
                         <div
                           key={task.id}
-                          className="flex items-start gap-2 px-2.5 py-2 rounded-md bg-background border border-border/50 hover:border-border transition-colors group"
+                          className={cn(
+                            "flex items-start gap-2 px-2.5 py-2 rounded-md border transition-colors group",
+                            isFeedbackVerification
+                              ? "bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50"
+                              : "bg-background border-border/50 hover:border-border"
+                          )}
                         >
-                          <Checkbox
-                            checked={false}
-                            disabled={!canToggleTask(task)}
-                            title={!canToggleTask(task) ? "Only the assigned user or creator can mark this complete" : undefined}
-                            onCheckedChange={() => toggleComplete(task)}
-                            className="mt-0.5 shrink-0"
-                          />
+                          {isFeedbackVerification ? (
+                            <div className="flex flex-col gap-1 mt-0.5 shrink-0">
+                              <button
+                                onClick={() => confirmFeedbackFix(task)}
+                                title="مشکل حل شده — تأیید"
+                                className="p-0.5 rounded hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => reReportFeedback(task)}
+                                title="مشکل حل نشده — گزارش مجدد"
+                                className="p-0.5 rounded hover:bg-destructive/20 text-destructive transition-colors"
+                              >
+                                <RefreshCw className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <Checkbox
+                              checked={false}
+                              disabled={!canToggleTask(task)}
+                              title={!canToggleTask(task) ? "Only the assigned user or creator can mark this complete" : undefined}
+                              onCheckedChange={() => toggleComplete(task)}
+                              className="mt-0.5 shrink-0"
+                            />
+                          )}
                           <button
                             className="flex-1 text-left min-w-0"
                             onClick={() => openDrawer(task)}
                           >
                             <span className={cn(
                               "text-sm font-medium block truncate",
-                              isOverdue(task) && "text-destructive"
+                              isOverdue(task) && "text-destructive",
+                              isFeedbackVerification && "text-emerald-700 dark:text-emerald-300"
                             )}>
                               {task.title}
                             </span>
@@ -898,7 +996,8 @@ export default function Tasks() {
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
 
                       {completedTasks.length > 0 && (
                         <>
