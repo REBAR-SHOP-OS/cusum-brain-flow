@@ -255,11 +255,6 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
             created_by_profile_id: submitterProfileId,
             source: "screenshot_feedback",
             attachment_url: publicUrl,
-            metadata: JSON.stringify({
-              submitter_name: submitterName,
-              submitter_email: user?.email,
-              submitter_profile_id: submitterProfileId,
-            }),
           } as any);
         if (taskErr) throw taskErr;
       }
