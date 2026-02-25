@@ -1,17 +1,50 @@
 
 
-## Make Floating Mic Button Bigger for Glove Use
+## Fix: Screenshot Captures Full Scrollable Page Content
 
-### Change
+### Problem
 
-**File: `src/components/feedback/FloatingMicButton.tsx`**
+When taking a screenshot from the bottom of the `/home` page, only the visible viewport area is captured. The content above/below the fold is cut off.
 
-Increase the button from 56px to 72px and the icon from 28px to 36px for easier glove tapping on the shop floor.
+**Root cause:** The layout has multiple nested `overflow-hidden` containers:
 
-- `BTN_SIZE`: 56 → 72
-- Button classes: `w-14 h-14` → `w-[72px] h-[72px]`
-- Icon classes: `w-7 h-7` → `w-9 h-9`
-- Add thicker ring and larger shadow for better visibility
+```text
+div.flex.flex-col.h-screen          ← h-screen
+  div.flex.flex-1.overflow-hidden   ← clips content
+    main#main-content.overflow-hidden  ← clips content
+      <ScrollArea>                     ← Radix scroll viewport
+        <actual page content>          ← full height
+```
 
-Single file, ~4 line changes.
+The current capture code expands the `main-content` target and its inner scroll containers, but does **not** walk up the DOM to expand ancestor containers that also clip with `overflow-hidden`. So even though the Radix scroll viewport gets expanded, the parent `div` and `main` still clip the rendered output.
+
+### Fix
+
+**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`**
+
+After expanding the target and its children, also walk **up** the DOM from the target to `document.body`, expanding any ancestor that has `overflow: hidden`, `overflow: auto`, or `overflow: scroll`, plus removing fixed `height` constraints like `h-screen`.
+
+Add this block after the existing child-expansion logic (after line 56):
+
+```typescript
+// Walk up ancestors to remove clipping
+let parent = target.parentElement;
+while (parent && parent !== document.body) {
+  const cs = getComputedStyle(parent);
+  if (cs.overflow !== "visible" || cs.overflowY !== "visible" || cs.overflowX !== "visible") {
+    expand(parent, "; overflow: visible !important; max-height: none !important; height: auto !important;");
+  }
+  parent = parent.parentElement;
+}
+```
+
+This ensures that every clipping ancestor (the `flex-1 overflow-hidden` wrapper, the `h-screen` root) temporarily allows content to overflow during capture, then gets restored in the `finally` block.
+
+### What stays the same
+- Overlay/dialog screenshot logic (uses `window.innerWidth/Height`, unaffected)
+- The restore logic in `finally` already handles all expanded elements
+- Retry-without-images fallback, timeouts, heavy page detection
+
+### Technical detail
+The `expandedEls` array already tracks every modified element and restores `style.cssText` in the `finally` block, so this change is safe — no permanent layout side effects.
 
