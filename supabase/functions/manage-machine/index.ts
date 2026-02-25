@@ -205,7 +205,7 @@ serve(async (req) => {
             if (events.length > 0) {
               const { error: evtErr } = await supabaseService
                 .from("activity_events")
-                .insert(events.map((e: any) => ({ ...e, source: "system" })));
+                .insert(events.map((e: any) => ({ ...e, source: "system", company_id: machine.company_id })));
               if (evtErr) console.error("Failed to log events:", evtErr);
             }
 
@@ -244,7 +244,7 @@ serve(async (req) => {
             if (events.length > 0) {
               const { error: evtErr } = await supabaseService
                 .from("activity_events")
-                .insert(events.map((e: any) => ({ ...e, source: "system" })));
+                .insert(events.map((e: any) => ({ ...e, source: "system", company_id: machine.company_id })));
               if (evtErr) console.error("Failed to log events:", evtErr);
             }
 
@@ -378,7 +378,9 @@ serve(async (req) => {
               metadata: { machineId, barCode, process: queuedRun.process },
             });
             if (events.length > 0) {
-              await supabaseService.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system" })));
+              try {
+                await supabaseService.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system", company_id: machine.company_id })));
+              } catch (evtErr) { console.error("Failed to log events:", evtErr); }
             }
             return json({ error: `Capability violation: ${machine.name} cannot ${queuedRun.process} ${barCode}` }, 403);
           }
@@ -395,7 +397,9 @@ serve(async (req) => {
               metadata: { machineId, barCode, requestedQty, maxBars: capability.max_bars },
             });
             if (events.length > 0) {
-              await supabaseService.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system" })));
+              try {
+                await supabaseService.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system", company_id: machine.company_id })));
+              } catch (evtErr) { console.error("Failed to log events:", evtErr); }
             }
             return json({ error: `Capacity exceeded: max ${capability.max_bars} bars for ${barCode}` }, 403);
           }
@@ -544,7 +548,7 @@ serve(async (req) => {
     if (events.length > 0) {
       const { error: evtErr } = await supabaseService
         .from("activity_events")
-        .insert(events.map((e: any) => ({ ...e, source: "system" })));
+        .insert(events.map((e: any) => ({ ...e, source: "system", company_id: machine.company_id })));
       if (evtErr) console.error("Failed to log events:", evtErr);
     }
 

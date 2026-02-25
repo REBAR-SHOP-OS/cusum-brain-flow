@@ -101,10 +101,10 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
     try {
       const piecesToAdd = unitCount;
       const newCount = Math.min(bendCompleted + piecesToAdd, currentItem.total_pieces);
-      // Update bend_completed_pieces and set phase to 'bending'
+      // Update bend_completed_pieces — let auto_advance_item_phase trigger handle phase transitions
       const { error } = await supabase
         .from("cut_plan_items")
-        .update({ bend_completed_pieces: newCount, phase: "bending" } as any)
+        .update({ bend_completed_pieces: newCount } as any)
         .eq("id", currentItem.id);
 
       if (error) throw error;

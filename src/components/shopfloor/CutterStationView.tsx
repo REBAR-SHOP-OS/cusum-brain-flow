@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { StationHeader } from "./StationHeader";
@@ -41,6 +41,13 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [manualFloorConfirmed, setManualFloorConfirmed] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [completedAtRunStart, setCompletedAtRunStart] = useState<number | null>(null);
+
+  // Keep currentIndex in bounds when items change (e.g. completed item removed by realtime)
+  useEffect(() => {
+    if (items.length > 0 && currentIndex >= items.length) {
+      setCurrentIndex(items.length - 1);
+    }
+  }, [items.length, currentIndex]);
 
   const currentItem = items[currentIndex] || null;
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
@@ -228,7 +235,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         .from("cut_plan_items")
         .update({ completed_pieces: newCompleted } as any)
         .eq("id", currentItem.id)
-        .then(); // fire-and-forget, don't block UI
+        .then(({ error }) => {
+          if (error) console.error("[CutterStation] Stroke persist failed:", error.message);
+        });
     }
 
     toast({
