@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { PickupVerification } from "@/components/shopfloor/PickupVerification";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
 import { DeliveryPackingSlip } from "@/components/delivery/DeliveryPackingSlip";
+import { PhotoPackingSlip } from "@/components/delivery/PhotoPackingSlip";
+import { PackingSlipTypeSelector } from "@/components/delivery/PackingSlipTypeSelector";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,8 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [showPackingSlip, setShowPackingSlip] = useState(false);
+  const [showSlipSelector, setShowSlipSelector] = useState(false);
+  const [slipType, setSlipType] = useState<"standard" | "photo" | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Map<string, string>>(new Map());
 
   const { checklistMap } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
@@ -85,6 +89,22 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
     }
   };
 
+  if (showPackingSlip && selectedBundle && slipType === "photo") {
+    const selectedItems = selectedBundle.items.filter((i) => checkedItems.has(i.id));
+    const slipNumber = `PKP-${Date.now().toString(36).toUpperCase()}`;
+    return (
+      <PhotoPackingSlip
+        slipNumber={slipNumber}
+        customerName={selectedBundle.projectName}
+        date={new Date().toISOString()}
+        items={selectedItems}
+        photoUrls={photoUrls}
+        onClose={() => { setShowPackingSlip(false); setSlipType(null); }}
+        scope={selectedBundle.planName}
+      />
+    );
+  }
+
   if (showPackingSlip && selectedBundle) {
     const selectedItems = selectedBundle.items.filter((i) => checkedItems.has(i.id));
     const slipNumber = `PKP-${Date.now().toString(36).toUpperCase()}`;
@@ -95,7 +115,7 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
         customerName={selectedBundle.projectName}
         date={new Date().toISOString()}
         items={selectedItems}
-        onClose={() => setShowPackingSlip(false)}
+        onClose={() => { setShowPackingSlip(false); setSlipType(null); }}
         scope={selectedBundle.planName}
       />
     );
@@ -155,13 +175,23 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
           </span>
           <Button
             disabled={checkedItems.size === 0}
-            onClick={() => setShowPackingSlip(true)}
+            onClick={() => setShowSlipSelector(true)}
             className="gap-2"
           >
             <FileText className="w-4 h-4" />
             Create Pickup Packing Slip
           </Button>
         </div>
+        <PackingSlipTypeSelector
+          open={showSlipSelector}
+          hasPhotos={photoUrls.size > 0}
+          onClose={() => setShowSlipSelector(false)}
+          onSelect={(type) => {
+            setSlipType(type);
+            setShowSlipSelector(false);
+            setShowPackingSlip(true);
+          }}
+        />
       </div>
     );
   }
