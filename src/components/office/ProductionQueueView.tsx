@@ -65,10 +65,7 @@ export function ProductionQueueView() {
   const queryClient = useQueryClient();
 
   const handleDeleteBarlist = async (barlistId: string) => {
-    // Work orders SET NULL via FK, machine_queue_items & production_tasks & barlist_items CASCADE via FK
-    const { error: woErr } = await supabase.from("work_orders").delete().eq("barlist_id", barlistId);
-    if (woErr) { toast({ title: "Error cleaning work orders", description: woErr.message, variant: "destructive" }); return; }
-
+    // work_orders.barlist_id → SET NULL via FK; barlist_items, machine_queue_items, production_tasks → CASCADE via FK
     const { error } = await supabase.from("barlists").delete().eq("id", barlistId);
     if (error) {
       toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" });
@@ -80,14 +77,8 @@ export function ProductionQueueView() {
   };
 
   const handleDeleteProject = async (projectId: string): Promise<boolean> => {
-    // 1. Work orders: SET NULL via FK on project delete, but explicit delete for barlist-linked ones
+    // 1. Delete barlists (work_orders.barlist_id → SET NULL via FK; barlist_items etc → CASCADE)
     const projectBarlists = barlists.filter(b => b.project_id === projectId);
-    for (const b of projectBarlists) {
-      const { error: woErr } = await supabase.from("work_orders").delete().eq("barlist_id", b.id);
-      if (woErr) { toast({ title: "Error cleaning work orders", description: woErr.message, variant: "destructive" }); return false; }
-    }
-
-    // 2. Delete barlists (CASCADE handles barlist_items, machine_queue_items, production_tasks)
     for (const b of projectBarlists) {
       const { error } = await supabase.from("barlists").delete().eq("id", b.id);
       if (error) { toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" }); return false; }
