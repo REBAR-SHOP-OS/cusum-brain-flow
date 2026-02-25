@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Plus, MoreHorizontal, Brain as BrainIcon,
-  Image, Video, Globe, FileText, Filter, Play, X, Database
+  Image, Video, Globe, FileText, Filter, Play, X, Database, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
@@ -13,6 +13,9 @@ import { AddKnowledgeDialog } from "@/components/brain/AddKnowledgeDialog";
 import { ImportDatabaseDialog } from "@/components/brain/ImportDatabaseDialog";
 import { KnowledgeDetailDialog } from "@/components/brain/KnowledgeDetailDialog";
 import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
+import { toast } from "sonner";
 
 interface KnowledgeItem {
   id: string;
@@ -158,7 +161,10 @@ export default function Brain() {
   const [selectedItem, setSelectedItem] = useState<KnowledgeItem | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
+  const [clearAllLoading, setClearAllLoading] = useState(false);
   const queryClient = useQueryClient();
+  const { companyId } = useCompanyId();
 
   const { data: knowledge, isLoading } = useQuery({
     queryKey: ["knowledge"],
@@ -207,6 +213,25 @@ export default function Brain() {
 
   const refetchKnowledge = () => queryClient.invalidateQueries({ queryKey: ["knowledge"] });
 
+  const handleClearAll = async () => {
+    if (!companyId) return;
+    setClearAllLoading(true);
+    try {
+      const { error } = await supabase
+        .from("knowledge")
+        .delete()
+        .eq("company_id", companyId);
+      if (error) throw error;
+      toast.success("All brain items cleared");
+      refetchKnowledge();
+    } catch {
+      toast.error("Failed to clear brain items");
+    } finally {
+      setClearAllLoading(false);
+      setClearAllOpen(false);
+    }
+  };
+
   const renderCard = (item: KnowledgeItem) => {
     const onClick = () => setSelectedItem(item);
     switch (item.category) {
@@ -234,6 +259,17 @@ export default function Brain() {
         <div className="flex items-center gap-1.5 sm:gap-2">
           <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9">
             <MoreHorizontal className="w-4 h-4 sm:w-5 sm:h-5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 sm:gap-2 text-xs sm:text-sm text-destructive hover:text-destructive"
+            onClick={() => setClearAllOpen(true)}
+            disabled={!knowledge?.length}
+          >
+            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Clear All</span>
+            <span className="sm:hidden">Clear</span>
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 text-xs sm:text-sm" onClick={() => setImportOpen(true)}>
             <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -394,6 +430,16 @@ export default function Brain() {
         item={selectedItem}
         onClose={() => setSelectedItem(null)}
         onUpdated={refetchKnowledge}
+      />
+      <ConfirmActionDialog
+        open={clearAllOpen}
+        onOpenChange={setClearAllOpen}
+        title="Delete all brain items?"
+        description={`This will permanently remove all ${knowledge?.length ?? 0} items. This action cannot be undone.`}
+        variant="destructive"
+        confirmLabel="Yes, Delete All"
+        onConfirm={handleClearAll}
+        loading={clearAllLoading}
       />
     </div>
   );
