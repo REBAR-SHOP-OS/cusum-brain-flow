@@ -255,7 +255,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  const handleToggle = (item: Notification) => {
+  const handleToggle = async (item: Notification) => {
     if (item.status === "unread") markRead(item.id);
 
     // If feedback_resolved and user is @rebar.shop, open review dialog
@@ -264,6 +264,36 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     if (isFeedbackResolved && isRebarUser) {
       setReviewItem(item);
       return;
+    }
+
+    // If To-do with task_approval category and Feedback in title, open review dialog with task data
+    const meta = item.metadata as Record<string, unknown> | null;
+    if (meta?.category === "task_approval" && item.title.includes("Feedback:") && meta?.human_task_id) {
+      try {
+        const { data: task } = await supabase
+          .from("tasks" as any)
+          .select("id, title, description, attachment_url")
+          .eq("id", meta.human_task_id as string)
+          .maybeSingle();
+
+        if (task) {
+          const t = task as any;
+          const reviewNotif: Notification = {
+            ...item,
+            metadata: {
+              ...meta,
+              original_title: t.title,
+              original_description: t.description,
+              original_attachment_url: t.attachment_url,
+              human_task_id: t.id,
+            },
+          };
+          setReviewItem(reviewNotif);
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to fetch task for feedback review:", err);
+      }
     }
 
     if (item.linkTo) {
@@ -288,10 +318,24 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
   const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID];
 
-  const handleConfirmFixed = useCallback((id: string) => {
+  const handleConfirmFixed = useCallback(async (id: string) => {
+    // Find the notification to check for linked task
+    const allNotifs = [...notifications, ...todos, ...ideas];
+    const notif = allNotifs.find(n => n.id === id);
+    const meta = notif?.metadata as Record<string, unknown> | null;
+    const humanTaskId = meta?.human_task_id as string | undefined;
+
+    // Complete linked task if exists
+    if (humanTaskId) {
+      await supabase
+        .from("tasks" as any)
+        .update({ status: "completed", completed_at: new Date().toISOString() } as any)
+        .eq("id", humanTaskId);
+    }
+
     dismiss(id);
     toast.success("مشکل تأیید و بسته شد");
-  }, [dismiss]);
+  }, [dismiss, notifications, todos, ideas]);
 
   const handleReReport = useCallback(async (item: Notification, comment?: string) => {
     try {
@@ -325,6 +369,15 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
           priority: "high",
           company_id: companyId,
         } as any);
+      }
+
+      // Complete the current linked task if exists
+      const humanTaskId = meta.human_task_id as string | undefined;
+      if (humanTaskId) {
+        await supabase
+          .from("tasks" as any)
+          .update({ status: "completed", completed_at: new Date().toISOString() } as any)
+          .eq("id", humanTaskId);
       }
 
       dismiss(item.id);
