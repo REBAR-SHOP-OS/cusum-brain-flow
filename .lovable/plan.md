@@ -1,78 +1,76 @@
 
-هدف فوری: مشکل Pixel را به‌صورت ریشه‌ای پایدار کنیم تا با زدن اسلات (۱ تا ۵ یا all) **همیشه ابتدا تصویر واقعی ساخته شود** و بعد کپشن بیاید، و لوگوی شرکت هم واقعاً وارد فرآیند تولید تصویر شود.
 
-آنچه الان در کد و لاگ‌ها مشخص است:
-1) مسیر deterministic برای Pixel Step 2 فعال است و در پاسخ موفق، markdown تصویر تولید می‌شود (`![...](...social-images...)`)، پس مسیر کلی درست است.
-2) خطای کاربر (`Model returned no image`) از `generatePixelImage` می‌آید؛ یعنی پاسخ AI دریافت می‌شود ولی پارسر فعلی تصویر را پیدا نمی‌کند.
-3) پارسر فعلی فقط `choices[0].message.images` را چک می‌کند، در حالی‌که در پروژه نمونه‌ی دیگر داریم که برای همین مدل گاهی خروجی در `message.parts[].inline_data.data` می‌آید.
-4) Resolver لوگو در ai-agent با `title ilike '%logo%'` جستجو می‌کند، ولی رکورد فعلی social با عنوان `favicon` ذخیره شده؛ پس عملاً لوگو اکثر مواقع اصلاً attach نمی‌شود.
-5) بعضی URLهای لوگو در Brain قدیمی/نامعتبر هستند (مثلاً لینک 404 یا signed URL منقضی‌شده) و باید از مسیر قابل‌اتکاتر resolve شوند.
+## اضافه کردن دکمه‌های تایید و بازسازی زیر هر پست Pixel و ذخیره در تقویم
 
-برنامه اجرای اصلاح ریشه‌ای (بدون تغییر در رفتار سایر ایجنت‌ها):
-1) یکپارچه‌سازی استخراج تصویر از پاسخ AI (robust parser)
-- فایل: `supabase/functions/ai-agent/index.ts`
-- helper استخراج تصویر اضافه می‌شود که این مسیرها را به‌ترتیب پشتیبانی کند:
-  - `choices[0].message.images[0].image_url.url`
-  - `choices[0].message.parts[*].inline_data.data` (تبدیل به data URL)
-  - `choices[0].message.content[*].image_url.url` (اگر provider به این فرمت برگرداند)
-- خروجی helper: `dataUrl | null` + metadata برای لاگ.
-- نتیجه: حالت «مدل تصویر داده ولی کد نفهمیده» حذف می‌شود.
+### وضعیت فعلی
+- بعد از تولید عکس و کپشن، `PixelChatRenderer` آن‌ها را به صورت `PixelPostCard` کوچک نمایش می‌دهد (فقط thumbnail + متن + یک دکمه تیک).
+- دکمه‌های Approve بزرگ در انتهای ChatThread نمایش داده می‌شوند (خارج از پیام).
+- `onViewPost` اصلاً به ChatThread پاس داده نمی‌شود (خط ۵۴۴ فایل AgentWorkspace).
+- وقتی کاربر Approve می‌زند، `handleApprovePixelSlot` پست را در `social_posts` ذخیره می‌کند.
 
-2) ایجاد pipeline تولید تصویر با Retry + Fallback مدل
-- فایل: `supabase/functions/ai-agent/index.ts`
-- به‌جای یک call تک‌مرحله‌ای:
-  - Attempt 1: `google/gemini-2.5-flash-image` با لوگو
-  - Attempt 2: همان مدل بدون لوگو (اگر لوگوی ورودی عامل fail باشد)
-  - Attempt 3: `google/gemini-3-pro-image-preview` با لوگو
-- اگر در هر Attempt تصویر استخراج شد → آپلود در `social-images` و return.
-- فقط اگر همه شکست خوردند خطای فنی دقیق برگردد.
-- نتیجه: پایداری بالا و حذف failureهای مقطعی.
+### هدف
+- زیر هر تصویر + کپشن تولیدشده، دو آیکون نمایش داده شود:
+  1. **تایید (Approve)**: ذخیره پست در جدول `social_posts` برای همان روز انتخاب‌شده و نمایش در تقویم Social Media Manager
+  2. **بازسازی (Regenerate)**: ارسال دستور بازسازی تصویر و کپشن به ایجنت
 
-3) اصلاح Resolver لوگو برای enforce واقعی
-- فایل: `supabase/functions/ai-agent/index.ts`
-- lookup لوگو برای social اصلاح می‌شود:
-  - جستجو بر اساس `metadata.agent = 'social'` و `category = 'image'` با اولویت title شامل `logo` یا `favicon`
-  - اگر `source_url` از `estimation-files` باشد، مسیر فایل استخراج و **signed URL تازه** از پروژه فعلی ساخته شود (نه اتکا به URL منقضی‌شده).
-  - fallback نهایی: استفاده از مسیر ثابت برندیگ پروژه (`/brand/rebar-logo.png`) با مبنای origin درخواست.
-- نتیجه: ورودی لوگو عملاً همیشه قابل resolve می‌شود.
+### تغییرات
 
-4) enforce ترتیب خروجی: اول تصویر، بعد کپشن
-- فایل: `supabase/functions/ai-agent/index.ts`
-- در پاسخ deterministic:
-  - خط اول markdown تصویر
-  - سپس Caption/Hashtags/Contact
-- در حالت failure کامل:
-  - به‌جای نمایش کپشن بدون تصویر، خطای فنی واضح می‌دهد تا UI پاسخ اشتباه «پست بدون عکس» نداشته باشد.
-- نتیجه: رفتار خروجی دقیقاً مطابق نیاز شما.
+#### 1. بازطراحی `PixelPostCard` (فایل: `src/components/social/PixelPostCard.tsx`)
+- نمایش تصویر بزرگ‌تر (نه فقط thumbnail) در بالا
+- نمایش کپشن و هشتگ زیر تصویر
+- اضافه کردن دو آیکون زیر کپشن:
+  - آیکون **CheckCircle** (تایید): با کلیک، callback `onApprove(post)` صدا زده می‌شود
+  - آیکون **RefreshCw** (بازسازی): با کلیک، callback `onRegenerate(post)` صدا زده می‌شود
+- بعد از تایید، آیکون تایید سبز شود و غیرفعال گردد و متن "Saved to calendar" نمایش داده شود
 
-5) هم‌راستاسازی مسیر tool-call برای جلوگیری از Drift
-- فایل: `supabase/functions/_shared/agentToolExecutor.ts`
-- branch مربوط به `generate_image` به همان parser/retry/logo-resolver جدید همسان می‌شود.
-- نتیجه: چه مسیر deterministic اجرا شود چه مسیر tool، خروجی یکسان و پایدار خواهد بود.
+#### 2. به‌روزرسانی `PixelChatRenderer` (فایل: `src/components/social/PixelChatRenderer.tsx`)
+- اضافه کردن prop جدید `onApprovePost: (post: PixelPostData) => void`
+- اضافه کردن prop جدید `onRegeneratePost: (post: PixelPostData) => void`
+- پاس دادن این دو callback به هر `PixelPostCard`
 
-6) سخت‌گیری بیشتر روی قوانین Pixel (متن ساختگی ممنوع)
-- فایل: `supabase/functions/_shared/agents/marketing.ts`
-- rule صریح حفظ/تقویت می‌شود که placeholderهایی مثل `[Image of ...]` ممنوع است و فقط URL واقعی تصویر قابل قبول است.
-- نتیجه: از بازگشت رفتار متنی جعلی جلوگیری می‌شود.
+#### 3. به‌روزرسانی `ChatMessage` (فایل: `src/components/chat/ChatMessage.tsx`)
+- اضافه کردن props `onApprovePost` و `onRegeneratePost` به interface
+- پاس دادن آن‌ها به `PixelChatRenderer`
 
-تست پذیرش (اجباری، end-to-end):
-1) `/agent/social` → New chat → انتخاب `1`
-- باید تصویر واقعی render شود (نه warning)، و زیر آن caption بیاید.
-2) انتخاب زمان مثل `06:30` یا `2:30 PM`
-- باید به اسلات درست map شود و تصویر بسازد.
-3) انتخاب `all`
-- باید ۵ تصویر واقعی پشت‌سرهم برگردد.
-4) تأیید لوگو
-- در لاگ/payload مشخص باشد لوگو resolve شده و در request مدل استفاده شده.
-5) Regression
-- agentهای غیر social هیچ تغییر رفتاری نداشته باشند.
+#### 4. به‌روزرسانی `ChatThread` (فایل: `src/components/chat/ChatThread.tsx`)
+- اضافه کردن props `onApprovePost` و `onRegeneratePost`
+- پاس دادن آن‌ها به هر `ChatMessage`
+- حذف دکمه‌های بزرگ Approve از انتهای thread (چون حالا هر پست دکمه خودش را دارد)
 
-ریسک‌ها و کنترل:
-- ریسک: provider فرمت پاسخ را تغییر دهد → parser چندفرمته + fallback مدل.
-- ریسک: URL لوگو نامعتبر/منقضی باشد → signed URL تازه + fallback مسیر ثابت برندیگ.
-- ریسک: failure مقطعی شبکه/مدل → retry مرحله‌ای و پاسخ خطای شفاف.
+#### 5. به‌روزرسانی `AgentWorkspace` (فایل: `src/pages/AgentWorkspace.tsx`)
+- ایجاد `handleApprovePost` callback:
+  - دریافت `PixelPostData` (شامل imageUrl, caption, hashtags)
+  - ذخیره در `social_posts` با status `draft`، تاریخ `selectedDate`، و `user_id`
+  - نمایش toast موفقیت
+- ایجاد `handleRegeneratePost` callback:
+  - ارسال پیام `regenerate` به ایجنت (از طریق `handleSendInternal`)
+- پاس دادن این دو callback به `ChatThread`
 
-فایل‌هایی که در اجرا تغییر می‌کنند:
-- `supabase/functions/ai-agent/index.ts` (اصلاح اصلی)
-- `supabase/functions/_shared/agentToolExecutor.ts` (همسان‌سازی ابزار)
-- `supabase/functions/_shared/agents/marketing.ts` (تقویت قواعد رفتاری)
+### جزییات فنی ذخیره پست در تقویم
+
+هنگام تایید، این فیلدها در `social_posts` ذخیره می‌شود:
+```text
+platform: "instagram" (پیش‌فرض)
+status: "draft"
+title: caption (اولین ۵۰ کاراکتر)
+content: caption کامل
+image_url: imageUrl از پست
+hashtags: آرایه هشتگ‌ها (split از string)
+scheduled_date: selectedDate (تاریخ انتخاب‌شده در تقویم Pixel)
+user_id: user.id
+```
+
+### فایل‌های تغییریافته
+
+| فایل | تغییر |
+|------|-------|
+| `src/components/social/PixelPostCard.tsx` | بازطراحی UI + اضافه کردن دکمه approve و regenerate |
+| `src/components/social/PixelChatRenderer.tsx` | اضافه کردن props و پاس دادن callbackها |
+| `src/components/chat/ChatMessage.tsx` | اضافه کردن props جدید |
+| `src/components/chat/ChatThread.tsx` | اضافه کردن props + حذف دکمه‌های بزرگ قبلی |
+| `src/pages/AgentWorkspace.tsx` | ایجاد handleApprovePost و handleRegeneratePost |
+
+### نکات مهم
+- سایر ایجنت‌ها تغییری نمی‌کنند (props اختیاری هستند)
+- تغییرات دیتابیس نیاز نیست (جدول `social_posts` از قبل موجود است)
+- بعد از ذخیره، پست در صفحه `/social-media-manager` در تقویم هفتگی قابل مشاهده خواهد بود
