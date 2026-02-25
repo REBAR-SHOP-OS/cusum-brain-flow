@@ -69,8 +69,8 @@ export function ScreenshotFeedbackButton() {
     const captureWidth  = isOverlay ? window.innerWidth  : target.scrollWidth;
     const captureHeight = isOverlay ? window.innerHeight : target.scrollHeight;
     const targetRect    = isOverlay ? null : target.getBoundingClientRect();
-    const captureX      = isOverlay ? 0 : (targetRect!.left + target.scrollLeft);
-    const captureY      = isOverlay ? 0 : (targetRect!.top  + target.scrollTop);
+    const captureX = 0;
+    const captureY = 0;
 
     const baseIgnore = (el: Element) => {
       const tag = el.tagName?.toLowerCase();
