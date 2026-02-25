@@ -571,8 +571,8 @@ export async function executeToolCall(
           // Retry pipeline: try multiple models
           const attempts = [
             { model: "google/gemini-2.5-flash-image", useLogo: true },
-            { model: "google/gemini-2.5-flash-image", useLogo: false },
-            { model: "google/gemini-3-pro-image-preview", useLogo: false },
+            { model: "google/gemini-2.5-flash-image", useLogo: true },
+            { model: "google/gemini-3-pro-image-preview", useLogo: true },
           ];
 
           let generated = false;

@@ -58,14 +58,6 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
               {post.hashtags}
             </p>
           )}
-          {post.persianTranslation && (
-            <div className="mt-2 p-2 rounded-lg bg-muted/50 border border-border/50">
-              <p className="text-xs font-medium text-muted-foreground mb-1">🇮🇷 Persian Translation (internal)</p>
-              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                {post.persianTranslation}
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Action icons */}
@@ -96,6 +88,16 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
             </>
           )}
         </div>
+
+        {/* Persian Translation - internal info below buttons */}
+        {post.persianTranslation && (
+          <div className="mx-3 mb-3 p-2 rounded-lg bg-muted/50 border border-border/50">
+            <p className="text-xs font-medium text-muted-foreground mb-1">🇮🇷 Persian Translation (internal)</p>
+            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+              {post.persianTranslation}
+            </p>
+          </div>
+        )}
       </div>
     );
   }
