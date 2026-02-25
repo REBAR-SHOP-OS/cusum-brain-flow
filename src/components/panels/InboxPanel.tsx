@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { normalizeNotificationRoute } from "@/lib/notificationRouting";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
 import { NotificationFilters } from "@/components/notifications/NotificationFilters";
+import { FeedbackReviewDialog } from "@/components/feedback/FeedbackReviewDialog";
 
 interface InboxPanelProps {
   isOpen: boolean;
@@ -197,6 +198,15 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [filterSearch, setFilterSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("all");
+  const [reviewItem, setReviewItem] = useState<Notification | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  // Fetch user email once for domain check
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email ?? null);
+    });
+  }, []);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -247,6 +257,15 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
 
   const handleToggle = (item: Notification) => {
     if (item.status === "unread") markRead(item.id);
+
+    // If feedback_resolved and user is @rebar.shop, open review dialog
+    const isFeedbackResolved = item.metadata?.feedback_resolved === true;
+    const isRebarUser = userEmail?.endsWith("@rebar.shop");
+    if (isFeedbackResolved && isRebarUser) {
+      setReviewItem(item);
+      return;
+    }
+
     if (item.linkTo) {
       const dest = normalizeNotificationRoute(item.linkTo, item.type);
       navigate(dest);
@@ -274,7 +293,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     toast.success("مشکل تأیید و بسته شد");
   }, [dismiss]);
 
-  const handleReReport = useCallback(async (item: Notification) => {
+  const handleReReport = useCallback(async (item: Notification, comment?: string) => {
     try {
       const meta = item.metadata as Record<string, unknown> | null;
       if (!meta) return;
@@ -289,10 +308,15 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
         .eq("user_id", user.id)
         .maybeSingle();
 
+      const originalDesc = (meta.original_description as string) || "";
+      const description = comment
+        ? `نظر جدید: ${comment}\n\nتوضیحات اصلی: ${originalDesc}`
+        : originalDesc || null;
+
       for (const recipientId of FEEDBACK_RECIPIENTS) {
         await supabase.from("tasks").insert({
           title: (meta.original_title as string) || "گزارش مجدد باگ",
-          description: (meta.original_description as string) || null,
+          description,
           attachment_url: (meta.original_attachment_url as string) || null,
           source: "screenshot_feedback",
           assigned_to: recipientId,
@@ -494,6 +518,13 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     </AnimatePresence>
 
     <NotificationPreferences open={prefsOpen} onOpenChange={setPrefsOpen} />
+    <FeedbackReviewDialog
+      open={!!reviewItem}
+      onOpenChange={(open) => { if (!open) setReviewItem(null); }}
+      item={reviewItem}
+      onConfirm={handleConfirmFixed}
+      onReReport={handleReReport}
+    />
     </>
   );
 }
