@@ -149,14 +149,14 @@ export function ScreenshotFeedbackButton() {
 
       const opts = {
         ...baseOpts,
-        scale: isHeavyPage ? 0.4 : 1,
+        scale: isHeavyPage ? 0.75 : 1,
         imageTimeout: skipImages ? 0 : (isHeavyPage ? 0 : 5000),
         ignoreElements,
         onclone,
       };
       return Promise.race([
         html2canvas(target, opts),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), isHeavyPage ? 8000 : 15000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), isHeavyPage ? 12000 : 15000)),
       ]);
     };
 
