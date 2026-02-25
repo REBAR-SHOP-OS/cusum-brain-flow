@@ -382,7 +382,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
               placeholder="Describe the change needed, or use the microphone..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="min-h-[60px] max-h-[100px] w-full"
+              className="min-h-[70px] max-h-[100px] w-full"
             />
             {/* Live interim text from Web Speech API */}
             {speech.interimText && (
@@ -406,12 +406,12 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
                 ? "Stop voice input"
                 : "Start voice input (supports Farsi & English)"
             }
-            className="shrink-0 !w-14 !h-14"
+            className="shrink-0 !w-20 !h-20 rounded-2xl"
           >
             {speech.isListening ? (
-              <MicOff className="w-7 h-7 animate-pulse" />
+              <MicOff className="w-10 h-10 animate-pulse" />
             ) : (
-              <Mic className="w-7 h-7" />
+              <Mic className="w-10 h-10" />
             )}
           </Button>
 
@@ -419,12 +419,12 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
           <Button
             onClick={handleSend}
             disabled={!canSend || sending}
-            className="shrink-0"
+            className="shrink-0 !h-20 !px-6 text-base"
           >
             {sending ? (
-              <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              <Loader2 className="w-6 h-6 animate-spin mr-1" />
             ) : (
-              <Send className="w-4 h-4 mr-1" />
+              <Send className="w-6 h-6 mr-1" />
             )}
             Send
           </Button>
