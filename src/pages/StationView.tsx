@@ -114,10 +114,9 @@ export default function StationView() {
     ? items.filter((i) => i.cut_plan_id === selectedBarListId)
     : items;
 
-  // Auto-clear selectedItemId if the item no longer exists (e.g. moved to clearance)
+  // Auto-clear selectedItemId if the item no longer exists (e.g. moved to clearance) or list is empty
   useEffect(() => {
-    if (selectedItemId && filteredItems.length > 0 
-        && !filteredItems.some(i => i.id === selectedItemId)) {
+    if (selectedItemId && !filteredItems.some(i => i.id === selectedItemId)) {
       setSelectedItemId(null);
     }
   }, [filteredItems, selectedItemId]);
