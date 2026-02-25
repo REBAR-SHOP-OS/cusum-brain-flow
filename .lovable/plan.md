@@ -1,70 +1,52 @@
 
 
-## رفع مشکل ناپایداری پنجره چت و نمایش صحیح مخاطبین
+## آپلود چند فایل در Pixel Brain + الزام استفاده از Brain در تولید محتوا
 
-### مشکل
-تداخل بین event handler های drag (pointer events) و مکانیزم داخلی Radix Popover باعث می‌شود:
-1. `handlePointerDown` پنجره را فوراً می‌بندد
-2. `handlePointerUp` دوباره toggle می‌کند (باز می‌کند)
-3. `onOpenChange` خود Radix هم اجرا می‌شود → نتیجه: فلیکر و بسته شدن فوری
+### بخش ۱: آپلود چندین فایل همزمان
 
-### راه‌حل
-جداسازی کامل منطق drag از منطق Popover:
+#### فایل: `src/components/brain/AddKnowledgeDialog.tsx`
 
-#### فایل: `src/components/chat/DockChatBar.tsx`
+1. **تبدیل `uploadedFile` از تک‌فایل به آرایه**: `uploadedFiles: { name, url, path }[]`
+2. **اضافه کردن `multiple` به input فایل**: `<input multiple ...>`
+3. **آپلود حلقه‌ای**: در `handleFileUpload`، تمام فایل‌های انتخاب شده را یکی‌یکی آپلود و به آرایه اضافه کن
+4. **نمایش لیست فایل‌ها**: به جای نمایش یک فایل، لیستی از فایل‌های آپلود شده نمایش داده شود با دکمه حذف برای هرکدام
+5. **حذف تکی**: تابع `removeFile(index)` برای حذف یک فایل خاص از آرایه
+6. **ذخیره‌سازی**: در `handleSave`، برای هر فایل آپلود شده یک رکورد knowledge جداگانه ایجاد شود (هرکدام با عنوان فایل و metadata خودش)
+7. **اگر فقط یک فایل باشد**: رفتار فعلی حفظ شود (title از نام فایل پر شود)
+8. **اگر چند فایل باشد**: title اختیاری شود و هر فایل با نام خودش ذخیره شود
 
-1. **حذف بستن popover از `handlePointerDown`** — فقط drag tracking شروع شود
-2. **در `handlePointerUp`**: اگر drag نشده، `launcherOpen` را toggle کن. اگر drag شده، هیچ کاری نکن
-3. **غیرفعال کردن `onOpenChange` Radix** هنگام drag — با بررسی `wasDragged.current`
-4. **اضافه کردن `e.preventDefault()`** در `handlePointerDown` برای جلوگیری از تداخل Radix
-5. **تبدیل PopoverTrigger به `div`** به جای `button` — چون pointer events و Radix trigger با هم تداخل دارند. دکمه داخل div باقی می‌ماند ولی Popover به صورت manual (controlled) مدیریت می‌شود
-6. **حذف `PopoverTrigger`** و استفاده از Popover به صورت کاملاً controlled — `open={launcherOpen}` فقط توسط pointer handlers کنترل شود
-7. **اضافه کردن click-outside handler** برای بستن popover هنگام کلیک خارج از آن
+### بخش ۲: الزام استفاده از Brain در تولید محتوا (قاعده الزام‌آور)
 
-#### جزئیات فنی
+#### فایل: `supabase/functions/ai-agent/index.ts`
+
+در تابع `generateDynamicContent` تغییرات زیر اعمال می‌شود:
+
+1. **پارامتر جدید**: `brainContext: string` اضافه شود به تابع
+2. **تزریق Brain به prompt**: اگر `brainContext` خالی نباشد، بلوک زیر به prompt اضافه شود:
 
 ```text
-// حذف PopoverTrigger — Popover کاملاً controlled
-<Popover open={launcherOpen}>
-  <div style={{ left: pos.x, top: pos.y }}>
-    <PopoverAnchor asChild>
-      <button
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlers.onPointerMove}
-        onPointerUp={handlePointerUp}
-      >
-        <MessageSquare />
-      </button>
-    </PopoverAnchor>
-  </div>
-  <PopoverContent onPointerDownOutside={() => setLauncherOpen(false)}>
-    ...
-  </PopoverContent>
-</Popover>
+## MANDATORY BRAIN CONTEXT (YOU MUST USE THIS):
+{brainContext}
 
-// handlePointerDown: فقط drag شروع شود، popover بسته نشود
-const handlePointerDown = (e) => {
-  handlers.onPointerDown(e);
-};
-
-// handlePointerUp: فقط اگر drag نشده toggle شود
-const handlePointerUp = (e) => {
-  handlers.onPointerUp(e);
-  if (!wasDragged.current) {
-    setLauncherOpen(prev => !prev);
-  }
-};
+CRITICAL: You MUST incorporate the above brain context (custom instructions, brand resources, uploaded files/images) 
+into your generated content. This is NOT optional. Align tone, style, language, and references with the brain data.
 ```
+
+3. **محل فراخوانی**: در بخش Pixel Step 2 (خط ~537)، قبل از فراخوانی `generateDynamicContent`، متغیر `mergedContext.brainKnowledgeBlock` (که قبلاً توسط `agentContext.ts` ساخته شده) به تابع پاس داده شود:
+
+```text
+const dynContent = await generateDynamicContent(slot, isRegenerate, mergedContext.brainKnowledgeBlock || "");
+```
+
+4. **تزریق در image prompt هم**: اگر Brain شامل لینک تصاویر مرجع باشد، آن لینک‌ها به `imagePrompt` اضافه شوند تا Gemini هنگام تولید عکس از آن‌ها الهام بگیرد
 
 ### فایل‌های تغییریافته
 
 | فایل | تغییر |
 |------|-------|
-| `src/components/chat/DockChatBar.tsx` | جایگزینی PopoverTrigger با PopoverAnchor + حالت controlled + رفع race condition |
+| `src/components/brain/AddKnowledgeDialog.tsx` | پشتیبانی از آپلود چند فایل همزمان |
+| `supabase/functions/ai-agent/index.ts` | تزریق الزامی Brain context به generateDynamicContent و imagePrompt |
 
 ### نتیجه
-- کلیک روی دکمه: پنجره مخاطبین باز/بسته می‌شود بدون فلیکر
-- درگ دکمه: پنجره باز نمی‌شود، فقط جابجایی انجام می‌شود
-- کلیک خارج پنجره: بسته می‌شود
-- مخاطبین rebar.shop به درستی فیلتر و نمایش داده می‌شوند
-
+- کاربر می‌تواند چندین فایل (عکس، سند، ...) را یکجا در Brain آپلود کند
+- هر بار که Pixel محتوا تولید می‌کند (کپشن + عکس)، الزاماً از اطلاعات Brain (دستورات سفارشی + فایل‌ها + منابع) استفاده می‌کند
