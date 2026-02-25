@@ -12453,6 +12453,7 @@ export type Database = {
         Returns: undefined
       }
       score_lead: { Args: { p_lead_id: string }; Returns: undefined }
+      update_cron_auth_key: { Args: { _key: string }; Returns: undefined }
       verify_admin_pin: { Args: { _pin: string }; Returns: boolean }
     }
     Enums: {
