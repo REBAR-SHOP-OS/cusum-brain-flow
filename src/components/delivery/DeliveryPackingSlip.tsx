@@ -121,7 +121,7 @@ export function DeliveryPackingSlip({
               <th className="text-right py-2 font-bold w-20">Quantity</th>
               <th className="text-left py-2 font-bold w-20">Size</th>
               <th className="text-left py-2 font-bold w-20">Type</th>
-              <th className="text-right py-2 font-bold w-28">Total Length</th>
+              <th className="text-right py-2 font-bold w-28">Cut Length</th>
             </tr>
           </thead>
           <tbody>

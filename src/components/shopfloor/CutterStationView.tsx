@@ -321,7 +321,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       if (itemErr) throw itemErr;
 
       // Immediately invalidate to refresh UI without waiting for realtime
-      queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "cutter"] });
+      queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] });
 
       await manageMachine({
         action: "complete-run",

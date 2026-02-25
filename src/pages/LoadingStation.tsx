@@ -51,7 +51,7 @@ export default function LoadingStation() {
         .from("cut_plan_items")
         .select("id, mark_number, drawing_ref, bar_code, cut_length_mm, total_pieces, asa_shape_code")
         .eq("cut_plan_id", selectedBundle!.cutPlanId)
-        .in("phase", ["clearance", "complete"]);
+        .eq("phase", "complete");
       if (error) throw error;
       return (data || []) as CompletedBundleItem[];
     },
@@ -76,7 +76,7 @@ export default function LoadingStation() {
   const progressPct = totalItems > 0 ? Math.round((loadedCount / totalItems) * 100) : 0;
 
   const handleCreateDelivery = async () => {
-    if (!selectedBundle || !invoiceNumber.trim()) return;
+    if (creating || !selectedBundle || !invoiceNumber.trim()) return;
     const result = await createDeliveryFromBundle(selectedBundle, invoiceNumber.trim());
     if (result) {
       navigate("/deliveries");

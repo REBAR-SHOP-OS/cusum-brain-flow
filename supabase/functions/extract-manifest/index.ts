@@ -224,8 +224,9 @@ Rules:
       );
     }
 
-    // Rebuild summary if it was lost due to truncation
+    // Rebuild summary if it was lost due to truncation and flag it
     if (extractedData.items && !extractedData.summary) {
+      extractedData._truncated = true;
       const items = extractedData.items;
       const barSizes = [...new Set(items.map((i: any) => i.size).filter(Boolean))];
       const shapeTypes = [...new Set(items.map((i: any) => i.type).filter(Boolean))];
