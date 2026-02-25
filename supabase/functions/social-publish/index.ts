@@ -45,6 +45,7 @@ serve(async (req) => {
       message: z.string().min(1).max(63206),
       image_url: z.string().url().max(2000).optional(),
       post_id: z.string().uuid().optional(),
+      page_name: z.string().optional(),
     });
     const parsed = publishSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -53,7 +54,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { platform, message, image_url, post_id } = parsed.data;
+    const { platform, message, image_url, post_id, page_name } = parsed.data;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -84,7 +85,14 @@ serve(async (req) => {
       );
     }
 
-    const pageId = pages[0].id;
+    // Find the correct page based on page_name, fallback to first page
+    let selectedPage = pages[0];
+    if (page_name) {
+      const matched = pages.find((p) => p.name === page_name);
+      if (matched) selectedPage = matched;
+      else console.warn(`Page "${page_name}" not found among ${pages.map(p => p.name).join(", ")}. Falling back to first page.`);
+    }
+    const pageId = selectedPage.id;
 
     // Get page-specific access token
     const { data: pageTokenData } = await supabaseAdmin
@@ -108,7 +116,12 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      result = await publishToInstagram(igAccounts[0].id, pageAccessToken, message, image_url);
+      // Find the IG account linked to the selected page
+      let selectedIg = igAccounts[0];
+      const matchedIg = igAccounts.find((ig) => ig.pageId === pageId);
+      if (matchedIg) selectedIg = matchedIg;
+      else if (page_name) console.warn(`No IG account matched pageId ${pageId}. Using first: ${igAccounts[0].username}`);
+      result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url);
     } else if (platform === "linkedin") {
       result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url);
     } else if (platform === "twitter") {
