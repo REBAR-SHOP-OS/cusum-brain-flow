@@ -1,74 +1,57 @@
 
-هدف: رفع قطعی مشکل Pixel که به‌جای نمایش برنامه محتوا، پاسخ «capability ندارم» می‌دهد، و enforce کردن رفتار الزامی شما به‌صورت قابل اتکا (نه وابسته به حدس مدل).
+## رفع خطای "Failed to send a request to the Edge Function" در ایجنت Pixel
 
-آنچه بررسی شد و ریشه مشکل:
-1) درخواست New Chat درست ارسال می‌شود:
-- در `src/pages/AgentWorkspace.tsx` بعد از New chat برای `agentId === "social"` پیام خودکار `"Content schedule for today"` ارسال می‌شود.
-2) پرامپت Pixel هم در کد وجود دارد و شامل جدول ساعت‌هاست:
-- `supabase/functions/_shared/agents/marketing.ts` → `social` prompt.
-3) اما خروجی واقعی از بک‌اند نشان می‌دهد مدل هنوز می‌گوید «دسترسی ندارم»:
-- پاسخ واقعی تابع `ai-agent` برای پیام schedule همین متن خطا را برمی‌گرداند.
-4) علت فنی اصلی:
-- جریان فعلی نمایش Schedule کاملاً به LLM سپرده شده و بین دستورهای سراسری سنگین + context حجیم + ابزارهای تعریف‌شده، مدل بعضی وقت‌ها schedule را «داده خارجی» فرض می‌کند و refusal می‌دهد.
-- یعنی این رفتار deterministic نیست و برای «پرامپت الزامی» مناسب نیست.
+### ریشه مشکل
+دو مشکل هم‌زمان وجود دارد:
 
-راه‌حل پیشنهادی (Robust + قطعی):
-A) تبدیل Step 1 به منطق قطعی در بک‌اند (Deterministic Guardrail)
-- فایل: `supabase/functions/ai-agent/index.ts`
-- قبل از فراخوانی `callAI`، برای agent=`social` یک شاخه قطعی اضافه می‌شود:
-  - اگر پیام از جنس شروع چت/درخواست برنامه روز است (مثل: `content schedule`, `today`, `program`, `schedule`, یا پیام خودکار New Chat)، تابع مستقیم schedule را برگرداند.
-  - پاسخ شامل:
-    - تاریخ روز (با `context.selectedDate` اگر موجود بود؛ در غیر این‌صورت تاریخ فعلی)
-    - 5 اسلات ثابت:
-      1) 06:30 AM — Motivational / start of work day  
-      2) 07:30 AM — Creative promotional  
-      3) 08:00 AM — Strength & scale  
-      4) 12:30 PM — Innovation & efficiency  
-      5) 02:30 PM — Product promotional
-    - جمله پایانی: `Which slot? (Enter 1-5, a time, or "all")`
-- نتیجه: Step 1 دیگر هیچ‌وقت به تصمیم مدل وابسته نیست و همیشه درست نمایش داده می‌شود.
+**مشکل ۱: هدرهای CORS ناقص**
+فایل `supabase/functions/ai-agent/index.ts` خط ۲۰ فقط شامل `authorization, x-client-info, apikey, content-type` است، اما مرورگر هدرهای اضافی `x-supabase-client-platform` و مشابه آن را هم ارسال می‌کند. این باعث بلاک شدن درخواست توسط مرورگر می‌شود.
 
-B) تقویت پرامپت Pixel برای Step 2 و جلوگیری از refusal
-- فایل: `supabase/functions/_shared/agents/marketing.ts`
-- در prompt `social` بخش صریح اضافه/تقویت می‌شود:
-  - «تو برنامه زمان‌بندی ثابت داخلی داری؛ هرگز نگو به schedule دسترسی نداری.»
-  - «برای درخواست عمومی اول فقط schedule را نشان بده؛ برای انتخاب اسلات بلافاصله `generate_image` صدا بزن.»
-- این لایه مکمل است؛ اما اتکای اصلی همچنان روی Guardrail بخش A خواهد بود.
+**مشکل ۲: مدل ابزار generate_image را صدا نمی‌زند**
+وقتی کاربر "1" را می‌فرستد، مدل Gemini به جای فراخوانی `generate_image` پاسخ متنی بی‌ربط برمی‌گرداند. تست مستقیم edge function هم همین مشکل را نشان داد — مدل گفت "Please provide more details" به جای فراخوانی ابزار.
 
-C) کاهش نویز context برای Pixel (اختیاری ولی توصیه‌شده برای پایداری)
-- فایل: `supabase/functions/_shared/agentContext.ts`
-- برای `agent === "social"` بار context غیرمرتبط (ایمیل‌ها/مشتری‌ها) محدود می‌شود یا خلاصه‌تر می‌شود تا مدل برای Step 2 تمرکز بیشتری داشته باشد.
-- این کار احتمال drift را کم می‌کند و latency را هم بهتر می‌کند.
+### راه‌حل
 
-D) حفظ Scope محدود فقط برای Pixel
-- هیچ تغییری برای بقیه ایجنت‌ها اعمال نمی‌شود.
-- New Chat behavior موجود فقط برای Pixel باقی می‌ماند.
+#### A) اصلاح CORS (فایل: `supabase/functions/ai-agent/index.ts`)
+هدرهای CORS کامل جایگزین شوند:
+```text
+"Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version"
+```
 
-جزئیات خروجی مورد انتظار پس از اعمال:
-1) کاربر روی Pixel → New chat می‌زند.
-2) بدون استثنا، همان ابتدا جدول ساعت‌ها + تاریخ نمایش داده می‌شود.
-3) کاربر اسلات/ساعت/`all` می‌دهد.
-4) ایجنت بلافاصله تصویر و کپشن را طبق قوانین تعریف‌شده شما تولید می‌کند.
+#### B) Deterministic Guardrail برای تولید تصویر (فایل: `supabase/functions/ai-agent/index.ts`)
+مشابه guardrail مرحله ۱ (نمایش schedule)، وقتی کاربر یک عدد (1-5) یا "all" ارسال کند، سیستم بدون وابستگی به LLM:
+1. شماره اسلات و موضوع را تشخیص دهد
+2. یک prompt مناسب برای تولید تصویر بسازد
+3. مستقیم `generate_image` tool را اجرا کند (بدون اینکه LLM تصمیم بگیرد)
+4. تصویر تولیدشده + کپشن + هشتگ + اطلاعات تماس را برگرداند
 
-تست پذیرش (Acceptance):
-1) `/agent/social` → New chat:
-- باید فوراً جدول + تاریخ امروز بیاید (بدون متن عذرخواهی).
-2) ارسال `1`:
-- باید `generate_image` اجرا شود و تصویر + کپشن با آدرس/تلفن/وب‌سایت برگردد.
-3) ارسال `all`:
-- باید 5 خروجی پیاپی طبق اسلات‌ها تولید شود.
-4) بررسی Regression:
-- ایجنت‌های غیر Pixel هیچ تغییر رفتاری نداشته باشند.
+منطق تشخیص:
+- ورودی "1" تا "5" → اسلات مشخص
+- ورودی "all" → تولید تمام ۵ اسلات
+- فقط برای agent === "social" فعال است
 
-فایل‌هایی که در پیاده‌سازی تغییر خواهند کرد:
-- `supabase/functions/ai-agent/index.ts` (Guardrail قطعی Step 1)
-- `supabase/functions/_shared/agents/marketing.ts` (تقویت دستورهای Pixel)
-- `supabase/functions/_shared/agentContext.ts` (اختیاری: کاهش نویز context برای social)
+#### C) ساخت prompt تصویر هوشمند
+برای هر اسلات یک prompt حرفه‌ای تصویری از پیش تعریف‌شده ساخته می‌شود:
+- اسلات ۱ (06:30): صحنه صبحگاهی ساختمانی + Rebar Stirrups + پیام انگیزشی
+- اسلات ۲ (07:30): تبلیغات خلاقانه + Rebar Cages
+- اسلات ۳ (08:00): استحکام + Fiberglass Rebar (GFRP)
+- اسلات ۴ (12:30): نوآوری + Wire Mesh
+- اسلات ۵ (14:30): محصول تبلیغاتی + Rebar Dowels
 
-ریسک‌ها و کنترل:
-- ریسک: Trigger بیش از حد broad و فعال‌شدن ناخواسته.
-  - کنترل: matcher فقط برای پیام‌های عمومی/شروع چت تعریف می‌شود، نه پیام‌های اسلاتی.
-- ریسک: فرمت تاریخ ناهماهنگ.
-  - کنترل: اولویت با `selectedDate` از فرانت، fallback به تاریخ فعلی.
+#### D) پس از تولید تصویر
+بعد از دریافت URL تصویر، یک پیام کامل شامل:
+- لینک تصویر (قابل نمایش در چت)
+- کپشن انگلیسی مرتبط با موضوع
+- اطلاعات تماس شرکت
+- هشتگ‌های مرتبط
 
-این طرح دقیقاً مطابق قانون «پرامپت الزامی» شماست، با این تفاوت مهم که بخش حیاتی Step 1 از حالت احتمالی مدل به حالت قطعیِ سیستمی تبدیل می‌شود تا دیگر پاسخ بی‌ربط تکرار نشود.
+این پاسخ مستقیم ساخته می‌شود و نیازی به LLM ندارد.
+
+### فایل‌های تغییریافته
+
+| فایل | تغییر |
+|------|-------|
+| `supabase/functions/ai-agent/index.ts` | اصلاح CORS + افزودن guardrail تولید تصویر |
+
+### نتیجه
+بعد از این تغییر، وقتی کاربر عدد ۱ تا ۵ یا "all" بزند، تصویر بدون هیچ خطایی و بدون وابستگی به تصمیم LLM تولید می‌شود.
