@@ -1,63 +1,65 @@
 
+## Feedback Resolution Notification with Confirm/Re-report Actions
 
-## Fix: Multiple Cron Job Authentication Failures
+### What This Does
+When Radin or Sattar click "Approve & Close" on a screenshot feedback task, the system will:
+1. Send a notification to the original bug reporter in their Inbox
+2. The notification will have two action buttons:
+   - **Confirm Fixed (checkmark)** -- closes/dismisses the notification, confirming the fix worked
+   - **Still Broken (re-report)** -- creates a new task assigned to Radin with the original feedback details, so the issue gets re-investigated
 
-### Issues Found
+### Implementation Steps
 
-**Issue 1: `check-sla-breaches` cron (Job 3) — Using anon key instead of service role key**
+**Step 1: Modify `approveAndClose` in `src/pages/Tasks.tsx`**
 
-The cron job uses the **anon key** (`eyJhbG...NkY`) as the Bearer token. The edge function's auth logic:
-1. Checks if token === service role key (it doesn't match -- anon key != service role key)
-2. Falls back to user auth check via `getUser()` 
-3. `getUser()` returns null because the anon key has no user session
-4. Returns 401 Unauthorized
+After the existing approval logic, add code to detect if the task is a `screenshot_feedback` task (by checking `task.source`). If so:
+- Look up the original reporter's `user_id` from `task.created_by_profile_id`
+- Insert a notification for that user with:
+  - `type: "notification"`
+  - `title: "Your feedback was resolved"` (with the task title)
+  - `agent_name: "Feedback"`
+  - `metadata: { task_id: task.id, feedback_resolved: true, original_title: task.title, original_description: task.description, original_attachment_url: task.attachment_url }`
+  - `link_to: null` (so it expands inline instead of navigating away)
 
-This means **SLA breach checks have been silently failing every 30 minutes**.
+**Step 2: Enhance the `NotificationItem` component in `src/components/panels/InboxPanel.tsx`**
 
-**Issue 2: Jobs 4 and 5 — Already fixed**
+For notifications that have `metadata.feedback_resolved === true`, render two action buttons instead of the default behavior:
 
-The `odoo-crm-sync` and `odoo-chatter-sync` cron jobs were updated in the previous fix and now use the correct service role key.
+- A green checkmark button (CheckCircle icon) -- confirms the fix. Clicking it calls `dismiss(id)` to close the notification.
+- A red refresh/re-report button (RotateCcw icon) -- re-reports the issue. Clicking it:
+  1. Creates a new task in the `tasks` table assigned to Radin (`RADIN_PROFILE_ID`) with the original feedback details from `metadata`
+  2. Dismisses the notification
+  3. Shows a toast confirming re-submission
 
-**Issue 3: Live/production environment**
+**Step 3: Add the re-report handler in `InboxPanel.tsx`**
 
-The production environment (`uavzziigfnqpfdkczbdo`) shows `ringcentral-sync` and `qb-sync-engine` returning 401 every minute. These are on the Live environment and likely have the same stale-key issue. Additionally, `unrecognized configuration parameter "supabase.service_role_key"` errors fire every 60 seconds — likely from a cron job or trigger that references a non-existent Postgres setting. These will need fixing after publish or separately.
+Create a `handleReReport` function that:
+- Reads `metadata.original_title`, `metadata.original_description`, `metadata.original_attachment_url` from the notification
+- Inserts a new task with `source: "screenshot_feedback"`, `assigned_to: RADIN_PROFILE_ID`, status `pending`, priority `high`
+- Gets the current user's `company_id` and `profile_id` for the new task
+- Dismisses the original notification
+- Shows a success toast
 
-### Fix Plan
+### Technical Details
 
-**Step 1: Update `check-sla-breaches` cron job (Job 3)**
-
-Run a SQL migration to update Job 3 to use the service role key instead of the anon key:
-
-```sql
-SELECT cron.alter_job(
-  3,
-  command := $cronCmd$
-    SELECT net.http_post(
-      url := 'https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/check-sla-breaches',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer sb_secret_awjjbBcZsNcBcUjnog9g5Q_BJkWbAlM'
-      ),
-      body := '{}'::jsonb
-    ) AS request_id;
-  $cronCmd$
-);
+**Constants needed:**
+```
+RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171"
 ```
 
-**Step 2: Verify the fix**
+**Notification metadata schema for feedback resolution:**
+```typescript
+{
+  task_id: string;
+  feedback_resolved: true;
+  original_title: string;
+  original_description: string;
+  original_attachment_url: string | null;
+}
+```
 
-After the migration, wait for the next 15-minute and 30-minute cron intervals and check `net._http_response` for 200 status codes instead of 401s.
+**Files to modify:**
+1. `src/pages/Tasks.tsx` -- Add notification creation in `approveAndClose` for feedback tasks
+2. `src/components/panels/InboxPanel.tsx` -- Add confirm/re-report action buttons for feedback resolution notifications
 
-### What This Fixes
-- SLA breach detection will resume running every 30 minutes
-- Combined with the previous fix, all 3 test-environment cron jobs will authenticate correctly
-
-### What This Does NOT Fix (Live Environment)
-- The `ringcentral-sync` and `qb-sync-engine` 401 errors on the Live environment are a separate issue requiring the same type of cron key update on that environment after publishing
-- The `unrecognized configuration parameter "supabase.service_role_key"` errors on Live need investigation into what cron job or trigger references that setting
-
-### No Code Changes Needed
-- All edge function code is correct
-- No frontend changes required
-- Only the database-level cron configuration needs updating
-
+**No database changes needed** -- uses the existing `notifications` and `tasks` tables.
