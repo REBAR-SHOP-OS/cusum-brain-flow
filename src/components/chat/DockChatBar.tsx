@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { MessageSquare, Hash, Users, ChevronRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { DockChatBox } from "./DockChatBox";
@@ -52,9 +52,9 @@ export function DockChatBar() {
   });
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (launcherOpen) setLauncherOpen(false);
+    e.preventDefault();
     handlers.onPointerDown(e);
-  }, [handlers, launcherOpen]);
+  }, [handlers]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     handlers.onPointerUp(e);
@@ -136,10 +136,8 @@ export function DockChatBar() {
         className="fixed z-[9998]"
         style={{ left: pos.x, top: pos.y, touchAction: "none" }}
       >
-        <Popover open={launcherOpen} onOpenChange={(open) => {
-          if (!wasDragged.current) setLauncherOpen(open);
-        }}>
-          <PopoverTrigger asChild>
+        <Popover open={launcherOpen}>
+          <PopoverAnchor asChild>
             <button
               onPointerDown={handlePointerDown}
               onPointerMove={handlers.onPointerMove}
@@ -149,8 +147,8 @@ export function DockChatBar() {
             >
               <MessageSquare className="w-6 h-6 pointer-events-none" />
             </button>
-          </PopoverTrigger>
-          <PopoverContent side="top" align="center" className="w-[300px] p-0 mb-2">
+          </PopoverAnchor>
+          <PopoverContent side="top" align="center" className="w-[300px] p-0 mb-2" onPointerDownOutside={() => setLauncherOpen(false)} onEscapeKeyDown={() => setLauncherOpen(false)}>
             <ScrollArea className="max-h-[400px]">
               {/* Team members - top for visibility */}
               <div className="px-2 pt-2 pb-2">
