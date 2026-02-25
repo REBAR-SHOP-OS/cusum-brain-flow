@@ -3,6 +3,7 @@ import { Camera, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import { AnnotationOverlay } from "./AnnotationOverlay";
+import { FloatingMicButton } from "./FloatingMicButton";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 
 const THROTTLE_MS = 3000;
@@ -12,6 +13,7 @@ export function ScreenshotFeedbackButton() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [screenshot, setScreenshot] = useState("");
   const [capturing, setCapturing] = useState(false);
+  const [initialDescription, setInitialDescription] = useState("");
   const cooldown = useRef(false);
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
@@ -182,12 +184,22 @@ export function ScreenshotFeedbackButton() {
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     handlers.onPointerUp(e);
     if (!wasDragged.current) {
+      setInitialDescription("");
       capture();
     }
   }, [handlers, capture, wasDragged]);
 
+  const handleMicComplete = useCallback((transcript: string) => {
+    setInitialDescription(transcript);
+    capture().then(() => {
+      // capture sets overlayOpen via setOverlayOpen(true) internally
+    });
+  }, [capture]);
+
   return (
     <>
+      <FloatingMicButton onRecordingComplete={handleMicComplete} />
+
       <button
         ref={btnRef}
         data-feedback-btn="true"
@@ -209,8 +221,9 @@ export function ScreenshotFeedbackButton() {
       {overlayOpen && (
         <AnnotationOverlay
           open={overlayOpen}
-          onClose={() => setOverlayOpen(false)}
+          onClose={() => { setOverlayOpen(false); setInitialDescription(""); }}
           screenshotDataUrl={screenshot}
+          initialDescription={initialDescription}
         />
       )}
     </>
