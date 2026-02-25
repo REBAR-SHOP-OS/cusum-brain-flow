@@ -267,8 +267,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   };
 
   const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
-  const ZAHRA_PROFILE_ID = "2356f04b-0e8d-4b50-bd62-1aa0420f74ab";
-  const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID, ZAHRA_PROFILE_ID];
+  const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID];
 
   const handleConfirmFixed = useCallback((id: string) => {
     dismiss(id);
