@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface PixelPostData {
@@ -13,58 +13,78 @@ export interface PixelPostData {
 
 interface PixelPostCardProps {
   post: PixelPostData;
-  onView: (post: PixelPostData) => void;
+  onView?: (post: PixelPostData) => void;
+  onApprove?: (post: PixelPostData) => void;
+  onRegenerate?: (post: PixelPostData) => void;
 }
 
 const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
-  ({ post, onView }, ref) => {
-    const [confirmed, setConfirmed] = useState(false);
+  ({ post, onView, onApprove, onRegenerate }, ref) => {
+    const [approved, setApproved] = useState(false);
 
-    const handleConfirm = () => {
-      if (!confirmed) {
-        setConfirmed(true);
-        onView(post);
+    const handleApprove = () => {
+      if (!approved) {
+        setApproved(true);
+        onApprove?.(post);
+      }
+    };
+
+    const handleRegenerate = () => {
+      if (!approved) {
+        onRegenerate?.(post);
       }
     };
 
     return (
       <div
         ref={ref}
-        className="flex items-center gap-3 rounded-xl border border-border bg-card p-2.5 my-2 shadow-sm hover:shadow-md transition-shadow"
+        className="rounded-xl border border-border bg-card my-2 shadow-sm overflow-hidden max-w-sm"
       >
-        {/* Thumbnail */}
+        {/* Larger image */}
         <img
           src={post.imageUrl}
-          alt="Post thumbnail"
-          className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+          alt="Post preview"
+          className="w-full aspect-square object-cover"
         />
 
         {/* Caption + Hashtags */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-foreground leading-tight truncate">
+        <div className="px-3 py-2">
+          <p className="text-sm text-foreground leading-snug">
             {post.caption || "Untitled post"}
           </p>
           {post.hashtags && (
-            <p className="text-xs text-primary/70 leading-tight mt-0.5 truncate">
+            <p className="text-xs text-primary/70 leading-tight mt-1">
               {post.hashtags}
             </p>
           )}
         </div>
 
-        {/* Confirm Button */}
-        <button
-          onClick={handleConfirm}
-          disabled={confirmed}
-          className={cn(
-            "flex-shrink-0 p-1.5 rounded-full transition-colors",
-            confirmed
-              ? "text-primary cursor-default"
-              : "text-muted-foreground hover:text-primary hover:bg-primary/10 cursor-pointer"
+        {/* Action icons */}
+        <div className="flex items-center gap-1 px-3 pb-2.5">
+          {approved ? (
+            <span className="text-xs text-primary font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-4 h-4 fill-primary/20" />
+              Saved to calendar
+            </span>
+          ) : (
+            <>
+              <button
+                onClick={handleApprove}
+                className="p-1.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label="Approve post"
+              >
+                <CheckCircle2 className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleRegenerate}
+                className="p-1.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label="Regenerate post"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </>
           )}
-          aria-label={confirmed ? "Post confirmed" : "Confirm post"}
-        >
-          <CheckCircle2 className={cn("w-5 h-5", confirmed && "fill-primary/20")} />
-        </button>
+        </div>
       </div>
     );
   }

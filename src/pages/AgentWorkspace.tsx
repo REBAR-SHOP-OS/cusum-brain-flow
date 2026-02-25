@@ -353,6 +353,36 @@ export default function AgentWorkspace() {
     handleSendInternal(`regenerate random`);
   }, [handleSendInternal]);
 
+  const handleApprovePost = useCallback(async (post: import("@/components/social/PixelPostCard").PixelPostData) => {
+    if (!user) return;
+    try {
+      const hashtags = post.hashtags ? post.hashtags.split(/\s+/).filter((h: string) => h.startsWith("#")) : [];
+      const { error } = await supabase.from("social_posts").insert({
+        platform: post.platform || "instagram",
+        status: "draft",
+        title: (post.caption || "Pixel Post").slice(0, 50),
+        content: post.caption || "",
+        image_url: post.imageUrl || null,
+        hashtags,
+        scheduled_date: selectedDate.toISOString(),
+        user_id: user.id,
+      });
+      if (error) {
+        console.error("Failed to save post:", error);
+        toast.error("Failed to save post to calendar");
+      } else {
+        toast.success("Post saved to calendar ✅");
+      }
+    } catch (err) {
+      console.error("Error saving post:", err);
+      toast.error("Error saving post");
+    }
+  }, [user, selectedDate]);
+
+  const handleRegeneratePost = useCallback((post: import("@/components/social/PixelPostCard").PixelPostData) => {
+    handleSendInternal(`Regenerate image and caption for: ${post.caption?.slice(0, 60) || "this post"}`);
+  }, [handleSendInternal]);
+
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
   
@@ -541,13 +571,11 @@ export default function AgentWorkspace() {
               messages={messages}
               isLoading={isLoading}
               onRegenerateImage={handleRegenerateImage}
-              
+              onApprovePost={agentId === "social" ? handleApprovePost : undefined}
+              onRegeneratePost={agentId === "social" ? handleRegeneratePost : undefined}
               agentImage={config.image}
               agentName={config.name}
               isPixelAgent={agentId === "social"}
-              pendingPixelSlot={pendingPixelSlot}
-              hasUnsavedPixelPost={!!lastPixelPost && !pendingPixelSlot}
-              onApprovePixelSlot={handleApprovePixelSlot}
             />
             <ChatInput
               onSend={handleSend}
