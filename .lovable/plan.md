@@ -1,44 +1,43 @@
 
+## نمایش نام واقعی ایجادکننده در کارت‌های تسک
 
-## تشخیص خودکار زبان در ضبط صدا
-
-### وضعیت فعلی
-- `useSpeechRecognition` (Web Speech API) به صورت پیش‌فرض روی `"fa-IR"` تنظیم شده - فقط فارسی تشخیص می‌دهد
-- `AnnotationOverlay` صراحتاً `lang: "fa-IR"` ارسال می‌کند
-- `useMeetingTranscription` روی `"en-US"` قفل شده
-- `useRealtimeTranscribe` (ElevenLabs Scribe) از قبل تشخیص خودکار زبان دارد - نیاز به تغییر ندارد
+### مشکل
+در صفحه `/tasks`، تسک‌های فیدبک "by Ai" نشان می‌دهند چون `created_by_profile_id` به پروفایل "Ai" (ai@rebar.shop) اشاره دارد. همچنین حدود نیمی از تسک‌ها اصلاً `created_by_profile_id` ندارند و نام ایجادکننده نمایش داده نمی‌شود.
 
 ### راه‌حل
-حذف محدودیت زبان از Web Speech API تا مرورگر به صورت خودکار زبان گفتار را تشخیص دهد.
 
-### تغییرات
+#### 1. تغییر در `src/components/feedback/AnnotationOverlay.tsx`
+- فیلد `metadata` به insert تسک اضافه شود تا نام و ایمیل فرستنده به صورت ساختاریافته ذخیره شود:
+  ```typescript
+  metadata: JSON.stringify({
+    submitter_name: submitterName,
+    submitter_email: user?.email,
+    submitter_profile_id: submitterProfileId,
+  })
+  ```
 
-#### 1. `src/hooks/useSpeechRecognition.ts`
-- حذف پیش‌فرض `"fa-IR"` از خط ۵۸
-- اگر `lang` ارسال نشود، `recognition.lang` اصلاً ست نشود (مرورگر خودش تشخیص می‌دهد)
-- اگر `lang` ارسال شود، همان مقدار استفاده شود (سازگاری عقبرو حفظ شود)
+#### 2. تغییر در `src/pages/Tasks.tsx` - نمایش نام ایجادکننده
+- در بخش نمایش کارت تسک (خطوط 982-987)، منطق نمایش نام را بهبود دهیم:
+  - اگر تسک `source === "screenshot_feedback"` باشد و `metadata` شامل `submitter_name` باشد، آن نام را نشان بده
+  - اگر `created_by_profile.full_name` برابر "Ai" باشد، از فیلد `From:` در description نام را استخراج کن (fallback)
+  - در غیر این صورت `created_by_profile.full_name` عادی نشان داده شود
 
-```typescript
-// قبل:
-recognition.lang = optionsRef.current?.lang ?? "fa-IR";
+#### 3. تابع کمکی `extractSubmitterName`
+- یک تابع helper اضافه شود که از description تسک‌های فیدبک، نام فرستنده (`From: ...`) را parse کند
+- این برای تسک‌های قدیمی که metadata ندارند کار می‌کند
 
-// بعد:
-if (optionsRef.current?.lang) {
-  recognition.lang = optionsRef.current.lang;
-}
-// اگر lang نباشد، ست نمی‌شود و مرورگر خودکار تشخیص می‌دهد
+### جزئیات فنی
+
+**فایل‌های تغییر:**
+1. `src/components/feedback/AnnotationOverlay.tsx` - اضافه کردن metadata به insert
+2. `src/pages/Tasks.tsx` - بهبود منطق نمایش نام ایجادکننده
+
+**بدون تغییر دیتابیس** - فیلد `metadata` قبلاً در جدول tasks وجود دارد (به صورت jsonb).
+
+**منطق نمایش نام:**
+```text
+1. اگر metadata.submitter_name موجود باشد -> آن را نشان بده
+2. اگر description شامل "From: ..." باشد -> نام را از آن استخراج کن
+3. اگر created_by_profile.full_name موجود باشد -> آن را نشان بده
+4. در غیر این صورت -> چیزی نشان نده
 ```
-
-#### 2. `src/components/feedback/AnnotationOverlay.tsx`
-- حذف `lang: "fa-IR"` از فراخوانی `useSpeechRecognition` (خط ۴۶)
-
-#### 3. `src/hooks/useMeetingTranscription.ts`
-- حذف `recognition.lang = "en-US"` از خط ۹۴ تا زبان خودکار تشخیص داده شود
-
-#### 4. فایل‌های بدون تغییر
-- `ChatInput.tsx`, `LiveChat.tsx`, `ComposeEmailDialog.tsx`, `EmailReplyComposer.tsx`, `MessageThread.tsx`, `LiveCallPanel.tsx` - هیچکدام `lang` ارسال نمی‌کنند، پس با حذف پیش‌فرض خودکار درست می‌شوند
-- `useRealtimeTranscribe.ts` (ElevenLabs) - از قبل تشخیص خودکار دارد
-
-### نکته فنی
-Web Speech API کروم وقتی `lang` ست نشود، از زبان مرورگر/سیستم‌عامل استفاده می‌کند و تا حدی تشخیص خودکار انجام می‌دهد. این بهترین رفتار ممکن با این API است.
-
