@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ import { ESignatureDialog } from "@/components/accounting/ESignatureDialog";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
+  initialDocType?: DocType;
 }
 
 type DocType = "invoice" | "packing-slip" | "quotation" | "estimation";
@@ -45,8 +46,14 @@ const QUOTATION_STATUSES = [
   { value: "Cancelled", label: "Cancelled" },
 ];
 
-export function AccountingDocuments({ data }: Props) {
-  const [activeDoc, setActiveDoc] = useState<DocType>("quotation");
+export function AccountingDocuments({ data, initialDocType }: Props) {
+  const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
+
+  useEffect(() => {
+    if (initialDocType) {
+      setActiveDoc(initialDocType);
+    }
+  }, [initialDocType]);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<DocType | null>(null);
   const [convertQuote, setConvertQuote] = useState<{ id: string; quote_number: string; total_amount: number | null; customer_name: string } | null>(null);
