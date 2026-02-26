@@ -499,9 +499,9 @@ export function AIExtractView() {
     <div className="relative h-full">
       {/* Brain processing overlay */}
       {processing && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center pointer-events-none animate-fade-in">
           {/* Dark backdrop */}
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px]" />
           
           {/* Outer glow */}
           <div
@@ -516,9 +516,10 @@ export function AIExtractView() {
           <img
             src={brainHero}
             alt=""
-            className="relative w-[40vh] h-[40vh] max-w-[500px] max-h-[500px] object-contain opacity-30 select-none"
+            className="relative w-[40vh] h-[40vh] max-w-[500px] max-h-[500px] object-contain opacity-70 select-none"
             draggable={false}
             style={{
+              mixBlendMode: "screen",
               filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.5))",
               animation: "brain-extract-float 4s ease-in-out infinite",
             }}
@@ -542,8 +543,8 @@ export function AIExtractView() {
           50% { opacity: 0.25; transform: scale(1.05); }
         }
         @keyframes brain-extract-float {
-          0%, 100% { transform: translateY(0) scale(1); opacity: 0.25; }
-          50% { transform: translateY(-10px) scale(1.03); opacity: 0.35; }
+          0%, 100% { transform: translateY(0) scale(1); opacity: 0.65; }
+          50% { transform: translateY(-10px) scale(1.03); opacity: 0.8; }
         }
       `}</style>
 
