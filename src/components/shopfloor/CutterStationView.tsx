@@ -41,6 +41,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [manualFloorConfirmed, setManualFloorConfirmed] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [completedAtRunStart, setCompletedAtRunStart] = useState<number | null>(null);
+  const [justCompletedItemId, setJustCompletedItemId] = useState<string | null>(null);
+  const [localCompletedOverride, setLocalCompletedOverride] = useState<Record<string, number>>({});
 
   // Keep currentIndex in bounds when items change (e.g. completed item removed by realtime)
   useEffect(() => {
@@ -48,6 +50,20 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       setCurrentIndex(items.length - 1);
     }
   }, [items.length, currentIndex]);
+
+  // Clear justCompleted guard when the item leaves the list or we switch items
+  useEffect(() => {
+    if (!justCompletedItemId) return;
+    const stillInList = items.some(i => i.id === justCompletedItemId);
+    if (!stillInList) {
+      setJustCompletedItemId(null);
+      setLocalCompletedOverride(prev => {
+        const next = { ...prev };
+        delete next[justCompletedItemId];
+        return next;
+      });
+    }
+  }, [items, justCompletedItemId]);
 
   // Reset run state when switching to a different item (Bug #12)
   const currentItem = items[currentIndex] || null;
@@ -112,12 +128,15 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const completedPieces = currentItem?.completed_pieces || 0;
 
   // SINGLE SOURCE OF TRUTH: during a run, use snapshot + local tracker;
-  // when idle, use whatever the DB/realtime says
-  const effectiveCompleted = completedAtRunStart != null
-    ? completedAtRunStart + slotTracker.totalCutsDone
-    : slotTracker.slots.length > 0
-      ? completedPieces + slotTracker.totalCutsDone   // running but no snapshot → use DB base + local progress
-      : completedPieces;
+  // when idle, use whatever the DB/realtime says.
+  // localCompletedOverride takes priority when set (prevents stale-data loop after completing a run)
+  const effectiveCompleted = currentItem && localCompletedOverride[currentItem.id] != null
+    ? localCompletedOverride[currentItem.id]
+    : completedAtRunStart != null
+      ? completedAtRunStart + slotTracker.totalCutsDone
+      : slotTracker.slots.length > 0
+        ? completedPieces + slotTracker.totalCutsDone
+        : completedPieces;
 
   const remainingPieces = totalPieces - effectiveCompleted;
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
@@ -357,6 +376,16 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         slots_removed: slotTracker.slots.filter((s) => s.status === "removed").length,
       });
 
+      const markLabel = currentItem.mark_number || "item";
+      const newCompletedPieces = (completedAtRunStart ?? completedPieces) + totalOutput;
+      const isMarkComplete = newCompletedPieces >= totalPieces;
+
+      // ── Set completion guard BEFORE resetting run state ──
+      setJustCompletedItemId(currentItem.id);
+      if (isMarkComplete) {
+        setLocalCompletedOverride(prev => ({ ...prev, [currentItem.id]: totalPieces }));
+      }
+
       slotTracker.reset();
       setIsRunning(false);
       setActiveRunId(null);
@@ -365,10 +394,6 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       setCompletedAtRunStart(null);
 
       // ── Routing toast based on bend type ──
-      const markLabel = currentItem.mark_number || "item";
-      const newCompletedPieces = (completedAtRunStart ?? completedPieces) + totalOutput;
-      const isMarkComplete = newCompletedPieces >= totalPieces;
-
       if (currentItem.bend_type === "bend") {
         toast({
           title: `✓ ${totalOutput} pieces cut — SEND TO BENDER`,
@@ -384,6 +409,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       // ── Auto-advance to next item if mark is complete ──
       if (isMarkComplete && currentIndex < items.length - 1) {
         setTimeout(() => {
+          setJustCompletedItemId(null);
           setCurrentIndex((i) => i + 1);
         }, 1200);
       }
@@ -461,26 +487,56 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             </div>
           )}
 
-          {/* ── SLOT TRACKER (visible during active run) ── */}
-          {machineIsRunning && slotTracker.slots.length > 0 && (
-            <SlotTracker
-              slots={slotTracker.slots}
-              barCode={currentItem.bar_code}
-              cutLengthMm={currentItem.cut_length_mm}
-              stockLengthMm={selectedStockLength}
-              onRecordStroke={handleRecordStroke}
-              onRemoveBar={handleRemoveBar}
-              onCompleteRun={handleCompleteRun}
-              canWrite={canWrite}
-            />
-          )}
+          {/* ── JUST-COMPLETED GUARD: suppress run UI while waiting for realtime ── */}
+          {justCompletedItemId === currentItem.id ? (
+            <Card className="bg-primary/10 border-primary/30">
+              <CardContent className="p-6 flex flex-col items-center justify-center gap-3">
+                <CheckCircle2 className="w-8 h-8 text-primary" />
+                {remaining <= 1 ? (
+                  <>
+                    <p className="text-sm font-bold text-primary tracking-wider uppercase">
+                      All marks complete — this machine is done
+                    </p>
+                    {onBack && (
+                      <button
+                        onClick={onBack}
+                        className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded text-sm font-bold hover:bg-primary/90 transition-colors"
+                      >
+                        ← Back to Station Dashboard
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm font-bold text-primary tracking-wider uppercase">
+                    Mark complete — advancing to next item…
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* ── SLOT TRACKER (visible during active run) ── */}
+              {machineIsRunning && slotTracker.slots.length > 0 && (
+                <SlotTracker
+                  slots={slotTracker.slots}
+                  barCode={currentItem.bar_code}
+                  cutLengthMm={currentItem.cut_length_mm}
+                  stockLengthMm={selectedStockLength}
+                  onRecordStroke={handleRecordStroke}
+                  onRemoveBar={handleRemoveBar}
+                  onCompleteRun={handleCompleteRun}
+                  canWrite={canWrite}
+                />
+              )}
 
-          {/* ── FOREMAN BRAIN PANEL (instructions before/during run) ── */}
-          {(!machineIsRunning || slotTracker.slots.length === 0) && (
-            <ForemanPanel
-              foreman={foreman}
-              onAlternativeAction={handleAlternativeAction}
-            />
+              {/* ── FOREMAN BRAIN PANEL (instructions before/during run) ── */}
+              {(!machineIsRunning || slotTracker.slots.length === 0) && (
+                <ForemanPanel
+                  foreman={foreman}
+                  onAlternativeAction={handleAlternativeAction}
+                />
+              )}
+            </>
           )}
 
           {/* BIG CUT LENGTH */}
@@ -535,13 +591,23 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             </Card>
           </div>
 
-          {isDone && !machineIsRunning && (
+          {isDone && !machineIsRunning && justCompletedItemId !== currentItem.id && (
             <Card className="bg-primary/10 border-primary/30">
-              <CardContent className="p-6 flex items-center justify-center gap-3">
+              <CardContent className="p-6 flex flex-col items-center justify-center gap-3">
                 <CheckCircle2 className="w-6 h-6 text-primary" />
                 <p className="text-sm font-bold text-primary tracking-wider uppercase">
-                  This mark is complete — move to next item
+                  {remaining <= 1
+                    ? "All marks complete — this machine is done"
+                    : "This mark is complete — move to next item"}
                 </p>
+                {remaining <= 1 && onBack && (
+                  <button
+                    onClick={onBack}
+                    className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded text-sm font-bold hover:bg-primary/90 transition-colors"
+                  >
+                    ← Back to Station Dashboard
+                  </button>
+                )}
               </CardContent>
             </Card>
           )}
