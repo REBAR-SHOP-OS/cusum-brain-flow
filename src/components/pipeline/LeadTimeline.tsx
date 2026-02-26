@@ -403,22 +403,8 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                     if (!signedUrl) return;
                     window.open(signedUrl, "_blank");
                   } else if (isOdooFile) {
-                    // Legacy: still on Odoo proxy (not yet migrated)
-                    const { data: sessionData } = await supabase.auth.getSession();
-                    const token = sessionData.session?.access_token;
-                    if (!token) return;
-                    const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${f.odoo_id}`;
-                    const res = await fetch(proxyUrl, {
-                      headers: { Authorization: `Bearer ${token}` },
-                    });
-                    if (!res.ok) throw new Error("Download failed");
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = f.file_name || `file-${f.odoo_id}`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                    // Odoo proxy disabled — file not yet migrated
+                    console.warn("Odoo file not yet migrated:", f.odoo_id);
                   } else if (f.file_url) {
                     window.open(f.file_url, "_blank");
                   }
@@ -516,42 +502,14 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
 
 // Inline image preview for Odoo attachments
 function OdooImagePreview({ odooId, fileName }: { odooId: string | number; fileName: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData.session?.access_token;
-        if (!token) return;
-        const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${odooId}`;
-        const res = await fetch(proxyUrl, { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) throw new Error("fetch failed");
-        const blob = await res.blob();
-        if (!cancelled) setSrc(URL.createObjectURL(blob));
-      } catch {
-        if (!cancelled) setError(true);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [odooId]);
-
-  if (error || !src) {
-    if (error) return null; // silently skip broken images
-    return <div className="w-full h-24 rounded-md bg-muted animate-pulse" />;
-  }
-
+  // Odoo proxy disabled — show placeholder for unmigrated files
   return (
-    <img
-      src={src}
-      alt={fileName}
-      className="rounded-md border border-border max-h-48 w-auto object-contain bg-muted"
-      loading="lazy"
-    />
+    <div className="w-full max-w-[280px] rounded-md border border-border bg-muted/30 p-3 text-center">
+      <p className="text-xs text-muted-foreground">Image not yet migrated (Odoo #{odooId})</p>
+    </div>
   );
 }
+
 
 // File icon helpers
 function getFileIcon(mime: string, ext: string) {

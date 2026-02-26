@@ -196,6 +196,11 @@ async function executeTool(
   actionId?: string,
 ): Promise<{ success: boolean; result?: unknown; error?: string }> {
   if (toolName === "odoo_write") {
+    // ODOO_ENABLED feature flag guard
+    if (Deno.env.get("ODOO_ENABLED") !== "true") {
+      return { success: false, error: "Odoo integration is disabled. odoo_write is no longer available." };
+    }
+
     // A) Enforce explicit write flag
     if (toolParams.allow_write !== true) {
       return { success: false, error: "allow_write flag required — set allow_write: true in tool_params to confirm write intent" };
