@@ -5,7 +5,21 @@ import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
-// ... keep existing code (getMimeType function)
+function getMimeType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
+  const map: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    pdf: "application/pdf",
+  };
+  return map[ext] || "application/octet-stream";
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
