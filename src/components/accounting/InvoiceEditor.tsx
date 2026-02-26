@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Printer, Pencil, Save, Plus, Trash2, Loader2 } from "lucide-react";
+import { X, Printer, Pencil, Save, Plus, Trash2, Loader2, Copy, ExternalLink, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import brandLogo from "@/assets/brand-logo.png";
 import { Badge } from "@/components/ui/badge";
 import { QBAttachmentUploader } from "./QBAttachmentUploader";
 import { ClassDepartmentPicker } from "./ClassDepartmentPicker";
+import { PaymentLinksSection } from "./PaymentLinksSection";
 import type { QBInvoice, QBCustomer, QBItem, QBPayment } from "@/hooks/useQuickBooksData";
 
 interface LineItem {
@@ -594,7 +595,11 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
           </div>
         </div>
 
-        {/* Attachments */}
+        {/* Payment Links — visible when balance > 0 and not editing */}
+        {amountDue > 0 && !editing && (
+          <PaymentLinksSection invoice={invoice} amountDue={amountDue} />
+        )}
+
         <div className="mt-6 print:hidden">
           <QBAttachmentUploader entityType="Invoice" entityId={invoice.Id} />
         </div>

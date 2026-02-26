@@ -1,5 +1,8 @@
 project_id = "rzqonxnowjrtbueauziu"
 
+[functions.stripe-payment]
+verify_jwt = false
+
 [functions.validate-clearance-photo]
 verify_jwt = false
 

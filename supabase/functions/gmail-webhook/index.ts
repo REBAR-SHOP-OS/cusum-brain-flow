@@ -264,6 +264,114 @@ serve(async (req) => {
             dedupe_key: `gmail:${msgId}`,
             metadata: { from, to, subject, threadId: msgData.threadId },
           });
+
+          // ── AI Receipt/Invoice Detection ──
+          try {
+            const bodyPreview = bodyContent?.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 500) || "";
+            const subjectLower = (subject || "").toLowerCase();
+            const hasAttachments = msgData.payload?.parts?.some((p: any) =>
+              p.filename && (p.mimeType?.startsWith("application/pdf") || p.mimeType?.startsWith("image/"))
+            );
+            
+            // Quick heuristic check before calling AI
+            const receiptKeywords = /invoice|receipt|payment|statement|bill|remittance|paid|charge|order confirmation/i;
+            const amountPattern = /\$[\d,]+\.?\d{0,2}|\d+\.\d{2}\s*(cad|usd|eur)/i;
+            const isLikelyFinancial = receiptKeywords.test(subjectLower) || receiptKeywords.test(bodyPreview) ||
+              (amountPattern.test(bodyPreview) && hasAttachments);
+
+            if (isLikelyFinancial) {
+              // Use Lovable AI to classify
+              const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+              if (LOVABLE_API_KEY) {
+                const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "google/gemini-2.5-flash-lite",
+                    messages: [
+                      {
+                        role: "system",
+                        content: "You are a financial document classifier. Analyze the email and extract: document_type (receipt/invoice/statement/payment_confirmation or null if not financial), vendor_name, amount (number), currency (CAD/USD/EUR). Return JSON only.",
+                      },
+                      {
+                        role: "user",
+                        content: `Subject: ${subject}\nFrom: ${from}\nBody: ${bodyPreview}`,
+                      },
+                    ],
+                    tools: [{
+                      type: "function",
+                      function: {
+                        name: "classify_document",
+                        description: "Classify email as financial document",
+                        parameters: {
+                          type: "object",
+                          properties: {
+                            document_type: { type: "string", enum: ["receipt", "invoice", "statement", "payment_confirmation", "not_financial"] },
+                            vendor_name: { type: "string" },
+                            amount: { type: "number" },
+                            currency: { type: "string", enum: ["CAD", "USD", "EUR"] },
+                          },
+                          required: ["document_type"],
+                        },
+                      },
+                    }],
+                    tool_choice: { type: "function", function: { name: "classify_document" } },
+                  }),
+                });
+
+                if (aiRes.ok) {
+                  const aiData = await aiRes.json();
+                  const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+                  if (toolCall?.function?.arguments) {
+                    const classification = JSON.parse(toolCall.function.arguments);
+                    
+                    if (classification.document_type && classification.document_type !== "not_financial") {
+                      // Store in email_collected_documents
+                      try {
+                        await supabase.from("email_collected_documents").insert({
+                          company_id: companyId,
+                          email_id: msgId,
+                          gmail_message_id: msgData.threadId,
+                          document_type: classification.document_type,
+                          vendor_name: classification.vendor_name || from,
+                          amount: classification.amount || null,
+                          currency: classification.currency || "CAD",
+                          document_date: new Date(parseInt(msgData.internalDate)).toISOString().split("T")[0],
+                          extracted_data: { classification, subject, from, has_attachments: hasAttachments },
+                          status: "pending_review",
+                        });
+                      } catch (insertErr) {
+                        console.error("Failed to insert email_collected_document:", insertErr);
+                      }
+
+                      // Create human task for review
+                      try {
+                        await supabase.from("human_tasks").insert({
+                          company_id: companyId,
+                          title: `📧 ${classification.document_type} detected: ${classification.vendor_name || "Unknown"} ${classification.amount ? `$${classification.amount}` : ""}`,
+                          description: `AI detected a ${classification.document_type} in email from ${from}.\nSubject: ${subject}\n${classification.amount ? `Amount: $${classification.amount} ${classification.currency || "CAD"}` : "Amount: unknown"}\nVendor: ${classification.vendor_name || "Unknown"}`,
+                          severity: "info",
+                          category: "receipt_collection",
+                          source: "gmail-webhook-ai",
+                        });
+                      } catch (taskErr) {
+                        console.error("Failed to create human task for receipt:", taskErr);
+                      }
+
+                      console.log(`[gmail-webhook] AI classified email as ${classification.document_type} from ${classification.vendor_name}`);
+                    }
+                  }
+                } else {
+                  console.warn("[gmail-webhook] AI classification failed:", aiRes.status);
+                }
+              }
+            }
+          } catch (aiErr) {
+            console.error("[gmail-webhook] AI receipt detection error:", aiErr);
+          }
         }
       } catch (msgErr) {
         console.error("Error processing message", msgId, msgErr);
