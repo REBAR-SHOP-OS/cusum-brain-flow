@@ -48,6 +48,17 @@ export interface Order {
   quotes?: { id: string; quote_number: string } | null;
 }
 
+export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["in_production", "cancelled"],
+  in_production: ["invoiced", "cancelled"],
+  invoiced: ["partially_paid", "paid", "cancelled"],
+  partially_paid: ["paid"],
+  paid: ["closed"],
+  closed: [],
+  cancelled: [],
+};
+
 export function useOrders() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -123,16 +134,6 @@ export function useOrders() {
   });
 
   // ─── Update order status ────────────────────────────
-  const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-    draft: ["confirmed", "cancelled"],
-    confirmed: ["in_production", "cancelled"],
-    in_production: ["ready", "cancelled"],
-    ready: ["loading", "cancelled"],
-    loading: ["in-transit"],
-    "in-transit": ["delivered"],
-    delivered: ["invoiced"],
-    invoiced: ["paid"],
-  };
 
   const updateOrderStatus = useMutation({
     mutationFn: async ({ id, status, currentStatus }: { id: string; status: string; currentStatus?: string }) => {
@@ -181,6 +182,9 @@ export function useOrders() {
     if (!order) throw new Error("Order not found");
     if (order.quickbooks_invoice_id) {
       throw new Error(`Order already invoiced (Invoice #${order.quickbooks_invoice_id})`);
+    }
+    if (order.status !== "confirmed" && order.status !== "in_production") {
+      throw new Error(`Cannot invoice: order is "${order.status}", must be "confirmed" or "in_production" first`);
     }
     if (!order.customers?.quickbooks_id) throw new Error("Customer has no QuickBooks ID — link it first");
 
