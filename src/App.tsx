@@ -82,6 +82,7 @@ const QaWar = React.lazy(() => import("./pages/QaWar"));
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
 import Unsubscribe from "./pages/Unsubscribe";
+import InboxManager from "./pages/InboxManager";
 import OrgChart from "./pages/OrgChart";
 const queryClient = new QueryClient();
 
@@ -201,7 +202,7 @@ const App = () => (
                     <Route path="/chat" element={<P><LiveChat /></P>} />
 
                     {/* Legacy redirects */}
-                    <Route path="/inbox-manager" element={<Navigate to="/home" replace />} />
+                    <Route path="/inbox-manager" element={<P><InboxManager /></P>} />
 
                     {/* Public pages */}
                     <Route path="/privacy" element={<PrivacyPolicy />} />
