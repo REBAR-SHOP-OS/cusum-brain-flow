@@ -28,6 +28,7 @@ import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { GenerateQuotationDialog } from "./GenerateQuotationDialog";
+import { DraftQuotationEditor } from "./documents/DraftQuotationEditor";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -60,6 +61,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
+  const [draftEditorId, setDraftEditorId] = useState<string | null>(null);
   const { companyId } = useCompanyId();
 
   const handleCreateDraft = async () => {
@@ -81,8 +83,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
       toast({ title: "Draft created", description: `${newQuote.quote_number} is ready for editing.` });
-      setPreviewId(newQuote.id);
-      setPreviewType("quotation");
+      setDraftEditorId(newQuote.id);
     } catch (err: any) {
       toast({ title: "Error creating draft", description: err.message, variant: "destructive" });
     } finally {
@@ -630,6 +631,15 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
         );
       })()}
       <GenerateQuotationDialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog} />
+      {draftEditorId && (
+        <DraftQuotationEditor
+          quoteId={draftEditorId}
+          onClose={() => {
+            setDraftEditorId(null);
+            queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+          }}
+        />
+      )}
     </div>
   );
 }
