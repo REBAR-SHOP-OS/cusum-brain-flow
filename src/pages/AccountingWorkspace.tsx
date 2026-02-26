@@ -301,7 +301,7 @@ export default function AccountingWorkspace() {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full">
+      <div className="flex h-full w-full">
         <AccountingSidebar activeTab={activeTab} onNavigate={setActiveTab} pendingCount={pendingCount} />
 
         <div className="flex flex-col flex-1 overflow-hidden">
