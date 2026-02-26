@@ -198,14 +198,16 @@ export async function runExtract(params: {
       status: "raw",
     }));
 
-    await supabase.from("extract_rows").insert(rows as any);
+    const { error: insertErr } = await supabase.from("extract_rows").insert(rows as any);
+    if (insertErr) throw new Error(`Failed to save rows: ${insertErr.message}`);
   }
 
   // Update session status
-  await supabase
+  const { error: statusErr } = await supabase
     .from("extract_sessions")
     .update({ status: "extracted" } as any)
     .eq("id", params.sessionId);
+  if (statusErr) throw new Error(`Failed to update session: ${statusErr.message}`);
 
   return { items, summary: data?.summary };
 }
