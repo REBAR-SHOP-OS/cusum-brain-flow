@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Users, Search, Loader2, Plus } from "lucide-react";
+import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
 import { CustomerDetail } from "@/components/customers/CustomerDetail";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
-import { useToast } from "@/hooks/use-toast";
+import { useToast, toast } from "@/hooks/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import type { Tables } from "@/integrations/supabase/types";
@@ -158,6 +159,13 @@ export function AccountingCustomers({ data }: Props) {
           <Plus className="w-4 h-4" /> Add Customer
         </Button>
       </div>
+
+      <DocumentUploadZone
+        targetType="customer"
+        onImport={(result) => {
+          toast({ title: "Customer imported", description: `${result.documentType} with ${result.fields.length} fields extracted.` });
+        }}
+      />
 
       <Card>
         <CardHeader>
