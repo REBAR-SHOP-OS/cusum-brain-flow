@@ -51,9 +51,15 @@ serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (!SUPER_ADMIN_EMAILS.includes(profile?.email ?? "")) {
+    if (!profile || !SUPER_ADMIN_EMAILS.includes(profile.email ?? "")) {
       return new Response(JSON.stringify({ error: "Forbidden: Super admin only" }), {
         status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!profile.company_id) {
+      return new Response(JSON.stringify({ activeCalls: [], error: "No company" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -62,7 +68,7 @@ serve(async (req) => {
     const { data: companyProfiles } = await supabaseAdmin
       .from("profiles")
       .select("user_id")
-      .eq("company_id", profile!.company_id);
+      .eq("company_id", profile.company_id);
 
     const userIds = (companyProfiles || []).map((p) => p.user_id);
     const { data: tokenRow } = await supabaseAdmin
