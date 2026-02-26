@@ -136,11 +136,15 @@ async function executeAction(
   switch (actionType) {
     case "auto_notify": {
       const roles = params.notify_roles || ["admin"];
-      // Get users with matching roles in this company
-      const { data: users } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .in("role", roles);
+      // Get users with matching roles scoped to this company
+      const { data: profileUsers } = await supabase
+        .from("profiles")
+        .select("user_id, user_roles!inner(role)")
+        .eq("company_id", companyId)
+        .eq("is_active", true);
+      const users = (profileUsers || []).filter((p: any) =>
+        p.user_roles?.some((r: any) => roles.includes(r.role))
+      ).map((p: any) => ({ user_id: p.user_id }));
 
       if (users) {
         for (const u of users) {

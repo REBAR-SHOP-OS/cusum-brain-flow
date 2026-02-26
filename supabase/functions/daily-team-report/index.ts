@@ -188,13 +188,16 @@ Keep it punchy, use emojis sparingly. No JSON, just plain text.`,
       console.warn("AI summary failed, using fallback:", e);
     }
 
-    // 5. Find admin users to notify
-    const { data: adminRoles } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "admin");
-
-    const adminUserIds = [...new Set((adminRoles || []).map((r: any) => r.user_id))];
+    // 5. Find admin users to notify (scoped to company via profiles)
+    const { data: adminProfiles } = await supabase
+      .from("profiles")
+      .select("user_id, user_roles!inner(role)")
+      .eq("is_active", true);
+    const adminUserIds = [...new Set(
+      (adminProfiles || [])
+        .filter((p: any) => p.user_roles?.some((r: any) => r.role === "admin"))
+        .map((p: any) => p.user_id)
+    )];
 
     if (!adminUserIds.length) {
       return new Response(JSON.stringify({ ok: true, message: "No admin users to notify" }), {

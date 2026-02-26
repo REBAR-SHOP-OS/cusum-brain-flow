@@ -91,11 +91,13 @@ Keep it practical and prioritized by business impact.`;
     const aiData = await aiResp.json();
     const ideas = aiData.choices?.[0]?.message?.content || "No ideas generated.";
 
-    // Find admin users to notify
-    const { data: admins } = await svc
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "admin");
+    // Find admin users to notify (scoped via profiles)
+    const { data: adminProfiles } = await svc
+      .from("profiles")
+      .select("user_id, user_roles!inner(role)")
+      .eq("is_active", true);
+    const admins = (adminProfiles || [])
+      .filter((p: any) => p.user_roles?.some((r: any) => r.role === "admin"));
 
     for (const admin of admins || []) {
       await svc.from("notifications").insert({
