@@ -360,9 +360,12 @@ serve(async (req) => {
     }
 
     const isPingTopic = wcTopic === "action.wc_webhook_ping" || wcTopic === "action.woocommerce_webhook_ping";
-    const isPingPayload = !!(pingPayload && (pingPayload.webhook_id || pingPayload.webhookId) && !pingPayload.id);
+    // WooCommerce validation pings arrive without signature AND without topic.
+    // Real order events ALWAYS include both x-wc-webhook-signature and x-wc-webhook-topic.
+    // So: no signature + no topic (or ping topic) = validation ping → accept unconditionally.
+    const isValidationPing = isPingTopic || (!wcSignature && !wcTopic);
 
-    if (isPingTopic || (!wcSignature && isPingPayload)) {
+    if (isValidationPing) {
       console.log("[wc-webhook] Ping/validation request received — responding 200 OK");
       return new Response(JSON.stringify({ ok: true, webhook_id: pingPayload?.webhook_id ?? pingPayload?.webhookId ?? null }), {
         status: 200,
