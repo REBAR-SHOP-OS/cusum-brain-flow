@@ -1363,7 +1363,12 @@ export function AIExtractView() {
             className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             onClick={async () => {
               if (!deleteProjectConfirm) return;
-              await supabase.from("projects").delete().eq("id", deleteProjectConfirm.id);
+              const { error } = await supabase.from("projects").delete().eq("id", deleteProjectConfirm.id);
+              if (error) {
+                toast({ title: "Error deleting project", description: error.message, variant: "destructive" });
+                setDeleteProjectConfirm(null);
+                return;
+              }
               if (selectedProjectId === deleteProjectConfirm.id) { setSelectedProjectId(""); setSelectedBarlistId(""); }
               setDeleteProjectConfirm(null);
               toast({ title: "Project deleted" });
