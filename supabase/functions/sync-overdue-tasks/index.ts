@@ -18,11 +18,13 @@ Deno.serve(async (req) => {
     const { serviceClient } = await requireAuth(req);
 
     // 1. Get overdue leads in Ben's stages
+    const today = new Date().toISOString().split("T")[0];
+
     const { data: leads, error: leadsErr } = await serviceClient
       .from("leads")
       .select("id, stage, expected_close_date, company_id, customer_id, customers(name, company_name)")
       .in("stage", BEN_STAGES)
-      .lt("expected_close_date", new Date().toISOString().split("T")[0])
+      .lte("expected_close_date", today)
       .not("expected_close_date", "is", null);
 
     if (leadsErr) {
@@ -38,7 +40,7 @@ Deno.serve(async (req) => {
     const { data: existingTasks } = await serviceClient
       .from("tasks")
       .select("source_ref")
-      .eq("source", "pipeline_overdue")
+      .in("source", ["pipeline_overdue", "pipeline_today"])
       .in("source_ref", leadIds)
       .neq("status", "completed");
 
@@ -50,13 +52,15 @@ Deno.serve(async (req) => {
       .map((l: any) => {
         const customerName = l.customers?.company_name || l.customers?.name || "Unknown";
         const stageLabel = STAGE_LABELS[l.stage] || l.stage;
+        const isToday = l.expected_close_date === today;
+        const prefix = isToday ? "Due Today" : "Overdue";
         return {
-          title: `Overdue: ${customerName} – ${stageLabel}`,
-          description: `Pipeline lead is overdue (expected close: ${l.expected_close_date}). Please follow up.`,
+          title: `${prefix}: ${customerName} – ${stageLabel}`,
+          description: `Pipeline lead is ${isToday ? "due today" : "overdue"} (expected close: ${l.expected_close_date}). Please follow up.`,
           assigned_to: BEN_PROFILE_ID,
-          source: "pipeline_overdue",
+          source: isToday ? "pipeline_today" : "pipeline_overdue",
           source_ref: l.id,
-          priority: "high",
+          priority: isToday ? "medium" : "high",
           due_date: l.expected_close_date,
           company_id: l.company_id,
           customer_id: l.customer_id,
@@ -74,7 +78,7 @@ Deno.serve(async (req) => {
       return json({ error: insertErr.message }, 500);
     }
 
-    return json({ created: newTasks.length, message: `Created ${newTasks.length} overdue task(s) for Ben` });
+    return json({ created: newTasks.length, message: `Created ${newTasks.length} overdue/due-today task(s) for Ben` });
   } catch (e) {
     if (e instanceof Response) return e;
     return json({ error: (e as Error).message }, 500);
