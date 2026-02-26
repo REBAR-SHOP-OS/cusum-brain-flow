@@ -254,29 +254,34 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
             </div>
           </div>
           <div className="text-right">
-            <h2 className="text-2xl font-black text-gray-900">Quotation {quoteNumber}</h2>
-            <p className="text-sm text-gray-500 mt-1">Date: {quoteDate}</p>
-            <div className="flex items-center gap-2 justify-end mt-1">
-              <span className="text-sm text-gray-500">Valid Until:</span>
-              <Input
-                type="date"
-                value={expirationDate}
-                onChange={(e) => setExpirationDate(e.target.value)}
-                className={`h-7 w-36 text-xs ${inputCls} print:border-none print:p-0`}
-              />
+            <h2 className="text-2xl font-black text-gray-900">Quotation #{quoteNumber}</h2>
+            <div className="mt-2 text-sm space-y-1">
+              <div className="flex items-center gap-2 justify-end">
+                <span className="text-gray-500 font-medium">Quote Date:</span>
+                <span className="text-gray-900">{quoteDate}</span>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <span className="text-gray-500 font-medium">Due Date:</span>
+                <Input
+                  type="date"
+                  value={expirationDate}
+                  onChange={(e) => setExpirationDate(e.target.value)}
+                  className={`h-7 w-36 text-xs ${inputCls} print:border-none print:p-0`}
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Customer & Project */}
-        <div className="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Customer</p>
-            {/* Customer searchable dropdown */}
+        {/* BILL TO + Shipping */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          {/* BILL TO */}
+          <div className="border border-gray-300 rounded-md p-4">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Bill To</p>
             <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
               <PopoverTrigger asChild>
                 <button
-                  className={`flex items-center justify-between w-full h-8 px-3 text-sm font-semibold rounded-md border bg-white text-gray-900 border-gray-300 hover:border-gray-400 transition-colors text-left print:border-none print:p-0`}
+                  className="flex items-center justify-between w-full h-8 px-3 text-sm font-semibold rounded-md border bg-white text-gray-900 border-gray-300 hover:border-gray-400 transition-colors text-left print:border-none print:p-0"
                 >
                   <span className={customerName ? "text-gray-900" : "text-gray-400"}>
                     {customerName || "Select customer…"}
@@ -297,8 +302,6 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
                     />
                   </div>
                 </div>
-
-                {/* Add new customer */}
                 {!addingNewCustomer ? (
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
@@ -309,40 +312,20 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
                   </button>
                 ) : (
                   <div className="p-2 border-b border-gray-100 space-y-1.5">
-                    <Input
-                      placeholder="Customer name"
-                      value={newCustName}
-                      onChange={(e) => setNewCustName(e.target.value)}
-                      className={`h-7 text-xs ${inputCls}`}
-                      autoFocus
-                    />
-                    <Input
-                      placeholder="Address (optional)"
-                      value={newCustAddress}
-                      onChange={(e) => setNewCustAddress(e.target.value)}
-                      className={`h-7 text-xs ${inputCls}`}
-                    />
+                    <Input placeholder="Customer name" value={newCustName} onChange={(e) => setNewCustName(e.target.value)} className={`h-7 text-xs ${inputCls}`} autoFocus />
+                    <Input placeholder="Address (optional)" value={newCustAddress} onChange={(e) => setNewCustAddress(e.target.value)} className={`h-7 text-xs ${inputCls}`} />
                     <div className="flex gap-1">
-                      <Button size="sm" className="h-6 text-xs" onClick={handleAddNewCustomer} disabled={!newCustName.trim()}>
-                        Create
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setAddingNewCustomer(false); setNewCustName(""); setNewCustAddress(""); }}>
-                        Cancel
-                      </Button>
+                      <Button size="sm" className="h-6 text-xs" onClick={handleAddNewCustomer} disabled={!newCustName.trim()}>Create</Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setAddingNewCustomer(false); setNewCustName(""); setNewCustAddress(""); }}>Cancel</Button>
                     </div>
                   </div>
                 )}
-
                 <div className="max-h-48 overflow-y-auto">
                   {filteredCustomers.length === 0 ? (
                     <p className="text-center text-gray-400 py-4 text-xs">No customers found</p>
                   ) : (
                     filteredCustomers.map((c) => (
-                      <button
-                        key={c.id}
-                        className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100 transition-colors truncate"
-                        onClick={() => selectCustomer(c)}
-                      >
+                      <button key={c.id} className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100 transition-colors truncate" onClick={() => selectCustomer(c)}>
                         {c.name}
                       </button>
                     ))
@@ -351,20 +334,29 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
               </PopoverContent>
             </Popover>
             <Input
-              placeholder="Address (optional)"
+              placeholder="Address"
               value={customerAddress}
               onChange={(e) => setCustomerAddress(e.target.value)}
-              className={`h-7 text-xs mt-1 ${inputCls} print:border-none print:p-0 print:bg-transparent`}
+              className={`h-7 text-xs mt-2 ${inputCls} print:border-none print:p-0 print:bg-transparent`}
             />
           </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Project</p>
+
+          {/* Shipping Address */}
+          <div className="border border-gray-300 rounded-md p-4">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Shipping Address</p>
             <Input
-              placeholder="Project name (optional)"
+              placeholder="Shipping address (optional)"
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              className={`h-8 text-sm font-semibold ${inputCls} print:border-none print:p-0 print:bg-transparent`}
+              className={`h-8 text-sm ${inputCls} print:border-none print:p-0 print:bg-transparent`}
             />
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Ship Date:</span>
+              <Input
+                type="date"
+                className={`h-7 text-xs flex-1 ${inputCls} print:border-none print:p-0`}
+              />
+            </div>
           </div>
         </div>
 
@@ -507,14 +499,14 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
 
         {/* Totals */}
         <div className="flex justify-end">
-          <div className="w-64 space-y-1 text-sm">
+          <div className="w-72 space-y-1 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Subtotal:</span>
               <span className="tabular-nums text-gray-900">{fmt(subtotal)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-500 flex items-center gap-1">
-                Tax
+                HST (ON)
                 <Input
                   type="number"
                   min={0}
@@ -528,8 +520,12 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
               </span>
               <span className="tabular-nums text-gray-900">{fmt(taxAmount)}</span>
             </div>
-            <div className="flex justify-between font-bold text-lg border-t-2 border-gray-900 pt-2 mt-2">
+            <div className="flex justify-between font-bold text-base border-t border-gray-900 pt-2 mt-2">
               <span className="text-gray-900">Total:</span>
+              <span className="tabular-nums text-gray-900">{fmt(total)}</span>
+            </div>
+            <div className="flex justify-between font-bold text-lg border-t-2 border-gray-900 pt-2 mt-1">
+              <span className="text-gray-900">Amount Due:</span>
               <span className="tabular-nums text-gray-900">{fmt(total)}</span>
             </div>
           </div>
