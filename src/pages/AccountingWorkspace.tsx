@@ -16,6 +16,7 @@ import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useWebPhone } from "@/hooks/useWebPhone";
+import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
 /* ── Lazy-loaded tab components ── */
@@ -170,6 +171,7 @@ export default function AccountingWorkspace() {
   const { isAdmin, hasRole, isLoading: rolesLoading } = useUserRole();
   const { user } = useAuth();
   const [webPhoneState, webPhoneActions] = useWebPhone();
+  const { totalCount: quotationCount } = useArchivedQuotations({ page: 1, pageSize: 1 });
   const [lastRefreshTime, setLastRefreshTime] = useState<string | null>(() => {
     try { return localStorage.getItem(QB_LAST_LOAD_TIME_KEY); } catch { return null; }
   });
@@ -336,7 +338,7 @@ export default function AccountingWorkspace() {
           <div className="flex items-center gap-2 px-4 py-2 border-b border-border shrink-0 overflow-x-auto">
             {[
               { label: "Invoices", tab: "invoices", count: qb.invoices.length },
-              { label: "Quotations", tab: "documents", count: qb.estimates.length, docType: "quotation" },
+              { label: "Quotations", tab: "documents", count: quotationCount || qb.estimates.length, docType: "quotation" },
               { label: "Bills", tab: "bills", count: qb.bills.length },
               { label: "Customers", tab: "customers", count: qb.customers.length },
             ].map(item => (
