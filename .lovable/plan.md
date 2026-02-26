@@ -1,35 +1,31 @@
 
 
-## Plan: Filter Work Order Queue to Only Show Production-Ready Orders
+## Plan: Fix Optimization Panel and Right-Side Overflow
 
-### Problem
-The Station Dashboard Work Order Queue shows all 17 pending work orders, but **none of them have any cut plan items** (0 items each). They are empty shells auto-generated from orders. The only real active job is the "Sector Contracting Ltd / Vault / Wall-E" entry visible in the Production Queue — which uses a different data path entirely.
+### Problem 1: Optimization panel shows "Optimization ready" toast but no plan cards are visible
+The `handleStartOptimize` runs optimization with the default config mode but never sets `selectedOptMode`, so the mode cards show no results. The optimization runs once but results only display when a mode card is clicked. The panel appears but all three cards are empty — user must click one to see results.
 
-### Root Cause
-Work orders are created automatically when orders are made, but they don't have production content (cut_plan_items) linked to them yet. The Station Dashboard blindly shows all pending WOs regardless of whether they have work to do.
+**Fix**: Auto-select "best-fit" as the default mode and pre-compute all three mode results so the cards show comparison data immediately.
 
-### Solution Options
+### Problem 2: Content leaks to the right side
+The table container has `min-w-[1400px]` inside a `div` with `overflow-auto` at `h-[55vh]`, but horizontal overflow isn't properly contained by the parent `max-w-full overflow-hidden` wrapper because the table's parent chain doesn't constrain width.
 
-**Option A (Recommended): Hide empty work orders from Station Dashboard**
-- In `useSupabaseWorkOrders.ts`, add a subquery or post-fetch filter to exclude work orders that have zero `cut_plan_items`
-- This ensures only production-ready WOs appear in the queue
-- Result: The queue would currently be empty (since no WOs have items), which is correct — the active job lives in the Production Queue
+**Fix**: Wrap the table's scrollable container with `overflow-x-auto` and ensure the parent uses `w-0 min-w-full` or `overflow-hidden` to prevent horizontal bleed.
 
-**Option B: Show Production Queue items on Station Dashboard**
-- Surface the Production Queue data (from `useProductionQueues`) more prominently on the Station Dashboard alongside or instead of the Work Order Queue
-- This would show the actual active job (Wall-E / Sector Contracting)
+### Changes
 
-### Recommended Changes
+**`src/components/office/AIExtractView.tsx`**
 
-**1. `src/hooks/useSupabaseWorkOrders.ts`**
-- After fetching work orders, run a secondary query to get `cut_plan_items` counts per work order
-- Filter out WOs with 0 items before returning
-- Or use a database view/join to do this in one query
+1. In `handleStartOptimize`: after running optimization, also set `setSelectedOptMode("best-fit")` so the best-fit card auto-selects and shows results immediately.
 
-**2. `src/components/shopfloor/WorkOrderQueueSection.tsx`**
-- Add a small empty-state message when all WOs are filtered out: "No production-ready work orders. Check the Production Queue."
+2. Pre-compute all three mode summaries so each card shows its stats without requiring a click:
+   - Run `runOptimization` for all 3 modes in `handleStartOptimize`
+   - Store results in a new state `allModeResults: Record<string, OptimizationSummary>`
+   - Each card shows its own stats from `allModeResults[mode]`
+   - Clicking a card still sets `selectedOptMode` for the highlight ring
+
+3. Fix right-side overflow: change the table container `div` from `h-[55vh] overflow-auto` to `h-[55vh] overflow-auto max-w-full` and ensure the outer wrapper constrains properly.
 
 ### Files Modified
-- `src/hooks/useSupabaseWorkOrders.ts` — filter out empty work orders
-- `src/components/shopfloor/WorkOrderQueueSection.tsx` — add empty state with link to Production Queue
+- `src/components/office/AIExtractView.tsx`
 
