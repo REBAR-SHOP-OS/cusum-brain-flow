@@ -1,74 +1,26 @@
-import { useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
-import { useCutPlans, CutPlan } from "@/hooks/useCutPlans";
+import { useSupabaseWorkOrders } from "@/hooks/useSupabaseWorkOrders";
 import { useProductionQueues } from "@/hooks/useProductionQueues";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
 import { MaterialFlowDiagram } from "@/components/shopfloor/MaterialFlowDiagram";
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
-import { MachineGroupSection } from "@/components/shopfloor/MachineGroupSection";
+import { WorkOrderQueueSection } from "@/components/shopfloor/WorkOrderQueueSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useTabletPin } from "@/hooks/useTabletPin";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
 
 export default function StationDashboard() {
   const { machines, isLoading, error } = useLiveMonitorData();
-  const { plans, loading: plansLoading, updatePlanStatus } = useCutPlans();
+  const { data: workOrders, loading: woLoading, updateStatus } = useSupabaseWorkOrders();
   const { projectLanes } = useProductionQueues();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { pinnedMachineId } = useTabletPin();
-  const queryClient = useQueryClient();
-
-  const assignToMachine = useCallback(async (planId: string, machineId: string) => {
-    await supabase.from("cut_plans").update({ machine_id: machineId }).eq("id", planId);
-    queryClient.invalidateQueries({ queryKey: ["cut-plans"] });
-    toast({ title: "Assigned", description: "Plan assigned to machine" });
-  }, [queryClient, toast]);
-  // Build a machine name lookup
-  const machineMap = new Map(machines.map(m => [m.id, m.name]));
-
-  // Sort helper: customer_name ASC nulls last, then name ASC
-  const sortPlans = (a: CutPlan, b: CutPlan) => {
-    const ca = (a.customer_name || "").toLowerCase();
-    const cb = (b.customer_name || "").toLowerCase();
-    if (!a.customer_name && b.customer_name) return 1;
-    if (a.customer_name && !b.customer_name) return -1;
-    if (ca !== cb) return ca < cb ? -1 : 1;
-    return (a.name || "").localeCompare(b.name || "");
-  };
-
-  // Group plans by machine
-  const machineGroups = useMemo(() => {
-    const groups = new Map<string | null, { running: CutPlan[]; queued: CutPlan[] }>();
-    for (const plan of plans) {
-      const key = plan.machine_id || null;
-      if (!groups.has(key)) groups.set(key, { running: [], queued: [] });
-      const g = groups.get(key)!;
-      if (plan.status === "running") g.running.push(plan);
-      else if (["draft", "ready", "queued"].includes(plan.status)) g.queued.push(plan);
-    }
-    for (const g of groups.values()) {
-      g.running.sort(sortPlans);
-      g.queued.sort(sortPlans);
-    }
-    const assigned: { machineId: string; name: string; running: CutPlan[]; queued: CutPlan[] }[] = [];
-    const unassigned = groups.get(null);
-    groups.forEach((g, key) => {
-      if (key) assigned.push({ machineId: key, name: machineMap.get(key) || key, ...g });
-    });
-    assigned.sort((a, b) => a.name.localeCompare(b.name));
-    return { assigned, unassigned: unassigned || { running: [], queued: [] } };
-  }, [plans, machines]);
-
-  // For ActiveProductionHub compatibility
-  const runningPlans = plans.filter(p => p.status === "running");
-  const queuedPlans = plans.filter(p => ["draft", "ready", "queued"].includes(p.status));
 
   // Auto-redirect if a machine is pinned to this device
   if (pinnedMachineId && !isLoading) {
@@ -122,39 +74,21 @@ export default function StationDashboard() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-10">
-        {isLoading ? (
+        {isLoading || woLoading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <>
             <MaterialFlowDiagram />
-            <ActiveProductionHub machines={machines} activePlans={[...runningPlans, ...queuedPlans]} />
+            <ActiveProductionHub machines={machines} activePlans={[]} />
 
-            {/* Machine-grouped sections */}
-            <div className="space-y-4">
-              {machineGroups.assigned.map(group => (
-                <MachineGroupSection
-                  key={group.machineId}
-                  machineName={group.name}
-                  runningPlans={group.running}
-                  queuedPlans={group.queued}
-                  onUpdateStatus={updatePlanStatus}
-                  onStatusChanged={(name, action) => toast({ title: action, description: name })}
-                />
-              ))}
-              {(machineGroups.unassigned.running.length > 0 || machineGroups.unassigned.queued.length > 0) && (
-                <MachineGroupSection
-                  machineName="Unassigned"
-                  runningPlans={machineGroups.unassigned.running}
-                  queuedPlans={machineGroups.unassigned.queued}
-                  onUpdateStatus={updatePlanStatus}
-                  onStatusChanged={(name, action) => toast({ title: action, description: name })}
-                  availableMachines={machines.map(m => ({ id: m.id, name: m.name }))}
-                  onAssignMachine={assignToMachine}
-                />
-              )}
-            </div>
+            {/* Work Order Queue */}
+            <WorkOrderQueueSection
+              workOrders={workOrders}
+              onUpdateStatus={updateStatus}
+              onStatusChanged={(name, action) => toast({ title: action, description: name })}
+            />
 
             <MachineSelector machines={machines} />
           </>
