@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, lazy, Suspense } from "react"
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Loader2, Plug, RefreshCw,
@@ -328,6 +329,29 @@ export default function AccountingWorkspace() {
                 <span className="hidden sm:inline">Refresh</span>
               </Button>
             </div>
+          </div>
+
+          {/* Quick-access tabs */}
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-border shrink-0 overflow-x-auto">
+            {[
+              { label: "Invoices", tab: "invoices", count: qb.invoices.length },
+              { label: "Estimates", tab: "estimates", count: qb.estimates.length },
+              { label: "Bills", tab: "bills", count: qb.bills.length },
+              { label: "Customers", tab: "customers", count: qb.customers.length },
+            ].map(item => (
+              <Button
+                key={item.tab}
+                variant={activeTab === item.tab ? "default" : "outline"}
+                size="sm"
+                className="h-8 text-xs gap-1.5 shrink-0"
+                onClick={() => setActiveTab(item.tab)}
+              >
+                {item.label}
+                <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+                  {item.count}
+                </Badge>
+              </Button>
+            ))}
           </div>
 
           {/* Main content with optional agent panel */}
