@@ -2,12 +2,28 @@ import { useState, useMemo } from "react";
 import { useProjects } from "@/hooks/useProjects";
 import { useBarlists } from "@/hooks/useBarlists";
 import { useCompanyId } from "@/hooks/useCompanyId";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronRight, ChevronDown, Users, FolderOpen, FileText, Activity } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronRight, ChevronDown, Users, FolderOpen, FileText, Activity, Wrench } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface CutPlanForBarlist {
+  id: string;
+  name: string;
+  status: string;
+  machine_id: string | null;
+  machine_name: string | null;
+  project_id: string | null;
+}
+
+interface MachineOption {
+  id: string;
+  name: string;
+}
 
 export function ShopFloorProductionQueue() {
   const { companyId } = useCompanyId();
@@ -28,6 +44,54 @@ export function ShopFloorProductionQueue() {
       return (data || []) as Array<{ id: string; name: string }>;
     },
   });
+
+  // Fetch cut_plans for all projects so we can show machine assignment
+  const projectIds = useMemo(() => [...new Set(projects.map(p => p.id))], [projects]);
+
+  const { data: cutPlans } = useQuery({
+    queryKey: ["cut-plans-for-shopfloor-queue", projectIds],
+    enabled: !!user && !!companyId && projectIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("cut_plans")
+        .select("id, name, status, machine_id, project_id, machines(name)")
+        .eq("company_id", companyId!)
+        .in("project_id", projectIds);
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        machine_id: row.machine_id,
+        machine_name: row.machines?.name || null,
+        project_id: row.project_id,
+      })) as CutPlanForBarlist[];
+    },
+  });
+
+  // Fetch cutter machines
+  const { data: machines } = useQuery({
+    queryKey: ["cutter-machines-for-queue"],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("machines")
+        .select("id, name")
+        .eq("type", "cutter")
+        .order("name");
+      return (data || []) as MachineOption[];
+    },
+  });
+
+  const cutPlansByProject = useMemo(() => {
+    const map = new Map<string, CutPlanForBarlist[]>();
+    (cutPlans || []).forEach(cp => {
+      if (cp.project_id) {
+        if (!map.has(cp.project_id)) map.set(cp.project_id, []);
+        map.get(cp.project_id)!.push(cp);
+      }
+    });
+    return map;
+  }, [cutPlans]);
 
   const tree = useMemo(() => {
     const customerMap = new Map((customers || []).map(c => [c.id, c.name]));
@@ -71,7 +135,6 @@ export function ShopFloorProductionQueue() {
       }
     });
 
-    // Unassigned
     const unassignedProjects = (projectsByCustomer.get("__none__") || [])
       .map(p => ({
         projectId: p.id,
@@ -106,14 +169,27 @@ export function ShopFloorProductionQueue() {
 
       <div className="space-y-2">
         {tree.map(node => (
-          <CustomerGroup key={node.customerId || "unassigned"} node={node} />
+          <CustomerGroup
+            key={node.customerId || "unassigned"}
+            node={node}
+            cutPlansByProject={cutPlansByProject}
+            machines={machines || []}
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function CustomerGroup({ node }: { node: { customerId: string | null; customerName: string; projects: { projectId: string; projectName: string; barlists: { id: string; name: string; revisionNo: number; status: string }[] }[] } }) {
+function CustomerGroup({
+  node,
+  cutPlansByProject,
+  machines,
+}: {
+  node: { customerId: string | null; customerName: string; projects: { projectId: string; projectName: string; barlists: { id: string; name: string; revisionNo: number; status: string }[] }[] };
+  cutPlansByProject: Map<string, CutPlanForBarlist[]>;
+  machines: MachineOption[];
+}) {
   const [open, setOpen] = useState(true);
 
   return (
@@ -128,14 +204,27 @@ function CustomerGroup({ node }: { node: { customerId: string | null; customerNa
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-5 pt-1 space-y-1">
         {node.projects.map(proj => (
-          <ProjectGroup key={proj.projectId} proj={proj} />
+          <ProjectGroup
+            key={proj.projectId}
+            proj={proj}
+            cutPlans={cutPlansByProject.get(proj.projectId) || []}
+            machines={machines}
+          />
         ))}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function ProjectGroup({ proj }: { proj: { projectId: string; projectName: string; barlists: { id: string; name: string; revisionNo: number; status: string }[] } }) {
+function ProjectGroup({
+  proj,
+  cutPlans,
+  machines,
+}: {
+  proj: { projectId: string; projectName: string; barlists: { id: string; name: string; revisionNo: number; status: string }[] };
+  cutPlans: CutPlanForBarlist[];
+  machines: MachineOption[];
+}) {
   const [open, setOpen] = useState(true);
 
   return (
@@ -147,15 +236,91 @@ function ProjectGroup({ proj }: { proj: { projectId: string; projectName: string
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-6 pt-0.5 space-y-0.5">
         {proj.barlists.map(bl => (
-          <div key={bl.id} className="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-muted/30 transition-colors">
-            <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
-            <span className="text-foreground truncate">{bl.name}</span>
-            <span className="text-muted-foreground text-[10px]">R{bl.revisionNo}</span>
-            <StatusBadge status={bl.status} />
-          </div>
+          <BarlistRow key={bl.id} bl={bl} cutPlans={cutPlans} machines={machines} projectId={proj.projectId} />
         ))}
+        {/* Show cut plans with machine assignment */}
+        {cutPlans.length > 0 && (
+          <div className="pt-1 space-y-1">
+            {cutPlans.map(cp => (
+              <CutPlanRow key={cp.id} plan={cp} machines={machines} />
+            ))}
+          </div>
+        )}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function BarlistRow({
+  bl,
+  cutPlans,
+  machines,
+  projectId,
+}: {
+  bl: { id: string; name: string; revisionNo: number; status: string };
+  cutPlans: CutPlanForBarlist[];
+  machines: MachineOption[];
+  projectId: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-muted/30 transition-colors">
+      <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+      <span className="text-foreground truncate">{bl.name}</span>
+      <span className="text-muted-foreground text-[10px]">R{bl.revisionNo}</span>
+      <StatusBadge status={bl.status} />
+    </div>
+  );
+}
+
+function CutPlanRow({ plan, machines }: { plan: CutPlanForBarlist; machines: MachineOption[] }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [assigning, setAssigning] = useState(false);
+
+  const handleAssign = async (machineId: string) => {
+    setAssigning(true);
+    const { error } = await supabase
+      .from("cut_plans")
+      .update({ machine_id: machineId, status: "queued" })
+      .eq("id", plan.id);
+
+    if (error) {
+      toast({ title: "Failed to assign", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Assigned to ${machines.find(m => m.id === machineId)?.name || "machine"}` });
+      queryClient.invalidateQueries({ queryKey: ["cut-plans-for-shopfloor-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["station-data"] });
+    }
+    setAssigning(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-muted/20 hover:bg-muted/40 transition-colors">
+      <Wrench className="w-3 h-3 text-primary/70 shrink-0" />
+      <span className="text-foreground truncate">{plan.name}</span>
+      <StatusBadge status={plan.status} />
+
+      {plan.machine_name ? (
+        <Badge variant="outline" className="text-[9px] px-1.5 py-0 ml-auto">
+          {plan.machine_name}
+        </Badge>
+      ) : (
+        <div className="ml-auto" onClick={e => e.stopPropagation()}>
+          <Select onValueChange={handleAssign} disabled={assigning}>
+            <SelectTrigger className="h-6 text-[10px] w-[110px] px-2 py-0 border-primary/30">
+              <SelectValue placeholder="Assign machine" />
+            </SelectTrigger>
+            <SelectContent>
+              {machines.map(m => (
+                <SelectItem key={m.id} value={m.id} className="text-xs">
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -165,6 +330,8 @@ function StatusBadge({ status }: { status: string }) {
     active: { label: "Active", cls: "bg-primary/15 text-primary" },
     approved: { label: "Approved", cls: "bg-success/15 text-success" },
     completed: { label: "Done", cls: "bg-success/15 text-success" },
+    queued: { label: "Queued", cls: "bg-primary/15 text-primary" },
+    running: { label: "Running", cls: "bg-warning/15 text-warning" },
   };
   const info = map[status] || { label: status, cls: "bg-muted text-muted-foreground" };
   return <Badge variant="secondary" className={`text-[9px] px-1.5 py-0 ml-auto ${info.cls}`}>{info.label}</Badge>;
