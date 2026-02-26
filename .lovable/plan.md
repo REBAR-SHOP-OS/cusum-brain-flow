@@ -1,25 +1,24 @@
 
 
-## Plan: Wire Upload Zone & Enhance "Add Quotation" Button
+## Plan: Change "Manual Upload" to "Manual" (Create Draft Quotation)
 
-### 1. Make "Add Quotation" button green with dropdown (Manual / AI Auto)
-**File: `src/components/accounting/AccountingDocuments.tsx`** (lines 246-250)
+### What changes
+Replace the "Manual Upload" dropdown option (which opens file picker) with a **"Manual"** option that creates a real draft quotation directly in the database and opens it for editing.
 
-Replace the single "Add Quotation" button with a split dropdown using `DropdownMenu`:
-- **Green background** (`bg-emerald-600 hover:bg-emerald-700 text-white`)
-- Two options:
-  - **"Manual Upload"** — scrolls to / highlights the drag-and-drop zone (or triggers file picker)
-  - **"AI Auto (from Estimation)"** — opens the existing `GenerateQuotationDialog`
+### File: `src/components/accounting/AccountingDocuments.tsx`
 
-Add imports for `DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger` and `ChevronDown`.
+**1. Add state for draft creation** (around line 60)
+- Add `const [creatingDraft, setCreatingDraft] = useState(false);`
 
-### 2. Wire the drag-and-drop upload zone to quotation creation
-**File: `src/components/accounting/AccountingDocuments.tsx`** (lines 283-291)
+**2. Add draft creation function**
+- Generate quote number like `QE-DRAFT-XXXXX` (random suffix)
+- Insert into `quotes` table with `status: 'draft'`, `source: 'manual'`, `total_amount: 0`
+- After insert, invalidate `archived-quotations` query to refresh list
+- Open the preview/edit view for the newly created quote
+- Show success toast
 
-The `DocumentUploadZone` with `targetType="estimate"` already handles AI extraction from uploaded files. Update the `onImport` callback to:
-- After extraction, also invalidate the `archived_quotations` query so the new quotation appears in the list immediately
-- Show a richer toast with the quote number if available from the import result
-
-### Files to modify:
-- **`src/components/accounting/AccountingDocuments.tsx`** — replace button with green dropdown, wire upload zone callback
+**3. Update dropdown item** (lines 257-264)
+- Change from file-picker trigger to calling the draft creation function
+- Label: **"Manual"** with `PenTool` icon instead of `Upload`
+- Show loading spinner while creating
 
