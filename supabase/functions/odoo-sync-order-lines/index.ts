@@ -33,6 +33,13 @@ async function odooRpc(url: string, db: string, apiKey: string, model: string, m
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // ODOO_ENABLED feature flag guard
+  if (Deno.env.get("ODOO_ENABLED") !== "true") {
+    return new Response(JSON.stringify({ error: "Odoo integration is disabled", disabled: true, linesFound: 0 }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const { serviceClient } = await requireAuth(req);
 

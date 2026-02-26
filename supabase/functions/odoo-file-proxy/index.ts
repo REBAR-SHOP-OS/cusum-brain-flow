@@ -75,6 +75,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // ODOO_ENABLED feature flag guard
+  if (Deno.env.get("ODOO_ENABLED") !== "true") {
+    return new Response(JSON.stringify({ error: "Odoo integration is disabled", disabled: true }), {
+      status: 410, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     // Auth check
     const authHeader = req.headers.get("Authorization");

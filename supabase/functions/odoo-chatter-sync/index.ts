@@ -53,6 +53,11 @@ function stripHtml(html: string | false): string {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // ODOO_ENABLED feature flag guard
+  if (Deno.env.get("ODOO_ENABLED") !== "true") {
+    return json({ error: "Odoo integration is disabled", disabled: true }, 200);
+  }
+
   try {
     // Dual-path auth: service role key (cron) OR valid user JWT (manual UI trigger)
     const authHeader = req.headers.get("Authorization") ?? "";

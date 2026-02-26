@@ -97,6 +97,13 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // ODOO_ENABLED feature flag guard
+  if (Deno.env.get("ODOO_ENABLED") !== "true") {
+    return new Response(JSON.stringify({ error: "Odoo integration is disabled. File migration paused.", disabled: true }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
