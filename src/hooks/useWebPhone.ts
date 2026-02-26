@@ -34,9 +34,26 @@ export function useWebPhone(): [WebPhoneState, WebPhoneActions] {
 
       // Get SIP info from edge function
       const { data, error } = await supabase.functions.invoke("ringcentral-sip-provision");
-      if (error) throw error;
+
+      // Handle FunctionsHttpError (non-2xx) — parse body to check for expected "not connected"
+      if (error) {
+        let bodyError: string | null = null;
+        try {
+          const ctx = (error as any).context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            bodyError = body?.error ?? null;
+          }
+        } catch {}
+
+        if (bodyError === "RingCentral not connected" || bodyError === "Forbidden") {
+          setState((s) => ({ ...s, status: "idle", error: null }));
+          return false;
+        }
+        throw error;
+      }
+
       if (data?.error) {
-        // Silently revert to idle if RingCentral isn't connected yet — not a fatal error
         if (data.error === "RingCentral not connected") {
           setState((s) => ({ ...s, status: "idle", error: null }));
           return false;
