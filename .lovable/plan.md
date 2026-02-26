@@ -1,129 +1,90 @@
 
 
-# QA War Simulation Round 9 -- Cross-Module Integrity Audit
-
-## Active Bugs Found (From Live Database Logs + Code Analysis)
+# QA War Simulation Round 11 -- Order Lifecycle, Realtime Scoping, Multi-Tenant Audit
 
 ---
 
-## BUG R9-1 -- CRITICAL: `ai-agent` queries `user_roles.company_id` which does not exist
-
-**Evidence**: Postgres error log (actively firing):
-```
-column user_roles.company_id does not exist
-```
-
-**Root Cause**: `supabase/functions/ai-agent/index.ts` line 366:
-```typescript
-const { data: rolesData } = await svcClient
-  .from("user_roles")
-  .select("role")
-  .eq("user_id", user.id)
-  .eq("company_id", companyId);  // ← COLUMN DOES NOT EXIST
-```
-
-The `user_roles` table has columns: `id`, `user_id`, `role`, `created_at`. There is no `company_id` column. This means **every AI agent call fails to load user roles**, causing the agent to operate with an empty `roles` array. This breaks role-gated agent behavior (e.g., shop floor agents should only respond to workshop users, accounting agents to accounting users).
-
-**Fix**: Remove the `.eq("company_id", companyId)` filter:
-```typescript
-const { data: rolesData } = await svcClient
-  .from("user_roles")
-  .select("role")
-  .eq("user_id", user.id);
-```
-
-**Severity**: CRITICAL -- breaks AI agent role awareness on every single call.
+## Active Bugs Found
 
 ---
 
-## BUG R9-2 -- HIGH: Lead delete fails silently due to RESTRICT FK constraints
+## BUG R11-1 -- HIGH: `CoordinationDashboard` queries 3 tables without `company_id` filter
 
-**Evidence**: Database FK analysis shows 4 child tables with `NO ACTION` (RESTRICT) delete rules:
-- `barlists.lead_id` → RESTRICT
-- `communications.lead_id` → RESTRICT
-- `estimation_learnings.lead_id` → RESTRICT
-- `project_coordination_log.lead_id` → RESTRICT
+**File**: `src/components/estimation/CoordinationDashboard.tsx`
 
-**Root Cause**: `src/pages/Pipeline.tsx` line 267:
-```typescript
-const { error } = await supabase.from("leads").delete().eq("id", id);
-```
+Three queries fetch data globally with no tenant scoping:
 
-No pre-delete cleanup of child records. If a lead has linked barlists, communications, estimation learnings, or coordination logs, the delete will throw a FK violation error. The UI shows "Error deleting lead" but gives no actionable information about what's blocking it.
+1. **Line 24-28**: `project_coordination_log` -- fetches ALL coordination logs across all companies
+2. **Line 37-41**: `ingestion_progress` -- fetches ALL ingestion progress rows
+3. **Line 50-54**: `estimation_learnings` -- fetches ALL learning pairs
 
-While `lead_activities`, `lead_communications`, `lead_events`, etc. have CASCADE, the above 4 tables do not.
+**Impact**: In a multi-tenant deployment, users see coordination data, ingestion progress, and learning stats from other companies. The KPI cards (accuracy, learning pairs count, weight delta) reflect all tenants' data, not just the current user's company.
 
-**Fix**: Before deleting a lead, either:
-1. SET NULL on the RESTRICT FK columns (`barlists.lead_id`, `communications.lead_id`, `estimation_learnings.lead_id`, `project_coordination_log.lead_id`), or
-2. Delete/nullify child records first, or
-3. Change the FK constraints to SET NULL via migration
+**Fix**: Import `useCompanyId` and add `.eq("company_id", companyId)` to all 3 queries. Add `enabled: !!companyId` to prevent queries firing before company is resolved.
 
-The cleanest approach is a migration to change the 4 RESTRICT FKs to `SET NULL` since these child records are valid standalone (a barlist can exist without a lead, communications can be orphaned).
-
-**Severity**: HIGH -- users cannot delete leads that have been actively worked on.
+**Severity**: HIGH -- cross-tenant data exposure in the Learning Engine dashboard.
 
 ---
 
-## BUG R9-3 -- MEDIUM: UUID "null" string error persists (R8-5 fix incomplete)
+## BUG R11-2 -- MEDIUM: Order status transitions have no validation
 
-**Evidence**: Postgres logs still show `invalid input syntax for type uuid: "null"` every ~10 seconds despite the R8-5 fix to `ringcentral-active-calls`.
+**File**: `src/hooks/useOrders.ts` line 126-134
 
-**Root Cause**: The R8-5 fix added a guard in the edge function, but the error is actually coming from a **client-side query**, not the edge function. The `ActiveCallsPanel` calls `supabase.functions.invoke()` which doesn't hit Postgres directly. The UUID error is from a different client-side `.eq()` call on a table with a UUID column, triggered on the same polling cadence.
+```typescript
+const updateOrderStatus = useMutation({
+  mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    const { error } = await supabase.from("orders").update({ status }).eq("id", id);
+    if (error) throw error;
+  },
+});
+```
 
-The most likely source is an RLS policy evaluation. When the user's session is active and polling, RLS policies that reference `auth.uid()` or join to `profiles.company_id` may receive a null value during edge cases (e.g., stale session, token refresh window). The error fires from the `authenticator` role connection, confirming it's a client-side PostgREST query, not an edge function.
+Any status can be set to any other status without validation. A user can move an order directly from "draft" to "delivered", bypassing the shop drawing approval, QC, production, and invoicing steps. While the `block_production_without_approval` trigger protects `cut_plan_items`, the order-level status itself has no guard.
 
-**Fix**: Audit all client-side queries that run on intervals or on page load that pass a variable which could be the string `"null"`. Search for patterns like `.eq("some_uuid_col", someVar)` where `someVar` may not be validated. Add guards: `if (!id) return;`
+**Fix**: Add a client-side status transition map that validates allowed transitions before calling the mutation. This is a defense-in-depth measure (the DB triggers catch production-level violations, but order-level status skipping is unprotected).
 
-**Severity**: MEDIUM -- log noise, potential silent data fetch failures.
+```typescript
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  draft: ["confirmed", "cancelled"],
+  confirmed: ["in_production", "cancelled"],
+  in_production: ["ready", "cancelled"],
+  ready: ["loading", "cancelled"],
+  loading: ["in-transit"],
+  "in-transit": ["delivered"],
+  delivered: ["invoiced"],
+  invoiced: ["paid"],
+};
+```
+
+**Severity**: MEDIUM -- workflow integrity issue, mitigated by DB triggers for production.
 
 ---
 
-## BUG R9-4 -- MEDIUM: Task delete does not clean up `task_comments`
+## BUG R11-3 -- LOW: 4 realtime channels missing `company_id` filter (R8-6 carried forward)
 
-**File**: `src/pages/Tasks.tsx` line 773:
-```typescript
-const { error } = await supabase.from("tasks").delete().eq("id", taskId);
-```
+**Files**:
+- `src/hooks/usePennyQueue.ts` line 67 -- `penny_collection_queue`
+- `src/hooks/useExtractSessions.ts` line 31 -- `extract_sessions`
+- `src/components/support/SupportConversationList.tsx` line 63 -- `support_conversations`
+- `src/hooks/useRCPresence.ts` line 60 -- `rc_presence`
 
-And the inline version at line 1399. Neither deletes `task_comments` first. If `task_comments.task_id` has a RESTRICT FK, the delete will fail. Even if it has CASCADE, the behavior is inconsistent with the explicit `deleteComment` function on line 490 which handles individual comment deletion. There's also a second delete path in the drawer (line 1399) that duplicates logic without cleanup.
+All 4 channels listen to ALL rows in their respective tables. While RLS prevents data leakage on the subsequent refetch query, the channel fires unnecessary callbacks for other tenants' changes, causing wasted API calls.
 
-**Fix**: Add `await supabase.from("task_comments").delete().eq("task_id", taskId)` before the task delete, matching the cascade-safe pattern from R7.
+**Fix**: Add `filter: "company_id=eq.<companyId>"` to the `postgres_changes` subscription config for each channel. This requires threading `companyId` into each hook.
 
-**Severity**: MEDIUM -- task deletion may fail for tasks with comments.
+For `usePennyQueue` and `useExtractSessions`, import `useCompanyId` and pass it into the subscription filter. For `SupportConversationList`, the component already has access to company context. For `useRCPresence`, the `rc_presence` table may not have a `company_id` column -- need to verify.
+
+**Severity**: LOW -- performance waste, no data leak (RLS protects reads).
 
 ---
 
-## BUG R9-5 -- LOW: `pipeline-automation-engine` queries `user_roles` by role without company scoping
+## Positive Findings (No Bug)
 
-**File**: `supabase/functions/pipeline-automation-engine/index.ts` line 140-143:
-```typescript
-const { data: users } = await supabase
-  .from("user_roles")
-  .select("user_id")
-  .in("role", roles);
-```
-
-This fetches ALL users with matching roles across ALL companies. In a multi-tenant environment, automation tasks could be assigned to users from different companies. The same pattern exists in:
-- `daily-team-report/index.ts` line 192-195
-- `timeclock-alerts/index.ts` line 144-147
-- `pipeline-digest/index.ts` line 116-119
-- `notify-on-message/index.ts` line 169-172
-- `auto-generate-post/index.ts` line 315-318
-
-Since `user_roles` has no `company_id`, these functions need to join through `profiles` to filter by company.
-
-**Fix**: Join through profiles:
-```typescript
-const { data: users } = await supabase
-  .from("profiles")
-  .select("user_id, user_roles!inner(role)")
-  .eq("company_id", companyId)
-  .in("user_roles.role", roles);
-```
-
-Or add a `company_id` column to `user_roles` (but this is a larger schema change).
-
-**Severity**: LOW in single-tenant deployment, HIGH in multi-tenant -- cross-company notification leakage.
+- **Webhook idempotency**: `ringcentral-webhook` uses `dedupe_key` on `activity_events` + `onConflict: "source,source_id"` on `communications`. Solid.
+- **QuickBooks invoice idempotency**: `quickbooks-oauth` checks `quickbooks_invoice_id` before creating invoice (line 1114-1128). Double-click safe.
+- **Order delete**: No order delete path exists in the frontend -- orders are status-managed, not deletable. Good design.
+- **`timeclock-alerts` and `notify-on-message`**: Already do two-step company filtering (global role query + profile company filter). Matches R9-5 pattern.
+- **All RESTRICT FKs eliminated**: Confirmed zero remaining from R9-2 migration.
 
 ---
 
@@ -131,57 +92,45 @@ Or add a `company_id` column to `user_roles` (but this is a larger schema change
 
 | ID | Severity | Module | Bug | Status |
 |----|----------|--------|-----|--------|
-| R9-1 | CRITICAL | AI Agent | `user_roles.company_id` column doesn't exist, breaks role loading | Active, every agent call |
-| R9-2 | HIGH | Pipeline | Lead delete blocked by RESTRICT FKs on 4 child tables | Latent, fails on worked leads |
-| R9-3 | MEDIUM | System | UUID "null" error persists from client-side query (R8-5 was server-side only) | Active, every 10s |
-| R9-4 | MEDIUM | Tasks | Task delete skips child comment cleanup | Latent |
-| R9-5 | LOW/HIGH | Multi-tenant | 6 edge functions query user_roles without company scoping | Latent in single-tenant |
-
----
-
-## Recurring Pattern Summary
-
-1. **Schema assumption drift**: Code assumes columns exist that don't (`user_roles.company_id` in R9-1, `leads.expected_revenue` in R8-2). No compile-time safety for edge functions.
-2. **Delete without cascade audit**: Rounds 7, 8, 9 keep finding new delete paths that skip child records. Systematic FK audit needed.
-3. **Cross-tenant role queries**: `user_roles` lacks `company_id`, forcing all role-based lookups to be global. 6+ edge functions affected.
+| R11-1 | HIGH | Learning Engine | CoordinationDashboard 3 queries missing company_id | New |
+| R11-2 | MEDIUM | Orders | No status transition validation | New |
+| R11-3 | LOW | Realtime | 4 channels missing company_id filter (R8-6) | Carried forward |
 
 ---
 
 ## Implementation Plan
 
-### Step 1: Fix R9-1 (CRITICAL) -- AI agent role query
-- Remove `.eq("company_id", companyId)` from `supabase/functions/ai-agent/index.ts` line 366
-- Deploy `ai-agent` edge function
+### Step 1: Fix R11-1 (HIGH) -- CoordinationDashboard multi-tenant scoping
+- Import `useCompanyId` hook
+- Add `.eq("company_id", companyId!)` to `project_coordination_log`, `ingestion_progress`, and `estimation_learnings` queries
+- Add `enabled: !!companyId` to all 3 queries
 
-### Step 2: Fix R9-2 (HIGH) -- Lead delete FK constraints
-- Database migration to change 4 RESTRICT FKs to SET NULL:
-  - `barlists.lead_id` → SET NULL
-  - `communications.lead_id` → SET NULL
-  - `estimation_learnings.lead_id` → SET NULL
-  - `project_coordination_log.lead_id` → SET NULL
+### Step 2: Fix R11-2 (MEDIUM) -- Order status transition validation
+- Add `ALLOWED_TRANSITIONS` map to `useOrders.ts`
+- In `updateOrderStatus`, validate `currentStatus -> newStatus` before executing the DB update
+- Show toast error if transition is not allowed
 
-### Step 3: Fix R9-4 (MEDIUM) -- Task delete cleanup
-- Add `task_comments` deletion before task deletion in `src/pages/Tasks.tsx` (both delete paths)
-
-### Step 4: Fix R9-5 (LOW) -- Cross-tenant role queries
-- Update `pipeline-automation-engine`, `daily-team-report`, `timeclock-alerts`, `pipeline-digest`, `notify-on-message`, and `auto-generate-post` to join through `profiles` for company-scoped role lookups
+### Step 3: Fix R11-3 (LOW) -- Realtime channel scoping
+- Add `filter: "company_id=eq.{companyId}"` to `usePennyQueue`, `useExtractSessions`, `SupportConversationList`
+- For `useRCPresence`, verify if `rc_presence` has a `company_id` column first; if not, skip (RLS handles it)
 
 ### Do NOT touch:
-- `ringcentral-active-calls/index.ts` (R8-5 fix is correct server-side, R9-3 is client-side)
-- `CutterStationView.tsx`, `BenderStationView.tsx` (fixed in R7/R8)
-- `Customers.tsx`, `AccountingCustomers.tsx` (fixed in R7)
-- `search-embeddings/index.ts`, `agentExecutiveContext.ts` (fixed in R8)
+- `ringcentral-webhook/index.ts` (idempotency already solid)
+- `quickbooks-oauth/index.ts` (invoice guard already solid)
+- `useOrders.ts` delete paths (none exist, by design)
+- Any files fixed in R7-R10
 
 ---
 
-## Updated Technical Debt Score: 2.5/10
+## Updated Technical Debt Score: 1.8/10
 
-| Category | Score | Delta from R8 |
-|----------|-------|---------------|
+| Category | Score | Delta from R10 |
+|----------|-------|----------------|
 | Security (XSS) | 9/10 | unchanged |
-| Multi-tenant isolation | 6/10 | -2 (6 functions with global role queries) |
-| Data integrity | 7/10 | -1 (lead delete + task delete gaps) |
-| Concurrency safety | 7/10 | +2 (R7/R8 atomic RPCs holding) |
-| API contract accuracy | 6/10 | -2 (user_roles.company_id ghost column) |
+| Multi-tenant isolation | 7/10 | -1 (CoordinationDashboard leak) |
+| Data integrity | 8/10 | unchanged |
+| Concurrency safety | 8/10 | +1 (QB invoice idempotency confirmed) |
+| API contract accuracy | 8/10 | +2 (R8/R9 fixes holding) |
+| Workflow integrity | 6/10 | NEW (order status transitions unvalidated) |
 | Code quality | 8/10 | unchanged |
 
