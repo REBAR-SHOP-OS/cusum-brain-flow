@@ -73,6 +73,7 @@ import PipelineIntelligence from "./pages/PipelineIntelligence";
 import SupportInbox from "./pages/SupportInbox";
 import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 import DriverDashboard from "./pages/DriverDashboard";
+import DriverDropoff from "./pages/DriverDropoff";
 import Estimation from "./pages/Estimation";
 import QuoteEngine from "./pages/QuoteEngine";
 import AutomationsHub from "./pages/AutomationsHub";
@@ -163,6 +164,7 @@ const App = () => (
                     
                     <Route path="/deliveries" element={<P><Deliveries /></P>} />
                     <Route path="/driver" element={<P><DriverDashboard /></P>} />
+                    <Route path="/driver/dropoff/:stopId" element={<P><DriverDropoff /></P>} />
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
                     <Route path="/transcribe" element={<P><Transcribe /></P>} />
                     <Route path="/transcribe/watch" element={<ProtectedRoute><TranscribeWatch /></ProtectedRoute>} />
