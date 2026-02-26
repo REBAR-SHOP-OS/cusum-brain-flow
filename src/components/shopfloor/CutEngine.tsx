@@ -24,6 +24,7 @@ interface CutEngineProps {
   totalPiecesDone?: number;
   totalPiecesPlanned?: number;
   activeBars?: number;
+  isDone?: boolean;
 }
 
 const STOCK_LENGTHS = [6000, 12000, 18000];
@@ -45,6 +46,7 @@ export function CutEngine({
   totalPiecesDone = 0,
   totalPiecesPlanned = 0,
   activeBars = 0,
+  isDone = false,
 }: CutEngineProps) {
   const [selectedStock, setSelectedStock] = useState(12000);
   const [bars, setBars] = useState(suggestedBars || 1);
@@ -88,7 +90,7 @@ export function CutEngine({
   const isFeasible = runPlan?.feasible ?? true;
 
   // Allow LOCK & START if plan is feasible OR supervisor can confirm
-  const canStart = canWrite && !isRunning && (isFeasible || runPlan?.stockSource === "manual");
+  const canStart = canWrite && !isRunning && !isDone && (isFeasible || runPlan?.stockSource === "manual");
 
   return (
     <div className={cn("space-y-4", baseClasses)}>
@@ -256,7 +258,7 @@ export function CutEngine({
         onClick={() => onLockAndStart(selectedStock, bars)}
       >
         <Lock className="w-4 h-4" />
-        {isRunning ? "RUNNING..." : "LOCK & START"}
+        {isRunning ? "RUNNING..." : isDone ? "✓ DONE" : "LOCK & START"}
       </Button>
 
       {isRunning && (
