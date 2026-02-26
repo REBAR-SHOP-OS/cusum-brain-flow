@@ -1,65 +1,37 @@
 
 
-## Plan: Add Packing Slip Items & Checklist to Driver Drop-Off Page
+## Fix: Build Error + Match Packing Slip UI to Attached Image
 
-The driver drop-off page currently only shows photo capture and signature. The user wants it to display all the packing slip line items (like the attached image: DW#, Mark, Quantity, Size, Type, Cut Length) with checkmarks, so the driver can verify what was delivered before signing.
+### Build Error
+The `as any` casts on `packing_slips` queries are causing the build to fail — `packing_slips` exists in the typed schema, so the casts must be removed.
 
-### Changes
+### UI Changes to Match Attached Image
+The current driver dropoff page has the right data but doesn't visually match the packing slip layout. Changes needed:
 
-#### `src/pages/DriverDropoff.tsx` — Major update
+#### `src/pages/DriverDropoff.tsx`
 
-1. **Fetch packing slip data**: Query `packing_slips` by `delivery_id` (from the stop's `delivery_id`) to get `items_json`, `customer_name`, `slip_number`, `scope`, `invoice_number`, `invoice_date`, `ship_to`
+1. **Remove `as any` casts** on lines 57, 138 — `packing_slips` is a valid typed table, casting breaks the production build
 
-2. **Add item checklist with checkmarks**: Display the items from `items_json` as a table/card list with columns matching the packing slip image:
-   - DW# (`drawing_ref`)
-   - Mark (`mark_number`)
-   - Quantity + Size (`total_pieces` + `bar_code`)
-   - Type (Bent if `asa_shape_code`, else Straight)
-   - Cut Length (`cut_length_mm / 1000` in meters)
-   - Each item gets a checkbox the driver taps to confirm it was delivered
-   - Total row at the bottom
+2. **Restyle packing slip header** to match the image layout:
+   - Company header: "Rebar.Shop Inc" + address + "Packing Slip" title aligned right
+   - Row 1: CUSTOMER | SHIP TO | DELIVERY # | DELIVERY DATE in bordered boxes
+   - Row 2: INVOICE # | INVOICE DATE | SCOPE in bordered boxes
 
-3. **Packing slip header info**: Show customer name, slip number, delivery number, invoice #, scope — matching the layout in the attached image
+3. **Restyle items table** to match the image:
+   - Proper table headers: DW# | Mark | Quantity Size | Type | Cut Length
+   - Each row shows data in columns matching the image
+   - Checkmark column added on the left for driver verification
+   - Total row at bottom with piece count
 
-4. **Reorder sections**: 
-   - Packing slip header (customer, delivery #, invoice, scope)
-   - Items checklist with checkmarks
-   - Site photo capture
-   - Customer signature pad
-   - Complete Drop-Off button
+4. **Add dual signature areas** matching the image:
+   - "Delivered By (Signature)" — line with label (driver signs)
+   - "Received By (Signature)" — uses the existing `SignaturePad` component (customer signs)
+   - Both labeled clearly below the signature lines
 
-5. **Update `canSubmit`**: Require all items checked + photo + signature before enabling completion
+5. **Move photo capture below signatures** — less prominent, keep it as a secondary action
 
-6. **Add checked item state**: `useState<Set<number>>` to track which items the driver has confirmed
-
-### Layout (mobile)
-```text
-┌──────────────────────────────┐
-│ ← DROP-OFF  DEL-4569-01     │
-│ 123 Main St  [Navigate]     │
-├──────────────────────────────┤
-│ CUSTOMER: ACTION HOME SVCS  │
-│ Slip: PS-4569-01            │
-│ Invoice: 4569 | Scope: ...  │
-├──────────────────────────────┤
-│ ☑ R01  15A09  3×15M  Bent   │
-│ ☑ R01  15A18 10×15M  Bent   │
-│ ☐ R02  AS18   6×10M  Str    │
-│ ...                         │
-│ Total: 47 pcs               │
-├──────────────────────────────┤
-│ 📷 Site Photo [tap]         │
-├──────────────────────────────┤
-│ ✍️ Customer Signature       │
-│ ┌────────────────────────┐  │
-│ │   SignaturePad         │  │
-│ └────────────────────────┘  │
-├──────────────────────────────┤
-│ [  ✓ Complete Drop-Off     ]│
-│ 3/6 items checked           │
-└──────────────────────────────┘
-```
+6. **Footer** with company contact info matching the image
 
 ### Files
-- **Edit**: `src/pages/DriverDropoff.tsx` — add packing slip fetch, item checklist with checkboxes, header info section
+- **Edit**: `src/pages/DriverDropoff.tsx` — remove `as any`, restyle to match packing slip image layout with checkmarks + dual signature areas
 
