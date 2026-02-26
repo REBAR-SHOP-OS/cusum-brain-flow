@@ -1,19 +1,32 @@
 
 
-## Plan: Fix Customer Deletion Error in Production Queue
+## Plan: Replace Station Queue with Work Order Queue
 
 ### Problem
-Clicking "Delete" on a customer folder in the Production Queue tries to delete the actual `customers` record from the database. A database trigger (`block_customer_delete_with_orders`) blocks this because the customer has 2 active orders. The Production Queue should only remove production-related items (plans, barlists, projects), not the customer record itself.
+The Station Dashboard currently shows cut plan queues grouped by machine (MachineGroupSection). The user wants to show work order queues instead.
 
-### File: `src/components/office/ProductionQueueView.tsx`
+### Changes
 
-**Change `handleDeleteCustomer` (lines 108-128):**
-- Keep the logic that deletes child projects, barlists, and plans (already handled by `handleDeleteProject`)
-- **Remove** the lines that delete contacts and the customer record (lines 114-121)
-- After cleaning up production items, just invalidate queries and show success toast
-- This way, the customer record stays intact (with its orders/quotes), but the production queue items are removed
+**1. Update `src/pages/StationDashboard.tsx`**
+- Remove the `useCutPlans` import and all cut-plan-related logic (machineGroups, sortPlans, assignToMachine, runningPlans, queuedPlans)
+- Import and use `useSupabaseWorkOrders` instead
+- Replace the MachineGroupSection block (lines 134-157) with a new `WorkOrderQueueSection` component
+- Keep MaterialFlowDiagram, ActiveProductionHub (pass empty arrays for activePlans), and MachineSelector
 
-### Summary of edit
-- Lines 114-121: Remove `supabase.from("contacts").delete()` and `supabase.from("customers").delete()` calls
-- The customer folder disappears from the queue naturally because its projects/plans are gone
+**2. Create `src/components/shopfloor/WorkOrderQueueSection.tsx`**
+- New component that displays work orders in a collapsible list, grouped by workstation (or "Unassigned")
+- Each work order row shows: work_order_number, status badge, customer_name, order_number
+- Action buttons: Start (pending→in_progress), Pause, Complete
+- Update work order status via supabase directly
+- Style consistent with existing MachineGroupSection (collapsible, badges, same border/card patterns)
+
+**3. Update `useSupabaseWorkOrders` hook**
+- Add join to fetch customer name: `select("*, orders(order_number, customers(name))")`
+- Add `customer_name` and `order_number` to the `SupabaseWorkOrder` interface
+- Add `updateStatus` function for changing work order status
+
+### Files
+- `src/hooks/useSupabaseWorkOrders.ts` — add joins + status update
+- `src/components/shopfloor/WorkOrderQueueSection.tsx` — new component
+- `src/pages/StationDashboard.tsx` — swap cut plan queues for work order queues
 
