@@ -1,33 +1,55 @@
 
 
-## Problem
+## Plan: Remove Packing Slips, Add AI Quotation Builder, Add "Convert to Quotation" in Pipeline
 
-The quotation preview for Odoo-synced quotes (like S00024) shows **empty items** because the Odoo sync only stored basic metadata (`odoo_customer`, `odoo_state`, etc.) — no `order_lines` or `line_items` were imported. The code at lines 543-553 looks for `metadata.order_lines` or `metadata.line_items`, finds neither, and renders an empty table.
+### 1. Remove "Packing Slips" from quick-access strip
+**File: `src/pages/AccountingWorkspace.tsx`** (line 340)
+- Remove the Packing Slips entry from the quick-access tabs array
 
-Similarly, QuickBooks estimates use `getQuotationData()` which parses `Line` array items — this works when the QB API returns line details, but can also be empty if the estimate has no `SalesItemLineDetail` lines.
+### 2. Remove Packing Slips sub-tab from Documents
+**File: `src/components/accounting/AccountingDocuments.tsx`** (lines 209-211)
+- Remove the `packing-slip` entry from `docTabs` array
+- Replace with a quotation tab or remove entirely since quotations are the main view
+- Set default `activeDoc` to `"quotation"` instead of `"packing-slip"`
 
-## Plan
+### 3. Add "Add Quotation" button with AI integration
+**File: `src/components/accounting/AccountingDocuments.tsx`** (lines 246-258)
+- Replace the "Add Packing Slip" button with an "Add Quotation" button
+- The button opens a dialog/sheet that:
+  - Fetches estimation projects from `estimation_projects` table
+  - Lets user select an estimation project
+  - Calls an edge function (`ai-generate-quotation`) that uses Gemini to build a quotation from the estimation BOM data
+  - Inserts the result into the `quotes` table with `source: "ai_estimation"`
 
-### 1. Add fallback summary row for Odoo quotes with no line items
-In `AccountingDocuments.tsx` (lines 541-578), when `viewQuote` is rendered and `items` array is empty, generate a single fallback row using `total_amount` from the quote record:
+### 4. Create edge function: `ai-generate-quotation`
+**File: `supabase/functions/ai-generate-quotation/index.ts`**
+- Accepts `estimation_project_id` and optional `lead_id`
+- Fetches BOM items from `estimation_bom_items` and project details from `estimation_projects`
+- Uses Gemini 2.5 Flash via Lovable AI to format items into a professional quotation
+- Inserts into `quotes` table with line items in metadata
+- Returns the created quote
 
-```typescript
-const fallbackItems = items.length > 0 ? items : [{
-  description: "Rebar Fabrication & Supply",
-  quantity: 1,
-  unitPrice: Number(viewQuote.total_amount || 0),
-  amount: Number(viewQuote.total_amount || 0),
-}];
-```
+### 5. Create "Generate Quotation" dialog component
+**File: `src/components/accounting/GenerateQuotationDialog.tsx`**
+- Select estimation project dropdown (fetches from `estimation_projects`)
+- Optional customer name override
+- "Generate with AI" button triggers the edge function
+- Shows loading state during generation
+- On success, refreshes quotation list
 
-Use `fallbackItems` instead of `items` in the template data and for `untaxed` calculation.
+### 6. Add "Convert to Quotation" button in Pipeline
+**File: `src/components/pipeline/LeadDetailDrawer.tsx`** (around line 118, action buttons area)
+- Add a `FileText` icon button labeled "→ Quotation" next to the Edit/Close buttons
+- Clicking it:
+  - Checks if the lead has a linked `estimation_project` (via `estimation_projects.lead_id`)
+  - If yes: calls `ai-generate-quotation` with the estimation project and lead data
+  - If no: calls `ai-generate-quotation` with just the lead's customer/revenue data to create a basic quotation
+  - Shows toast on success with link to view in Accounting
 
-### 2. Add customer address and project name from metadata
-Extract `customerAddress` and `projectName` from metadata when available (Odoo stores `odoo_customer`, QB stores `CustomerRef`). Pass these to `QuotationTemplate` for richer display.
-
-### 3. Same fallback for QuickBooks estimates
-The `getQuotationData()` function (line 138) already has this fallback pattern — no change needed there.
-
-### File changes
-- **`src/components/accounting/AccountingDocuments.tsx`** — lines 541-578: Add fallback items row when no line items exist in Odoo quote metadata, and pass `customerAddress`/`projectName` from metadata.
+### Files to create/modify:
+- **Create** `supabase/functions/ai-generate-quotation/index.ts`
+- **Create** `src/components/accounting/GenerateQuotationDialog.tsx`
+- **Modify** `src/components/accounting/AccountingDocuments.tsx` — remove packing slip, add quotation button
+- **Modify** `src/pages/AccountingWorkspace.tsx` — remove Packing Slips from strip
+- **Modify** `src/components/pipeline/LeadDetailDrawer.tsx` — add "Convert to Quotation" action
 
