@@ -1,90 +1,122 @@
 
 
-# QA War Simulation Round 11 -- Order Lifecycle, Realtime Scoping, Multi-Tenant Audit
+# QA War Simulation Round 12 -- Order Lifecycle & Transition Integrity
+
+## Active Environment Status
+- R9-1 fix confirmed deployed: `user_roles.company_id` errors gone from logs
+- Only active Postgres error: `unrecognized configuration parameter "supabase.service_role_key"` (Supabase internal, not our code)
+- All previous fixes (R7-R11) holding
 
 ---
 
-## Active Bugs Found
+## BUG R12-1 -- HIGH: Order status transition validation (R11-2) is completely non-functional
 
----
+**Root Cause**: Two compounding issues make the R11-2 fix dead code:
 
-## BUG R11-1 -- HIGH: `CoordinationDashboard` queries 3 tables without `company_id` filter
+### Issue A: Caller never passes `currentStatus`
 
-**File**: `src/components/estimation/CoordinationDashboard.tsx`
-
-Three queries fetch data globally with no tenant scoping:
-
-1. **Line 24-28**: `project_coordination_log` -- fetches ALL coordination logs across all companies
-2. **Line 37-41**: `ingestion_progress` -- fetches ALL ingestion progress rows
-3. **Line 50-54**: `estimation_learnings` -- fetches ALL learning pairs
-
-**Impact**: In a multi-tenant deployment, users see coordination data, ingestion progress, and learning stats from other companies. The KPI cards (accuracy, learning pairs count, weight delta) reflect all tenants' data, not just the current user's company.
-
-**Fix**: Import `useCompanyId` and add `.eq("company_id", companyId)` to all 3 queries. Add `enabled: !!companyId` to prevent queries firing before company is resolved.
-
-**Severity**: HIGH -- cross-tenant data exposure in the Learning Engine dashboard.
-
----
-
-## BUG R11-2 -- MEDIUM: Order status transitions have no validation
-
-**File**: `src/hooks/useOrders.ts` line 126-134
-
+**File**: `src/components/orders/OrderDetail.tsx` line 118:
 ```typescript
-const updateOrderStatus = useMutation({
-  mutationFn: async ({ id, status }: { id: string; status: string }) => {
-    const { error } = await supabase.from("orders").update({ status }).eq("id", id);
-    if (error) throw error;
-  },
-});
+onValueChange={(v) => updateOrderStatus.mutate({ id: order.id, status: v })}
+```
+Missing `currentStatus: order.status`. The mutation signature requires `currentStatus` for validation, but it's optional (`currentStatus?: string`), so the guard `if (currentStatus && ...)` silently skips validation.
+
+### Issue B: Transition map is misaligned with real statuses
+
+**File**: `src/hooks/useOrders.ts` lines 126-135
+
+The `ALLOWED_TRANSITIONS` map contains:
+```
+draft → confirmed → in_production → ready → loading → in-transit → delivered → invoiced → paid
 ```
 
-Any status can be set to any other status without validation. A user can move an order directly from "draft" to "delivered", bypassing the shop drawing approval, QC, production, and invoicing steps. While the `block_production_without_approval` trigger protects `cut_plan_items`, the order-level status itself has no guard.
+But real order statuses (from DB and `OrderDetail.tsx` line 11) are:
+```
+pending, confirmed, in_production, invoiced, partially_paid, paid, closed, cancelled
+```
 
-**Fix**: Add a client-side status transition map that validates allowed transitions before calling the mutation. This is a defense-in-depth measure (the DB triggers catch production-level violations, but order-level status skipping is unprotected).
+Problems:
+- `"pending"` (the actual initial status set by `convert-quote-to-order`) is missing from the map
+- `"draft"` doesn't exist in the system
+- `"ready"`, `"loading"`, `"in-transit"`, `"delivered"` don't exist in the UI dropdown
+- `"partially_paid"`, `"closed"` are missing from the map
+- `sendToQuickBooks` (line 222) directly sets `status: "invoiced"` bypassing validation entirely
 
+**Fix (two changes)**:
+
+1. Update `ALLOWED_TRANSITIONS` to match real statuses:
 ```typescript
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  draft: ["confirmed", "cancelled"],
+  pending: ["confirmed", "cancelled"],
   confirmed: ["in_production", "cancelled"],
-  in_production: ["ready", "cancelled"],
-  ready: ["loading", "cancelled"],
-  loading: ["in-transit"],
-  "in-transit": ["delivered"],
-  delivered: ["invoiced"],
-  invoiced: ["paid"],
+  in_production: ["invoiced", "cancelled"],
+  invoiced: ["partially_paid", "paid", "cancelled"],
+  partially_paid: ["paid"],
+  paid: ["closed"],
+  closed: [],
+  cancelled: [],
 };
 ```
 
-**Severity**: MEDIUM -- workflow integrity issue, mitigated by DB triggers for production.
+2. Fix `OrderDetail.tsx` to pass `currentStatus`:
+```typescript
+onValueChange={(v) => updateOrderStatus.mutate({ 
+  id: order.id, 
+  status: v, 
+  currentStatus: order.status || "pending" 
+})}
+```
+
+**Severity**: HIGH -- the entire R11-2 workflow integrity fix is non-functional.
 
 ---
 
-## BUG R11-3 -- LOW: 4 realtime channels missing `company_id` filter (R8-6 carried forward)
+## BUG R12-2 -- MEDIUM: `sendToQuickBooks` bypasses status transition validation
 
-**Files**:
-- `src/hooks/usePennyQueue.ts` line 67 -- `penny_collection_queue`
-- `src/hooks/useExtractSessions.ts` line 31 -- `extract_sessions`
-- `src/components/support/SupportConversationList.tsx` line 63 -- `support_conversations`
-- `src/hooks/useRCPresence.ts` line 60 -- `rc_presence`
+**File**: `src/hooks/useOrders.ts` line 217-223
 
-All 4 channels listen to ALL rows in their respective tables. While RLS prevents data leakage on the subsequent refetch query, the channel fires unnecessary callbacks for other tenants' changes, causing wasted API calls.
+After creating a QB invoice, the code directly updates the order status to `"invoiced"`:
+```typescript
+await supabase.from("orders").update({
+  quickbooks_invoice_id: docNumber,
+  status: "invoiced",
+}).eq("id", orderId);
+```
 
-**Fix**: Add `filter: "company_id=eq.<companyId>"` to the `postgres_changes` subscription config for each channel. This requires threading `companyId` into each hook.
+This bypasses `updateOrderStatus.mutate()` and its transition validation. If an order is in `"pending"` status, `sendToQuickBooks` will jump it straight to `"invoiced"`, skipping confirmation and production.
 
-For `usePennyQueue` and `useExtractSessions`, import `useCompanyId` and pass it into the subscription filter. For `SupportConversationList`, the component already has access to company context. For `useRCPresence`, the `rc_presence` table may not have a `company_id` column -- need to verify.
+**Fix**: Add a pre-check before the QB call:
+```typescript
+if (order.status !== "in_production" && order.status !== "confirmed") {
+  throw new Error(`Cannot invoice: order is "${order.status}", must be "confirmed" or "in_production" first`);
+}
+```
 
-**Severity**: LOW -- performance waste, no data leak (RLS protects reads).
+**Severity**: MEDIUM -- financial workflow integrity. Mitigated by the existing UI guards (button disabled when items are empty).
 
 ---
 
-## Positive Findings (No Bug)
+## BUG R12-3 -- LOW: `OrderDetail` status dropdown shows all statuses regardless of current state
 
-- **Webhook idempotency**: `ringcentral-webhook` uses `dedupe_key` on `activity_events` + `onConflict: "source,source_id"` on `communications`. Solid.
-- **QuickBooks invoice idempotency**: `quickbooks-oauth` checks `quickbooks_invoice_id` before creating invoice (line 1114-1128). Double-click safe.
-- **Order delete**: No order delete path exists in the frontend -- orders are status-managed, not deletable. Good design.
-- **`timeclock-alerts` and `notify-on-message`**: Already do two-step company filtering (global role query + profile company filter). Matches R9-5 pattern.
-- **All RESTRICT FKs eliminated**: Confirmed zero remaining from R9-2 migration.
+**File**: `src/components/orders/OrderDetail.tsx` lines 119-126
+
+The dropdown always renders all 8 statuses:
+```typescript
+{STATUSES.map((s) => (
+  <SelectItem key={s} value={s}>{s.replace(/_/g, " ")}</SelectItem>
+))}
+```
+
+Users can see and select invalid transitions. Even with validation in place, the UX is confusing -- users should only see valid next statuses.
+
+**Fix**: Filter the dropdown options based on `ALLOWED_TRANSITIONS`:
+```typescript
+const allowedNext = ALLOWED_TRANSITIONS[order.status || "pending"] || [];
+// Show current status + allowed transitions
+const visibleStatuses = [order.status || "pending", ...allowedNext].filter(Boolean);
+```
+
+**Severity**: LOW -- UX improvement that reinforces the workflow integrity fix.
 
 ---
 
@@ -92,45 +124,50 @@ For `usePennyQueue` and `useExtractSessions`, import `useCompanyId` and pass it 
 
 | ID | Severity | Module | Bug | Status |
 |----|----------|--------|-----|--------|
-| R11-1 | HIGH | Learning Engine | CoordinationDashboard 3 queries missing company_id | New |
-| R11-2 | MEDIUM | Orders | No status transition validation | New |
-| R11-3 | LOW | Realtime | 4 channels missing company_id filter (R8-6) | Carried forward |
+| R12-1 | HIGH | Orders | Status transition validation is dead code (no currentStatus + wrong map) | New |
+| R12-2 | MEDIUM | Orders/QB | sendToQuickBooks bypasses transition validation | New |
+| R12-3 | LOW | Orders UX | Status dropdown shows all statuses, not just valid transitions | New |
 
 ---
 
 ## Implementation Plan
 
-### Step 1: Fix R11-1 (HIGH) -- CoordinationDashboard multi-tenant scoping
-- Import `useCompanyId` hook
-- Add `.eq("company_id", companyId!)` to `project_coordination_log`, `ingestion_progress`, and `estimation_learnings` queries
-- Add `enabled: !!companyId` to all 3 queries
+### Step 1: Fix R12-1 -- Correct the transition map and wire up currentStatus
 
-### Step 2: Fix R11-2 (MEDIUM) -- Order status transition validation
-- Add `ALLOWED_TRANSITIONS` map to `useOrders.ts`
-- In `updateOrderStatus`, validate `currentStatus -> newStatus` before executing the DB update
-- Show toast error if transition is not allowed
+**File: `src/hooks/useOrders.ts`**
+- Replace `ALLOWED_TRANSITIONS` with the corrected map matching real statuses (`pending`, `confirmed`, `in_production`, `invoiced`, `partially_paid`, `paid`, `closed`, `cancelled`)
+- Make `currentStatus` required (not optional) -- or fetch current status from DB if not provided
 
-### Step 3: Fix R11-3 (LOW) -- Realtime channel scoping
-- Add `filter: "company_id=eq.{companyId}"` to `usePennyQueue`, `useExtractSessions`, `SupportConversationList`
-- For `useRCPresence`, verify if `rc_presence` has a `company_id` column first; if not, skip (RLS handles it)
+**File: `src/components/orders/OrderDetail.tsx`**
+- Pass `currentStatus: order.status || "pending"` to `updateOrderStatus.mutate()`
+
+### Step 2: Fix R12-2 -- Guard sendToQuickBooks against premature invoicing
+
+**File: `src/hooks/useOrders.ts`**
+- Add status pre-check before QB invocation: order must be `confirmed` or `in_production`
+
+### Step 3: Fix R12-3 -- Filter dropdown to valid transitions
+
+**File: `src/components/orders/OrderDetail.tsx`**  
+- Import `ALLOWED_TRANSITIONS` (export it from `useOrders.ts`)
+- Filter `STATUSES` in the dropdown to show only current + valid next statuses
 
 ### Do NOT touch:
-- `ringcentral-webhook/index.ts` (idempotency already solid)
-- `quickbooks-oauth/index.ts` (invoice guard already solid)
-- `useOrders.ts` delete paths (none exist, by design)
-- Any files fixed in R7-R10
+- `convert-quote-to-order/index.ts` (correctly sets `"pending"` initial status)
+- `autopilot-engine/index.ts` (risk policies working correctly)
+- Customer delete paths (R7 fix holding)
+- Any R7-R11 fixes
 
 ---
 
-## Updated Technical Debt Score: 1.8/10
+## Updated Technical Debt Score: 1.5/10
 
-| Category | Score | Delta from R10 |
+| Category | Score | Delta from R11 |
 |----------|-------|----------------|
-| Security (XSS) | 9/10 | unchanged |
-| Multi-tenant isolation | 7/10 | -1 (CoordinationDashboard leak) |
+| Multi-tenant isolation | 9/10 | unchanged |
+| Workflow integrity | 4/10 | -4 (transition validation dead code) |
 | Data integrity | 8/10 | unchanged |
-| Concurrency safety | 8/10 | +1 (QB invoice idempotency confirmed) |
-| API contract accuracy | 8/10 | +2 (R8/R9 fixes holding) |
-| Workflow integrity | 6/10 | NEW (order status transitions unvalidated) |
-| Code quality | 8/10 | unchanged |
+| Concurrency safety | 8/10 | unchanged |
+| API contract accuracy | 8/10 | unchanged |
+| Code quality | 7/10 | -1 (map/UI mismatch) |
 
