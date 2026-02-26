@@ -253,7 +253,7 @@ export default function Deliveries() {
   useEffect(() => {
     if (!companyId) return;
     const channel = supabase
-      .channel("deliveries-live")
+      .channel(`deliveries-live-${companyId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "deliveries" }, () =>
         queryClient.invalidateQueries({ queryKey: ["deliveries", companyId] })
       )

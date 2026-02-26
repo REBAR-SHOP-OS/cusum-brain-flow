@@ -184,7 +184,7 @@ mcpServer.tool("list_orders", {
 
 mcpServer.tool("list_deliveries", {
   description:
-    "List deliveries. Optional filter: status (scheduled, in_transit, delivered, canceled). Returns up to 50 deliveries.",
+    "List deliveries. Optional filter: status (scheduled, in-transit, delivered, canceled, completed_with_issues). Returns up to 50 deliveries.",
   inputSchema: {
     type: "object",
     properties: {
