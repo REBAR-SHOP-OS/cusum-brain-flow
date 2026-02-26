@@ -41,9 +41,12 @@ interface Props {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
+type StatusFilter = "all" | "open" | "overdue" | "paid";
+
 export function AccountingInvoices({ data, initialSearch }: Props) {
   const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items, payments, qbAction, loadAll } = data;
   const [search, setSearch] = useState(initialSearch || "");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
   const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -56,11 +59,16 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
     else { setSortField(field); setSortDir("asc"); }
   };
 
-  const filtered = invoices.filter(
-    (inv) =>
+  const filtered = invoices.filter((inv) => {
+    const matchesSearch =
       (inv.DocNumber || "").toLowerCase().includes(search.toLowerCase()) ||
-      (inv.CustomerRef?.name || "").toLowerCase().includes(search.toLowerCase())
-  ).sort((a, b) => {
+      (inv.CustomerRef?.name || "").toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (statusFilter === "paid") return inv.Balance === 0;
+    if (statusFilter === "overdue") return inv.Balance > 0 && new Date(inv.DueDate) < new Date();
+    if (statusFilter === "open") return inv.Balance > 0 && new Date(inv.DueDate) >= new Date();
+    return true;
+  }).sort((a, b) => {
     const m = sortDir === "asc" ? 1 : -1;
     switch (sortField) {
       case "DocNumber": return (a.DocNumber || "").localeCompare(b.DocNumber || "", undefined, { numeric: true }) * m;
@@ -133,6 +141,19 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10 h-12 text-base"
           />
+        </div>
+        <div className="flex items-center gap-1">
+          {(["all", "open", "overdue", "paid"] as StatusFilter[]).map(f => (
+            <Button
+              key={f}
+              variant={statusFilter === f ? "default" : "outline"}
+              size="sm"
+              className="h-9 text-xs capitalize"
+              onClick={() => setStatusFilter(f)}
+            >
+              {f}
+            </Button>
+          ))}
         </div>
         <Button variant="outline" size="sm" className="h-12 gap-2" onClick={exportCsv}>
           <Download className="w-4 h-4" /> Export CSV

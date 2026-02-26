@@ -7,7 +7,8 @@ import {
   Loader2, Plug, RefreshCw,
   X, ShieldAlert, AlertTriangle,
 } from "lucide-react";
-import { AccountingNavMenus } from "@/components/accounting/AccountingNavMenus";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AccountingSidebar } from "@/components/accounting/AccountingSidebar";
 import { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -60,6 +61,8 @@ const TaxPlanning = lazy(() => import("@/components/accounting/TaxPlanning").the
 const BudgetVsActuals = lazy(() => import("@/components/accounting/BudgetVsActuals").then(m => ({ default: m.BudgetVsActuals })));
 const AccountingCashFlow = lazy(() => import("@/components/accounting/AccountingCashFlow").then(m => ({ default: m.AccountingCashFlow })));
 const TaxFilingSummary = lazy(() => import("@/components/accounting/TaxFilingSummary").then(m => ({ default: m.TaxFilingSummary })));
+const AccountingEstimates = lazy(() => import("@/components/accounting/AccountingEstimates").then(m => ({ default: m.AccountingEstimates })));
+const AccountingCreditMemos = lazy(() => import("@/components/accounting/AccountingCreditMemos").then(m => ({ default: m.AccountingCreditMemos })));
 
 /* ── Constants ── */
 const QB_LAST_LOAD_KEY = "qb-last-load-date";
@@ -297,149 +300,151 @@ export default function AccountingWorkspace() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden relative">
-      {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border gap-2 sm:gap-0 shrink-0">
-          <div className="flex items-center gap-4 min-w-0 overflow-hidden w-full sm:w-auto">
-            <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2 shrink-0">
-              💰 <span className="hidden sm:inline">Accounting</span>
-              <span className="sm:hidden">Acct</span>
-            </h1>
-            <div className="overflow-x-auto scrollbar-none flex-1 min-w-0">
-              <AccountingNavMenus activeTab={activeTab} onNavigate={setActiveTab} pendingCount={pendingCount} />
+    <SidebarProvider defaultOpen={true}>
+      <div className="flex min-h-screen w-full">
+        <AccountingSidebar activeTab={activeTab} onNavigate={setActiveTab} pendingCount={pendingCount} />
+
+        <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger />
+              <h1 className="text-lg font-bold hidden sm:block">Accounting</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              {lastRefreshTime && (
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  Last updated: {lastRefreshTime}
+                </span>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleManualRefresh}
+                disabled={qb.loading}
+              >
+                <RefreshCw className={`w-4 h-4 ${qb.loading ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {lastRefreshTime && (
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                Last updated: {lastRefreshTime}
-              </span>
+
+          {/* Main content with optional agent panel */}
+          <div className="flex-1 flex overflow-hidden">
+            {!(showAgent && agentMode === "fullscreen") && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <Suspense fallback={<TabLoader />}>
+                  {activeTab === "dashboard" && <AccountingDashboard data={qb} onNavigate={setActiveTab} />}
+                  {activeTab === "invoices" && <AccountingInvoices data={qb} initialSearch={urlSearch} />}
+                  {activeTab === "bills" && <AccountingBills data={qb} />}
+                  {activeTab === "payments" && <AccountingPayments data={qb} />}
+                  {activeTab === "customers" && <AccountingCustomers data={qb} />}
+                  {activeTab === "vendors" && <AccountingVendors data={qb} />}
+                  {activeTab === "accounts" && <AccountingAccounts data={qb} />}
+                  {activeTab === "audit" && <AccountingAudit data={qb} />}
+                  {activeTab === "payroll" && <AccountingPayroll data={qb} />}
+                  {activeTab === "payroll-audit" && <PayrollAuditView />}
+                  {activeTab === "orders" && <AccountingOrders />}
+                  {activeTab === "actions" && <AccountingActionQueue />}
+                  {activeTab === "vendor-payments" && <AccountingVendorPayments />}
+                  {activeTab === "budgets" && <BudgetManagement />}
+                  {activeTab === "quote-templates" && <QuoteTemplateManager />}
+                  {activeTab === "expense-claims" && <ExpenseClaimsManager />}
+                  {activeTab === "three-way-matching" && <ThreeWayMatchingManager />}
+                  {activeTab === "employee-contracts" && <EmployeeContractsManager />}
+                  {activeTab === "recruitment" && <RecruitmentPipeline />}
+                  {activeTab === "project-management" && <ProjectManagement />}
+                  {activeTab === "sales-receipts" && <AccountingSalesReceipts data={qb} />}
+                  {activeTab === "refund-receipts" && <AccountingRefundReceipts data={qb} />}
+                  {activeTab === "deposits" && <AccountingDeposits data={qb} />}
+                  {activeTab === "transfers" && <AccountingTransfers data={qb} />}
+                  {activeTab === "journal-entries" && <AccountingJournalEntries data={qb} />}
+                  {activeTab === "recurring" && <AccountingRecurring data={qb} />}
+                  {activeTab === "batch-actions" && <AccountingBatchActions data={qb} />}
+                  {activeTab === "statements" && <AccountingStatements data={qb} />}
+                  {activeTab === "expenses" && <AccountingExpenses data={qb} />}
+                  {activeTab === "attachments" && <AccountingAttachments data={qb} />}
+                  {activeTab === "reconciliation" && <AccountingReconciliation />}
+                  {activeTab === "scheduled-reports" && <AccountingScheduledReports />}
+                  {activeTab === "recurring-auto" && <AccountingRecurringTxns />}
+                  {activeTab === "tax-planning" && <TaxPlanning />}
+                  {activeTab === "budget-vs-actuals" && <BudgetVsActuals />}
+                  {activeTab === "cash-flow-report" && <AccountingCashFlow />}
+                  {activeTab === "tax-filing" && <TaxFilingSummary />}
+                  {activeTab === "documents" && <AccountingDocuments data={qb} />}
+                  {activeTab === "estimates" && <AccountingEstimates data={qb} />}
+                  {activeTab === "credit-memos" && <AccountingCreditMemos data={qb} />}
+                  {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
+                  {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
+                  {activeTab === "cash-flow" && <AccountingReport data={qb} report="cash-flow" />}
+                  {activeTab === "aged-receivables" && <AccountingAgedReceivables data={qb} />}
+                  {activeTab === "aged-payables" && <AccountingAgedPayables data={qb} />}
+                  {activeTab === "general-ledger" && <AccountingQBReport data={qb} report="general-ledger" />}
+                  {activeTab === "trial-balance" && <AccountingQBReport data={qb} report="trial-balance" />}
+                  {activeTab === "transaction-list" && <AccountingQBReport data={qb} report="transaction-list" />}
+                </Suspense>
+              </div>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={handleManualRefresh}
-              disabled={qb.loading}
-            >
-              <RefreshCw className={`w-4 h-4 ${qb.loading ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Refresh All</span>
-              <span className="sm:hidden">Refresh</span>
-            </Button>
+
+            {/* Penny Agent Panel (side panel / fullscreen on desktop) */}
+            {showAgent && (
+              <div className={cn(
+                "hidden lg:flex shrink-0 border-l border-border overflow-hidden",
+                agentMode === "fullscreen" ? "flex-1" : "w-[400px]",
+                "p-3"
+              )}>
+                <div className="w-full h-full min-h-0">
+                  <Suspense fallback={<TabLoader />}>
+                    <AccountingAgent
+                      viewMode={agentMode}
+                      onViewModeChange={(m) => setAgentMode(m)}
+                      qbSummary={qb}
+                      autoGreet
+                      webPhoneState={webPhoneState}
+                      webPhoneActions={webPhoneActions}
+                    />
+                  </Suspense>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-      {/* Main content with optional agent panel */}
-      <div className="flex-1 flex overflow-hidden">
-        {!(showAgent && agentMode === "fullscreen") && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        {/* Penny Agent Panel (overlay on mobile) */}
+        {showAgent && (
+          <div className={cn(
+            "lg:hidden fixed z-50",
+            agentMode === "fullscreen"
+              ? "inset-0 bg-background p-3"
+              : "inset-x-3 bottom-3 max-h-[75vh] rounded-xl shadow-2xl overflow-hidden flex flex-col"
+          )}>
+            {agentMode !== "fullscreen" && (
+              <button
+                onClick={() => setShowAgent(false)}
+                className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-muted/80 backdrop-blur flex items-center justify-center hover:bg-muted transition-colors"
+                aria-label="Close Penny"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
             <Suspense fallback={<TabLoader />}>
-              {activeTab === "dashboard" && <AccountingDashboard data={qb} onNavigate={setActiveTab} />}
-              {activeTab === "invoices" && <AccountingInvoices data={qb} initialSearch={urlSearch} />}
-              {activeTab === "bills" && <AccountingBills data={qb} />}
-              {activeTab === "payments" && <AccountingPayments data={qb} />}
-              {activeTab === "customers" && <AccountingCustomers data={qb} />}
-              {activeTab === "vendors" && <AccountingVendors data={qb} />}
-              {activeTab === "accounts" && <AccountingAccounts data={qb} />}
-              {activeTab === "audit" && <AccountingAudit data={qb} />}
-              {activeTab === "payroll" && <AccountingPayroll data={qb} />}
-              {activeTab === "payroll-audit" && <PayrollAuditView />}
-              {activeTab === "orders" && <AccountingOrders />}
-              {activeTab === "actions" && <AccountingActionQueue />}
-              {activeTab === "vendor-payments" && <AccountingVendorPayments />}
-              {activeTab === "budgets" && <BudgetManagement />}
-              {activeTab === "quote-templates" && <QuoteTemplateManager />}
-              {activeTab === "expense-claims" && <ExpenseClaimsManager />}
-              {activeTab === "three-way-matching" && <ThreeWayMatchingManager />}
-              {activeTab === "employee-contracts" && <EmployeeContractsManager />}
-              {activeTab === "recruitment" && <RecruitmentPipeline />}
-              {activeTab === "project-management" && <ProjectManagement />}
-              {activeTab === "sales-receipts" && <AccountingSalesReceipts data={qb} />}
-              {activeTab === "refund-receipts" && <AccountingRefundReceipts data={qb} />}
-              {activeTab === "deposits" && <AccountingDeposits data={qb} />}
-              {activeTab === "transfers" && <AccountingTransfers data={qb} />}
-              {activeTab === "journal-entries" && <AccountingJournalEntries data={qb} />}
-              {activeTab === "recurring" && <AccountingRecurring data={qb} />}
-              {activeTab === "batch-actions" && <AccountingBatchActions data={qb} />}
-              {activeTab === "statements" && <AccountingStatements data={qb} />}
-              {activeTab === "expenses" && <AccountingExpenses data={qb} />}
-              {activeTab === "attachments" && <AccountingAttachments data={qb} />}
-              {activeTab === "reconciliation" && <AccountingReconciliation />}
-              {activeTab === "scheduled-reports" && <AccountingScheduledReports />}
-              {activeTab === "recurring-auto" && <AccountingRecurringTxns />}
-              {activeTab === "tax-planning" && <TaxPlanning />}
-              {activeTab === "budget-vs-actuals" && <BudgetVsActuals />}
-              {activeTab === "cash-flow-report" && <AccountingCashFlow />}
-              {activeTab === "tax-filing" && <TaxFilingSummary />}
-              {activeTab === "documents" && <AccountingDocuments data={qb} />}
-              {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
-              {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
-              {activeTab === "cash-flow" && <AccountingReport data={qb} report="cash-flow" />}
-              {activeTab === "aged-receivables" && <AccountingAgedReceivables data={qb} />}
-              {activeTab === "aged-payables" && <AccountingAgedPayables data={qb} />}
-              {activeTab === "general-ledger" && <AccountingQBReport data={qb} report="general-ledger" />}
-              {activeTab === "trial-balance" && <AccountingQBReport data={qb} report="trial-balance" />}
-              {activeTab === "transaction-list" && <AccountingQBReport data={qb} report="transaction-list" />}
+              <AccountingAgent
+                viewMode={agentMode}
+                onViewModeChange={(m) => setAgentMode(m)}
+                qbSummary={qb}
+                autoGreet
+                webPhoneState={webPhoneState}
+                webPhoneActions={webPhoneActions}
+              />
             </Suspense>
           </div>
         )}
 
-        {/* Penny Agent Panel (side panel / fullscreen on desktop) */}
-        {showAgent && (
-          <div className={cn(
-            "hidden lg:flex shrink-0 border-l border-border overflow-hidden",
-            agentMode === "fullscreen" ? "flex-1" : "w-[400px]",
-            "p-3"
-          )}>
-            <div className="w-full h-full min-h-0">
-              <Suspense fallback={<TabLoader />}>
-                <AccountingAgent
-                  viewMode={agentMode}
-                  onViewModeChange={(m) => setAgentMode(m)}
-                  qbSummary={qb}
-                  autoGreet
-                  webPhoneState={webPhoneState}
-                  webPhoneActions={webPhoneActions}
-                />
-              </Suspense>
-            </div>
-          </div>
-        )}
+        {/* Draggable Penny FAB */}
+        <PennyFab showAgent={showAgent} onToggle={() => setShowAgent(s => !s)} />
       </div>
-
-      {/* Penny Agent Panel (overlay on mobile) */}
-      {showAgent && (
-        <div className={cn(
-          "lg:hidden fixed z-50",
-          agentMode === "fullscreen"
-            ? "inset-0 bg-background p-3"
-            : "inset-x-3 bottom-3 max-h-[75vh] rounded-xl shadow-2xl overflow-hidden flex flex-col"
-        )}>
-          {agentMode !== "fullscreen" && (
-            <button
-              onClick={() => setShowAgent(false)}
-              className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-muted/80 backdrop-blur flex items-center justify-center hover:bg-muted transition-colors"
-              aria-label="Close Penny"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-          <Suspense fallback={<TabLoader />}>
-            <AccountingAgent
-              viewMode={agentMode}
-              onViewModeChange={(m) => setAgentMode(m)}
-              qbSummary={qb}
-              autoGreet
-              webPhoneState={webPhoneState}
-              webPhoneActions={webPhoneActions}
-            />
-          </Suspense>
-        </div>
-      )}
-
-      {/* Draggable Penny FAB */}
-      <PennyFab showAgent={showAgent} onToggle={() => setShowAgent(s => !s)} />
-    </div>
+    </SidebarProvider>
   );
 }
 

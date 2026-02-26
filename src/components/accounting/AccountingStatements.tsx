@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, FileText, Download, Search } from "lucide-react";
+import { Loader2, FileText, Download, Search, Printer } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
@@ -111,6 +111,9 @@ export function AccountingStatements({ data }: Props) {
           <CardHeader>
             <CardTitle className="text-sm flex items-center justify-between">
               <span>Statement ({lines.length} transactions)</span>
+              <Button variant="outline" size="sm" className="gap-1 h-8" onClick={() => window.print()}>
+                <Printer className="w-3.5 h-3.5" /> Print / PDF
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent>
