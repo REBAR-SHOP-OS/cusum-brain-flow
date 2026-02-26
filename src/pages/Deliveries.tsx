@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
@@ -38,6 +39,7 @@ interface Delivery {
   id: string;
   delivery_number: string;
   driver_name: string | null;
+  driver_profile_id: string | null;
   vehicle: string | null;
   scheduled_date: string | null;
   status: string | null;
@@ -141,7 +143,7 @@ export default function Deliveries() {
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("id, full_name")
         .eq("user_id", user!.id)
         .maybeSingle();
       return data;
@@ -199,10 +201,57 @@ export default function Deliveries() {
     },
   });
 
-  // Apply driver mode filter
-  const filteredDeliveries = driverMode && myProfile?.full_name
-    ? deliveries.filter(d => d.driver_name === myProfile.full_name)
+  // Profiles for driver assignment dropdown
+  const { data: teamProfiles = [] } = useQuery({
+    queryKey: ["team-profiles-for-assign", companyId],
+    enabled: !!companyId && !driverMode,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles_safe" as any)
+        .select("id, full_name")
+        .eq("is_active", true)
+        .order("full_name");
+      return (data || []) as unknown as { id: string; full_name: string }[];
+    },
+  });
+
+  // Apply driver mode filter — show assigned-to-me + unassigned deliveries
+  const filteredDeliveries = driverMode && myProfile
+    ? deliveries.filter(d => 
+        d.driver_name === myProfile.full_name || 
+        d.driver_profile_id === myProfile.id ||
+        !d.driver_name // Show unassigned so driver can claim
+      )
     : deliveries;
+
+  // Claim delivery handler for driver mode
+  const claimDelivery = async (deliveryId: string) => {
+    if (!myProfile) return;
+    const { error } = await supabase
+      .from("deliveries")
+      .update({ driver_name: myProfile.full_name, driver_profile_id: myProfile.id } as any)
+      .eq("id", deliveryId);
+    if (error) {
+      toast.error("Failed to claim delivery: " + error.message);
+    } else {
+      toast.success("Delivery claimed!");
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    }
+  };
+
+  // Assign driver handler (admin mode)
+  const assignDriver = async (deliveryId: string, profileId: string, profileName: string) => {
+    const { error } = await supabase
+      .from("deliveries")
+      .update({ driver_name: profileName, driver_profile_id: profileId } as any)
+      .eq("id", deliveryId);
+    if (error) {
+      toast.error("Failed to assign driver: " + error.message);
+    } else {
+      toast.success(`Assigned to ${profileName}`);
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    }
+  };
 
   const today = new Date().toISOString().split("T")[0];
   
@@ -481,12 +530,41 @@ export default function Deliveries() {
                   </Badge>
                 </div>
                 <div className="text-sm text-muted-foreground space-y-1">
-                  {selectedDelivery.driver_name && (
+                  {selectedDelivery.driver_name ? (
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4" />
                       {selectedDelivery.driver_name}
                     </div>
-                  )}
+                  ) : driverMode && myProfile ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2 mt-1"
+                      onClick={() => claimDelivery(selectedDelivery.id)}
+                    >
+                      <User className="w-4 h-4" />
+                      Claim Delivery
+                    </Button>
+                  ) : !driverMode ? (
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 shrink-0" />
+                      <Select
+                        onValueChange={(profileId) => {
+                          const profile = teamProfiles.find((p: any) => p.id === profileId);
+                          if (profile) assignDriver(selectedDelivery.id, profile.id, profile.full_name);
+                        }}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-40">
+                          <SelectValue placeholder="Assign driver…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teamProfiles.map((p: any) => (
+                            <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
                   {selectedDelivery.vehicle && (
                     <div className="flex items-center gap-2">
                       <Truck className="w-4 h-4" />
