@@ -43,7 +43,7 @@ interface PoolItem {
 }
 
 const PHASES: PoolPhase[] = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
-const ITEMS_LIMIT = 500;
+const ITEMS_LIMIT = 2000;
 
 const PHASE_CONFIG: Record<string, { label: string; shortLabel: string; icon: React.ElementType; color: string; bg: string; actionLabel?: string; actionRoute?: string; actionColor?: string }> = {
   queued:    { label: "POOL → CUTTER",       shortLabel: "POOL→CUT",  icon: Layers,      color: "text-muted-foreground", bg: "bg-muted",          actionLabel: "Open Cutter",   actionRoute: "/shopfloor/station", actionColor: "bg-primary hover:bg-primary/90 text-primary-foreground" },

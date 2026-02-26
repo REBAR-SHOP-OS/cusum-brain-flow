@@ -22,7 +22,6 @@ export function StopIssueDialog({ open, onOpenChange, stopId, onComplete }: Stop
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Fix 4: Reset reason when dialog closes
   useEffect(() => {
     if (!open) setReason("");
   }, [open]);
@@ -39,6 +38,31 @@ export function StopIssueDialog({ open, onOpenChange, stopId, onComplete }: Stop
         })
         .eq("id", stopId);
       if (error) throw error;
+
+      // Bug #2 fix: Auto-complete delivery when all stops are terminal (completed or failed)
+      const { data: stop } = await supabase
+        .from("delivery_stops")
+        .select("delivery_id")
+        .eq("id", stopId)
+        .single();
+
+      if (stop?.delivery_id) {
+        const { data: allStops } = await supabase
+          .from("delivery_stops")
+          .select("id, status")
+          .eq("delivery_id", stop.delivery_id);
+
+        const allTerminal = allStops && allStops.length > 0 &&
+          allStops.every(s => s.status === "completed" || s.status === "failed");
+
+        if (allTerminal) {
+          const hasFailures = allStops.some(s => s.status === "failed");
+          await supabase
+            .from("deliveries")
+            .update({ status: hasFailures ? "completed_with_issues" : "delivered" })
+            .eq("id", stop.delivery_id);
+        }
+      }
 
       toast.success("Issue logged");
       onComplete();
