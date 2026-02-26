@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CreditCard, Search, FileText, AlertCircle, Download, Eye } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { DocumentUploadZone } from "./DocumentUploadZone";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -109,6 +111,13 @@ export function AccountingPayments({ data }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      <DocumentUploadZone
+        targetType="payment"
+        onImport={(result) => {
+          toast({ title: "Payment imported", description: `${result.fields.length} fields extracted.` });
+        }}
+      />
 
       {/* Outstanding Invoices Panel */}
       {selectedCustomerId !== "all" && (

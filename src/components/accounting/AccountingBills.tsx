@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VendorDetail } from "@/components/accounting/VendorDetail";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { DocumentUploadZone } from "./DocumentUploadZone";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -57,6 +58,13 @@ export function AccountingBills({ data }: Props) {
           <Plus className="w-4 h-4" /> Add Bill
         </Button>
       </div>
+
+      <DocumentUploadZone
+        targetType="bill"
+        onImport={(result) => {
+          toast({ title: "Bill imported", description: `${result.fields.length} fields extracted from document.` });
+        }}
+      />
 
       <Tabs value={subTab} onValueChange={setSubTab}>
         <TabsList className="h-12">

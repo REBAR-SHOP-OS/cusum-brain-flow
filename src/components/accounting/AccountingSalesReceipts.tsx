@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/utils";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { DocumentUploadZone } from "./DocumentUploadZone";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -160,6 +161,14 @@ export function AccountingSalesReceipts({ data }: Props) {
           <Plus className="w-4 h-4" /> New Sales Receipt
         </Button>
       </div>
+
+      <DocumentUploadZone
+        targetType="sales_receipt"
+        onImport={(result) => {
+          toast({ title: "Sales receipt imported", description: `${result.fields.length} fields extracted.` });
+          loadReceipts();
+        }}
+      />
 
       <Card>
         <CardHeader>
