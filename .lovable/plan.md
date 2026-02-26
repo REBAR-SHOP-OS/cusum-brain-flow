@@ -1,31 +1,31 @@
 
 
-## Plan: Open Editable Quotation Editor for Manual Drafts
+## Plan: Add Customer & Product Dropdowns with Visible Font Colors
 
 ### Problem
-When clicking "Manual", a draft record is created in the database but nothing opens because the preview logic looks for the quote in QuickBooks data (`data.estimates`), not the DB. The user expects a blank quotation form to fill in.
+- Customer field is a plain text input; needs a searchable dropdown with "Add New Customer" at the top, followed by existing customers from the `customers` table.
+- Description field is a plain text input; needs a searchable product dropdown pulling from the `qb_items` table (Service/Inventory types, not Category), auto-filling unit price when selected.
+- Input fields have dark backgrounds making text invisible on the white quotation form.
 
-### Solution
-Create a new `DraftQuotationEditor` component — a full-screen overlay (matching `QuotationTemplate` style) with editable fields. When "Manual" is clicked, the draft is created, then this editor opens instead of the read-only template.
+### File: `src/components/accounting/documents/DraftQuotationEditor.tsx`
 
----
+**1. Fix font/color visibility on all inputs**
+- Add explicit `bg-white text-gray-900 border-gray-300` classes to all `<Input>` and `<textarea>` elements inside the white quotation form so text is always readable.
 
-### 1. Create `src/components/accounting/documents/DraftQuotationEditor.tsx`
-An editable quotation form with:
-- **Header fields**: Customer name (text input), project name (optional), expiration date (date picker)
-- **Line items table**: Editable rows with description, quantity, unit price, auto-calculated amount. "Add row" button to append items. Delete button per row.
-- **Totals**: Auto-calculated subtotal, tax rate input (default 13%), tax amount, total
-- **Notes/terms**: Text area for additional notes
-- **Actions**: "Save Draft" (updates the `quotes` record with all data stored in `metadata` JSONB), "Print / PDF", "Close"
-- Layout matches the existing `QuotationTemplate` branding (logo, company info, signature area)
+**2. Customer dropdown (replace text input)**
+- Fetch customers from `customers` table on mount (`SELECT id, name FROM customers ORDER BY name`).
+- Replace the customer name `<Input>` with a custom searchable dropdown (Popover + Command pattern or simple filtered list):
+  - First option: **"+ Add New Customer"** — clicking it shows inline inputs for name + address, and inserts into `customers` table on save.
+  - Below that: filterable list of existing customers. Selecting one sets `customerName` and optionally auto-fills address.
+- Keep the address input below for manual override.
 
-### 2. Update `src/components/accounting/AccountingDocuments.tsx`
-- Add state `draftEditorId` (string | null) to track when the draft editor should open
-- In `handleCreateDraft`: instead of `setPreviewId` / `setPreviewType`, set `draftEditorId` to the new quote's ID
-- Add render block: when `draftEditorId` is set, render `<DraftQuotationEditor quoteId={draftEditorId} onClose={() => setDraftEditorId(null)} />`
-- The editor fetches the quote from DB by ID, lets user edit, and saves back
+**3. Product/Service dropdown (replace description input)**
+- Fetch products from `qb_items` table on mount (`SELECT id, name, unit_price, description FROM qb_items WHERE is_deleted = false AND type != 'Category' ORDER BY name`).
+- Replace each line item's description `<Input>` with a searchable dropdown (Popover + filtered list):
+  - Type to filter products by name.
+  - Selecting a product auto-fills `description` (product name) and `unitPrice` (from `unit_price` column).
+  - Allow free-text entry for custom items not in the list.
 
-### Files
-- **Create**: `src/components/accounting/documents/DraftQuotationEditor.tsx`
-- **Modify**: `src/components/accounting/AccountingDocuments.tsx` — wire draft editor instead of broken preview
+### Files to modify
+- **`src/components/accounting/documents/DraftQuotationEditor.tsx`** — all changes in this single file
 
