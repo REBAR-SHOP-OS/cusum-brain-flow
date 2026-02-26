@@ -228,9 +228,13 @@ export async function validateExtract(sessionId: string) {
   return data;
 }
 
-export async function approveExtract(sessionId: string) {
+export async function approveExtract(sessionId: string, optimizerConfig?: {
+  stockLengthMm?: number;
+  kerfMm?: number;
+  selectedMode?: string;
+}) {
   const { data, error } = await supabase.functions.invoke("manage-extract", {
-    body: { action: "approve", sessionId },
+    body: { action: "approve", sessionId, optimizerConfig },
   });
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);

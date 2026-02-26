@@ -116,6 +116,7 @@ export function AIExtractView() {
   const [optimizationResult, setOptimizationResult] = useState<OptimizationSummary | null>(null);
   const [selectedOptMode, setSelectedOptMode] = useState<OptimizerConfig["mode"] | null>(null);
   const [allModeResults, setAllModeResults] = useState<Record<string, OptimizationSummary>>({});
+  const [isOptimizing, setIsOptimizing] = useState(false); // local flag for optimization panel visibility
 
   // Inline editing state
   const [editingRows, setEditingRows] = useState<Record<string, Record<string, any>>>({});
@@ -387,7 +388,11 @@ export function AIExtractView() {
     setProcessing(true);
     setProcessingStep("Approving & creating work orders...");
     try {
-      const result = await approveExtract(activeSessionId);
+      const result = await approveExtract(activeSessionId, {
+        stockLengthMm: optimizerConfig.stockLengthMm,
+        kerfMm: optimizerConfig.kerfMm,
+        selectedMode: selectedOptMode || "best-fit",
+      });
       await refreshSessions();
       toast({
         title: "Approved!",

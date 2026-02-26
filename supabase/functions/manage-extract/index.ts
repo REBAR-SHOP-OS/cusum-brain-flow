@@ -53,7 +53,7 @@ serve(async (req) => {
         return await validateExtract(sb, sessionId);
 
       case "approve":
-        return await approveExtract(sb, sessionId, user.id);
+        return await approveExtract(sb, sessionId, user.id, params.optimizerConfig);
 
       case "reject":
         return await rejectExtract(sb, sessionId, user.id, params.reason);
@@ -332,7 +332,7 @@ async function validateExtract(sb: any, sessionId: string) {
 }
 
 // ─── Approve ────────────────────────────────────────────────
-async function approveExtract(sb: any, sessionId: string, userId: string) {
+async function approveExtract(sb: any, sessionId: string, userId: string, optimizerConfig?: any) {
   // Check for blockers
   const { data: blockers } = await sb
     .from("extract_errors")
@@ -563,11 +563,13 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 
   // ── Create cut_plan_items + production_tasks ──────────────
   if (cutPlan) {
-    const STOCK_LENGTH_MM = 12000;
+    const STOCK_LENGTH_MM = optimizerConfig?.stockLengthMm || 12000;
+    const KERF_MM = optimizerConfig?.kerfMm || 5;
     const cutItems = rows.map((row: any) => {
       const cutLen = row.total_length_mm || 0;
       const totalPieces = row.quantity || 1;
-      const piecesPerBar = cutLen > 0 ? Math.floor(STOCK_LENGTH_MM / cutLen) : 1;
+      const effectiveCut = cutLen + KERF_MM;
+      const piecesPerBar = cutLen > 0 ? Math.floor(STOCK_LENGTH_MM / effectiveCut) : 1;
       const qtyBars = Math.ceil(totalPieces / Math.max(piecesPerBar, 1));
       return {
         cut_plan_id: cutPlan.id,
