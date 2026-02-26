@@ -148,13 +148,16 @@ export function usePennyQueue() {
     }
   }, [toast]);
 
-  const triggerAutoActions = useCallback(async () => {
+  const triggerAutoActions = useCallback(async (opts?: { purge?: boolean }) => {
     if (scanning) return;
     setScanning(true);
     try {
-      const { data, error } = await supabase.functions.invoke("penny-auto-actions");
+      const { data, error } = await supabase.functions.invoke("penny-auto-actions", {
+        body: opts?.purge ? { purge: true } : {},
+      });
       if (error) throw error;
-      toast({ title: "🤖 Penny scanned invoices", description: `${data?.queued || 0} new actions queued` });
+      const label = opts?.purge ? "🤖 Penny cleared & rescanned" : "🤖 Penny scanned invoices";
+      toast({ title: label, description: `${data?.queued || 0} new actions queued` });
     } catch (err) {
       toast({ title: "Auto-scan failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {

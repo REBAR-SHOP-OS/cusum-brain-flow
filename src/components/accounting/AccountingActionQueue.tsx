@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
   Bot, Check, X, Calendar, Edit3, Mail, Phone, Send, AlertTriangle,
-  ChevronDown, ChevronUp, Loader2, RefreshCw,
+  ChevronDown, ChevronUp, Loader2, RefreshCw, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePennyQueue, type PennyQueueItem } from "@/hooks/usePennyQueue";
@@ -230,9 +230,13 @@ export function AccountingActionQueue() {
           >
             All ({items.length})
           </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={triggerAutoActions} disabled={scanning}>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => triggerAutoActions()} disabled={scanning}>
             {scanning ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
             {scanning ? "Scanning..." : "Scan Now"}
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1 text-destructive" onClick={() => triggerAutoActions({ purge: true })} disabled={scanning}>
+            <Trash2 className="w-3 h-3" />
+            Clear & Rescan
           </Button>
         </div>
       </div>

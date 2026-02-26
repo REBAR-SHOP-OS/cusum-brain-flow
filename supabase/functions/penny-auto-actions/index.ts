@@ -18,6 +18,15 @@ serve(async (req) => {
     if (!profile?.company_id) return json({ error: "No company found" }, 400);
     const companyId = profile.company_id;
 
+    // Check for purge flag
+    const body = await req.json().catch(() => ({}));
+    const purge = body?.purge === true;
+
+    if (purge) {
+      await supabase.from("penny_collection_queue").delete().eq("company_id", companyId);
+      console.log("[penny-auto-actions] Purged all queue items for company", companyId);
+    }
+
     // Force QB sync before scanning to ensure fresh balance data
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
