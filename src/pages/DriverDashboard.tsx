@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isValidDeliveryTransition } from "@/lib/deliveryTransitions";
 import { useAuth } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { PODCaptureDialog } from "@/components/delivery/PODCaptureDialog";
@@ -26,6 +27,7 @@ import {
   Package,
 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 interface Delivery {
   id: string;
@@ -156,6 +158,11 @@ export default function DriverDashboard() {
   }, [companyId, selectedDelivery?.id, myProfile?.id, queryClient]);
 
   const handleStartDelivery = async (deliveryId: string) => {
+    const currentStatus = selectedDelivery?.status || "pending";
+    if (!isValidDeliveryTransition(currentStatus, "in-transit")) {
+      toast.error(`Cannot transition from "${currentStatus}" to "in-transit"`);
+      return;
+    }
     await supabase
       .from("deliveries")
       .update({ status: "in-transit" })
