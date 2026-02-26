@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical, Bot, BarChart3 } from "lucide-react";
+import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical, Bot, BarChart3, ListChecks } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { usePipelineBulkActions } from "@/hooks/usePipelineBulkActions";
 import { PipelineBulkBar } from "@/components/pipeline/PipelineBulkBar";
@@ -95,6 +95,7 @@ export default function Pipeline() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isScanningRfq, setIsScanningRfq] = useState(false);
   const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
+  const [isSyncingOverdue, setIsSyncingOverdue] = useState(false);
   const [aiMode, setAiMode] = useState(() => localStorage.getItem("pipeline_ai_mode") === "true");
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -111,7 +112,7 @@ export default function Pipeline() {
   const [groupBy, setGroupBy] = useState<GroupByOption>("none");
   const [isAISheetOpen, setIsAISheetOpen] = useState(false);
   const { toast } = useToast();
-  const { isAdmin } = useUserRole();
+  const { isAdmin, isOffice } = useUserRole();
   const { orderedStages, saveOrder, canReorder } = usePipelineStageOrder();
 
   const queryClient = useQueryClient();
@@ -558,6 +559,22 @@ export default function Pipeline() {
     }
   };
 
+  const handleSyncOverdueTasks = async () => {
+    setIsSyncingOverdue(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-overdue-tasks");
+      if (error) throw error;
+      toast({
+        title: "Overdue Tasks Synced",
+        description: data.message || `${data.created} task(s) created`,
+      });
+    } catch (err) {
+      console.error("Overdue sync error:", err);
+      toast({ title: "Sync failed", description: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+    } finally {
+      setIsSyncingOverdue(false);
+    }
+  };
 
   // Build pipeline stats for AI scan
   const pipelineStats = useMemo(() => {
@@ -665,6 +682,12 @@ export default function Pipeline() {
                       {formatDistanceToNow(lastSyncedAt, { addSuffix: true })}
                     </span>
                   )}
+                </DropdownMenuItem>
+              )}
+              {(isAdmin || isOffice) && (
+                <DropdownMenuItem onClick={handleSyncOverdueTasks} disabled={isSyncingOverdue}>
+                  {isSyncingOverdue ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <ListChecks className="w-3.5 h-3.5 mr-2" />}
+                  Sync Overdue Tasks
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => navigate("/prospecting")}>
