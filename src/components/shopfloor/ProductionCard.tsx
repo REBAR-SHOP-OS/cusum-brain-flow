@@ -105,6 +105,11 @@ export function ProductionCard({
                   </span>
                 )}
               </div>
+              {item.customer_name && (
+                <p className="text-[10px] text-muted-foreground font-medium truncate max-w-[160px]">
+                  {item.customer_name}
+                </p>
+              )}
             </div>
 
             {/* Supervisor action buttons — only visible in supervisor mode */}
