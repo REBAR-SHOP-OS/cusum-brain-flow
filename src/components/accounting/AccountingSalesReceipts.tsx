@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Receipt, Search, Plus, Loader2 } from "lucide-react";
+import { Receipt, Search, Plus, Loader2, Eye } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/utils";
@@ -37,6 +38,7 @@ export function AccountingSalesReceipts({ data }: Props) {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<SalesReceipt | null>(null);
 
   // Create form state
   const [customerId, setCustomerId] = useState("");
@@ -180,6 +182,7 @@ export function AccountingSalesReceipts({ data }: Props) {
                   <TableHead>Customer</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -189,6 +192,11 @@ export function AccountingSalesReceipts({ data }: Props) {
                     <TableCell>{r.CustomerRef?.name || "—"}</TableCell>
                     <TableCell>{new Date(r.TxnDate).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right font-semibold">{fmt(r.TotalAmt)}</TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="ghost" className="gap-1" onClick={() => setSelectedReceipt(r)}>
+                        <Eye className="w-4 h-4" /> View
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -230,6 +238,26 @@ export function AccountingSalesReceipts({ data }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Sales Receipt Detail Sheet */}
+      <Sheet open={!!selectedReceipt} onOpenChange={(o) => { if (!o) setSelectedReceipt(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Sales Receipt #{selectedReceipt?.DocNumber}</SheetTitle>
+            <SheetDescription>Full sales receipt details</SheetDescription>
+          </SheetHeader>
+          {selectedReceipt && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-sm text-muted-foreground">Customer</p><p className="font-medium">{selectedReceipt.CustomerRef?.name || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{new Date(selectedReceipt.TxnDate).toLocaleDateString()}</p></div>
+                <div><p className="text-sm text-muted-foreground">Amount</p><p className="font-semibold text-lg">{fmt(selectedReceipt.TotalAmt)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Memo</p><p className="font-medium">{selectedReceipt.PrivateNote || "—"}</p></div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

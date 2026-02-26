@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, Search, FileText, AlertCircle, Download } from "lucide-react";
+import { CreditCard, Search, FileText, AlertCircle, Download, Eye } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -19,6 +20,7 @@ export function AccountingPayments({ data }: Props) {
   const { payments, invoices, customers } = data;
   const [search, setSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("all");
+  const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
 
   // Build unique customer list from payments + invoices
   const customerOptions = useMemo(() => {
@@ -179,6 +181,7 @@ export function AccountingPayments({ data }: Props) {
                   <TableHead className="text-base">Date</TableHead>
                   <TableHead className="text-base">Customer</TableHead>
                   <TableHead className="text-base text-right">Amount</TableHead>
+                  <TableHead className="text-base">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -191,6 +194,11 @@ export function AccountingPayments({ data }: Props) {
                         +{fmt(p.TotalAmt)}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="ghost" className="gap-1" onClick={() => setSelectedPayment(p)}>
+                        <Eye className="w-4 h-4" /> View
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -198,6 +206,25 @@ export function AccountingPayments({ data }: Props) {
           )}
         </CardContent>
       </Card>
+      {/* Payment Detail Sheet */}
+      <Sheet open={!!selectedPayment} onOpenChange={(o) => { if (!o) setSelectedPayment(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Payment Details</SheetTitle>
+            <SheetDescription>Full payment information</SheetDescription>
+          </SheetHeader>
+          {selectedPayment && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-sm text-muted-foreground">Customer</p><p className="font-medium">{selectedPayment.CustomerRef?.name || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{new Date(selectedPayment.TxnDate).toLocaleDateString()}</p></div>
+                <div><p className="text-sm text-muted-foreground">Amount</p><p className="font-semibold text-lg text-success">{fmt(selectedPayment.TotalAmt)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Payment Method</p><p className="font-medium">{selectedPayment.PaymentMethodRef?.name || selectedPayment.PaymentType || "—"}</p></div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
