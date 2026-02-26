@@ -1,206 +1,182 @@
 
 
-# QA War Engine -- Implementation Plan
-
-## What this is
-
-A backend-driven, AI-powered QA simulation engine that generates 500 realistic ERP stress scenarios, executes them against your live schema and edge functions, detects bugs, and logs structured results into a new `qa_war_runs` + `qa_war_bugs` table pair. Results are viewable from a new `/qa-war` admin page.
-
-This is NOT manual testing. This is an autonomous AI agent that reads your real DB schema, real edge function signatures, real RLS policies, and real transition maps -- then systematically tries to break them.
+# Odoo Detach Readiness Report
 
 ---
 
-## Architecture
+## PHASE 1 -- Dependency Audit
 
-```text
-┌─────────────────┐     ┌──────────────────────┐     ┌────────────────┐
-│  /qa-war page   │────▶│  qa-war-engine (EF)   │────▶│  Gemini 2.5    │
-│  (Admin only)   │     │  Orchestrates 500     │     │  Pro via        │
-│  Start/View     │     │  scenarios in batches │     │  Lovable AI     │
-└─────────────────┘     └──────┬───────────────┘     └────────────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │  qa_war_runs        │  (run metadata)
-                    │  qa_war_bugs        │  (structured bugs)
-                    └─────────────────────┘
-```
+### 1A. Edge Functions That Call Odoo (JSON-RPC)
 
----
+| Function | Purpose | Direction | Status |
+|----------|---------|-----------|--------|
+| `odoo-crm-sync` | Syncs ~2,990 leads from Odoo CRM | Inbound (Odoo → ERP) | **Active cron: every 15 min** |
+| `odoo-chatter-sync` | Imports chatter messages/activities | Inbound | **Active cron: hourly** |
+| `odoo-sync-order-lines` | Pulls sale.order.line items for quotes | Inbound | On-demand (triggered from ConvertQuoteDialog) |
+| `odoo-reconciliation-report` | Compares Odoo vs ERP data for drift | Read-only audit | On-demand |
+| `odoo-file-proxy` | Proxies file downloads from Odoo ir.attachment | Inbound file access | On-demand (used in LeadTimeline) |
+| `archive-odoo-files` | Migrates Odoo attachments to local storage | Migration tool | On-demand (admin card) |
+| `autopilot-engine` | Contains `odoo_write` tool + rollback logic | **Outbound (ERP → Odoo)** | Active (AI writes back to Odoo) |
 
-## Step 1: Database Tables
+### 1B. Cron Jobs
 
-### `qa_war_runs`
-| Column | Type | Notes |
-|--------|------|-------|
-| id | uuid PK | |
-| started_at | timestamptz | |
-| completed_at | timestamptz | nullable |
-| status | text | running, completed, failed |
-| total_scenarios | int | 500 |
-| bugs_found | int | 0 initially |
-| summary | jsonb | Top risks, patterns, debt score |
-| company_id | uuid | RLS |
+| Job ID | Name | Schedule | Target |
+|--------|------|----------|--------|
+| 4 | `odoo-crm-sync-incremental` | `*/15 * * * *` | `odoo-crm-sync` |
+| 5 | `odoo-chatter-sync-hourly` | `0 * * * *` | `odoo-chatter-sync` |
 
-### `qa_war_bugs`
-| Column | Type | Notes |
-|--------|------|-------|
-| id | uuid PK | |
-| run_id | uuid FK → qa_war_runs | |
-| bug_id | text | Stable hash for dedup |
-| title | text | |
-| module | text | dashboard, crm, orders, etc. |
-| severity | text | S0-S3 |
-| priority | text | P0-P3 |
-| type | text | UI, API, Data, Permissions, Performance, Reliability |
-| steps_to_repro | jsonb | Array of strings |
-| expected | text | |
-| actual | text | |
-| suspected_root_cause | text | |
-| fix_proposal | text | |
-| scenario_category | text | normal, edge_case, concurrency, permission_abuse, integration, corrupt_data, stress |
-| status | text | new, known, regression, fixed |
-| company_id | uuid | RLS |
-| created_at | timestamptz | |
+### 1C. Environment Secrets Used
 
-RLS: Admin-only read/write via `has_role(auth.uid(), 'admin')`.
+- `ODOO_URL`
+- `ODOO_API_KEY`
+- `ODOO_DATABASE`
+- `ODOO_USERNAME`
 
----
+### 1D. Database Columns with Odoo References
 
-## Step 2: Edge Function -- `qa-war-engine`
+| Table | Column | Data Volume |
+|-------|--------|-------------|
+| `leads` | `metadata.odoo_id` (JSONB) | 2,990 leads sourced from Odoo |
+| `quotes` | `odoo_id`, `odoo_status` | 2,586 quotes from Odoo |
+| `lead_files` | `odoo_id` | 15,787 files (527 migrated, **15,260 NOT yet migrated**) |
+| `lead_activities` | `odoo_message_id` | 39,836 chatter records |
+| `sync_validation_log` | `odoo_id` | Validation audit trail |
+| `ventures` | `odoo_context` | Venture planning metadata |
 
-The engine works in batches of 25 scenarios per AI call (20 batches = 500 total). Each batch:
+### 1E. Frontend Components Referencing Odoo
 
-1. **Context injection**: Sends the AI a snapshot of:
-   - All public table names + column schemas (from `information_schema`)
-   - All RLS policies (from `pg_policies`)
-   - Transition maps (delivery, pipeline, order status)
-   - Edge function list
-   - Module list with real page routes
-   - The `bugRecord.schema.json` output format
+| File | Usage |
+|------|-------|
+| `OdooMigrationStatusCard.tsx` | Admin card for file migration progress |
+| `OdooDumpImportDialog.tsx` | Import from Odoo data dump |
+| `ArchivedQuotations` page | Displays `source=odoo_sync` quotes |
+| `ConvertQuoteDialog.tsx` | Calls `odoo-sync-order-lines` before converting |
+| `LeadTimeline.tsx` | Shows Odoo chatter, proxies Odoo files |
+| `SwipeableLeadCard.tsx` | Reads `metadata.odoo_revenue` |
+| `PipelineAISheet.tsx` | Reads `metadata.odoo_salesperson` |
+| `RepPerformanceDashboard.tsx` | Reads `metadata.odoo_salesperson` |
+| `Sidebar.tsx` | Comments reference "Odoo-style" (cosmetic only) |
+| `agentConfigs.ts` | Architect agent mentions Odoo diagnostics |
 
-2. **Scenario distribution per batch**: The prompt enforces the distribution:
-   - 8 normal flows, 5 edge cases, 4 concurrency, 3 permission abuse, 3 integration failures, 3 corrupt data, 1 stress (per batch of 25, × 20 batches = 500 total)
+### 1F. Shared Utilities
 
-3. **AI generates structured bugs**: Using tool calling to extract typed `BugRecord[]` arrays. Each bug includes steps_to_repro, expected vs actual, root cause hypothesis, and fix proposal.
-
-4. **Dedup**: Before insert, check `bug_id` (hash of module + title) against existing bugs in this run and prior runs. Mark as `known` or `regression` if seen before.
-
-5. **Insert results** into `qa_war_bugs` with the run_id.
-
-6. **Final summary**: After all 20 batches, generate a summary with:
-   - Bug registry (count by severity/module)
-   - Top 20 systemic risks
-   - Recurring pattern clusters
-   - Architectural weaknesses
-   - Technical debt score (1-100)
-
-Auth: Admin-only via `requireAuth` + role check.
-
-Config: `verify_jwt = false` in config.toml (manual auth in code).
-
-Model: `google/gemini-2.5-pro` (needs deep reasoning over schema).
+- `supabase/functions/_shared/odoo-validation.ts` -- Validation layer for Odoo lead sync
 
 ---
 
-## Step 3: Frontend -- `/qa-war` Page
+## PHASE 2 -- Source of Truth Validation
 
-Admin-gated page with:
+### Are Tables Locally Authoritative?
 
-- **Start Run** button -- invokes edge function, shows progress
-- **Run History** -- list of past runs with bug counts
-- **Bug Registry Table** -- filterable by module, severity, type, category
-- **Summary Panel** -- top risks, patterns, debt score
-- **Export** -- download bugs as JSON matching `bugRecord.schema.json`
+| Table | Local Authority? | Notes |
+|-------|-----------------|-------|
+| `customers` | **YES** | All customer records exist locally. Odoo sync creates them but they are self-contained. |
+| `leads` | **YES** | 2,990 leads fully copied with all fields. No read-time dependency on Odoo. |
+| `orders` | **YES** | Created locally. `odoo-sync-order-lines` enriches but order exists independently. |
+| `deliveries` | **YES** | Fully local. No Odoo dependency. |
+| `inventory` | **YES** | Fully local. No Odoo dependency. |
+| `invoices` | **YES** | Managed by QuickBooks integration, not Odoo. |
+| `activity_events` | **YES** | Local ledger. Odoo chatter imported as historical data. |
+| `lead_activities` | **YES** | 39,836 records already copied locally. |
+| `quotes` | **YES** | 2,586 quotes fully stored with metadata. |
 
-Lazy-loaded, admin-only route via `AdminRoute`.
+### Write Operations Depending on Odoo
 
----
+| Operation | Dependency | Risk |
+|-----------|-----------|------|
+| `autopilot-engine` `odoo_write` tool | **WRITES TO ODOO** -- AI can mutate Odoo CRM records | Medium -- only if you want bidirectional sync to stop |
+| `ConvertQuoteDialog` line sync | Fetches line items from Odoo before order creation | Medium -- lines may not exist locally for unconverted quotes |
+| `odoo-file-proxy` | Downloads files on-demand from Odoo | **HIGH -- 15,260 files NOT YET migrated to local storage** |
 
-## Step 4: Scenario Categories (What the AI Attacks)
+### Production/Delivery Callbacks
 
-The prompt instructs the AI to simulate these against your REAL schema:
-
-| Category | Count | Examples |
-|----------|-------|---------|
-| Normal flows | 150 | Create lead → quote → order → delivery → invoice → payment |
-| Edge cases | 100 | Zero-qty order, duplicate email customer, delivery with no stops |
-| Concurrency | 75 | Two users editing same order, parallel inventory reservations |
-| Permission abuse | 50 | Workshop user hitting accounting endpoints, customer accessing admin routes |
-| Integration failures | 50 | QB webhook duplicate, Gmail sync timeout, Odoo RPC failure |
-| Corrupt data | 50 | Null company_id insert, negative inventory, orphaned order_items |
-| Extreme stress | 25 | 1000 concurrent cut plans, 500 webhook deliveries, bulk lead import |
-
----
-
-## Step 5: What the AI Knows About Your System
-
-The engine dynamically queries and injects:
-
-- **150+ tables** from `information_schema.columns`
-- **All RLS policies** from `pg_policies`
-- **Status transition maps**: `ALLOWED_DELIVERY_TRANSITIONS`, pipeline stage order, order status FSM
-- **Edge function list**: All 130+ functions from the functions directory
-- **Role system**: admin, sales, accounting, office, workshop, field, shop_supervisor, customer
-- **Known patterns**: `company_id` isolation, `dedupe_key` on activity_events, `has_role()` SECURITY DEFINER
+None. No production, delivery, or accounting workflow depends on Odoo callbacks.
 
 ---
 
-## Files Created/Modified
+## PHASE 3 -- Detach Readiness Assessment
+
+### RISK LEVEL: **MEDIUM**
+
+The primary blocker is the **15,260 unmigrated files** still served via `odoo-file-proxy`. If Odoo is shut down, these files become inaccessible.
+
+### Pre-Detach Blockers
+
+1. **File Migration Incomplete**: 15,260 of 15,787 Odoo files have NOT been archived to local storage. Must complete `archive-odoo-files` migration runs before detaching.
+2. **Quote Line Items**: Quotes that have not yet been converted to orders may need their line items synced one final time via `odoo-sync-order-lines` batch mode.
+
+### Safe Detach Plan (Once Blockers Resolved)
+
+**Step 1 -- Complete File Migration**
+- Run `archive-odoo-files` repeatedly until `remaining = 0`
+- This moves all 15,260 files from Odoo to local storage
+
+**Step 2 -- Final Data Snapshot**
+- Run `odoo-crm-sync` with `mode: "full"` one last time
+- Run `odoo-chatter-sync` with `mode: "full"` one last time
+- Run `odoo-sync-order-lines` with `mode: "batch"` for all quotes
+- Run `odoo-reconciliation-report` to confirm 100% parity
+
+**Step 3 -- Disable Cron Jobs**
+- SQL: `SELECT cron.unschedule(4);` (odoo-crm-sync-incremental)
+- SQL: `SELECT cron.unschedule(5);` (odoo-chatter-sync-hourly)
+
+**Step 4 -- Disable Autopilot Odoo Write**
+- In `autopilot-engine/index.ts`, make the `odoo_write` tool return `{ success: false, error: "Odoo integration disabled" }` when `ODOO_ENABLED` env is not `true`
+
+**Step 5 -- Guard All Edge Functions**
+- Add early-return guard to these functions checking for `ODOO_ENABLED !== "true"`:
+  - `odoo-crm-sync`
+  - `odoo-chatter-sync`
+  - `odoo-sync-order-lines`
+  - `odoo-reconciliation-report`
+  - `odoo-file-proxy`
+  - `archive-odoo-files`
+
+**Step 6 -- Frontend Cleanup**
+- `ConvertQuoteDialog`: Skip Odoo line sync call (lines already in quote metadata)
+- `LeadTimeline`: Use local `storage_path` for files, remove Odoo proxy fallback for migrated files
+- `OdooMigrationStatusCard`: Show "Migration Complete" state, disable run button
+- No changes to data display components (they read from local `metadata` JSONB)
+
+**Step 7 -- Remove Secrets (After Verification Period)**
+- Remove `ODOO_URL`, `ODOO_API_KEY`, `ODOO_DATABASE`, `ODOO_USERNAME` from secrets
+- Set `ODOO_ENABLED=false` as feature flag
+
+### Files to Disable/Modify
 
 | File | Action |
 |------|--------|
-| DB migration | Create `qa_war_runs` + `qa_war_bugs` tables with RLS |
-| `supabase/functions/qa-war-engine/index.ts` | New edge function |
-| `supabase/config.toml` | Add `verify_jwt = false` for qa-war-engine |
-| `src/pages/QaWar.tsx` | New admin page |
-| `src/App.tsx` | Add route `/qa-war` under AdminRoute |
+| `supabase/functions/odoo-crm-sync/index.ts` | Add `ODOO_ENABLED` guard |
+| `supabase/functions/odoo-chatter-sync/index.ts` | Add `ODOO_ENABLED` guard |
+| `supabase/functions/odoo-sync-order-lines/index.ts` | Add `ODOO_ENABLED` guard |
+| `supabase/functions/odoo-reconciliation-report/index.ts` | Add `ODOO_ENABLED` guard |
+| `supabase/functions/odoo-file-proxy/index.ts` | Add `ODOO_ENABLED` guard |
+| `supabase/functions/archive-odoo-files/index.ts` | Keep active until migration done, then guard |
+| `supabase/functions/autopilot-engine/index.ts` | Guard `odoo_write` tool |
+| `supabase/functions/_shared/odoo-validation.ts` | Keep (no runtime cost, used by sync) |
+| Cron jobs 4, 5 | Unschedule via SQL |
 
----
+### Migrations Needed
 
-## Technical Details
+1. Unschedule cron jobs (SQL insert, not migration)
+2. No schema changes needed -- `odoo_id` columns are harmless historical references
 
-### AI Prompt Structure (per batch)
+### What This Does NOT Touch
 
-```text
-You are a QA War Engine testing an ERP system. You have full knowledge of:
-- Database schema: [injected table/column list]
-- RLS policies: [injected policy list]
-- Edge functions: [injected function names]
-- Status machines: [injected transition maps]
-- Role hierarchy: [injected role definitions]
+- QuickBooks integration (untouched)
+- All local business logic (untouched)
+- Existing data in `metadata.odoo_*` fields (preserved as historical record)
+- No table drops, no column drops
 
-Generate exactly 25 bug reports. Distribution for this batch:
-- 8 normal business flow bugs
-- 5 edge case bugs
-- 4 concurrency bugs
-- 3 permission abuse bugs
-- 3 integration failure bugs
-- 3 corrupt/invalid data bugs
-- 1 extreme stress bug
+### Summary
 
-Rules:
-- Never assume the system is correct
-- Assume concurrent users
-- Assume malicious actors
-- Assume flaky network
-- Each bug must have concrete steps_to_repro against real tables/endpoints
-- Reference actual column names and table names
-- Propose code-level fixes
-```
-
-### Tool Calling Schema for Structured Output
-
-Uses Lovable AI tool calling to extract typed `BugRecord[]` -- no JSON parsing gymnastics.
-
-### Rate Limiting
-
-20 batches with 3-second delays between calls to stay under Lovable AI rate limits. Total runtime: ~2-4 minutes per full 500-scenario run.
-
----
-
-## Security
-
-- Admin-only: both edge function (role check) and frontend (AdminRoute)
-- Read-only analysis: the AI analyzes schema metadata, it does NOT execute mutations against production data
-- All bugs stored with `company_id` for multi-tenant isolation
+| Dimension | Assessment |
+|-----------|-----------|
+| **Risk Level** | **Medium** (due to 15,260 unmigrated files) |
+| **Blocker** | File migration must complete first |
+| **Data Authority** | All tables are locally authoritative |
+| **Outbound Writes** | Only `autopilot-engine` writes to Odoo |
+| **Accounting** | Zero Odoo dependency (QuickBooks handles it) |
+| **Estimated Effort** | 2 implementation rounds after file migration completes |
 
