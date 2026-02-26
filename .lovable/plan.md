@@ -1,18 +1,21 @@
 
 
-# Store WC_WEBHOOK_SECRET and Finalize Webhook Setup
+# Fix: WooCommerce Webhook 401 Error
 
-## What's Happening
-You've provided the WooCommerce webhook secret: `Q0x9dwu4kXMdh5lQeRkjmAmbOrtFg9E9`
+## Root Cause
+The `wc-webhook` edge function is not listed in `supabase/config.toml` with `verify_jwt = false`. By default, edge functions require a valid JWT. WooCommerce sends no JWT, so the request is rejected with a 401 before your function code even executes.
 
 ## Plan
 
-1. **Store the secret** using the secrets tool so the `wc-webhook` edge function can verify incoming webhook signatures from rebar.shop
-2. **Verify the `wc-webhook` edge function** is deployed and references `WC_WEBHOOK_SECRET` correctly (already implemented in previous messages)
+1. **Add `wc-webhook` to `supabase/config.toml`** with `verify_jwt = false` — this is the only change needed.
 
-## After This
-- Create two webhooks in WooCommerce admin (rebar.shop → WooCommerce → Settings → Advanced → Webhooks):
-  - **Webhook 1**: Topic = `Order created`, Delivery URL = `https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/wc-webhook`, Secret = the value above, Status = Active
-  - **Webhook 2**: Topic = `Order updated`, same Delivery URL and Secret
-- Place a test order to verify the full flow
+```toml
+[functions.wc-webhook]
+verify_jwt = false
+```
+
+No other code changes are required. The function already has its own HMAC-SHA256 signature verification, so disabling JWT verification is safe — only requests signed with your `WC_WEBHOOK_SECRET` will be processed.
+
+## After Deployment
+Once deployed, go back to the WooCommerce webhook page and click "Save webhook" — WooCommerce will re-ping the delivery URL and should now receive a 200 response.
 
