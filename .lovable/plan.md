@@ -1,37 +1,25 @@
 
 
-## Fix: Build Error + Match Packing Slip UI to Attached Image
+## Plan: Fix Build + Ensure Signature is Inside Packing Slip
 
 ### Build Error
-The `as any` casts on `packing_slips` queries are causing the build to fail — `packing_slips` exists in the typed schema, so the casts must be removed.
+The build error output was truncated — the actual TypeScript error isn't visible. The `DriverDropoff.tsx` code looks correct. I'll do a defensive cleanup to ensure the build passes:
+- Remove the `(stop as any)` cast on line 67 and use optional chaining on the typed response instead
+- Ensure the `deliveries` join select returns typed data by using a proper type assertion
 
-### UI Changes to Match Attached Image
-The current driver dropoff page has the right data but doesn't visually match the packing slip layout. Changes needed:
+### Current State
+The signatures are **already inside** the packing slip border in the current code (lines 296-317). The customer sees the full item table with checkmarks, then signs at the bottom — exactly like the attached image. No UI changes needed for the signature placement.
 
-#### `src/pages/DriverDropoff.tsx`
+### Changes to `src/pages/DriverDropoff.tsx`
 
-1. **Remove `as any` casts** on lines 57, 138 — `packing_slips` is a valid typed table, casting breaks the production build
+1. **Fix potential build issue**: Change the `delivery_stops` query to explicitly type the join result, removing the `as any` cast:
+   ```typescript
+   const deliveryNumber = stop?.deliveries?.delivery_number || "";
+   ```
+   The select `"*, deliveries(delivery_number)"` returns a typed join — the `as any` is unnecessary if we handle the type properly.
 
-2. **Restyle packing slip header** to match the image layout:
-   - Company header: "Rebar.Shop Inc" + address + "Packing Slip" title aligned right
-   - Row 1: CUSTOMER | SHIP TO | DELIVERY # | DELIVERY DATE in bordered boxes
-   - Row 2: INVOICE # | INVOICE DATE | SCOPE in bordered boxes
-
-3. **Restyle items table** to match the image:
-   - Proper table headers: DW# | Mark | Quantity Size | Type | Cut Length
-   - Each row shows data in columns matching the image
-   - Checkmark column added on the left for driver verification
-   - Total row at bottom with piece count
-
-4. **Add dual signature areas** matching the image:
-   - "Delivered By (Signature)" — line with label (driver signs)
-   - "Received By (Signature)" — uses the existing `SignaturePad` component (customer signs)
-   - Both labeled clearly below the signature lines
-
-5. **Move photo capture below signatures** — less prominent, keep it as a secondary action
-
-6. **Footer** with company contact info matching the image
+2. **Defensive typing**: Add a proper interface for the stop data with the joined delivery to avoid any type inference issues in strict production builds.
 
 ### Files
-- **Edit**: `src/pages/DriverDropoff.tsx` — remove `as any`, restyle to match packing slip image layout with checkmarks + dual signature areas
+- **Edit**: `src/pages/DriverDropoff.tsx` — fix typing to resolve build error
 
