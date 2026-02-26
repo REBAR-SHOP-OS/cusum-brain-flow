@@ -4,15 +4,18 @@ import { useShapeSchematics } from "@/hooks/useShapeSchematics";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RebarTagCard } from "@/components/office/RebarTagCard";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ZebraZplModal } from "@/components/office/ZebraZplModal";
 import { generateZpl } from "@/utils/generateZpl";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import {
   LayoutGrid, Table as TableIcon, Download, Printer,
-  Zap, Sparkles, ChevronRight, ChevronDown, Tag,
+  Zap, Sparkles, ChevronRight, ChevronDown, Tag, Trash2,
 } from "lucide-react";
 
 // Mass per meter by bar code (RSIC Canada)
@@ -31,7 +34,7 @@ function getWeight(size: string | null, lengthMm: number | null, qty: number | n
 }
 
 export function TagsExportView() {
-  const { sessions, loading: sessionsLoading } = useExtractSessions();
+  const { sessions, loading: sessionsLoading, refresh } = useExtractSessions();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const { rows, loading: rowsLoading } = useExtractRows(selectedSessionId);
   const { getShapeImageUrl } = useShapeSchematics();
@@ -39,6 +42,8 @@ export function TagsExportView() {
   const [sortMode, setSortMode] = useState<"standard" | "optimized">("standard");
   const [zebraOpen, setZebraOpen] = useState(false);
   const [zebraZpl, setZebraZpl] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
 
@@ -119,6 +124,31 @@ export function TagsExportView() {
     setZebraOpen(true);
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setDeleting(true);
+    const { error } = await supabase
+      .from("extract_sessions")
+      .delete()
+      .in("id", Array.from(selectedIds));
+    if (error) toast.error(error.message);
+    else {
+      toast.success(`Deleted ${selectedIds.size} session(s)`);
+      setSelectedIds(new Set());
+      refresh();
+    }
+    setDeleting(false);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   // Session selection screen
   if (!selectedSessionId) {
     return (
@@ -131,31 +161,58 @@ export function TagsExportView() {
           <p className="text-sm text-muted-foreground">No sessions with extracted data found.</p>
         ) : (
           <div className="space-y-2">
+            {/* Select All + Bulk Delete toolbar */}
+            <div className="flex items-center gap-3">
+              <Checkbox
+                checked={selectedIds.size === availableSessions.length && availableSessions.length > 0}
+                onCheckedChange={(checked) => {
+                  if (checked) setSelectedIds(new Set(availableSessions.map((s) => s.id)));
+                  else setSelectedIds(new Set());
+                }}
+              />
+              <span className="text-xs text-muted-foreground">Select All</span>
+              {selectedIds.size > 0 && (
+                <Button variant="destructive" size="sm" className="h-7 gap-1.5 text-xs" onClick={handleBulkDelete} disabled={deleting}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete {selectedIds.size}
+                </Button>
+              )}
+            </div>
+
             {availableSessions.map((s) => (
-              <button
+              <div
                 key={s.id}
-                onClick={() => setSelectedSessionId(s.id)}
-                className="w-full flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors"
               >
-                <div>
-                  <span className="font-bold text-foreground">{s.name}</span>
-                  {s.customer && (
-                    <span className="ml-3 text-xs text-muted-foreground">{s.customer}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    className={`text-[10px] tracking-wider border-0 ${
-                      s.status === "approved"
-                        ? "bg-emerald-500/20 text-emerald-500"
-                        : "bg-primary/20 text-primary"
-                    }`}
-                  >
-                    {s.status.toUpperCase()}
-                  </Badge>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-                </div>
-              </button>
+                <Checkbox
+                  checked={selectedIds.has(s.id)}
+                  onCheckedChange={() => toggleSelect(s.id)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <button
+                  className="flex-1 flex items-center justify-between"
+                  onClick={() => setSelectedSessionId(s.id)}
+                >
+                  <div>
+                    <span className="font-bold text-foreground">{s.name}</span>
+                    {s.customer && (
+                      <span className="ml-3 text-xs text-muted-foreground">{s.customer}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      className={`text-[10px] tracking-wider border-0 ${
+                        s.status === "approved"
+                          ? "bg-emerald-500/20 text-emerald-500"
+                          : "bg-primary/20 text-primary"
+                      }`}
+                    >
+                      {s.status.toUpperCase()}
+                    </Badge>
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                </button>
+              </div>
             ))}
           </div>
         )}
