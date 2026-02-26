@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.stripe-qb-webhook]
 verify_jwt = false
+
+[functions.ai-generate-quotation]
+verify_jwt = false

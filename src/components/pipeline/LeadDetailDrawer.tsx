@@ -16,8 +16,10 @@ import {
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
   TrendingUp, Clock, User, Star, Archive, X, FileText, ClipboardList, Brain, Target, ShieldCheck,
-  Sparkles, Loader2, Plus, MessageSquare,
+  Sparkles, Loader2, Plus, MessageSquare, FileOutput,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
@@ -76,8 +78,48 @@ export function LeadDetailDrawer({
   const { isAdmin } = useUserRole();
   const [activeTab, setActiveTab] = useState<"notes" | "chatter" | "activities" | "timeline">("chatter");
   const { data: recommendation, isLoading: recLoading } = useLeadRecommendation(lead, open);
+  const [convertingToQuote, setConvertingToQuote] = useState(false);
 
   if (!lead) return null;
+
+  const handleConvertToQuotation = async () => {
+    setConvertingToQuote(true);
+    try {
+      // First check if there's an estimation project linked to this lead
+      const { data: estProjects } = await supabase
+        .from("estimation_projects")
+        .select("id, name")
+        .eq("lead_id", lead.id)
+        .limit(1);
+
+      const estProjectId = estProjects?.[0]?.id;
+
+      if (!estProjectId) {
+        toast({ title: "No estimation project", description: "Link an estimation project to this lead first, or generate a quotation from the Accounting workspace.", variant: "destructive" });
+        setConvertingToQuote(false);
+        return;
+      }
+
+      const customerName = lead.customers?.company_name || lead.customers?.name || lead.title;
+
+      const { data, error } = await supabase.functions.invoke("ai-generate-quotation", {
+        body: {
+          estimation_project_id: estProjectId,
+          lead_id: lead.id,
+          customer_name_override: customerName,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({ title: "Quotation created!", description: `Quote ${data.quote?.quote_number} generated. View it in Accounting → Quotations.` });
+    } catch (err: any) {
+      toast({ title: "Conversion failed", description: err?.message || "Could not generate quotation.", variant: "destructive" });
+    } finally {
+      setConvertingToQuote(false);
+    }
+  };
 
   const meta = (lead.metadata ?? {}) as Record<string, unknown>;
   const currentStageIndex = PIPELINE_STAGES.findIndex((s) => s.id === lead.stage);
@@ -116,6 +158,16 @@ export function LeadDetailDrawer({
               </SheetTitle>
             </SheetHeader>
             <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1 px-2"
+                disabled={convertingToQuote}
+                onClick={handleConvertToQuotation}
+              >
+                {convertingToQuote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileOutput className="w-3.5 h-3.5" />}
+                → Quotation
+              </Button>
               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { onOpenChange(false); onEdit(lead); }}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
