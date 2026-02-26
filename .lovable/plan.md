@@ -1,31 +1,30 @@
 
 
-## Add Search + Upload Zone to Quotations Tab
+## QA War Engine — Already Built and Ready
 
-### Problem
-The Quotations tab in `AccountingDocuments.tsx` has a search bar and status filter, but is missing the drag-and-drop `DocumentUploadZone` that other sections (Bills, Payments, Expenses, etc.) already have. The user wants feature parity with the Bills section (as shown in the screenshot).
+The entire QA War Engine you described is **already implemented** in this project. Here is what exists:
 
-### Changes
+### Edge Function: `supabase/functions/qa-war-engine/index.ts`
+- Runs 20 batches of 25 scenarios each (500 total)
+- Uses Gemini 2.5 Pro to generate structured bug reports against the live database schema
+- Distribution matches your spec: normal flows, edge cases, concurrency, permission abuse, integration failures, corrupt data, extreme stress
+- Deduplicates bugs using a hash of module + title
+- Detects regressions (bugs previously marked "fixed" that reappear)
+- Computes a technical debt score
+- Produces summary with breakdowns by severity, module, type, and category
+- Admin-only access enforced via `user_roles` check
 
-**`src/components/accounting/AccountingDocuments.tsx`**:
-1. Import `DocumentUploadZone` (already imported but unused in this component).
-2. Add a `DocumentUploadZone` with `targetType="estimate"` (quotations map to estimates) below the search/filter bar in the quotation tab, matching the pattern used in `AccountingBills.tsx`.
-3. Wire the `onImport` callback to handle the AI-extracted data (e.g., toast notification, refresh query).
+### Frontend: `src/pages/QaWar.tsx` (route: `/qa-war`)
+- "Launch QA War" button triggers the 500-scenario simulation
+- Run history with status badges and bug counts
+- Summary dashboard: total bugs, critical count (S0+S1), debt score, top risk modules
+- Filterable bug registry table (severity, module, category)
+- Hover-to-reveal root cause and fix proposal per bug
+- JSON export of filtered results
 
-The implementation follows the exact same pattern as every other accounting section — a `<DocumentUploadZone targetType="estimate" onImport={...} />` placed between the search bar and the document list.
+### Database: `qa_war_runs` + `qa_war_bugs` tables
+- Persists all runs and bugs with company_id scoping
 
-### Technical Detail
-
-```tsx
-// Inside the {activeDoc === "quotation" && ...} block, after the search/filter div:
-<DocumentUploadZone
-  targetType="estimate"
-  onImport={(result) => {
-    console.log("Quotation import result:", result);
-    // toast or refresh as needed
-  }}
-/>
-```
-
-No new files, no edge function changes, no DB changes — just wiring an existing component into the quotation view.
+### No changes needed
+Navigate to `/qa-war` and click **Launch QA War** to execute the full 500-scenario stress simulation. It takes approximately 3 minutes to complete all 20 batches.
 
