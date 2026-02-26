@@ -1,14 +1,25 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { SignaturePad } from "@/components/shopfloor/SignaturePad";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Camera, MapPin, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ArrowLeft, Camera, MapPin, CheckCircle2, Loader2, RotateCcw, Package } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+interface SlipItem {
+  mark_number: string | null;
+  drawing_ref?: string | null;
+  bar_code: string;
+  cut_length_mm: number;
+  total_pieces: number;
+  asa_shape_code?: string | null;
+}
 
 export default function DriverDropoff() {
   const { stopId } = useParams<{ stopId: string }>();
@@ -20,6 +31,7 @@ export default function DriverDropoff() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
 
   // Fetch stop details
   const { data: stop } = useQuery({
@@ -36,7 +48,43 @@ export default function DriverDropoff() {
     },
   });
 
+  // Fetch packing slip for this delivery
+  const { data: packingSlip } = useQuery({
+    queryKey: ["dropoff-packing-slip", stop?.delivery_id],
+    enabled: !!stop?.delivery_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("packing_slips" as any)
+        .select("*")
+        .eq("delivery_id", stop!.delivery_id)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as any;
+    },
+  });
+
   const deliveryNumber = (stop as any)?.deliveries?.delivery_number || "";
+  const items: SlipItem[] = packingSlip?.items_json || [];
+  const totalQty = items.reduce((s, i) => s + i.total_pieces, 0);
+  const allChecked = items.length > 0 && checkedItems.size === items.length;
+
+  const toggleItem = (idx: number) => {
+    setCheckedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allChecked) {
+      setCheckedItems(new Set());
+    } else {
+      setCheckedItems(new Set(items.map((_, i) => i)));
+    }
+  };
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -114,7 +162,7 @@ export default function DriverDropoff() {
     }
   };
 
-  const canSubmit = !saving && !!signatureData && !!photoFile;
+  const canSubmit = !saving && !!signatureData && !!photoFile && (items.length === 0 || allChecked);
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-background">
@@ -151,6 +199,114 @@ export default function DriverDropoff() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+
+        {/* Packing Slip Header */}
+        {packingSlip && (
+          <section className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Package className="w-4 h-4 text-primary" />
+              <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Packing Slip</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Customer</p>
+                <p className="font-semibold truncate">{packingSlip.customer_name || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Slip #</p>
+                <p className="font-semibold">{packingSlip.slip_number || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Invoice #</p>
+                <p className="font-semibold">{packingSlip.invoice_number || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Scope</p>
+                <p className="font-semibold truncate">{packingSlip.scope || "—"}</p>
+              </div>
+              {packingSlip.invoice_date && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Invoice Date</p>
+                  <p className="font-semibold">{format(new Date(packingSlip.invoice_date), "MMM d, yyyy")}</p>
+                </div>
+              )}
+              {packingSlip.ship_to && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Ship To</p>
+                  <p className="font-semibold truncate">{packingSlip.ship_to}</p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Items Checklist */}
+        {items.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                📦 Delivery Items
+              </label>
+              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1.5" onClick={toggleAll}>
+                {allChecked ? "Uncheck All" : "Check All"}
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-border overflow-hidden bg-card">
+              {/* Table header */}
+              <div className="grid grid-cols-[2rem_1fr_1fr_auto_auto] gap-1 px-3 py-2 bg-muted/50 text-[10px] uppercase tracking-widest text-muted-foreground font-semibold border-b border-border">
+                <span />
+                <span>DW# / Mark</span>
+                <span>Size</span>
+                <span className="text-right">Qty</span>
+                <span className="text-right">Length</span>
+              </div>
+
+              {/* Items */}
+              {items.map((item, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => toggleItem(idx)}
+                  className={`grid grid-cols-[2rem_1fr_1fr_auto_auto] gap-1 px-3 py-3 border-b border-border last:border-b-0 items-center cursor-pointer active:bg-muted/50 transition-colors ${
+                    checkedItems.has(idx) ? "bg-primary/5" : ""
+                  }`}
+                >
+                  <Checkbox
+                    checked={checkedItems.has(idx)}
+                    onCheckedChange={() => toggleItem(idx)}
+                    className="h-5 w-5"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{item.drawing_ref || "—"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{item.mark_number || "—"}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm">{item.bar_code}</p>
+                    <p className="text-xs text-muted-foreground">{item.asa_shape_code ? "Bent" : "Straight"}</p>
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums text-right w-8">{item.total_pieces}</p>
+                  <p className="text-xs text-muted-foreground tabular-nums text-right w-14">
+                    {(item.cut_length_mm / 1000).toFixed(2)}m
+                  </p>
+                </div>
+              ))}
+
+              {/* Total row */}
+              <div className="grid grid-cols-[2rem_1fr_1fr_auto_auto] gap-1 px-3 py-2 bg-muted/50 items-center font-semibold text-sm">
+                <span />
+                <span>Total</span>
+                <span />
+                <span className="text-right tabular-nums w-8">{totalQty}</span>
+                <span className="w-14" />
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              {checkedItems.size}/{items.length} items verified
+            </p>
+          </section>
+        )}
+
         {/* Site Photo */}
         <section>
           <label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
@@ -219,7 +375,9 @@ export default function DriverDropoff() {
         </Button>
         {!canSubmit && !saving && (
           <p className="text-xs text-muted-foreground text-center mt-2">
-            {!photoFile && !signatureData
+            {items.length > 0 && !allChecked
+              ? `Verify all items (${checkedItems.size}/${items.length})`
+              : !photoFile && !signatureData
               ? "Photo and signature required"
               : !photoFile
               ? "Photo required"
