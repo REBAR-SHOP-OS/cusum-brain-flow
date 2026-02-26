@@ -383,6 +383,10 @@ Deno.serve(async (req) => {
         .single();
       if (!run) return json({ error: "Run not found" }, 404);
 
+      if (!["awaiting_approval", "approved"].includes(run.status)) {
+        return json({ error: `Cannot reject run in status: ${run.status}` }, 400);
+      }
+
       await svcClient.from("autopilot_runs").update({
         status: "cancelled",
         phase: "cancelled",

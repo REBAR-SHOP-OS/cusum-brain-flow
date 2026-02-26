@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useExpenseClaims, useExpenseClaimItems, type ExpenseClaim } from "@/hooks/useExpenseClaims";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,9 +34,20 @@ function ClaimEditor({ claim, onBack }: { claim: ExpenseClaim; onBack: () => voi
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItem, setNewItem] = useState({ expense_date: new Date().toISOString().split("T")[0], category: "other", description: "", amount: 0, notes: "" });
   const [reviewNote, setReviewNote] = useState("");
+  const [myProfileId, setMyProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        supabase.from("profiles").select("id").eq("user_id", data.user.id).single()
+          .then(({ data: p }) => setMyProfileId(p?.id ?? null));
+      }
+    });
+  }, []);
 
   const isDraft = claim.status === "draft";
   const isSubmitted = claim.status === "submitted";
+  const isOwnClaim = myProfileId === claim.profile_id;
   const total = items.reduce((s, i) => s + i.amount, 0);
 
   const handleAddItem = () => {
@@ -62,7 +74,7 @@ function ClaimEditor({ claim, onBack }: { claim: ExpenseClaim; onBack: () => voi
               <Send className="w-4 h-4 mr-1" /> Submit
             </Button>
           )}
-          {isSubmitted && (
+          {isSubmitted && !isOwnClaim && (
             <>
               <Button size="sm" variant="default" onClick={() => updateClaim.mutate({ id: claim.id, status: "approved", review_note: reviewNote })}>
                 <CheckCircle2 className="w-4 h-4 mr-1" /> Approve

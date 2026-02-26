@@ -36,6 +36,14 @@ export interface ExpenseClaimItem {
   created_at: string;
 }
 
+export const ALLOWED_EXPENSE_TRANSITIONS: Record<string, string[]> = {
+  draft: ["submitted"],
+  submitted: ["approved", "rejected"],
+  approved: ["paid"],
+  rejected: ["draft"],
+  paid: [],
+};
+
 export function useExpenseClaims() {
   const { user } = useAuth();
   const { companyId } = useCompanyId();
@@ -87,6 +95,16 @@ export function useExpenseClaims() {
 
   const updateClaim = useMutation({
     mutationFn: async (input: { id: string; status?: string; review_note?: string; payment_reference?: string; title?: string; description?: string }) => {
+      // Validate status transition
+      if (input.status) {
+        const { data: current } = await supabase.from("expense_claims").select("status").eq("id", input.id).single();
+        const currentStatus = current?.status || "draft";
+        const allowed = ALLOWED_EXPENSE_TRANSITIONS[currentStatus] || [];
+        if (!allowed.includes(input.status)) {
+          throw new Error(`Cannot transition from "${currentStatus}" to "${input.status}"`);
+        }
+      }
+
       const updates: any = {};
       if (input.status) updates.status = input.status;
       if (input.status === "submitted") updates.submitted_at = new Date().toISOString();
