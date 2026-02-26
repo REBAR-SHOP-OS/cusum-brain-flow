@@ -24,7 +24,7 @@ export function SignaturePad({ onSignatureChange, className, width = 400, height
   useEffect(() => {
     const ctx = getCtx();
     if (!ctx) return;
-    ctx.strokeStyle = "hsl(0, 0%, 90%)";
+    ctx.strokeStyle = "#000000";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
