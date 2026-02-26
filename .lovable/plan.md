@@ -1,117 +1,137 @@
 
 
-# QA War Simulation Round 14 -- Delivery Workflow, Inventory Guards, Notification Reliability
+# QA War Simulation Round 15 -- Lead Lifecycle, Quote Conversion, Customer Safety, Payroll Integrity
 
 ---
 
-## BUG R14-1 -- HIGH: Delivery status has no transition validation
+## BUG R15-1 -- HIGH: Lead delete has no child-record guard
 
-**Files**: `src/pages/Deliveries.tsx`, `src/pages/DriverDashboard.tsx`
+**File**: `src/pages/Pipeline.tsx` line 267
 
-Unlike orders (`ALLOWED_TRANSITIONS` in `useOrders.ts`) and expense claims (`ALLOWED_EXPENSE_TRANSITIONS` in `useExpenseClaims.ts`), delivery status updates have zero transition validation. The delivery status is set via raw `.update({ status: ... })` calls with no guard.
+The lead delete mutation is a raw `supabase.from("leads").delete().eq("id", id)` with zero pre-checks. Unlike the customer delete (which deletes child contacts first) or the delivery delete (which cleans up stops/slips), leads can have:
+- `quotes` with `lead_id` FK
+- `lead_activities` with `lead_id` FK
+- `lead_events` with `lead_id` FK
+- `lead_files` referencing the lead
+
+If a lead has linked quotes or orders, deleting it either:
+1. Fails silently with an FK violation (user sees "Error deleting lead")
+2. Or succeeds and orphans all downstream records
+
+**No confirmation dialog** asks "This lead has 3 quotes and 1 order -- are you sure?"
+
+**Impact**: HIGH -- data orphaning or silent failure. A lead with active quotes/orders should never be deletable.
+
+**Fix**:
+1. Before delete, query `quotes` and `orders` for this lead's ID
+2. If any exist, block deletion with a toast: "Cannot delete: lead has linked quotes/orders"
+3. Add a DB trigger `block_lead_delete_with_children` as defense-in-depth
+
+---
+
+## BUG R15-2 -- HIGH: Customer delete orphans orders, quotes, invoices
+
+**File**: `src/pages/Customers.tsx` lines 208-213
+
+The customer delete only cleans up `contacts` before deleting the customer. It does not check for:
+- `orders` with `customer_id` FK
+- `quotes` with `customer_id` FK
+- `leads` with `customer_id` FK
+- `deliveries` referencing orders for this customer
+
+If FK constraints are set to RESTRICT (likely), the delete will fail with a cryptic DB error. If set to CASCADE (unlikely but dangerous), it would cascade-delete all orders, quotes, and financial records.
+
+**Impact**: HIGH -- either data loss (CASCADE) or confusing error (RESTRICT). No business logic guards.
+
+**Fix**:
+1. Before delete, check for orders/quotes/leads referencing this customer
+2. If any exist, block with clear message: "Cannot delete customer with active orders"
+3. Add a DB trigger `block_customer_delete_with_orders` as server-side guard
+
+---
+
+## BUG R15-3 -- MEDIUM: Quote-to-order conversion has no quote status guard
+
+**File**: `supabase/functions/convert-quote-to-order/index.ts` line 71
+
+The conversion function checks for duplicate orders (line 74-84, good dedup), but it does NOT check the quote's status. A draft, expired, or rejected quote can be converted to an order. The only check is `if (qErr || !quote) throw new Error("Quote not found")`.
 
 **Flow**:
-1. Driver opens DriverDashboard, delivery is "pending"
-2. Driver calls `startDelivery()` which sets status to "in-transit" (line 162 of DriverDashboard.tsx)
-3. Any user with DB write access can set a "completed" delivery back to "pending" or "in-transit" via direct mutation
-4. No `ALLOWED_DELIVERY_TRANSITIONS` map exists anywhere in the codebase
+1. Sales creates quote, status = "draft"
+2. Customer rejects it, status updated to "rejected"
+3. Another user (or AI agent via `agentToolExecutor`) calls `convert-quote-to-order` with the rejected quote's ID
+4. Order is created from a rejected quote -- financial and workflow inconsistency
 
-**Valid transitions should be**:
-```text
-pending → scheduled → in-transit → delivered/completed/completed_with_issues
-                                  → partial → in-transit (retry)
-                                  → failed
-```
-
-**Impact**: Delivery workflow can be corrupted. A completed delivery could be re-opened, causing duplicate POD captures and driver confusion.
+**Impact**: MEDIUM -- orders created from invalid quotes corrupt the sales pipeline.
 
 **Fix**:
-1. Create `ALLOWED_DELIVERY_TRANSITIONS` map (client-side, in a shared hook or `Deliveries.tsx`)
-2. Validate before every `.update({ status })` call in `Deliveries.tsx` and `DriverDashboard.tsx`
-3. Optionally add a DB trigger on `deliveries` table to enforce server-side
-
-**Severity**: HIGH -- workflow integrity gap, inconsistent with order/expense patterns.
-
----
-
-## BUG R14-2 -- MEDIUM: Delivery delete does not check for in-transit or completed status at DB level
-
-**File**: `src/pages/Deliveries.tsx` lines 113-134
-
-The UI checks `delivery.status !== "pending"` before allowing delete (line 116), but this is a client-only guard. The actual DB delete (line 122) has no server-side constraint. A direct API call or race condition could delete an in-transit delivery with active stops.
-
-The delete sequence also has a non-atomic multi-table deletion:
-1. Delete `packing_slips` (line 120)
-2. Delete `delivery_stops` (line 121)
-3. Delete `deliveries` (line 122)
-
-If step 3 fails, stops and slips are already deleted -- orphaned data loss.
-
-**Fix**:
-1. Add a DB trigger `block_delivery_delete_unless_pending` that raises exception if `OLD.status != 'pending'`
-2. Or use CASCADE foreign keys so deleting the delivery cascades to stops and slips atomically
-
-**Severity**: MEDIUM -- mitigated by UI guard, but no server-side defense.
-
----
-
-## BUG R14-3 -- MEDIUM: Inventory `consume-on-start` can drive `qty_on_hand` to zero but not below due to `Math.max(0, ...)` -- masking over-consumption
-
-**File**: `supabase/functions/manage-inventory/index.ts` lines 291-294
-
+Add status validation after fetching the quote:
 ```typescript
-await svc.from("inventory_lots").update({
-  qty_on_hand: Math.max(0, lot.qty_on_hand - qty),
-  qty_reserved: Math.max(0, lot.qty_reserved - qty),
-}).eq("id", sourceId);
+const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
+if (!CONVERTIBLE_STATUSES.includes(quote.status)) {
+  return json({ error: `Cannot convert quote in status: ${quote.status}` }, 400);
+}
 ```
-
-The `Math.max(0, ...)` silently clamps negative values instead of rejecting over-consumption. If two concurrent consume requests race, both could read the same `qty_on_hand` and both succeed -- the second one just clamps to 0 without error.
-
-**Impact**: Inventory phantom stock. The system believes it consumed N units, but the lot only had M < N. No error is raised, no alert generated. Financial and production planning data becomes unreliable.
-
-**Fix**:
-1. Before update, check `lot.qty_on_hand >= qty` -- return 400 if insufficient
-2. Use an atomic RPC function: `UPDATE ... SET qty_on_hand = qty_on_hand - $1 WHERE qty_on_hand >= $1 RETURNING qty_on_hand` to prevent race conditions
-3. Keep `Math.max(0, ...)` only for `qty_reserved` (which may lag behind)
-
-**Severity**: MEDIUM -- silent data corruption in inventory accounting.
 
 ---
 
-## BUG R14-4 -- LOW: `push-on-notify` has no retry or dead-letter on `send-push` failure
+## BUG R15-4 -- MEDIUM: Payroll engine uses deprecated AI model name
 
-**File**: `supabase/functions/push-on-notify/index.ts` lines 40-53
+**File**: `supabase/functions/payroll-engine/index.ts` lines 202-214
 
-The function calls `send-push` via `fetch()` and reads the result, but if `send-push` returns an error or times out:
-- The notification INSERT in the DB succeeded (trigger already fired)
-- The push notification is silently lost
-- No retry mechanism exists
-- No failed-push log is written
+The payroll engine calls `callAI()` with `model: "gpt-4o-mini"`. This model identifier is not in the Lovable AI supported models list. The supported equivalent is `openai/gpt-5-nano` or `google/gemini-2.5-flash-lite`. If the AI router doesn't map this legacy name, the call will fail silently (the error is caught on line 226 as non-fatal), producing payroll snapshots with no AI audit notes.
 
-**Flow**:
-1. Notification inserted into `notifications` table
-2. DB webhook triggers `push-on-notify`
-3. `push-on-notify` calls `send-push`
-4. `send-push` returns 500 (e.g., FCM token expired)
-5. `push-on-notify` returns `{ ok: true, push: { error: "..." } }` -- it treats the error response as success
+Additionally, the `provider: "gpt"` parameter may not match the current `callAI` router expectations.
+
+**Impact**: MEDIUM -- payroll AI notes silently missing. No user-visible error but auditing quality degrades.
 
 **Fix**:
-1. Check `resp.ok` before returning success
-2. On failure, log to an `activity_events` entry with `event_type: "push_failed"` for observability
-3. Consider a `push_delivery_status` column on `notifications` table (pending/sent/failed)
+Update to a supported model:
+```typescript
+const aiResult = await callAI({
+  model: "google/gemini-2.5-flash-lite",
+  messages: [...],
+  temperature: 0.3,
+});
+```
 
-**Severity**: LOW -- in-app notifications still work, only push delivery is silently lost. But for mobile-first users this creates notification blindspots.
+---
+
+## BUG R15-5 -- LOW: Pipeline lead stage update has no optimistic locking
+
+**File**: `src/pages/Pipeline.tsx` line 244
+
+The stage update is `supabase.from("leads").update({ stage }).eq("id", id)` with no concurrency guard. If two users (or a user + an AI agent like the pipeline-automation-engine) update the same lead's stage simultaneously:
+1. User A drags lead from "new" to "qualified"
+2. AI automation moves same lead from "new" to "estimation"
+3. Last write wins -- no conflict detection, no error, audit log records both as "allowed"
+
+The `logPipelineTransition` captures `fromStage` from the local React state, not from the DB. So the audit log may record a transition `new → qualified` even though the DB already moved to `estimation`.
+
+**Impact**: LOW -- rare in practice, but the audit trail becomes unreliable.
+
+**Fix**:
+Add an optimistic lock: `.eq("stage", fromStage)` to the update, and check if 0 rows were affected (meaning someone else changed it):
+```typescript
+const { data, error } = await supabase
+  .from("leads")
+  .update({ stage })
+  .eq("id", id)
+  .eq("stage", fromStage)  // optimistic lock
+  .select("id")
+  .maybeSingle();
+if (!data && !error) throw new Error("Lead was modified by another user");
+```
 
 ---
 
 ## Positive Findings (No Bug)
 
-- **Inventory reservation idempotency**: `manage-inventory` reserve action checks for existing reservation with same `source_id + cut_plan_item_id` before creating (lines 232-243). Solid dedup.
-- **Delivery QC gate**: `block_delivery_without_qc` DB trigger prevents deliveries from going to "loading" or "in-transit" if QC evidence is missing. Excellent safety net.
-- **Notification deduplication**: All edge functions use `dedupe_key` on `activity_events` with `onConflict: "dedupe_key", ignoreDuplicates: true`. Consistent pattern.
-- **Delivery realtime**: Deliveries page has proper realtime subscription with channel cleanup (lines 253-268).
-- **Packing slip delete guard**: Only "draft" slips can be deleted (line 243, `.eq("status", "draft")`).
+- **Quote-to-order dedup**: `convert-quote-to-order` checks for existing orders with same `quote_id` (line 74-84). Solid idempotency with 409 response.
+- **Order number retry loop**: 5-attempt retry with sequence increment handles concurrent conversions (lines 89-157).
+- **Machine run Zod validation**: `log-machine-run` validates all fields with Zod including `.nonnegative()` on quantities and `.uuid()` on IDs.
+- **Smart dispatch role check**: `smart-dispatch` correctly blocks non-workshop/admin users from dispatch actions.
+- **Payroll overtime calc**: Correctly distributes overtime from the last day backwards after 44h/week threshold (Ontario ESA compliant).
 
 ---
 
@@ -119,90 +139,86 @@ The function calls `send-push` via `fetch()` and reads the result, but if `send-
 
 | ID | Severity | Module | Bug | Status |
 |----|----------|--------|-----|--------|
-| R14-1 | HIGH | Delivery | No status transition validation (unlike orders/expenses) | New |
-| R14-2 | MEDIUM | Delivery | Delete has no server-side status guard + non-atomic multi-table delete | New |
-| R14-3 | MEDIUM | Inventory | `Math.max(0)` masks over-consumption silently, race-condition vulnerable | New |
-| R14-4 | LOW | Notifications | `push-on-notify` does not detect/log `send-push` failures | New |
+| R15-1 | HIGH | Pipeline | Lead delete has no child-record guard (quotes/orders orphaned) | New |
+| R15-2 | HIGH | Customers | Customer delete orphans orders/quotes/invoices | New |
+| R15-3 | MEDIUM | Quotes/Orders | Quote-to-order conversion allows draft/rejected/expired quotes | New |
+| R15-4 | MEDIUM | Payroll | AI model name `gpt-4o-mini` deprecated, notes silently missing | New |
+| R15-5 | LOW | Pipeline | No optimistic locking on lead stage update, audit trail unreliable | New |
 
 ---
 
 ## Implementation Plan
 
-### Step 1: Fix R14-1 (HIGH) -- Delivery status transition validation
+### Step 1: Fix R15-1 (HIGH) -- Lead delete child guard
 
-**New constant** in `src/pages/Deliveries.tsx` (or shared utility):
+In `src/pages/Pipeline.tsx`, before the `.delete()` call:
 ```typescript
-const ALLOWED_DELIVERY_TRANSITIONS: Record<string, string[]> = {
-  pending: ["scheduled", "in-transit"],
-  scheduled: ["in-transit", "pending"],
-  "in-transit": ["delivered", "completed", "completed_with_issues", "partial", "failed"],
-  partial: ["in-transit", "completed_with_issues"],
-  delivered: ["completed"],
-  completed: [],
-  completed_with_issues: [],
-  failed: ["pending"],
-};
+// Check for linked quotes/orders
+const { count: quoteCount } = await supabase
+  .from("quotes").select("id", { count: "exact", head: true }).eq("lead_id", id);
+const { count: orderCount } = await supabase
+  .from("orders").select("id", { count: "exact", head: true })
+  .in("quote_id", /* quotes for this lead */);
+if ((quoteCount || 0) > 0) throw new Error("Cannot delete lead with linked quotes");
 ```
+Also clean up `lead_activities` and `lead_files` before delete (like the task delete pattern).
 
-Apply validation before every `supabase.from("deliveries").update({ status })` call in both `Deliveries.tsx` and `DriverDashboard.tsx`.
+### Step 2: Fix R15-2 (HIGH) -- Customer delete safety
 
-### Step 2: Fix R14-2 (MEDIUM) -- Delivery delete server-side guard
-
-**DB Migration**: Create trigger `block_delivery_delete_unless_pending`:
-```sql
-CREATE OR REPLACE FUNCTION public.block_delivery_delete_unless_pending()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF OLD.status IS NOT NULL AND OLD.status != 'pending' THEN
-    RAISE EXCEPTION 'Cannot delete delivery in status: %', OLD.status;
-  END IF;
-  RETURN OLD;
-END;
-$$ LANGUAGE plpgsql SET search_path = public;
-
-CREATE TRIGGER block_delivery_delete_unless_pending
-BEFORE DELETE ON public.deliveries
-FOR EACH ROW
-EXECUTE FUNCTION public.block_delivery_delete_unless_pending();
-```
-
-### Step 3: Fix R14-3 (MEDIUM) -- Inventory over-consumption guard
-
-In `manage-inventory/index.ts` `consume-on-start` case, add pre-update check:
+In `src/pages/Customers.tsx`, add pre-delete checks:
 ```typescript
-if (lot.qty_on_hand < qty) {
-  return json({ error: `Over-consumption: only ${lot.qty_on_hand} on hand, ${qty} requested` }, 400);
+const { count: orderCount } = await supabase
+  .from("orders").select("id", { count: "exact", head: true }).eq("customer_id", id);
+if ((orderCount || 0) > 0) throw new Error("Cannot delete customer with active orders");
+```
+DB trigger `block_customer_delete_with_orders` as server-side backup.
+
+### Step 3: Fix R15-3 (MEDIUM) -- Quote status guard
+
+In `supabase/functions/convert-quote-to-order/index.ts`, after line 71:
+```typescript
+const CONVERTIBLE = ["approved", "accepted", "sent", "signed"];
+if (!CONVERTIBLE.includes(quote.status)) {
+  return new Response(JSON.stringify({ error: `Cannot convert quote in status: ${quote.status}` }), {
+    status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+  });
 }
 ```
-Same for floor stock. Keep `Math.max(0, ...)` only for `qty_reserved`.
 
-### Step 4: Fix R14-4 (LOW) -- Push failure logging
+### Step 4: Fix R15-4 (MEDIUM) -- Payroll AI model update
 
-In `push-on-notify/index.ts`, check `resp.ok` and log failures:
+In `supabase/functions/payroll-engine/index.ts` line 203-204, replace:
 ```typescript
-const result = await resp.json();
-if (!resp.ok || result?.error) {
-  console.error("Push delivery failed:", result);
-  // Best-effort log to activity_events
-}
+provider: "gpt",
+model: "gpt-4o-mini",
 ```
+with:
+```typescript
+model: "google/gemini-2.5-flash-lite",
+```
+
+### Step 5: Fix R15-5 (LOW) -- Pipeline optimistic lock
+
+In `src/pages/Pipeline.tsx` line 244, add `.eq("stage", fromStage)` to the update query and handle the conflict case with a toast + refetch.
 
 ### Do NOT touch:
-- `block_delivery_without_qc` trigger (correct)
-- Inventory reservation idempotency (correct)
-- Realtime subscription logic (correct)
-- Any R7-R13 fixes
+- `convert-quote-to-order` dedup logic (correct)
+- `log-machine-run` Zod validation (correct)
+- `smart-dispatch` role checks (correct)
+- Payroll overtime distribution (correct)
+- Any R7-R14 fixes
 
 ---
 
-## Updated Technical Debt Score: 1.2/10
+## Cumulative Technical Debt Score: 1.1/10
 
 | Category | Score | Delta |
 |----------|-------|-------|
 | Multi-tenant isolation | 9/10 | unchanged |
-| Workflow integrity | 7/10 | -1 (delivery transitions missing) |
-| Financial controls | 7/10 | +2 (R13 expense fix deployed) |
-| Inventory accuracy | 6/10 | NEW (silent over-consumption risk) |
-| Notification reliability | 8/10 | NEW (push failure silent) |
-| Data integrity | 9/10 | unchanged |
+| Workflow integrity | 8/10 | +1 (R14 delivery transitions deployed) |
+| Financial controls | 7/10 | unchanged |
+| Data integrity | 7/10 | -2 (lead/customer delete orphaning) |
+| Inventory accuracy | 8/10 | +2 (R14 over-consumption guard deployed) |
+| Notification reliability | 8.5/10 | +0.5 (push failure logging deployed) |
+| Pipeline reliability | 8/10 | NEW (no optimistic lock, no delete guard) |
 
