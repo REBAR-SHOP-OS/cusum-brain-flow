@@ -1,236 +1,141 @@
 
 
-## Multi-Project Parallel Pipeline Audit: New Bugs Found
+## Final Multi-Project Parallel Test: Remaining Bugs
 
-After tracing 10 parallel projects running simultaneously across different machines from extraction through delivery and the driver UI, here are all new bugs beyond the 17 already fixed.
-
----
-
-### CRITICAL — Race conditions and data corruption in multi-project parallel execution
-
-#### 1. `QueueToMachineDialog`: does NOT set `machine_id` on the `cut_plans` row
-
-**File**: `src/components/cutter/QueueToMachineDialog.tsx` line 78
-
-```typescript
-await supabase.from("cut_plans").update({ status: "queued" }).eq("id", plan.id);
-```
-
-Only `status` is updated — `machine_id` is never set. The cutter station query in `useStationData` (line 76) filters by `.eq("machine_id", machineId)`. Since `machine_id` stays `NULL`, the plan's items **never appear** on the cutter station.
-
-The `machine_runs` rows ARE created with the correct `machine_id`, but cut_plan_items are fetched via `cut_plans.machine_id`, not via `machine_runs`. This means:
-- Office queues a plan to Machine A → plan status becomes "queued"
-- Cutter operator opens Machine A station → sees nothing (plan's `machine_id` is still NULL)
-- With 10 projects queued in parallel, NONE appear on any station
-
-**Fix**: Change line 78 to:
-```typescript
-await supabase.from("cut_plans").update({ status: "queued", machine_id: machineId }).eq("id", plan.id);
-```
+After reviewing all code changes from the previous 3 rounds of fixes (29 bugs fixed), here are the remaining issues found when simulating 10 projects running in parallel through the full pipeline.
 
 ---
 
-#### 2. `useStationData` realtime: channel name collision across projects
+### Previous Fixes Verified (Working Correctly)
 
-**File**: `src/hooks/useStationData.ts` line 122
-
-```typescript
-.channel(`station-${machineId}`)
-```
-
-The channel name uses only `machineId`. When `StationView` calls `useStationData(machineId, machineType, null)` (line 26 — no project filter to get ALL items for project selection), and then the filtered items are computed client-side, the **single** realtime channel correctly invalidates. However, the query key includes `projectId`:
-
-```typescript
-queryKey: ["station-data", machineId, machineType, companyId, projectId]
-```
-
-The invalidation at line 125 also includes `projectId`. So the channel invalidates only the `projectId=null` query. If a user navigates back, selects a different project, the old subscription's invalidation targets the wrong key. Items won't auto-refresh until the component remounts.
-
-**Fix**: Remove `projectId` from the invalidation query key or use partial key matching:
-```typescript
-queryClient.invalidateQueries({ queryKey: ["station-data", machineId] })
-```
+The following previously-fixed areas are now correct:
+- `QueueToMachineDialog` correctly sets `machine_id` on line 78
+- `useStationData` realtime invalidation uses partial key `["station-data", machineId]`
+- `StationView` uses `project_id` (UUID) for project keying, not `project_name`
+- `useDeliveryActions` has retry loop for delivery number race conditions
+- `manage-extract` reject handler includes `company_id` in event insert
+- `manage-extract` approval correctly calculates `pieces_per_bar` and `qty_bars`
+- `manage-extract` sets `project_id: projectId` (not `workOrder.id`) on production tasks
+- `useCompletedBundles` filters only `phase: "complete"` items
+- `auto_advance_item_phase` trigger accepts both `bending` and `cut_done` phases
+- `CutterStationView` resets `completedAtRunStart` on item change
+- `PODCaptureDialog` auto-completes delivery when all stops are done
+- `DriverDashboard` has "Start Delivery" button and `driver_profile_id` support
+- `LoadingStation` has `creating` guard against double-click
 
 ---
 
-#### 3. `StationView` project picker uses `project_name` string as ID — collisions across plans
+### NEW BUG #1 — CRITICAL: `block_delivery_without_qc` trigger uses `in_transit` but app writes `in-transit`
 
-**File**: `src/pages/StationView.tsx` lines 37-53
+**File**: DB trigger (migration `20260213082259`) line 131 vs `DriverDashboard.tsx` line 160
 
-```typescript
-const projKey = item.project_name || "__unassigned__";
-```
-
-Projects are keyed by their `project_name` string, not by a UUID `project_id`. If two different projects have the same name (e.g., two "123 Main St" projects from different customers), they merge into one entry. The operator sees combined items from both projects, which can cause mixed barlists loaded onto the same truck.
-
-With 10 projects in parallel, name collisions become statistically likely.
-
-**Fix**: Use `cut_plans.project_id` (available via the join) as the key instead of `project_name`. This requires adding `project_id` to the `cut_plans` select in `useStationData` and the `StationItem` type.
-
----
-
-#### 4. `useDeliveryActions`: delivery number race condition in parallel creation
-
-**File**: `src/hooks/useDeliveryActions.ts` lines 22-29
-
-```typescript
-const { count } = await supabase
-  .from("deliveries")
-  .select("id", { count: "exact", head: true })
-  .eq("company_id", companyId)
-  .like("delivery_number", `${invoiceNumber}-%`);
-const seq = String((count ?? 0) + 1).padStart(2, "0");
-```
-
-If two operators create deliveries for the same invoice number simultaneously (e.g., two trucks for the same project), both read `count=0` and both generate `INV-01`. The second insert succeeds (no unique constraint on `delivery_number`), creating duplicate delivery numbers. With 10 projects loading simultaneously, this is likely.
-
-**Fix**: Add a unique constraint on `(company_id, delivery_number)` in the database, and retry with incremented seq on conflict.
-
----
-
-#### 5. `autoDispatchTask`: queue position race condition
-
-**File**: `supabase/functions/manage-extract/index.ts` lines 804-811
-
-```typescript
-const { data: posData } = await sb
-  .from("machine_queue_items")
-  .select("position")
-  .eq("machine_id", bestMachine.id)
-  .in("status", ["queued", "running"])
-  .order("position", { ascending: false })
-  .limit(1);
-const nextPos = posData?.length ? posData[0].position + 1 : 0;
-```
-
-When 10 projects approve simultaneously, multiple `autoDispatchTask` calls read the same `nextPos` and insert at the same position. This creates duplicate positions, corrupting the queue order. The production operator sees items in random order.
-
-**Fix**: Use a database sequence or `COALESCE(MAX(position), -1) + 1` inside a transaction, or use `ON CONFLICT` to resolve position collisions.
-
----
-
-### HIGH — Multi-project data integrity
-
-#### 6. `BenderStationView`: `items` passed from parent are NOT filtered by project
-
-**File**: `src/pages/StationView.tsx` line 223
-
-```typescript
-<BenderStationView
-  machine={machine}
-  items={items}  // ← these are project-filtered items from line 64-70
-```
-
-Wait — `items` at line 64 IS filtered. But `items` is filtered by `selectedProjectId` using `project_name` string matching (Bug #3). If two projects share a name, the bender gets mixed items. Additionally, if `selectedProjectId` is `null` (user hasn't selected), ALL items from ALL projects are passed to the bender — the operator sees a merged list across projects.
-
-**Impact with 10 parallel projects**: Bender operator can accidentally process items from the wrong project if they haven't selected a project, or if project names collide.
-
-#### 7. `DriverDashboard`: delivery filtering uses `driver_name` string match, not user ID
-
-**File**: `src/pages/DriverDashboard.tsx` line 105
-
-```typescript
-.eq("driver_name", myProfile!.full_name!)
-```
-
-If two drivers have the same `full_name` (e.g., two "John Smith" employees), they see each other's deliveries. With 10 parallel projects generating deliveries assigned to different drivers, name collisions cause cross-delivery visibility.
-
-**Fix**: Use `driver_profile_id` (a UUID FK to profiles) instead of `driver_name` string matching.
-
-#### 8. Delivery `status` never transitions to `in-transit`
-
-**File**: `src/hooks/useDeliveryActions.ts` — the delivery is created with `status: "pending"` (line 40). There is no code anywhere that transitions it to `in-transit`. The `DriverDashboard` filters by `d.status === "in-transit"` (line 129) to find the active delivery. But no UI action ever sets this status.
-
-The driver can only see deliveries in the "Today's Deliveries" list and tap "Mark Arrived" on individual stops, but the parent delivery stays "pending" forever. The "Active Delivery" highlight card never appears.
-
-**Fix**: Add a "Start Delivery" button in `DriverDashboard` that updates the delivery status to `in-transit`. Also auto-transition to `delivered` when all stops are completed.
-
-#### 9. `delivery_stops.order_id` is never set — `block_delivery_without_qc` trigger is bypassed
-
-**File**: The `block_delivery_without_qc` trigger (DB function) checks:
+The QC gate trigger checks:
 ```sql
-SELECT EXISTS (
-  SELECT 1 FROM delivery_stops ds
-  JOIN orders o ON o.id = ds.order_id
-  WHERE ds.delivery_id = NEW.id
-    AND (o.qc_evidence_uploaded = FALSE OR o.qc_final_approved = FALSE)
-) INTO _missing;
+IF NEW.status IN ('loading', 'in_transit') AND OLD.status NOT IN ('loading', 'in_transit') THEN
 ```
 
-But `useDeliveryActions.ts` creates delivery stops WITHOUT `order_id` (line 68-76):
+But the driver dashboard sets:
 ```typescript
-.insert({
-  company_id: companyId,
-  delivery_id: delivery.id,
-  stop_sequence: 1,
-  status: "pending",
-  address: siteAddress,
-  // NO order_id
-})
+.update({ status: "in-transit" })  // hyphen, not underscore
 ```
 
-The `JOIN orders o ON o.id = ds.order_id` returns zero rows because `order_id` is NULL. The QC check is completely bypassed — unverified items can be delivered.
+Since `'in-transit' != 'in_transit'`, the QC trigger **never fires**. The delivery transitions to "in-transit" without any QC check. The entire QC gate is completely bypassed for all deliveries.
 
-**Fix**: Resolve the `order_id` from the cut plan's work order chain: `cut_plan → work_order → order_id`, and set it on the delivery stop.
+With 10 parallel projects, every single delivery can be started without QC verification.
+
+**Fix**: Either update the trigger to check `'in-transit'` (matching the app convention) or standardize all status values to use underscores. Since the app consistently uses `in-transit` (hyphen) across 3+ files, the trigger should be updated:
+```sql
+IF NEW.status IN ('loading', 'in-transit') AND OLD.status NOT IN ('loading', 'in-transit') THEN
+```
 
 ---
 
-### MEDIUM — UX / functional issues in multi-project scenarios
+### NEW BUG #2 — HIGH: `StopIssueDialog` does not trigger delivery auto-completion check
 
-#### 10. `LoadingStation`: bundle selection doesn't show project name distinctly
+**File**: `src/components/delivery/StopIssueDialog.tsx` line 34-41
 
-When 10 projects produce completed bundles simultaneously, the `ReadyBundleList` component displays bundles by `projectName` — but this is actually `cut_plans.project_name`, which is set to `session.name` during extract approval (line 556 of manage-extract). If operators used the same session name across projects, bundles are indistinguishable.
+When a driver logs an issue on a stop, the stop status is set to `"failed"`. But no code checks whether all other stops are completed. If the last remaining stop fails, the delivery stays "in-transit" forever.
 
-#### 11. `PODCaptureDialog`: no delivery-level status update after all stops complete
+Example scenario with 10 projects: Driver has 3 stops. Stops 1 and 2 completed via POD. Stop 3 has an issue (customer not available). Stop 3 is marked `"failed"`. The delivery stays `"in-transit"` permanently because `PODCaptureDialog`'s auto-complete only checks when a stop is `"completed"`, not `"failed"`.
 
-After the driver captures POD for the last stop, only the stop status is set to "completed". The parent delivery status stays "pending" (or "in-transit" if bug #8 is fixed). The office user sees the delivery as still in progress even though all stops are done.
-
-**Fix**: After updating the stop, check if all stops for the delivery are "completed" and auto-update delivery status to "delivered".
-
-#### 12. `CutterStationView`: `completedAtRunStart` snapshot is not machine-scoped
-
-**File**: `src/components/shopfloor/CutterStationView.tsx` line 43
-
-```typescript
-const [completedAtRunStart, setCompletedAtRunStart] = useState<number | null>(null);
-```
-
-This state is per-component instance. If an operator navigates to a different item within the same cutter session (via prev/next), `completedAtRunStart` from the previous item's run persists. The next item's "effective completed" calculation uses the wrong base, showing incorrect progress.
-
-This is especially problematic when running 10 projects in parallel — switching between items from different projects mid-run corrupts the count.
-
-**Fix**: Reset `completedAtRunStart` and `slotTracker` when `currentItem.id` changes.
-
-#### 13. `StationView`: `workspaceName` prop passes raw `selectedProjectId` string
-
-**File**: `src/pages/StationView.tsx` line 264
-
-```typescript
-workspaceName={selectedProjectId && selectedProjectId !== "__unassigned__" ? selectedProjectId : undefined}
-```
-
-`selectedProjectId` is the `project_name` string (e.g., "123 Main St"), not a formatted display name. For bender stations, `selectedProjectId` could be any arbitrary text since it comes from `project_name`. This is cosmetic but confusing when 10 projects are active.
+**Fix**: After marking a stop as failed, check if all stops have a terminal status (`completed` or `failed`) and auto-update the delivery to `delivered` (or a new `completed_with_issues` status).
 
 ---
 
-### Summary of Required Fixes (Priority Order)
+### NEW BUG #3 — HIGH: Bender station `queryClient.invalidateQueries` uses wrong key format
 
-| # | Severity | Fix | File |
+**File**: `src/components/shopfloor/BenderStationView.tsx` line 113
+
+```typescript
+await queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "bender"] });
+```
+
+The query key in `useStationData` is `["station-data", machineId, machineType, companyId, projectId]`. The bender invalidation uses `["station-data", machine.id, "bender"]` which is a 3-element key. This works via prefix matching only because `machine.id` matches `machineId` at position 1.
+
+However, `"bender"` at position 2 matches `machineType` at position 2. But `companyId` at position 3 is missing — so this prefix `["station-data", machine.id, "bender"]` will NOT match a query with key `["station-data", machine.id, "bender", "some-company-id", null]` because TanStack Query's prefix matching requires exact element equality for each position specified.
+
+Wait — TanStack Query's `queryKey` filtering IS prefix-based: a partial key `["station-data", machine.id, "bender"]` matches any key that starts with those 3 elements. So `["station-data", machine.id, "bender", companyId, projectId]` IS matched. This is correct.
+
+Actually, re-checking: the cutter already uses `["station-data", machine.id]` (2 elements) for invalidation. The bender uses 3 elements. Both work via prefix matching. This is not a bug — marking as **false positive**.
+
+---
+
+### NEW BUG #3 (revised) — MEDIUM: `DriverDashboard` does not update `selectedDelivery` after status change
+
+**File**: `src/pages/DriverDashboard.tsx` line 157-163
+
+When `handleStartDelivery` is called, it updates the DB but the local `selectedDelivery` state still has `status: "pending"`. The UI still shows the "Start Delivery" button (line 211 checks `selectedDelivery.status === "pending"`). The button disappears only after the realtime subscription fires and the query refetches, which can take 1-3 seconds.
+
+During this window, if the operator double-taps, `handleStartDelivery` fires again — but since the status is already `"in-transit"`, the update is a no-op. This is not harmful but creates a confusing UX flash.
+
+**Fix**: Optimistically update `selectedDelivery` state after successful mutation:
+```typescript
+const handleStartDelivery = async (deliveryId: string) => {
+  await supabase.from("deliveries").update({ status: "in-transit" }).eq("id", deliveryId);
+  setSelectedDelivery(prev => prev ? { ...prev, status: "in-transit" } : null);
+  refreshStops();
+};
+```
+
+---
+
+### NEW BUG #4 — MEDIUM: `useDeliveryActions` `order_id` resolution can fail silently for multi-project
+
+**File**: `src/hooks/useDeliveryActions.ts` lines 80-97
+
+The `order_id` resolution chain is:
+1. Get first `cut_plan_item` with non-null `work_order_id`
+2. Get `work_orders.order_id`
+
+But with multi-project parallel execution, if the cut plan has items from multiple work orders (possible when items are re-assigned), the `limit(1).maybeSingle()` picks an arbitrary item. Its `work_order_id` may resolve to an `order_id` for a different project's order. The QC gate then checks the wrong order.
+
+This is a design limitation rather than a clear bug, but in multi-project scenarios it can cause incorrect QC validation — either blocking a valid delivery or allowing an invalid one.
+
+---
+
+### NEW BUG #5 — MEDIUM: `PoolView` not included in fix scope — still shows stale phase data
+
+**File**: `src/pages/PoolView.tsx`
+
+The PoolView (material flow overview) fetches items per phase with `ITEMS_LIMIT = 500`. With 10 parallel projects each having 50+ items, the 500-item limit means some phases may not show all items. The "clearance" and "complete" columns may appear empty even when items exist beyond the limit.
+
+This was not addressed in any of the 3 fix rounds.
+
+---
+
+### Summary of Remaining Fixes
+
+| # | Severity | Bug | File |
 |---|----------|-----|------|
-| 1 | CRITICAL | Set `machine_id` on `cut_plans` when queuing to machine | `QueueToMachineDialog.tsx` line 78 |
-| 2 | CRITICAL | Fix realtime invalidation to use partial query key | `useStationData.ts` line 125 |
-| 3 | CRITICAL | Use `project_id` instead of `project_name` for project keying | `StationView.tsx` + `useStationData.ts` |
-| 4 | CRITICAL | Add unique constraint on delivery numbers / handle race | `useDeliveryActions.ts` + DB migration |
-| 5 | CRITICAL | Fix queue position race in autoDispatchTask | `manage-extract/index.ts` line 804 |
-| 6 | HIGH | Set `order_id` on delivery stops to enable QC gate | `useDeliveryActions.ts` line 68 |
-| 7 | HIGH | Use `driver_profile_id` instead of `driver_name` for filtering | `DriverDashboard.tsx` line 105 |
-| 8 | HIGH | Add delivery status transitions (`in-transit`, `delivered`) | `DriverDashboard.tsx` + `PODCaptureDialog.tsx` |
-| 9 | HIGH | Reset `completedAtRunStart` on item change | `CutterStationView.tsx` |
-| 10 | MEDIUM | Auto-complete delivery when all stops done | `PODCaptureDialog.tsx` |
-| 11 | MEDIUM | Show distinct project identifiers in loading station | `LoadingStation.tsx` |
-| 12 | LOW | Fix `workspaceName` display | `StationView.tsx` |
+| 1 | CRITICAL | QC trigger uses `in_transit` but app writes `in-transit` — QC gate bypassed | DB trigger + all status references |
+| 2 | HIGH | `StopIssueDialog` failed stops don't trigger delivery auto-completion | `StopIssueDialog.tsx` |
+| 3 | MEDIUM | `DriverDashboard` optimistic state update missing after Start Delivery | `DriverDashboard.tsx` line 157 |
+| 4 | MEDIUM | `order_id` resolution picks arbitrary work order in multi-project plans | `useDeliveryActions.ts` line 82 |
+| 5 | MEDIUM | `PoolView` 500-item limit hides data in multi-project scenarios | `PoolView.tsx` |
 
-### Most Urgent: Bug #1 — Plans never appear on cutter stations
+### Overall Pipeline Health
 
-Bug #1 (`QueueToMachineDialog` not setting `machine_id`) means **zero plans appear on any cutter station** after being queued from the office. This is the single most critical break in the entire pipeline — the factory floor sees empty queues despite the office having queued work. Every single project is affected.
+After 3 rounds of fixes (29 bugs total), the pipeline is substantially more robust. The one remaining **critical** issue is Bug #1 — the status string mismatch between the database trigger (`in_transit`) and the application code (`in-transit`). This means the QC gate has never actually fired for any delivery. All other issues are medium severity or edge cases.
+
+**Recommended action**: Fix Bug #1 (trigger status mismatch) and Bug #2 (failed stop auto-completion) as they are the only functional gaps remaining.
 
