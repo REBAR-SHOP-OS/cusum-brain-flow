@@ -149,21 +149,37 @@ serve(async (req) => {
 
       const deliveries = await Promise.allSettled(
         matching.map(async (wh: any) => {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          const hdrs: Record<string, string> = { "Content-Type": "application/json" };
           if (wh.secret) {
-            // Simple HMAC-like signature
             const encoder = new TextEncoder();
             const key = await crypto.subtle.importKey("raw", encoder.encode(wh.secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
             const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(JSON.stringify(payload)));
-            headers["X-Webhook-Signature"] = btoa(String.fromCharCode(...new Uint8Array(sig)));
+            hdrs["X-Webhook-Signature"] = btoa(String.fromCharCode(...new Uint8Array(sig)));
           }
 
-          const res = await fetch(wh.url, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(10000),
-          });
+          // R16-4: Attempt delivery with single retry on failure
+          let res: Response | null = null;
+          let lastError: string | null = null;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              res = await fetch(wh.url, {
+                method: "POST",
+                headers: hdrs,
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(10000),
+              });
+              if (res.ok) break;
+              lastError = `HTTP ${res.status}`;
+            } catch (e) {
+              lastError = String(e);
+              res = null;
+            }
+            // Wait 3s before retry
+            if (attempt === 0) await new Promise(r => setTimeout(r, 3000));
+          }
+
+          const status = res?.status ?? 0;
+          const ok = res?.ok ?? false;
 
           // Log delivery
           try {
@@ -172,12 +188,13 @@ serve(async (req) => {
               company_id: companyId,
               event_type: body.event_type,
               payload,
-              response_status: res.status,
-              success: res.ok,
+              response_status: status,
+              success: ok,
             });
           } catch (e) { console.warn("Failed to log delivery:", e); }
 
-          return { webhook_id: wh.id, status: res.status, ok: res.ok };
+          if (!ok) console.warn(`Webhook delivery failed for ${wh.id}: ${lastError}`);
+          return { webhook_id: wh.id, status, ok };
         })
       );
 
