@@ -7,6 +7,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Verify HMAC-SHA256 signature from QuickBooks */
+async function verifySignature(rawBody: string, signature: string, secret: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
+  const computed = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return computed === signature;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -17,11 +28,11 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  const verifierToken = Deno.env.get("QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN");
+
   try {
-    // QB webhook sends GET for validation, POST for events
+    // QB webhook sends GET for validation
     if (req.method === "GET") {
-      // Intuit verification: respond with verifier token
-      const verifierToken = Deno.env.get("QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN");
       if (!verifierToken) {
         return new Response("Webhook verifier not configured", { status: 500 });
       }
@@ -31,10 +42,29 @@ serve(async (req) => {
       });
     }
 
-    const payload = await req.json();
-    console.log("[qb-webhook] Received:", JSON.stringify(payload).slice(0, 500));
+    // --- R16-1: HMAC signature verification on POST ---
+    const rawBody = await req.text();
+    const intuitSignature = req.headers.get("intuit-signature");
 
-    // QB sends eventNotifications array
+    if (!verifierToken) {
+      console.error("[qb-webhook] QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN not set");
+      return new Response(JSON.stringify({ error: "Webhook not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!intuitSignature || !(await verifySignature(rawBody, intuitSignature, verifierToken))) {
+      console.warn("[qb-webhook] Invalid or missing intuit-signature header");
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const payload = JSON.parse(rawBody);
+    console.log("[qb-webhook] Verified payload:", JSON.stringify(payload).slice(0, 500));
+
     const notifications = payload.eventNotifications || [];
 
     for (const notification of notifications) {
@@ -63,6 +93,26 @@ serve(async (req) => {
         const entityType = entity.name;
         const entityId = entity.id;
         const operation = entity.operation;
+
+        // --- R16-2: Replay/dedup protection ---
+        try {
+          const { data: existing } = await svc
+            .from("qb_webhook_events")
+            .select("id, created_at")
+            .eq("realm_id", realmId)
+            .eq("entity_type", entityType)
+            .eq("entity_id", entityId)
+            .eq("operation", operation)
+            .gte("created_at", new Date(Date.now() - 60_000).toISOString())
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            console.log(`[qb-webhook] Duplicate event skipped: ${entityType}/${entityId}/${operation}`);
+            continue;
+          }
+        } catch (e) {
+          console.warn("[qb-webhook] Dedup check failed, proceeding:", e);
+        }
 
         // Log the event
         try {
@@ -95,7 +145,6 @@ serve(async (req) => {
               }),
             });
 
-            // Mark as processed
             await svc
               .from("qb_webhook_events")
               .update({ processed_at: new Date().toISOString() })
@@ -105,13 +154,17 @@ serve(async (req) => {
               .is("processed_at", null);
           } catch (e) {
             console.error("[qb-webhook] Sync trigger failed:", e);
-            await svc
-              .from("qb_webhook_events")
-              .update({ error_message: String(e) })
-              .eq("realm_id", realmId)
-              .eq("entity_id", entityId)
-              .eq("entity_type", entityType)
-              .is("processed_at", null);
+            try {
+              await svc
+                .from("qb_webhook_events")
+                .update({ error_message: String(e) })
+                .eq("realm_id", realmId)
+                .eq("entity_id", entityId)
+                .eq("entity_type", entityType)
+                .is("processed_at", null);
+            } catch (logErr) {
+              console.error("[qb-webhook] Failed to log error:", logErr);
+            }
           }
         }
       }
