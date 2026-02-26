@@ -35,7 +35,7 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
     m => machinesWithPlans.has(m.id) && !workingMachines.some(wm => wm.id === m.id)
   );
 
-  const allWorkingMachines = [...workingMachines, ...additionalMachines];
+  const allWorkingMachinesRaw = [...workingMachines, ...additionalMachines];
 
   // Unassigned running/queued plans
   const unassignedPlans = activePlans.filter(p => !p.machine_id && ["running", "queued"].includes(p.status));
@@ -84,10 +84,16 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
     queryClient.invalidateQueries({ queryKey: ["production-hub-progress"] });
   };
 
+  // Filter out machines with no plans and no progress
+  const allWorkingMachines = allWorkingMachinesRaw.filter(m => {
+    const hasPlans = (plansByMachine.get(m.id)?.length || 0) > 0;
+    const prog = machineProgress.get(m.id);
+    const hasProgress = prog && prog.total > 0;
+    return hasPlans || hasProgress;
+  });
+
   // Hide entirely when nothing is actively producing
-  const hasAnyProgress = [...machineProgress.values()].some(p => p.total > 0);
   if (allWorkingMachines.length === 0 && unassignedPlans.length === 0) return null;
-  if (activePlans.length === 0 && !hasAnyProgress && allWorkingMachines.every(m => m.status !== "running")) return null;
 
   return (
     <div className="space-y-4">
