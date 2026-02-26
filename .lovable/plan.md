@@ -1,96 +1,210 @@
 
 
-# Accounting Dashboard Redesign Plan
+# Accounting Module Overhaul -- Audit + Redesign Plan
 
-## Current Issues
+## STEP 1: Audit -- What Exists vs What's Missing
 
-Looking at the screenshot and code, the dashboard has several UX problems:
+### Existing Components (45+ files)
 
-1. No financial summary -- users land on the page with no immediate sense of their financial position
-2. Flat visual hierarchy -- all cards look identical in weight and importance
-3. Cramped card layout -- Invoices and Bills cards are squeezed into a narrow 2-column grid with tiny 9px text
-4. Cash card is nearly empty -- just one line of data
-5. Banking Activity interrupts the flow between summary cards and action cards
-6. No progress indicators or visual cues for urgency
+| Area | Component | Status |
+|---|---|---|
+| Dashboard | AccountingDashboard, FinancialSnapshot, AlertsBanner | Done |
+| Invoices | AccountingInvoices, InvoiceEditor | Done (list, send, void, sort, CSV) |
+| Bills | AccountingBills, BillPaymentDialog | Done (list, pay) |
+| Payments | AccountingPayments | Done (list, filter, CSV) |
+| Customers | AccountingCustomers | Done |
+| Vendors | AccountingVendors, VendorDetail, AddVendorDialog | Done |
+| Estimates | AccountingDocuments (embedded), QuoteTemplateManager | Partial -- no standalone list/edit/convert |
+| Credit Memos | Backend handler exists | No dedicated UI |
+| Statements | AccountingStatements | Done |
+| Reconciliation | AccountingReconciliation | Done |
+| Chart of Accounts | AccountingAccounts | Done |
+| Journal Entries | AccountingJournalEntries | Done |
+| Reports | P&L, Balance Sheet, Cash Flow, Aged AR/AP, GL, Trial Balance, Tax Filing | Done |
+| Deposits, Transfers, Sales/Refund Receipts | All exist | Done |
+| Expense Claims | ExpenseClaimsManager | Done |
+| Batch Actions, Recurring, Attachments | All exist | Done |
 
-## Redesign Approach
+### Backend (quickbooks-oauth edge function)
+
+All write handlers exist: `create-estimate`, `create-invoice`, `create-payment`, `create-bill`, `create-credit-memo`, `create-purchase-order`, plus send/void/update/convert. Idempotency guards and audit logging are in place.
+
+### Gaps Identified
+
+1. **Navigation**: Current top-bar dropdown menus are cluttered (70+ items across 6 dropdowns). No sidebar. Hard to find things quickly.
+2. **Estimates/Quotations**: No standalone list view with create/edit/send/convert-to-invoice. Currently buried inside "Documents" tab.
+3. **Credit Memos**: Backend exists, no UI to create/view/apply to invoices.
+4. **Partial Payments**: Payment recording exists but lacks an allocation UI to apply payments across multiple invoices.
+5. **Vendor Bill Pay**: BillPaymentDialog exists but is not prominently surfaced.
+6. **Sync Status**: No per-record sync status indicator or last-error display.
+
+---
+
+## STEP 2: Redesign -- Accounting Sidebar
+
+Replace the cramped top-bar dropdown menus with a collapsible left sidebar using the existing `sidebar.tsx` component.
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  FINANCIAL SNAPSHOT (full-width hero strip)                  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
-│  │ Revenue  │ │ Payable  │ │ Cash     │ │ Net      │       │
-│  │ $117k    │ │ $44k     │ │ $25k     │ │ $98k     │       │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘       │
-├─────────────────────────────────────────────────────────────┤
-│  ACTION REQUIRED (alerts strip, only when items exist)      │
-│  🔴 27 overdue invoices ($117k)  🟡 18 overdue bills ($16k)│
-├──────────────────────────┬──────────────────────────────────┤
-│  RECEIVABLES (wider)     │  PAYABLES                        │
-│  Invoices breakdown      │  Bills breakdown                 │
-│  - Total / Unpaid / Late │  - Open / Overdue                │
-│  - Due date bar chart    │  - Due date bar chart            │
-│  [+ New Invoice]         │                                  │
-├──────────────────────────┴──────────────────────────────────┤
-│  BANKING ACTIVITY (collapsible, same as now)                │
-├────────────────────────────┬────────────────────────────────┤
-│  CASH & PAYMENTS           │  PENNY'S QUEUE                 │
-│  Total collected           │  Pending / AR at risk           │
-│  [+ New Transaction]       │  [Review Actions]               │
-└────────────────────────────┴────────────────────────────────┘
+┌────────────────────┬──────────────────────────────┐
+│ 💰 Accounting      │  [Page Content]              │
+│ ─────────────────  │                              │
+│ ▸ Dashboard        │                              │
+│                    │                              │
+│ SALES              │                              │
+│   Estimates        │                              │
+│   Invoices         │                              │
+│   Payments Received│                              │
+│   Credit Memos     │                              │
+│   Sales Receipts   │                              │
+│   Customers        │                              │
+│                    │                              │
+│ PURCHASES          │                              │
+│   Bills            │                              │
+│   Vendor Payments  │                              │
+│   Vendors          │                              │
+│   Expenses         │                              │
+│   Purchase Orders  │                              │
+│                    │                              │
+│ BANKING            │                              │
+│   Chart of Accounts│                              │
+│   Reconciliation   │                              │
+│   Deposits         │                              │
+│   Transfers        │                              │
+│   Journal Entries  │                              │
+│                    │                              │
+│ REPORTS            │                              │
+│   Balance Sheet    │                              │
+│   Profit & Loss    │                              │
+│   Cash Flow        │                              │
+│   Aged Receivables │                              │
+│   Aged Payables    │                              │
+│   Trial Balance    │                              │
+│   General Ledger   │                              │
+│   Tax Summary      │                              │
+│   Statements       │                              │
+│   Budget vs Actuals│                              │
+│                    │                              │
+│ TOOLS              │                              │
+│   AI Actions       │                              │
+│   AI Audit         │                              │
+│   Batch Actions    │                              │
+│   Recurring Txns   │                              │
+│   Attachments      │                              │
+│   Scheduled Reports│                              │
+│   Tax Planning     │                              │
+│                    │                              │
+│ HR & PROJECTS      │                              │
+│   (collapsible)    │                              │
+│   Payroll / Recruit│                              │
+│   Projects         │                              │
+└────────────────────┴──────────────────────────────┘
 ```
 
-## Specific Changes
+### Implementation details
 
-### 1. New Financial Snapshot Strip (top of dashboard)
+- **New file**: `src/components/accounting/AccountingSidebar.tsx` using the existing `Sidebar`, `SidebarGroup`, `SidebarMenu*` components from `src/components/ui/sidebar.tsx`.
+- **Modify**: `AccountingWorkspace.tsx` -- wrap content in `SidebarProvider`, replace `AccountingNavMenus` with the new sidebar, keep Penny FAB and agent panel.
+- **Delete**: Nothing. `AccountingNavMenus.tsx` stays but is no longer rendered (preserved for rollback).
+- Active tab highlighting using the existing `activeTab` state.
+- Sidebar collapses to icon-only mode on smaller screens (w-14 mini).
+- Mobile: sidebar as overlay sheet, same as Shadcn sidebar default.
 
-Add a full-width row of 4 metric tiles above everything else:
-- **Receivable** -- total outstanding AR (from `totalReceivable`)
-- **Payable** -- total outstanding AP (from `totalPayable`)
-- **Cash Position** -- sum of bank account balances
-- **Net Position** -- Receivable - Payable (color-coded green/red)
+---
 
-Each tile: large number, small label, subtle icon. No card border -- uses a light background strip to separate from the cards below.
+## STEP 3: Missing Core Workflows
 
-### 2. Alerts Banner
+### 3A. Estimates/Quotations (standalone tab)
 
-A conditional banner that only appears when overdue items exist. Shows overdue invoices and overdue bills counts with amounts in a compact horizontal strip using destructive/warning colors. Clicking navigates to the relevant tab.
+**New file**: `src/components/accounting/AccountingEstimates.tsx`
 
-### 3. Improved Invoices & Bills Cards
+- Dense table: Doc#, Customer, Date, Expiry, Amount, Status (Pending/Accepted/Closed/Rejected)
+- Status chips with color coding
+- Actions: View, Send, Convert to Invoice, Void
+- "New Estimate" button opens `CreateTransactionDialog` with type `Estimate`
+- Convert to Invoice calls existing `convert-estimate` backend action
+- Search + sort + CSV export
+- **No DB changes needed** -- estimates already live in `accounting_mirror`
 
-- Increase card padding and font sizes for readability
-- Add a subtle progress ring or percentage indicator showing "% collected" for invoices
-- Make the mini bar chart taller (from 48px to 64px) with better labels
-- Add a colored left border to indicate health (green = mostly current, red = mostly overdue)
+### 3B. Credit Memos (standalone tab)
 
-### 4. Merge Cash into a Richer Card
+**New file**: `src/components/accounting/AccountingCreditMemos.tsx`
 
-Instead of a near-empty Cash card, combine it with a "Recent Payments" mini-list showing the last 3 payments with dates and amounts. This gives immediate context.
+- Dense table: Doc#, Customer, Date, Amount, Remaining Credit, Status
+- "New Credit Memo" button opens `CreateTransactionDialog` with type `CreditMemo`
+- Apply to Invoice action (calls backend)
+- Search + sort + CSV export
+- **No DB changes needed** -- credit memos already in `accounting_mirror`
 
-### 5. Improved Penny's Queue Card
+### 3C. Enhanced Payment Allocation
 
-- Add a colored progress bar showing pending vs. completed approvals
-- Make the badge more prominent
-- Add a one-line summary like "3 items need attention today"
+**Modify**: `AccountingPayments.tsx`
 
-### 6. Better Grid Layout
+- When recording a new payment, show a checklist of outstanding invoices for the selected customer
+- Allow partial payment amounts per invoice
+- Pass linked invoice refs to the existing `create-payment` backend handler (which already supports multiple linked invoices)
 
-Change from `grid-cols-1 md:grid-cols-2 xl:grid-cols-4` to:
-- Snapshot strip: `grid-cols-2 md:grid-cols-4` (full width)
-- Main cards: `grid-cols-1 md:grid-cols-2` (Invoices and Bills side by side, equal width)
-- Banking: `col-span-full` (unchanged)
-- Bottom row: `grid-cols-1 md:grid-cols-2` (Cash + Penny side by side)
+### 3D. Sync Status Indicators
 
-## Files Modified
+**New file**: `src/components/accounting/SyncStatusBadge.tsx`
 
-| File | Change |
-|---|---|
-| `src/components/accounting/AccountingDashboard.tsx` | Full rewrite of layout, add FinancialSnapshot and AlertsBanner components, update card designs |
+- Small badge component: shows "Synced", "Pending", or "Error" with timestamp
+- Used in Invoices, Estimates, Bills, Credit Memos table rows
+- Reads from `qb_transactions` table (already has `status`, `error_message`, `updated_at`)
 
-## What Stays the Same
+---
 
-- `BankAccountsCard.tsx` -- untouched, already well-designed
-- All data hooks and props -- no API changes
-- Navigation behavior -- all click handlers preserved
-- Dark/light theme compatibility -- uses existing CSS variables
+## STEP 4: Reporting (already mostly complete)
+
+All requested reports already exist. The only addition:
+
+### 4A. "Open Invoices" / "Paid Invoices" quick filters
+
+**Modify**: `AccountingInvoices.tsx`
+
+- Add filter chips above the table: "All", "Open", "Overdue", "Paid"
+- Already has sort capability; this adds pre-built filter states
+
+### 4B. Customer Statement PDF Export
+
+**Modify**: `AccountingStatements.tsx`
+
+- Add a "Print / Export PDF" button using `html2canvas` (already installed) or browser print
+- Statement data is already generated; just needs a print-friendly wrapper
+
+---
+
+## STEP 5: QB Integration Compatibility
+
+Already in place. No changes needed:
+- Idempotency via `dedupe_key` in `qb_transactions`
+- Audit logging in `activity_events`
+- Per-company config in `qb_company_config`
+- Sync status tracking in `qb_api_failures`
+
+The new Estimates and Credit Memos UIs will call the existing backend handlers (`create-estimate`, `create-credit-memo`, `convert-estimate`, etc.) through the same `qbAction` pattern.
+
+---
+
+## Files Changed Summary
+
+| File | Action | Description |
+|---|---|---|
+| `src/components/accounting/AccountingSidebar.tsx` | **Create** | Left sidebar with grouped navigation |
+| `src/pages/AccountingWorkspace.tsx` | **Modify** | Wrap in SidebarProvider, replace top-nav with sidebar |
+| `src/components/accounting/AccountingEstimates.tsx` | **Create** | Standalone estimates list with CRUD actions |
+| `src/components/accounting/AccountingCreditMemos.tsx` | **Create** | Standalone credit memos list with apply-to-invoice |
+| `src/components/accounting/SyncStatusBadge.tsx` | **Create** | Reusable sync status indicator |
+| `src/components/accounting/AccountingPayments.tsx` | **Modify** | Add invoice allocation checklist |
+| `src/components/accounting/AccountingInvoices.tsx` | **Modify** | Add status filter chips (All/Open/Overdue/Paid) |
+| `src/components/accounting/AccountingStatements.tsx` | **Modify** | Add print/PDF export button |
+
+### No database changes required
+
+All needed tables (`accounting_mirror`, `qb_transactions`, `qb_company_config`) already exist with the right columns.
+
+### No breaking changes
+
+- All existing tabs, handlers, and data flows remain intact
+- The sidebar maps to the same `activeTab` state
+- `AccountingNavMenus` is preserved but no longer rendered (safe rollback)
 
