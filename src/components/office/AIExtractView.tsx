@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -70,6 +71,7 @@ export function AIExtractView() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Form state
   const [manifestName, setManifestName] = useState("");
@@ -689,14 +691,14 @@ export function AIExtractView() {
               <Button
                 variant={manifestType === "delivery" ? "default" : "ghost"}
                 size="sm" className="h-9 px-4 text-xs gap-1.5 font-bold"
-                onClick={() => setManifestType("delivery")}
+                onClick={() => { setManifestType("delivery"); navigate("/shopfloor/loading"); }}
               >
                 <Truck className="w-3.5 h-3.5" /> DELIVERY
               </Button>
               <Button
                 variant={manifestType === "pickup" ? "default" : "ghost"}
                 size="sm" className="h-9 px-4 text-xs gap-1.5 font-bold"
-                onClick={() => setManifestType("pickup")}
+                onClick={() => { setManifestType("pickup"); navigate("/shopfloor/pickup"); }}
               >
                 <Package className="w-3.5 h-3.5" /> PICKUP
               </Button>
