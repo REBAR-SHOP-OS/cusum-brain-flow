@@ -1,28 +1,48 @@
 
 
-## Fix Brain Overlay — Remove Black Square, Add Smooth Fade
+## Fix Brain Overlay & Page Layout — AI Extract View
 
-The brain processing overlay currently shows a harsh dark rectangle because the PNG image has a solid black/dark background baked in. The fix involves making the overlay blend seamlessly with the page.
+### Problem
+The brain processing overlay still shows a visible dark rectangle around the brain image. The `mix-blend-mode: screen` isn't enough because the backdrop behind it (`bg-background/60`) is dark, so there's nothing bright to blend against. The page also looks cluttered with content bleeding.
 
-### Changes to `src/components/office/AIExtractView.tsx`
+### Solution
 
-**1. Remove the harsh black square from the brain image** (lines 516-524):
-- Add `mix-blend-mode: screen` to the brain image — this makes the black background transparent, leaving only the glowing cyan brain visible
-- Increase opacity so the brain itself is more visible
-- Add a smooth CSS fade-in animation when the overlay appears
+**File: `src/components/office/AIExtractView.tsx`**
 
-**2. Improve the backdrop** (line 504):
-- Keep the backdrop blur but make it subtler so content behind peeks through nicely
+#### 1. Fix the brain black square (lines 516-526)
+Use a **radial `mask-image`** gradient to fade the brain's edges to transparent — the same proven technique used in `InteractiveBrainBg.tsx`. This completely eliminates the hard rectangular boundary regardless of backdrop color.
 
-**3. Add fade-in animation to the entire overlay** (line 502):
-- Wrap in `animate-fade-in` class for a smooth entrance
+```tsx
+<img
+  src={brainHero}
+  alt=""
+  className="relative w-[35vh] h-[35vh] max-w-[400px] max-h-[400px] object-contain opacity-80 select-none"
+  draggable={false}
+  style={{
+    mixBlendMode: "screen",
+    filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.5))",
+    animation: "brain-extract-float 4s ease-in-out infinite",
+    maskImage: "radial-gradient(circle, white 30%, transparent 70%)",
+    WebkitMaskImage: "radial-gradient(circle, white 30%, transparent 70%)",
+  }}
+/>
+```
 
-### Specific edits:
+Key additions:
+- `maskImage` + `WebkitMaskImage` — fades the rectangular edges to invisible
+- Slightly smaller size (`35vh` / `400px` max) so it doesn't dominate the view
 
-- **Line 502**: Add `animate-fade-in` to the overlay container
-- **Lines 516-524**: Add `style={{ mixBlendMode: "screen" }}` and bump opacity from `opacity-30` to `opacity-70` so the brain glows through without the black box
-- **Lines 544-547**: Adjust the float animation to use higher opacity range since blend mode handles transparency
+#### 2. Improve the backdrop (line 504)
+Make the backdrop darker and blurrier so the brain glow pops against it:
+```tsx
+<div className="absolute inset-0 bg-background/85 backdrop-blur-md" />
+```
 
-### Technical detail
-`mix-blend-mode: screen` mathematically removes black pixels (they become transparent) while preserving bright/light pixels (the cyan brain circuit lines). This is the standard technique for removing dark backgrounds from glowing images without needing alpha transparency.
+#### 3. Ensure page fits without overflow (line 551-552)
+The outer container already uses `h-full` + `ScrollArea`, which is correct for the `AppLayout` pattern. No structural changes needed there.
+
+### Summary of edits
+- **Lines 504**: Backdrop → `bg-background/85 backdrop-blur-md`
+- **Lines 516-526**: Add `maskImage`/`WebkitMaskImage` radial gradient, adjust size down slightly
+- No other file changes needed
 
