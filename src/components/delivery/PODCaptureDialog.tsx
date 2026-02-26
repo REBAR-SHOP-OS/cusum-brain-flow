@@ -114,11 +114,12 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
           .select("id, status")
           .eq("delivery_id", stop.delivery_id);
 
-        const allCompleted = allStops && allStops.length > 0 && allStops.every(s => s.status === "completed");
-        if (allCompleted) {
+        const allTerminal = allStops && allStops.length > 0 && allStops.every(s => s.status === "completed" || s.status === "failed");
+        if (allTerminal) {
+          const hasFailures = allStops.some(s => s.status === "failed");
           await supabase
             .from("deliveries")
-            .update({ status: "delivered" })
+            .update({ status: hasFailures ? "completed_with_issues" : "delivered" })
             .eq("id", stop.delivery_id);
         }
       }

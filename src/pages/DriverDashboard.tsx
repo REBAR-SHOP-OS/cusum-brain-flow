@@ -159,6 +159,8 @@ export default function DriverDashboard() {
       .from("deliveries")
       .update({ status: "in-transit" })
       .eq("id", deliveryId);
+    // Bug #3 fix: Optimistic update to prevent double-tap
+    setSelectedDelivery(prev => prev ? { ...prev, status: "in-transit" } : null);
     refreshStops();
   };
 
