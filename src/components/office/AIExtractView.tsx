@@ -97,6 +97,7 @@ export function AIExtractView() {
   const [processing, setProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const optimizationPanelRef = useRef<HTMLDivElement>(null);
 
   // Active session
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -436,6 +437,10 @@ export function AIExtractView() {
 
       await refreshSessions();
       toast({ title: "Optimization ready", description: "Select your preferred cutting plan below." });
+      // Auto-scroll to the optimization panel
+      setTimeout(() => {
+        optimizationPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
     } catch (err: any) {
       toast({ title: "Failed", description: err.message, variant: "destructive" });
     } finally {
@@ -1126,9 +1131,14 @@ export function AIExtractView() {
               </Button>
             )}
             {currentStepIndex >= 5 && (
-              <Button onClick={handleApprove} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700">
-                <CheckCircle2 className="w-4 h-4" /> Approve & Create WO
-              </Button>
+              <>
+                <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
+                  <Zap className="w-3 h-3 mr-1" /> Select a cutting plan below, then click Approve
+                </Badge>
+                <Button onClick={handleApprove} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+                  <CheckCircle2 className="w-4 h-4" /> Approve & Create WO
+                </Button>
+              </>
             )}
             {processing && (
               <Badge variant="secondary" className="gap-1.5 text-xs py-1.5 px-3">
@@ -1170,56 +1180,9 @@ export function AIExtractView() {
           </div>
         )}
 
-        {/* Extracting state indicator — animated brain */}
-        {activeSession && activeSession.status === "extracting" && !processing && (
-          <div className="relative flex flex-col items-center justify-center py-24 gap-6 overflow-hidden rounded-xl">
-            {/* Pulsing glow rings */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-64 h-64 rounded-full bg-primary/5 animate-ping" style={{ animationDuration: '3s' }} />
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-48 h-48 rounded-full bg-primary/10 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
-            </div>
-
-            {/* Brain icon with pulse */}
-            <div className="relative z-10">
-              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center animate-pulse" style={{ animationDuration: '1.5s' }}>
-                <svg viewBox="0 0 24 24" className="w-14 h-14 text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.6)]" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2a5 5 0 0 1 4.5 2.8A4 4 0 0 1 20 9a4 4 0 0 1-1.5 3.1A5 5 0 0 1 17 17H7a5 5 0 0 1-1.5-4.9A4 4 0 0 1 4 9a4 4 0 0 1 3.5-4.2A5 5 0 0 1 12 2z" />
-                  <path d="M12 2v20" opacity="0.4" />
-                  <path d="M8 8h.01M16 8h.01M9 13a3 3 0 0 0 6 0" opacity="0.4" />
-                </svg>
-              </div>
-              {/* Blinking dots around the brain */}
-              {[0, 60, 120, 180, 240, 300].map((deg, i) => (
-                <span
-                  key={deg}
-                  className="absolute w-2 h-2 rounded-full bg-primary"
-                  style={{
-                    top: `${50 - 46 * Math.cos((deg * Math.PI) / 180)}%`,
-                    left: `${50 + 46 * Math.sin((deg * Math.PI) / 180)}%`,
-                    animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-                    opacity: 0.7,
-                  }}
-                />
-              ))}
-            </div>
-
-            <div className="relative z-10 text-center space-y-1.5">
-              <h3 className="text-sm font-bold text-foreground tracking-wide">AI Brain is Thinking…</h3>
-              <p className="text-xs text-muted-foreground max-w-xs">
-                Analyzing your manifest. This may take up to 2 minutes for large files.
-              </p>
-            </div>
-            <Button variant="outline" size="sm" className="relative z-10 gap-1.5 text-xs" onClick={() => { refreshSessions(); refreshRows(); }}>
-              <Clock className="w-3.5 h-3.5" /> Refresh Status
-            </Button>
-          </div>
-        )}
-
-        {/* Optimization Panel */}
+        {/* Optimization Panel — rendered above the table for visibility */}
         {activeSession?.status === "optimizing" && (
-          <Card className="border-amber-500/30 bg-amber-500/5">
+          <Card ref={optimizationPanelRef} className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Zap className="w-5 h-5 text-amber-500" />
@@ -1325,6 +1288,54 @@ export function AIExtractView() {
             </CardContent>
           </Card>
         )}
+
+        {activeSession && activeSession.status === "extracting" && !processing && (
+          <div className="relative flex flex-col items-center justify-center py-24 gap-6 overflow-hidden rounded-xl">
+            {/* Pulsing glow rings */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-64 h-64 rounded-full bg-primary/5 animate-ping" style={{ animationDuration: '3s' }} />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-48 h-48 rounded-full bg-primary/10 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
+            </div>
+
+            {/* Brain icon with pulse */}
+            <div className="relative z-10">
+              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center animate-pulse" style={{ animationDuration: '1.5s' }}>
+                <svg viewBox="0 0 24 24" className="w-14 h-14 text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.6)]" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a5 5 0 0 1 4.5 2.8A4 4 0 0 1 20 9a4 4 0 0 1-1.5 3.1A5 5 0 0 1 17 17H7a5 5 0 0 1-1.5-4.9A4 4 0 0 1 4 9a4 4 0 0 1 3.5-4.2A5 5 0 0 1 12 2z" />
+                  <path d="M12 2v20" opacity="0.4" />
+                  <path d="M8 8h.01M16 8h.01M9 13a3 3 0 0 0 6 0" opacity="0.4" />
+                </svg>
+              </div>
+              {/* Blinking dots around the brain */}
+              {[0, 60, 120, 180, 240, 300].map((deg, i) => (
+                <span
+                  key={deg}
+                  className="absolute w-2 h-2 rounded-full bg-primary"
+                  style={{
+                    top: `${50 - 46 * Math.cos((deg * Math.PI) / 180)}%`,
+                    left: `${50 + 46 * Math.sin((deg * Math.PI) / 180)}%`,
+                    animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                    opacity: 0.7,
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="relative z-10 text-center space-y-1.5">
+              <h3 className="text-sm font-bold text-foreground tracking-wide">AI Brain is Thinking…</h3>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Analyzing your manifest. This may take up to 2 minutes for large files.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="relative z-10 gap-1.5 text-xs" onClick={() => { refreshSessions(); refreshRows(); }}>
+              <Clock className="w-3.5 h-3.5" /> Refresh Status
+            </Button>
+          </div>
+        )}
+
+        {/* (Optimization panel moved above the table) */}
 
         {activeSession?.status === "approved" && (
           <div className="flex items-center gap-2 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
