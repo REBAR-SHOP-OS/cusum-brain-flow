@@ -335,7 +335,7 @@ export default function AccountingWorkspace() {
           <div className="flex items-center gap-2 px-4 py-2 border-b border-border shrink-0 overflow-x-auto">
             {[
               { label: "Invoices", tab: "invoices", count: qb.invoices.length },
-              { label: "Estimates", tab: "estimates", count: qb.estimates.length },
+              
               { label: "Bills", tab: "bills", count: qb.bills.length },
               { label: "Customers", tab: "customers", count: qb.customers.length },
             ].map(item => (
