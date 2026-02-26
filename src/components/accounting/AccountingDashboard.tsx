@@ -12,6 +12,7 @@ import { useQBBankActivity } from "@/hooks/useQBBankActivity";
 import { BankAccountsCard } from "@/components/accounting/BankAccountsCard";
 import { FinancialSnapshot } from "@/components/accounting/FinancialSnapshot";
 import { AlertsBanner } from "@/components/accounting/AlertsBanner";
+import { StripeCard } from "@/components/accounting/StripeCard";
 import { useMemo } from "react";
 
 interface Props {
@@ -361,9 +362,10 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
         syncing={syncing}
       />
 
-      {/* 5. Cash & Penny's Queue */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* 5. Cash, Stripe & Penny's Queue */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <CashCard data={data} onNavigate={onNavigate} />
+        <StripeCard />
         <PennyQueueCard onNavigate={onNavigate} />
       </div>
     </div>
