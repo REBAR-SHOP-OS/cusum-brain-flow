@@ -96,6 +96,45 @@ export function useDeliveryActions() {
         }
       } catch { /* non-critical */ }
 
+      // 2b. Fetch invoice_date from extract session
+      let invoiceDate: string | null = null;
+      try {
+        const { data: cpData2 } = await supabase
+          .from("cut_plans")
+          .select("project_id")
+          .eq("id", bundle.cutPlanId)
+          .single();
+        if (cpData2?.project_id) {
+          const { data: bl } = await supabase
+            .from("barlists")
+            .select("extract_session_id")
+            .eq("project_id", cpData2.project_id)
+            .not("extract_session_id", "is", null)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+          if (bl?.extract_session_id) {
+            const { data: es } = await supabase
+              .from("extract_sessions")
+              .select("invoice_date")
+              .eq("id", bl.extract_session_id)
+              .single();
+            invoiceDate = (es as any)?.invoice_date ?? null;
+          }
+        }
+      } catch { /* non-critical */ }
+
+      // Resolve scope from cut_plan project_name
+      let scope: string | null = null;
+      try {
+        const { data: cpScope } = await supabase
+          .from("cut_plans")
+          .select("project_name")
+          .eq("id", bundle.cutPlanId)
+          .single();
+        scope = (cpScope as any)?.project_name ?? bundle.planName;
+      } catch { scope = bundle.planName; }
+
       // 3. Create delivery stop (with address and order_id for QC gate)
       const { error: stopErr } = await supabase
         .from("delivery_stops")
@@ -129,6 +168,9 @@ export function useDeliveryActions() {
           cut_plan_id: bundle.cutPlanId,
           slip_number: slipNumber,
           customer_name: bundle.customerName || bundle.projectName,
+          invoice_number: invoiceNumber,
+          invoice_date: invoiceDate,
+          scope: scope,
           items_json: itemsSnapshot,
           status: "draft",
           delivery_date: scheduledDate,
