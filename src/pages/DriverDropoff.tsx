@@ -34,7 +34,7 @@ export default function DriverDropoff() {
   const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
 
   // Fetch stop details
-  const { data: stop } = useQuery({
+  const { data: stop, isLoading: stopLoading } = useQuery({
     queryKey: ["dropoff-stop", stopId],
     enabled: !!stopId,
     queryFn: async () => {
@@ -49,7 +49,7 @@ export default function DriverDropoff() {
   });
 
   // Fetch packing slip for this delivery
-  const { data: packingSlip } = useQuery({
+  const { data: packingSlip, isLoading: slipLoading } = useQuery({
     queryKey: ["dropoff-packing-slip", stop?.delivery_id],
     enabled: !!stop?.delivery_id,
     queryFn: async () => {
@@ -97,6 +97,7 @@ export default function DriverDropoff() {
     try {
       let photoPath: string | null = null;
       let signaturePath: string | null = null;
+      let driverSignaturePath: string | null = null;
 
       if (photoFile) {
         const path = `${companyId}/pod/${stopId}-photo-${Date.now()}.jpg`;
@@ -113,12 +114,27 @@ export default function DriverDropoff() {
         signaturePath = path;
       }
 
-      const updates: Record<string, unknown> = {
+      if (driverSignatureData) {
+        const blob = await (await fetch(driverSignatureData)).blob();
+        const path = `${companyId}/pod/${stopId}-driver-sig-${Date.now()}.png`;
+        const { error } = await supabase.storage.from("clearance-photos").upload(path, blob, { contentType: "image/png" });
+        if (error) throw error;
+        driverSignaturePath = path;
+      }
+
+      const updates: {
+        status: string;
+        departure_time: string;
+        pod_signature?: string;
+        pod_photo_url?: string;
+        notes?: string;
+      } = {
         status: "completed",
         departure_time: new Date().toISOString(),
       };
       if (signaturePath) updates.pod_signature = signaturePath;
       if (photoPath) updates.pod_photo_url = photoPath;
+      if (driverSignaturePath) updates.notes = `driver_signature:${driverSignaturePath}`;
 
       const { error } = await supabase.from("delivery_stops").update(updates).eq("id", stopId);
       if (error) throw error;
@@ -158,6 +174,14 @@ export default function DriverDropoff() {
   const canSubmit = !saving && !!signatureData && !!photoFile && (items.length === 0 || allChecked);
   const today = format(new Date(), "MMM d, yyyy");
 
+  if (stopLoading || slipLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[100dvh] bg-white">
+        <Loader2 className="w-8 h-8 animate-spin text-black/40" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-[100dvh] bg-white text-black">
       {/* Top nav bar */}
@@ -166,6 +190,9 @@ export default function DriverDropoff() {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <h1 className="text-base font-bold tracking-tight uppercase">Packing Slip</h1>
+        {packingSlip?.slip_number && (
+          <span className="ml-auto text-[11px] font-mono font-semibold text-gray-600">#{packingSlip.slip_number}</span>
+        )}
       </header>
 
       <div className="flex-1 overflow-y-auto">
@@ -236,42 +263,50 @@ export default function DriverDropoff() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, idx) => (
-                  <tr
-                    key={idx}
-                    onClick={() => toggleItem(idx)}
-                    className={`border-b border-black/40 cursor-pointer active:bg-gray-100 transition-colors ${
-                      checkedItems.has(idx) ? "bg-green-50" : ""
-                    }`}
-                  >
-                    <td className="border-r border-black/40 px-1 py-2 text-center">
-                      <div
-                        className={`w-5 h-5 mx-auto border-2 rounded flex items-center justify-center transition-colors ${
-                          checkedItems.has(idx)
-                            ? "bg-green-600 border-green-600 text-white"
-                            : "border-black/50"
-                        }`}
-                      >
-                        {checkedItems.has(idx) && (
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                    </td>
-                    <td className="border-r border-black/40 px-2 py-2 font-medium">{item.drawing_ref || "—"}</td>
-                    <td className="border-r border-black/40 px-2 py-2">{item.mark_number || "—"}</td>
-                    <td className="border-r border-black/40 px-2 py-2 font-semibold tabular-nums">
-                      {item.total_pieces} × {item.bar_code}
-                    </td>
-                    <td className="border-r border-black/40 px-2 py-2">
-                      {item.asa_shape_code ? "Bent" : "Straight"}
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums">
-                      {(item.cut_length_mm / 1000).toFixed(2)}m
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-gray-400 text-[11px]">
+                      No items on this slip
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  items.map((item, idx) => (
+                    <tr
+                      key={idx}
+                      onClick={() => toggleItem(idx)}
+                      className={`border-b border-black/40 cursor-pointer active:bg-gray-100 transition-colors ${
+                        checkedItems.has(idx) ? "bg-green-50" : ""
+                      }`}
+                    >
+                      <td className="border-r border-black/40 px-1 py-2 text-center">
+                        <div
+                          className={`w-5 h-5 mx-auto border-2 rounded flex items-center justify-center transition-colors ${
+                            checkedItems.has(idx)
+                              ? "bg-green-600 border-green-600 text-white"
+                              : "border-black/50"
+                          }`}
+                        >
+                          {checkedItems.has(idx) && (
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </td>
+                      <td className="border-r border-black/40 px-2 py-2 font-medium">{item.drawing_ref || "—"}</td>
+                      <td className="border-r border-black/40 px-2 py-2">{item.mark_number || "—"}</td>
+                      <td className="border-r border-black/40 px-2 py-2 font-semibold tabular-nums">
+                        {item.total_pieces} × {item.bar_code}
+                      </td>
+                      <td className="border-r border-black/40 px-2 py-2">
+                        {item.asa_shape_code ? "Bent" : "Straight"}
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums">
+                        {(item.cut_length_mm / 1000).toFixed(2)}m
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-black bg-gray-100">
