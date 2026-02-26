@@ -12,7 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, FileOutput, Sparkles } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, FileOutput, Sparkles, ChevronDown, Upload } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { InvoiceTemplate } from "./documents/InvoiceTemplate";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
@@ -52,6 +54,7 @@ const QUOTATION_STATUSES = [
 ];
 
 export function AccountingDocuments({ data, initialDocType }: Props) {
+  const queryClient = useQueryClient();
   const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
@@ -244,9 +247,26 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           </Button>
         ))}
         <div className="ml-auto flex gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowGenerateDialog(true)}>
-            <Sparkles className="w-4 h-4" /> Add Quotation
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+                <Plus className="w-4 h-4" /> Add Quotation <ChevronDown className="w-3 h-3 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-popover">
+              <DropdownMenuItem onClick={() => {
+                const zone = document.querySelector('[data-upload-zone="quotation"]');
+                if (zone) zone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const input = zone?.querySelector('input[type="file"]') as HTMLInputElement;
+                if (input) input.click();
+              }}>
+                <Upload className="w-4 h-4 mr-2" /> Manual Upload
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowGenerateDialog(true)}>
+                <Sparkles className="w-4 h-4 mr-2" /> AI Auto (from Estimation)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -282,12 +302,16 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
 
       {/* Quotation upload zone */}
       {activeDoc === "quotation" && (
-        <DocumentUploadZone
-          targetType="estimate"
-          onImport={(result) => {
-            toast({ title: "Quotation imported", description: `${result.documentType} with ${result.fields.length} fields extracted.` });
-          }}
-        />
+        <div data-upload-zone="quotation">
+          <DocumentUploadZone
+            targetType="estimate"
+            onImport={(result) => {
+              const quoteNum = result.fields.find(f => f.field === "quote_number")?.value;
+              toast({ title: "Quotation imported", description: quoteNum ? `Quote ${quoteNum} imported successfully.` : `${result.documentType} with ${result.fields.length} fields extracted.` });
+              queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+            }}
+          />
+        </div>
       )}
 
       {/* Document list */}
