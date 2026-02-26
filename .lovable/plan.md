@@ -1,25 +1,39 @@
 
 
-## Plan: Fix Build + Ensure Signature is Inside Packing Slip
+## Audit: Driver Dropoff Page — Issues Found & Improvements
 
-### Build Error
-The build error output was truncated — the actual TypeScript error isn't visible. The `DriverDropoff.tsx` code looks correct. I'll do a defensive cleanup to ensure the build passes:
-- Remove the `(stop as any)` cast on line 67 and use optional chaining on the typed response instead
-- Ensure the `deliveries` join select returns typed data by using a proper type assertion
+### Bug: Signature Ink is Nearly Invisible
+**Critical.** In `SignaturePad.tsx` line 27, the stroke color is `hsl(0, 0%, 90%)` — that's near-white. Signatures are being drawn but almost invisible on the white canvas. Must change to a dark color like `#000` or `hsl(0, 0%, 10%)`.
 
-### Current State
-The signatures are **already inside** the packing slip border in the current code (lines 296-317). The customer sees the full item table with checkmarks, then signs at the bottom — exactly like the attached image. No UI changes needed for the signature placement.
+### Bug: Driver Signature Not Uploaded
+In `DriverDropoff.tsx`, the driver captures `driverSignatureData` (line 30) but it is **never uploaded or saved** — only the customer signature (`signatureData`) gets uploaded. The driver signature is collected but discarded on submit.
 
-### Changes to `src/pages/DriverDropoff.tsx`
+**Fix:** Upload the driver signature as a second file (e.g. `*-driver-sig-*.png`) and save the path to `delivery_stops` (can use the existing `notes` field or a new metadata approach, or store alongside the customer sig in packing_slips).
 
-1. **Fix potential build issue**: Change the `delivery_stops` query to explicitly type the join result, removing the `as any` cast:
-   ```typescript
-   const deliveryNumber = stop?.deliveries?.delivery_number || "";
-   ```
-   The select `"*, deliveries(delivery_number)"` returns a typed join — the `as any` is unnecessary if we handle the type properly.
+### Bug: `delivery_stops.update` Uses `Record<string, unknown>`
+Line 116 — the `updates` object for `delivery_stops` is typed as `Record<string, unknown>`, which can cause the same build error pattern we've been fixing. Should use explicit typing.
 
-2. **Defensive typing**: Add a proper interface for the stop data with the joined delivery to avoid any type inference issues in strict production builds.
+### Improvement: Empty State for No Items
+If the packing slip has zero items (or no packing slip found), the table renders with just headers and no body. Should show a clear message like "No items on this slip".
 
-### Files
-- **Edit**: `src/pages/DriverDropoff.tsx` — fix typing to resolve build error
+### Improvement: Loading State Missing
+The page has no loading indicator while `stop` or `packingSlip` queries are in flight. On slow connections the page appears blank.
+
+### Improvement: Slip Number Not Shown
+The packing slip has a `slip_number` field but it's not displayed anywhere on the document.
+
+---
+
+### Changes
+
+**`src/components/shopfloor/SignaturePad.tsx`**
+- Change stroke color from `hsl(0, 0%, 90%)` to `#000000` (black ink)
+
+**`src/pages/DriverDropoff.tsx`**
+1. Upload driver signature blob alongside customer signature on submit
+2. Type the `updates` object explicitly instead of `Record<string, unknown>`
+3. Add loading spinner while queries load
+4. Show empty state when items array is empty
+5. Display `slip_number` in the document header
+6. Save driver signature path to packing_slips or delivery_stops
 
