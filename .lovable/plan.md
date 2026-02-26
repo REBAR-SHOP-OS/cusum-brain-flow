@@ -1,24 +1,30 @@
 
 
-## Plan: Hide Empty Production Sections on Station Dashboard
+## Plan: Fix Odoo Sync & Auto-Refresh Pipeline UI
 
-### Problem
-The Active Production Hub and Work Order Queue display on the Station Dashboard even when the production queue (`machine_queue_items`) is empty and no work is actively running. Machines show "LIVE" with 0/0 pieces and pending work orders clutter the view.
+### Two Issues
+
+**Issue 1: Odoo Sync Not Working**
+The `odoo-crm-sync` edge function has a feature flag guard at line 74: `if (Deno.env.get("ODOO_ENABLED") !== "true")` — it returns immediately with `{ disabled: true }`. The `ODOO_ENABLED` secret is not set (not in the secrets list). Need to add it.
+
+**Issue 2: Pipeline UI Not Auto-Refreshing**
+The Pipeline page (`src/pages/Pipeline.tsx`) does not use `usePipelineRealtime()` — only the Intelligence sub-page does. When leads change in the database, the Pipeline board doesn't update until manual refresh.
 
 ### Changes
 
-**1. `src/components/shopfloor/ActiveProductionHub.tsx`**
-- Currently line 87 checks `allWorkingMachines.length === 0 && unassignedPlans.length === 0` and shows "No machines currently running" placeholder
-- Change: Also hide when all machines have 0 progress and no active plans assigned — show only machines that actually have cut plans with items in progress
+**1. Add `ODOO_ENABLED` secret**
+- Set `ODOO_ENABLED` = `true` so the edge function stops short-circuiting
 
-**2. `src/components/shopfloor/WorkOrderQueueSection.tsx`**
-- Currently shows all work orders grouped by workstation
-- Change: Filter to only show work orders with `status = 'in_progress'` or `status = 'on_hold'` (active production). Hide the section entirely when no work orders are actively being worked on.
+**2. Add realtime subscription to Pipeline page (`src/pages/Pipeline.tsx`)**
+- Import and call `usePipelineRealtime()` at the top of the component
+- This will auto-invalidate `["pipeline-intelligence-leads"]` and `["pipeline-leads"]` queries on changes
+- Also need to add `["leads"]` invalidation to `usePipelineRealtime.ts` since Pipeline uses `queryKey: ["leads"]`
 
-**3. `src/pages/StationDashboard.tsx`**
-- Pass `activePlans` data to `ActiveProductionHub` (currently passing empty array `[]`)
-- Fetch active cut plans using existing hooks so the hub can properly determine what's actually running
+**3. Update `usePipelineRealtime.ts` to also invalidate the `["leads"]` query key**
+- Add `queryClient.invalidateQueries({ queryKey: ["leads"] })` to both UPDATE and INSERT handlers so the main Pipeline board refreshes too
 
-### Result
-When the production queue is empty and no work orders are in progress, these sections won't appear, giving a clean dashboard. They'll appear automatically once production starts.
+### Files
+- `src/pages/Pipeline.tsx` — add `usePipelineRealtime()` call
+- `src/hooks/usePipelineRealtime.ts` — add `["leads"]` query invalidation
+- Secret: add `ODOO_ENABLED` = `true`
 
