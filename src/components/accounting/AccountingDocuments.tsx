@@ -454,51 +454,46 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           onSigned={() => { setSignQuote(null); }}
         />
       )}
-      {/* Quotation Detail Sheet */}
-      <Sheet open={!!viewQuote} onOpenChange={(o) => !o && setViewQuote(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Quotation {viewQuote?.quote_number}</SheetTitle>
-            <SheetDescription>Full quotation details</SheetDescription>
-          </SheetHeader>
-          {viewQuote && (() => {
-            const meta = viewQuote.metadata as Record<string, unknown> | null;
-            const customer = meta?.odoo_customer as string || "Unknown";
-            const lines = (meta?.order_lines || meta?.line_items) as Array<Record<string, unknown>> | undefined;
-            return (
-              <div className="space-y-6 mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div><p className="text-sm text-muted-foreground">Quote #</p><p className="font-medium">{viewQuote.quote_number}</p></div>
-                  <div><p className="text-sm text-muted-foreground">Customer</p><p className="font-medium">{customer}</p></div>
-                  <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{new Date(viewQuote.created_at).toLocaleDateString()}</p></div>
-                  <div><p className="text-sm text-muted-foreground">Status</p><Badge variant="outline">{viewQuote.odoo_status || viewQuote.status}</Badge></div>
-                  <div><p className="text-sm text-muted-foreground">Total Amount</p><p className="font-medium text-lg">${Number(viewQuote.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-                  <div><p className="text-sm text-muted-foreground">Salesperson</p><p className="font-medium">{viewQuote.salesperson || "—"}</p></div>
-                  {viewQuote.valid_until && <div><p className="text-sm text-muted-foreground">Valid Until</p><p className="font-medium">{new Date(viewQuote.valid_until).toLocaleDateString()}</p></div>}
-                  {viewQuote.signature_data && <div><p className="text-sm text-muted-foreground">Signed</p><Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200">✓ Signed</Badge></div>}
-                </div>
-                {viewQuote.notes && (
-                  <div><p className="text-sm text-muted-foreground mb-1">Notes</p><p className="text-sm">{viewQuote.notes}</p></div>
-                )}
-                {lines && lines.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium mb-2">Line Items ({lines.length})</p>
-                    <div className="space-y-2">
-                      {lines.map((line, i) => (
-                        <div key={i} className="flex justify-between items-center p-2 rounded bg-muted/50 text-sm">
-                          <span className="flex-1">{String(line.name || line.description || `Item ${i + 1}`)}</span>
-                          <span className="text-muted-foreground mx-2">×{Number(line.product_uom_qty || line.quantity || 1)}</span>
-                          <span className="font-medium">${Number(line.price_unit || line.unit_price || 0).toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </SheetContent>
-      </Sheet>
+      {/* Quotation Document Overlay */}
+      {viewQuote && (() => {
+        const meta = viewQuote.metadata as Record<string, unknown> | null;
+        const lines = ((meta?.order_lines || meta?.line_items) as Array<Record<string, unknown>>) || [];
+        const items = lines.map((l) => {
+          const quantity = Number(l.product_uom_qty || l.quantity || 1);
+          const unitPrice = Number(l.price_unit || l.unit_price || 0);
+          return {
+            description: String(l.name || l.description || "Item"),
+            quantity,
+            unitPrice,
+            amount: quantity * unitPrice,
+          };
+        });
+        const untaxed = items.reduce((s, i) => s + i.amount, 0) || Number(viewQuote.total_amount || 0);
+        return (
+          <QuotationTemplate
+            data={{
+              quoteNumber: viewQuote.quote_number,
+              quoteDate: new Date(viewQuote.created_at).toLocaleDateString(),
+              expirationDate: viewQuote.valid_until
+                ? new Date(viewQuote.valid_until).toLocaleDateString()
+                : "—",
+              customerName: (meta?.odoo_customer as string) || "Unknown",
+              items,
+              untaxedAmount: untaxed,
+              taxRate: 0.13,
+              taxAmount: untaxed * 0.13,
+              total: untaxed * 1.13,
+              terms: [
+                "Payment due within 30 days of invoice date.",
+                "Prices valid for the duration specified above.",
+                "All amounts in CAD.",
+                "HST 13% applied where applicable.",
+              ],
+            }}
+            onClose={() => setViewQuote(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
