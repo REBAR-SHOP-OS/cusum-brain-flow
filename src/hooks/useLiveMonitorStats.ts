@@ -41,7 +41,7 @@ export function useLiveMonitorStats() {
       
       if (error) {
         // Fallback: manual query
-        const { data: plans, error: planError } = await (supabase as any)
+        let query = (supabase as any)
           .from("cut_plans")
           .select(`
             id, name, project_name, status, created_at, updated_at,
@@ -52,6 +52,8 @@ export function useLiveMonitorStats() {
           `)
           .in("status", ["draft", "ready", "queued", "running", "staged"])
           .order("created_at", { ascending: false });
+        if (companyId) query = query.eq("company_id", companyId);
+        const { data: plans, error: planError } = await query;
 
         if (planError) throw planError;
 
@@ -100,7 +102,7 @@ export function useLiveMonitorStats() {
     queryKey: ["live-monitor-cleared"],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from("cut_plans")
         .select(`
           id, name, status, updated_at,
@@ -109,6 +111,8 @@ export function useLiveMonitorStats() {
         .in("status", ["completed", "delivered"])
         .order("updated_at", { ascending: false })
         .limit(15);
+      if (companyId) query = query.eq("company_id", companyId);
+      const { data, error } = await query;
 
       if (error) throw error;
 
