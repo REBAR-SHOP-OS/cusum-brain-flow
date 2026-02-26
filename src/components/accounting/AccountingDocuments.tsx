@@ -176,7 +176,7 @@ export function AccountingDocuments({ data }: Props) {
     { id: "invoice" as DocType, label: "Invoices", icon: FileText, count: data.invoices.length },
     { id: "packing-slip" as DocType, label: "Packing Slips", icon: Package, count: data.invoices.length },
     { id: "quotation" as DocType, label: "Quotations", icon: ClipboardList, count: totalCount || data.estimates.length },
-    { id: "estimation" as DocType, label: "Estimations", icon: Calculator, count: data.estimates.length },
+    
   ];
 
   return (
