@@ -131,31 +131,52 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
     inclusions: [],
   });
 
-  const getQuotationData = (est: typeof data.estimates[0]) => ({
-    quoteNumber: est.DocNumber,
-    quoteDate: new Date(est.TxnDate).toLocaleDateString(),
-    expirationDate: new Date(est.ExpirationDate).toLocaleDateString(),
-    customerName: est.CustomerRef?.name || "Unknown",
-    items: [{
+  const getQuotationData = (est: typeof data.estimates[0]) => {
+    const rawLines = (est as any).Line as Array<Record<string, any>> | undefined;
+    const items = (rawLines || [])
+      .filter((l) => l.DetailType === "SalesItemLineDetail")
+      .map((l) => {
+        const detail = l.SalesItemLineDetail || {};
+        const qty = Number(detail.Qty || 1);
+        const unitPrice = Number(detail.UnitPrice || l.Amount || 0);
+        return {
+          description: (l.Description as string) || detail?.ItemRef?.name || "Line item",
+          quantity: qty,
+          unitPrice,
+          amount: Number(l.Amount || qty * unitPrice),
+        };
+      });
+
+    // Fallback: if no parsed line items, show a single summary row
+    const finalItems = items.length > 0 ? items : [{
       description: "Rebar Fabrication & Supply",
       quantity: 1,
       unitPrice: est.TotalAmt,
       amount: est.TotalAmt,
-    }],
-    untaxedAmount: est.TotalAmt,
-    taxRate: 0.13,
-    taxAmount: est.TotalAmt * 0.13,
-    total: est.TotalAmt * 1.13,
-    inclusions: [],
-    exclusions: [],
-    terms: [
-      "Quote valid for 30 days from date of issue.",
-      "Shop drawings required prior to fabrication.",
-      "One (1) shop drawing revision included. Additional revisions billable via Change Order.",
-      "Revisions impacting quantities, bar sizes, coatings, or scope are re-priced regardless of count.",
-      "Delivery charges apply based on distance.",
-    ],
-  });
+    }];
+
+    const untaxed = finalItems.reduce((s, i) => s + i.amount, 0);
+
+    return {
+      quoteNumber: est.DocNumber,
+      quoteDate: new Date(est.TxnDate).toLocaleDateString(),
+      expirationDate: new Date(est.ExpirationDate).toLocaleDateString(),
+      customerName: est.CustomerRef?.name || "Unknown",
+      items: finalItems,
+      untaxedAmount: untaxed,
+      taxRate: 0.13,
+      taxAmount: untaxed * 0.13,
+      total: untaxed * 1.13,
+      inclusions: [],
+      exclusions: [],
+      terms: [
+        "Payment due within 30 days of invoice date.",
+        "Prices valid for the duration specified above.",
+        "All amounts in CAD.",
+        "HST 13% applied where applicable.",
+      ],
+    };
+  };
 
   const getEstimationData = (est: typeof data.estimates[0]) => ({
     estimateNumber: est.DocNumber,
