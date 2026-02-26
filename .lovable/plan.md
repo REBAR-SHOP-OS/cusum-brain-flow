@@ -1,70 +1,66 @@
 
 
-## Accounting Payments — Multi-Source Balance View
+## Stripe Connection Stability Fix
 
 ### Problem
-The Payments tab currently shows only QuickBooks payment data. The user needs a unified view that balances payments across all four financial sources: **QuickBooks**, **Odoo** (legacy/archived), **Stripe**, and **BMO** (bank feed).
-
-### Current State
-- **QuickBooks**: Full payment data via `useQuickBooksData` hook (live API). This is the authority.
-- **Stripe**: `stripe_payment_links` table + `stripe-payment` edge function. Tracks payment links, amounts, and status. No actual "payment received" data yet (only links).
-- **BMO**: `qb_bank_activity` table stores ledger/bank balances per account, `bank_feed_balances` table stores manual bank balance entries. No per-transaction BMO feed exists yet.
-- **Odoo**: Disabled/detached per memory. No live payment data. `wc_qb_order_map` exists for WooCommerce-to-QB mapping.
+The Stripe tile shows "Disconnected" intermittently because:
+1. The edge function has no **key validation** — a misconfigured key (e.g. `pk_` instead of `sk_`) silently fails and returns `status: "error"`, which the UI treats as "disconnected."
+2. The `stripeRequest` helper has **no timeout** — if Stripe is slow, the edge function hangs until Deno kills it, returning a generic error.
+3. The `check-status` action catches all errors into a single `status: "error"` bucket with no retry or diagnostic detail.
+4. The `StripeCard` and `PaymentSourceStrip` both make separate calls to check Stripe status on every mount, with no caching or retry on transient failures.
 
 ### Plan
 
-#### 1. Source Summary Strip (top of Payments tab)
-Add a 4-tile horizontal summary strip above the payments table:
+#### 1. Edge function: Add key validation + timeout + retry (stripe-payment/index.ts)
 
-```text
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│  QuickBooks   │ │   Stripe     │ │   BMO Bank   │ │    Odoo      │
-│  $45,230      │ │   $8,400     │ │   $52,100    │ │   (Legacy)   │
-│  23 payments  │ │   5 links    │ │   Ledger Bal │ │   Detached   │
-│  ● Connected  │ │  ● Connected │ │  ● Synced    │ │  ○ Archived  │
-└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+- **Key validation** at the top of `stripeRequest`: reject `pk_*` and `rk_*` keys with clear error messages.
+- **Timeout**: Add `AbortSignal.timeout(15000)` (15s) to every Stripe API fetch call.
+- **Retry on 5xx**: If Stripe returns a server error, retry once with 2s backoff before failing.
+- **Structured error responses** from `check-status`: return `{ status: "error", errorType: "invalid_key" | "timeout" | "api_error", error: "..." }` so the UI can display actionable messages.
+
+#### 2. StripeCard: Add retry + better error display
+
+- On mount, if `check-status` returns `status: "error"`, retry once after 3 seconds before showing the error state.
+- Show the specific error type: "Invalid API key" vs "Connection timeout" vs generic error, so the user knows what to fix.
+
+#### 3. PaymentSourceStrip: Treat "error" differently from "disconnected"
+
+- Currently `usePaymentSources` marks Stripe as "disconnected" when there are 0 links in the DB. This is a data-based check and is correct.
+- The `StripeCard` on the Integrations page is the one doing the live API check. No change needed in `PaymentSourceStrip`.
+
+### Files to modify
+- **`supabase/functions/stripe-payment/index.ts`** — key validation, timeout, retry in `stripeRequest`, structured error in `check-status`.
+- **`src/components/accounting/StripeCard.tsx`** — retry logic on mount, actionable error messages.
+
+### Technical details
+
+**stripeRequest changes:**
+```typescript
+async function stripeRequest(path, method, body?) {
+  const key = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!key) throw new Error("STRIPE_SECRET_KEY not configured");
+  if (key.startsWith("pk_")) throw new Error("INVALID_KEY: Using publishable key instead of secret key");
+  if (key.startsWith("rk_")) throw new Error("INVALID_KEY: Restricted keys not supported");
+
+  // fetch with 15s timeout
+  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });
+
+  // retry once on 5xx
+  if (res.status >= 500) {
+    await new Promise(r => setTimeout(r, 2000));
+    const retry = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });
+    // ...
+  }
+}
 ```
 
-- **QB tile**: Sum of `payments[].TotalAmt` + count. Already available.
-- **Stripe tile**: Query `stripe_payment_links` for active links total + count. Call `stripe-payment` `check-status`.
-- **BMO tile**: Query `qb_bank_activity` for the primary chequing account's ledger balance. Show last sync time.
-- **Odoo tile**: Static "Detached / Legacy" badge per memory. Show archived order count from `wc_qb_order_map` if any.
-
-#### 2. Unified Payments Table Enhancement
-Add a **Source** column to the payments table showing where each payment originates:
-
-| Date | Customer | Amount | Source | Actions |
-|------|----------|--------|--------|---------|
-| 02/26 | Customer A | $1,200 | QB | View |
-| 02/25 | Customer B | $800 | Stripe | View / Link |
-| 02/24 | Customer C | $3,000 | QB | View |
-
-- QB payments: existing data (tagged `source: "quickbooks"`).
-- Stripe payments: merge active `stripe_payment_links` rows (tagged `source: "stripe"`), normalized to same shape.
-- Source column uses color-coded badges (green=QB, purple=Stripe, blue=BMO, gray=Odoo).
-
-#### 3. Reconciliation Indicators
-Add a small reconciliation status indicator per source in the summary strip:
-
-- **QB vs Stripe**: Compare QB invoice balance against Stripe link amount for matched `qb_invoice_id`. Show "X invoices with Stripe links" and any amount mismatches.
-- **QB vs BMO**: Compare QB total collected against BMO ledger balance delta. Flag if they diverge beyond a threshold.
-- Display a "Balanced" checkmark or "Variance: $X" warning per pair.
-
-#### 4. Data Fetching
-- Create a new hook `usePaymentSources` that:
-  - Receives QB payments from parent `data` prop (already loaded).
-  - Queries `stripe_payment_links` table filtered by `company_id`.
-  - Queries `qb_bank_activity` for BMO account balances.
-  - Queries `wc_qb_order_map` for Odoo/WC archived order count.
-  - Returns combined, normalized payment list + per-source summaries.
-
-#### 5. Files to Create/Modify
-- **New**: `src/hooks/usePaymentSources.ts` — multi-source data aggregation hook.
-- **New**: `src/components/accounting/PaymentSourceStrip.tsx` — 4-tile summary component.
-- **Modify**: `src/components/accounting/AccountingPayments.tsx` — integrate strip, add Source column, merge Stripe rows into table.
-
-### Technical Notes
-- Odoo is detached per project memory. The tile will show static "Legacy / Archived" status with a count from `wc_qb_order_map`.
-- BMO data comes from `qb_bank_activity` (synced from QB banking module). No direct BMO API integration — this shows the QB-side ledger balance for bank accounts.
-- QuickBooks remains the authority per project rules. Stripe and BMO tiles are for cross-reference/reconciliation only.
+**StripeCard retry:**
+```typescript
+// If first check-status fails, wait 3s and try once more
+if (data?.status !== "connected") {
+  await new Promise(r => setTimeout(r, 3000));
+  const { data: retry } = await supabase.functions.invoke("stripe-payment", { body: { action: "check-status" } });
+  if (retry?.status === "connected") { /* use retry */ }
+}
+```
 
