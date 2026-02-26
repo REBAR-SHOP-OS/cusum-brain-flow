@@ -104,8 +104,9 @@ serve(async (req) => {
 
     const accessToken = await getAccessToken(supabaseAdmin, userId);
     if (!accessToken) {
-      return new Response(JSON.stringify({ error: "RingCentral not connected" }), {
-        status: 400,
+      // Optional integration: return 200 so frontend can gracefully stay idle
+      return new Response(JSON.stringify({ error: "RingCentral not connected", connected: false }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
