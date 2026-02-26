@@ -288,8 +288,12 @@ serve(async (req) => {
             .single();
           if (!lot) return json({ error: "Lot not found" }, 404);
 
+          if (lot.qty_on_hand < qty) {
+            return json({ error: `Over-consumption: only ${lot.qty_on_hand} on hand, ${qty} requested` }, 400);
+          }
+
           await svc.from("inventory_lots").update({
-            qty_on_hand: Math.max(0, lot.qty_on_hand - qty),
+            qty_on_hand: lot.qty_on_hand - qty,
             qty_reserved: Math.max(0, lot.qty_reserved - qty),
           }).eq("id", sourceId);
 
@@ -310,8 +314,12 @@ serve(async (req) => {
             .single();
           if (!fs) return json({ error: "Floor stock not found" }, 404);
 
+          if (fs.qty_on_hand < qty) {
+            return json({ error: `Over-consumption: only ${fs.qty_on_hand} floor stock on hand, ${qty} requested` }, 400);
+          }
+
           await svc.from("floor_stock").update({
-            qty_on_hand: Math.max(0, fs.qty_on_hand - qty),
+            qty_on_hand: fs.qty_on_hand - qty,
             qty_reserved: Math.max(0, fs.qty_reserved - qty),
           }).eq("id", sourceId);
 

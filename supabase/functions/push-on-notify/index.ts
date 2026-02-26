@@ -53,6 +53,30 @@ serve(async (req) => {
     });
 
     const result = await resp.json();
+
+    if (!resp.ok || result?.error) {
+      console.error("Push delivery failed:", { status: resp.status, result });
+      // Best-effort log to activity_events for observability
+      try {
+        const svc = createClient(supabaseUrl, serviceKey);
+        await svc.from("activity_events").insert({
+          company_id: record.company_id || "a0000000-0000-0000-0000-000000000001",
+          entity_type: "notification",
+          entity_id: record.id || "unknown",
+          event_type: "push_failed",
+          source: "system",
+          description: `Push failed for notification "${title}": ${result?.error || resp.status}`,
+          metadata: { user_id, push_status: resp.status, push_error: result?.error },
+          dedupe_key: `push_fail_${record.id}`,
+        }, { onConflict: "dedupe_key", ignoreDuplicates: true } as any);
+      } catch (logErr) {
+        console.error("Failed to log push failure:", logErr);
+      }
+      return new Response(JSON.stringify({ ok: false, push: result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ ok: true, push: result }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
