@@ -65,6 +65,21 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     }
   }, [items, justCompletedItemId]);
 
+  // Bug fix #2b: Clear localCompletedOverride when DB value catches up via realtime
+  useEffect(() => {
+    setLocalCompletedOverride(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const item of items) {
+        if (next[item.id] != null && item.completed_pieces >= next[item.id]) {
+          delete next[item.id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [items]);
+
   // Reset run state when switching to a different item (Bug #12)
   const currentItem = items[currentIndex] || null;
   const [prevItemId, setPrevItemId] = useState<string | null>(null);
@@ -84,7 +99,11 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   const { lots, floorStock, wipBatches } = useInventoryData(cutPlanId, barCode);
 
-  const remaining = items.filter((i) => i.completed_pieces < i.total_pieces).length;
+  // Bug fix #4: Account for localCompletedOverride so remaining count updates immediately
+  const remaining = items.filter((i) => {
+    const effective = localCompletedOverride[i.id] != null ? localCompletedOverride[i.id] : i.completed_pieces;
+    return effective < i.total_pieces;
+  }).length;
   const maxBars = currentItem ? (getMaxBars(currentItem.bar_code) || 10) : 10;
 
   // ── Foreman Brain context ──
@@ -381,10 +400,13 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const isMarkComplete = newCompletedPieces >= totalPieces;
 
       // ── Set completion guard BEFORE resetting run state ──
-      setJustCompletedItemId(currentItem.id);
+      // Bug fix #1: Only set guard for complete marks; partial runs skip guard
       if (isMarkComplete) {
-        setLocalCompletedOverride(prev => ({ ...prev, [currentItem.id]: totalPieces }));
+        setJustCompletedItemId(currentItem.id);
       }
+      // Bug fix #2: Always set localCompletedOverride so effectiveCompleted
+      // doesn't revert to stale DB value after any run
+      setLocalCompletedOverride(prev => ({ ...prev, [currentItem.id]: newCompletedPieces }));
 
       slotTracker.reset();
       setIsRunning(false);
@@ -407,9 +429,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       }
 
       // ── Auto-advance to next item if mark is complete ──
+      // Bug fix #3: Don't clear justCompletedItemId here — let the useEffect
+      // at line 55-66 handle it when the item actually leaves the list
       if (isMarkComplete && currentIndex < items.length - 1) {
         setTimeout(() => {
-          setJustCompletedItemId(null);
           setCurrentIndex((i) => i + 1);
         }, 1200);
       }
