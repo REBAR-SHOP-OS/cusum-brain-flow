@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout, isTransientError, backoffWithJitter, logQBCall } from "../_shared/qbHttp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,18 +80,38 @@ async function qbFetch(
   }
 
   const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${config.access_token}`,
-      Accept: "application/json",
-      ...(options?.body ? { "Content-Type": "application/json" } : {}),
-    },
-  });
+  const t0 = Date.now();
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${config.access_token}`,
+        Accept: "application/json",
+        ...(options?.body ? { "Content-Type": "application/json" } : {}),
+      },
+    }, 15_000);
+  } catch (err) {
+    const duration = Date.now() - t0;
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: 0, retry_count: retries, error_message: String(err) });
+    // Retry on timeout if under limit
+    if (retries < 3 && String(err).includes("timed out")) {
+      const delay = backoffWithJitter(retries);
+      console.warn(`[QB-sync] Timeout on [${path}], retry ${retries + 1} in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+      return qbFetch(config, path, ctx, options, retries + 1);
+    }
+    throw err;
+  }
 
-  if (res.status === 429 && retries < 4) {
-    const delay = Math.min(1000 * Math.pow(2, retries), 10000);
-    console.warn(`QB rate-limited [${path}], retry ${retries + 1} in ${delay}ms`);
+  const duration = Date.now() - t0;
+
+  // Retry on transient errors (429, 502, 503, 504)
+  if (isTransientError(res.status) && retries < 3) {
+    const delay = backoffWithJitter(retries);
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: retries });
+    console.warn(`[QB-sync] ${res.status} on [${path}], retry ${retries + 1} in ${delay}ms`);
+    await res.text(); // consume body
     await new Promise(r => setTimeout(r, delay));
     return qbFetch(config, path, ctx, options, retries + 1);
   }
@@ -105,8 +126,11 @@ async function qbFetch(
 
   if (!res.ok) {
     const errorText = await res.text();
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: retries, error_message: errorText.slice(0, 500) });
     throw new Error(`QB API error (${res.status}) [${path}]: ${errorText}`);
   }
+
+  logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: retries });
   return res.json();
 }
 
@@ -1237,19 +1261,60 @@ serve(async (req) => {
     if (!companyId) return jsonRes({ error: "company_id required" }, 400);
     if (!action) return jsonRes({ error: "action required" }, 400);
 
-    switch (action) {
-      case "backfill":
-        return jsonRes(await handleBackfill(svc, companyId));
-      case "incremental":
-        return jsonRes(await handleIncremental(svc, companyId));
-      case "reconcile":
-        return jsonRes(await handleReconcile(svc, companyId));
-      case "sync-entity":
-        return jsonRes(await handleSyncEntity(svc, companyId, body.entity_type));
-      case "sync-bank-activity":
-        return jsonRes(await handleSyncBankActivity(svc, companyId));
-      default:
-        return jsonRes({ error: `Unknown action: ${action}` }, 400);
+    // --- Single-flight lock: prevent concurrent runs for same company+action ---
+    // Clean up expired locks first
+    try {
+      await svc.from("qb_sync_locks").delete().lt("expires_at", new Date().toISOString());
+    } catch (_) { /* best effort */ }
+
+    const lockKey = { company_id: companyId, action };
+    const { error: lockErr } = await svc.from("qb_sync_locks").insert({
+      ...lockKey,
+      locked_by: `qb-sync-engine-${crypto.randomUUID().slice(0, 8)}`,
+      locked_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
+
+    if (lockErr) {
+      // Unique constraint violation = already locked
+      if (lockErr.code === "23505" || lockErr.message?.includes("duplicate key")) {
+        console.warn(`[qb-sync-engine] Already locked: ${companyId}/${action}`);
+        return jsonRes({ error: "Sync already in progress for this company", locked: true }, 409);
+      }
+      console.error("[qb-sync-engine] Lock acquisition failed:", lockErr.message);
+    }
+
+    try {
+      let result: unknown;
+      switch (action) {
+        case "backfill":
+          result = await handleBackfill(svc, companyId);
+          break;
+        case "incremental":
+          result = await handleIncremental(svc, companyId);
+          break;
+        case "reconcile":
+          result = await handleReconcile(svc, companyId);
+          break;
+        case "sync-entity":
+          result = await handleSyncEntity(svc, companyId, body.entity_type);
+          break;
+        case "sync-bank-activity":
+          result = await handleSyncBankActivity(svc, companyId);
+          break;
+        default:
+          // Release lock before returning error
+          await svc.from("qb_sync_locks").delete().match(lockKey);
+          return jsonRes({ error: `Unknown action: ${action}` }, 400);
+      }
+      return jsonRes(result);
+    } finally {
+      // Always release lock
+      try {
+        await svc.from("qb_sync_locks").delete().match(lockKey);
+      } catch (e) {
+        console.error("[qb-sync-engine] Lock release failed:", e);
+      }
     }
   } catch (error) {
     console.error("qb-sync-engine error:", error);

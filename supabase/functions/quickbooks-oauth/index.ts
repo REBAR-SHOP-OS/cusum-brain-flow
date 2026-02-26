@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout, isTransientError, backoffWithJitter, logQBCall } from "../_shared/qbHttp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -168,20 +169,39 @@ async function qbFetch(
   }
 
   const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "Authorization": `Bearer ${config.access_token}`,
-      "Accept": "application/json",
-      ...(options?.body ? { "Content-Type": "application/json" } : {}),
-      ...options?.headers,
-    },
-  });
+  const t0 = Date.now();
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, {
+      ...options,
+      headers: {
+        "Authorization": `Bearer ${config.access_token}`,
+        "Accept": "application/json",
+        ...(options?.body ? { "Content-Type": "application/json" } : {}),
+        ...options?.headers,
+      },
+    }, 15_000);
+  } catch (err) {
+    const duration = Date.now() - t0;
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: 0, retry_count: _retries, error_message: String(err) });
+    // Retry on timeout
+    if (_retries < MAX_RETRIES && String(err).includes("timed out")) {
+      const delay = backoffWithJitter(_retries);
+      console.warn(`[QB] Timeout on [${path}], retry ${_retries + 1}/${MAX_RETRIES} in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+      return qbFetch(config, path, options, _retries + 1, _refreshContext);
+    }
+    throw err;
+  }
 
-  // Retry on 429 (rate limit) with exponential backoff
-  if (res.status === 429 && _retries < MAX_RETRIES) {
-    const delay = Math.min(1000 * Math.pow(2, _retries), 10000);
-    console.warn(`QB rate-limited on [${path}], retry ${_retries + 1}/${MAX_RETRIES} in ${delay}ms`);
+  const duration = Date.now() - t0;
+
+  // Retry on transient errors (429, 502, 503, 504) with jitter
+  if (isTransientError(res.status) && _retries < MAX_RETRIES) {
+    const delay = backoffWithJitter(_retries);
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: _retries });
+    console.warn(`[QB] ${res.status} on [${path}], retry ${_retries + 1}/${MAX_RETRIES} in ${delay}ms`);
+    await res.text(); // consume body
     await new Promise((r) => setTimeout(r, delay));
     return qbFetch(config, path, options, _retries + 1, _refreshContext);
   }
@@ -208,11 +228,14 @@ async function qbFetch(
     }
   }
 
+  // Never retry non-429 4xx errors
   if (!res.ok) {
     const errorText = await res.text();
-    console.error(`QB API error [${path}]:`, errorText);
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: _retries, error_message: errorText.slice(0, 500) });
     throw new Error(`QuickBooks API error (${res.status}): ${path}`);
   }
+
+  logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: _retries });
   return res.json();
 }
 

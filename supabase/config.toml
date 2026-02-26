@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.qa-war-engine]
 verify_jwt = false
+
+[functions.qb-webhook]
+verify_jwt = false
