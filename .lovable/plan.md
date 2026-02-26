@@ -1,32 +1,29 @@
 
 
-## Plan: Replace Station Queue with Work Order Queue
+## Investigation: Ben's Inbox Appears Empty
 
-### Problem
-The Station Dashboard currently shows cut plan queues grouped by machine (MachineGroupSection). The user wants to show work order queues instead.
+### Findings
 
-### Changes
+After thorough investigation, there is **no `inbox_items` table** in this project. The bug report's root cause analysis is incorrect.
 
-**1. Update `src/pages/StationDashboard.tsx`**
-- Remove the `useCutPlans` import and all cut-plan-related logic (machineGroups, sortPlans, assignToMachine, runningPlans, queuedPlans)
-- Import and use `useSupabaseWorkOrders` instead
-- Replace the MachineGroupSection block (lines 134-157) with a new `WorkOrderQueueSection` component
-- Keep MaterialFlowDiagram, ActiveProductionHub (pass empty arrays for activePlans), and MachineSelector
+**What actually exists:**
+- `notifications` table — powers the InboxPanel (sidebar notification bell). Ben has **78 unread** notifications with correct RLS policies (`user_id = auth.uid()` and `assigned_to` via profiles join)
+- `communications` table — powers the email InboxView. Ben has **183 records** (131 Gmail, 52 RingCentral) with correct RLS policies
+- `get_user_company_id()` returns the correct company for Ben
 
-**2. Create `src/components/shopfloor/WorkOrderQueueSection.tsx`**
-- New component that displays work orders in a collapsible list, grouped by workstation (or "Unassigned")
-- Each work order row shows: work_order_number, status badge, customer_name, order_number
-- Action buttons: Start (pending→in_progress), Pause, Complete
-- Update work order status via supabase directly
-- Style consistent with existing MachineGroupSection (collapsible, badges, same border/card patterns)
+**RLS policies verified and working:**
+- `notifications` SELECT: two policies, both correctly matching Ben's user_id and profile
+- `communications` SELECT: correctly scoped by `company_id` AND `user_id`
 
-**3. Update `useSupabaseWorkOrders` hook**
-- Add join to fetch customer name: `select("*, orders(order_number, customers(name))")`
-- Add `customer_name` and `order_number` to the `SupabaseWorkOrder` interface
-- Add `updateStatus` function for changing work order status
+### Possible Real Causes
 
-### Files
-- `src/hooks/useSupabaseWorkOrders.ts` — add joins + status update
-- `src/components/shopfloor/WorkOrderQueueSection.tsx` — new component
-- `src/pages/StationDashboard.tsx` — swap cut plan queues for work order queues
+1. **Email InboxView is unreachable** — The `/inbox-manager` route redirects to `/home`, so users can't access the email inbox. If Ben is looking for his email inbox, there's no route to get there.
+2. **Session/auth issue** — If Ben's token is expired or he's not fully authenticated, the client-side `supabase.auth.getUser()` returns null, causing `useCommunications` to short-circuit and show nothing.
+3. **InboxPanel filtering** — The notification panel only shows the last 50 items and filters out "dismissed" ones. If Ben previously dismissed notifications, they won't reappear.
+
+### Recommended Action
+
+Since the backend data and RLS are correct, this is likely a **frontend routing or session issue**, not a database access problem. No SQL migration is needed.
+
+If you can clarify which specific page/panel appears empty for Ben (the bell notification panel, or an email inbox view), I can provide a targeted fix.
 
