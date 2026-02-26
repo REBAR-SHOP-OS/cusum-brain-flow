@@ -1,28 +1,59 @@
 
 
-# Link "Quotations" Quick-Access Tab to Documents → Quotations Sub-Tab
+# Add "View" Buttons Across All Accounting Table Sections
 
 ## What Changes
 
-When you click **Quotations** in the top quick-access strip, it will navigate to the **Documents** section with the **Quotations** sub-tab already selected, instead of going to the standalone estimates tab.
+Add an **Eye / View** button to every accounting table that's currently missing one. Clicking "View" opens a side drawer (Sheet) showing the full details of that record.
 
-## Files to Change
+## Sections Needing View
 
-| File | Change |
-|---|---|
-| `src/components/accounting/AccountingDocuments.tsx` | Add optional `initialDocType` prop; use it to initialize `activeDoc` state; add `useEffect` to sync when prop changes |
-| `src/pages/AccountingWorkspace.tsx` | Add `docSubTab` state; change Quotations button from `tab: "estimates"` to `tab: "documents"` with a `docType` field; update click handler to set `docSubTab`; pass `initialDocType` to `AccountingDocuments` |
+| Section | Current State | Change |
+|---|---|---|
+| **AccountingEstimates.tsx** | Has Convert + Send, no View | Add Eye/View button + detail Sheet |
+| **AccountingBills.tsx** | Bills table has no Actions column | Add Actions column with View button + detail Sheet |
+| **AccountingCreditMemos.tsx** | No Actions column | Add Actions column with View button + detail Sheet |
+| **AccountingPayments.tsx** | No Actions column | Add Actions column with View button + detail Sheet |
+| **AccountingSalesReceipts.tsx** | No Actions column | Add Actions column with View button + detail Sheet |
+| **AccountingExpenses.tsx** | No Actions column | Add Actions column with View button + detail Sheet |
+
+*AccountingInvoices and AccountingDocuments already have View buttons -- no changes needed.*
+
+## How It Works
+
+Each section gets:
+1. A new **Actions** column (or View added to existing actions) in the table
+2. An `Eye` icon button labeled "View"
+3. A **Sheet** (side drawer) that slides in from the right showing the record's full details (all fields displayed in a clean layout)
+4. State: `selectedItem` to track which record is being viewed
 
 ## Technical Details
 
-**AccountingDocuments.tsx:**
-- Update `Props` interface to accept `initialDocType?: DocType`
-- Destructure: `{ data, initialDocType }`
-- Add `useEffect` that sets `activeDoc` when `initialDocType` changes (so clicking the quick-access button after mount still works)
+**Pattern** (same across all 6 files):
+```text
++ import { Eye } from "lucide-react"
++ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
++ const [selectedItem, setSelectedItem] = useState<...| null>(null)
 
-**AccountingWorkspace.tsx:**
-- Add state: `const [docSubTab, setDocSubTab] = useState<string | undefined>()`
-- Change Quotations entry to `{ label: "Quotations", tab: "documents", docType: "quotation", count: qb.estimates.length }`
-- Update click handler: when a button has `docType`, call `setDocSubTab(item.docType)` alongside `setActiveTab(item.tab)`; otherwise clear it with `setDocSubTab(undefined)`
-- Pass prop: `<AccountingDocuments data={qb} initialDocType={docSubTab} />`
+Table:
++ <TableHead>Actions</TableHead>
++ <TableCell>
++   <Button size="sm" variant="ghost" onClick={() => setSelectedItem(row)}>
++     <Eye className="w-4 h-4" /> View
++   </Button>
++ </TableCell>
+
+Sheet:
++ <Sheet open={!!selectedItem} onOpenChange={(o) => !o && setSelectedItem(null)}>
++   <SheetContent> ... detail fields ... </SheetContent>
++ </Sheet>
+```
+
+**Detail Sheet content per type:**
+- **Estimate**: Doc#, Customer, Date, Expiry, Amount, Status, line items if available
+- **Bill**: Doc#, Vendor, Date, Due, Total, Balance, Status
+- **Credit Memo**: CM#, Customer, Date, Amount, Remaining Credit, Status
+- **Payment**: Date, Customer, Amount, Payment Method
+- **Sales Receipt**: Doc#, Customer, Date, Amount, Memo
+- **Expense**: Date, Payee, Account, Type, Ref#, Amount, Note
 
