@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { User, Clock, MapPin } from "lucide-react";
@@ -36,6 +37,7 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [filter, setFilter] = useState<"all" | "open" | "resolved">("all");
   const [loading, setLoading] = useState(true);
+  const { companyId } = useCompanyId();
 
   const fetchConversations = async () => {
     let query = supabase
@@ -60,13 +62,16 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
   useEffect(() => {
     const channel = supabase
       .channel("support-convos-list-" + Math.random().toString(36).slice(2, 8))
-      .on("postgres_changes", { event: "*", schema: "public", table: "support_conversations" }, () => {
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "support_conversations",
+        ...(companyId ? { filter: `company_id=eq.${companyId}` } : {}),
+      }, () => {
         fetchConversations();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [filter]);
+  }, [filter, companyId]);
 
   // Refresh presence every 30s
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface RCPresenceEntry {
   user_id: string;
@@ -11,6 +12,7 @@ export interface RCPresenceEntry {
 }
 
 export function useRCPresence() {
+  const { companyId } = useCompanyId();
   const [presenceMap, setPresenceMap] = useState<Map<string, RCPresenceEntry>>(new Map());
   const [loading, setLoading] = useState(false);
 
@@ -57,7 +59,10 @@ export function useRCPresence() {
   useEffect(() => {
     const channel = supabase
       .channel("rc_presence_changes-" + Math.random().toString(36).slice(2, 8))
-      .on("postgres_changes", { event: "*", schema: "public", table: "rc_presence" }, (payload) => {
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "rc_presence",
+        ...(companyId ? { filter: `company_id=eq.${companyId}` } : {}),
+      }, (payload) => {
         const row = payload.new as any;
         if (row?.user_id) {
           setPresenceMap((prev) => {
@@ -77,7 +82,7 @@ export function useRCPresence() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [companyId]);
 
   const getPresence = useCallback((userId: string) => presenceMap.get(userId), [presenceMap]);
 
