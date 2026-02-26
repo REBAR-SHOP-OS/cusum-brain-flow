@@ -44,7 +44,7 @@ export default function DriverDropoff() {
         .eq("id", stopId!)
         .single();
       if (error) throw error;
-      return data;
+      return data as typeof data & { deliveries: { delivery_number: string } | null };
     },
   });
 
@@ -64,7 +64,7 @@ export default function DriverDropoff() {
     },
   });
 
-  const deliveryNumber = (stop as any)?.deliveries?.delivery_number || "";
+  const deliveryNumber = stop?.deliveries?.delivery_number || "";
   const items: SlipItem[] = (packingSlip?.items_json as unknown as SlipItem[]) || [];
   const totalQty = items.reduce((s, i) => s + i.total_pieces, 0);
   const allChecked = items.length > 0 && checkedItems.size === items.length;
