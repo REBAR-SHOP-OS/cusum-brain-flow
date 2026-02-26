@@ -100,23 +100,23 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
     setSubmitting(true);
     try {
       const piecesToAdd = unitCount;
-      const newCount = Math.min(bendCompleted + piecesToAdd, currentItem.total_pieces);
-      // Update bend_completed_pieces — let auto_advance_item_phase trigger handle phase transitions
-      const { error } = await supabase
-        .from("cut_plan_items")
-        .update({ bend_completed_pieces: newCount } as any)
-        .eq("id", currentItem.id);
+      // Use atomic increment RPC to prevent concurrent overwrites
+      const { data: newCount, error } = await supabase.rpc("increment_bend_completed_pieces" as any, {
+        p_item_id: currentItem.id,
+        p_increment: piecesToAdd,
+      });
 
       if (error) throw error;
 
       // Force immediate data refresh
       await queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "bender"] });
 
-      const added = newCount - bendCompleted;
-      toast({ title: `+${added} Confirmed`, description: `${newCount} / ${currentItem.total_pieces} pieces` });
+      const actualNew = newCount ?? (bendCompleted + piecesToAdd);
+      const added = actualNew - bendCompleted;
+      toast({ title: `+${added} Confirmed`, description: `${actualNew} / ${currentItem.total_pieces} pieces` });
 
       // Record completion learning if mark done
-      if (newCount >= currentItem.total_pieces) {
+      if (actualNew >= currentItem.total_pieces) {
         recordCompletion("bend", machine.id, currentItem.bar_code, {
           mark: currentItem.mark_number,
           shape_code: currentItem.asa_shape_code,

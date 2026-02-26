@@ -12441,6 +12441,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_bend_completed_pieces: {
+        Args: { p_increment?: number; p_item_id: string }
+        Returns: number
+      }
       increment_completed_pieces: {
         Args: { p_increment: number; p_item_id: string }
         Returns: number

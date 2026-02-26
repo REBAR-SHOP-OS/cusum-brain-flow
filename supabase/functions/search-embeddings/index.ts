@@ -52,9 +52,7 @@ serve(async (req) => {
     const { data, error } = await supabase.rpc("match_documents", {
       query_embedding: `[${queryEmbedding.join(",")}]`,
       match_count: matchCount || 5,
-      match_threshold: threshold || 0.5,
-      filter_domain: domain || null,
-      filter_company: companyId || null,
+      filter_company_id: companyId || null,
     });
 
     if (error) {

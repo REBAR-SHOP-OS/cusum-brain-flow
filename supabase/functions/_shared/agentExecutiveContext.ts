@@ -41,7 +41,7 @@ export async function fetchExecutiveContext(
     // Pipeline: active leads
     supabase
       .from("leads")
-      .select("id, expected_revenue, status, stage, lead_score")
+      .select("id, expected_value, status, stage, lead_score")
       .eq("company_id", companyId)
       .in("status", ["new", "contacted", "qualified", "proposal"])
       .order("lead_score", { ascending: false })
@@ -100,7 +100,7 @@ export async function fetchExecutiveContext(
 
   const totalAP = (apData || []).reduce((s: number, r: any) => s + (r.balance || 0), 0);
 
-  const pipelineValue = (pipelineLeads || []).reduce((s: number, l: any) => s + (l.expected_revenue || 0), 0);
+  const pipelineValue = (pipelineLeads || []).reduce((s: number, l: any) => s + (l.expected_value || 0), 0);
   const hotLeads = (pipelineLeads || []).filter((l: any) => (l.lead_score || 0) >= 70).length;
 
   const totalPieces = (productionItems || []).reduce((s: number, i: any) => s + (i.total_pieces || 0), 0);
