@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useProjects } from "@/hooks/useProjects";
 import { useBarlists } from "@/hooks/useBarlists";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -272,10 +272,17 @@ function BarlistRow({
   );
 }
 
+// Auto-assignment routing constants
+const CUTTER_01_ID = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";
+const CUTTER_02_ID = "b0000000-0000-0000-0000-000000000002";
+const SMALL_BAR_CODES = new Set(["10M", "15M"]);
+
 function CutPlanRow({ plan, machines }: { plan: CutPlanForBarlist; machines: MachineOption[] }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [assigning, setAssigning] = useState(false);
+  const [showOverride, setShowOverride] = useState(false);
+  const autoAssignedRef = useState(false);
 
   const handleAssign = async (machineId: string) => {
     setAssigning(true);
@@ -294,16 +301,63 @@ function CutPlanRow({ plan, machines }: { plan: CutPlanForBarlist; machines: Mac
     setAssigning(false);
   };
 
+  // Auto-assign unassigned plans based on bar sizes
+  useEffect(() => {
+    if (plan.machine_id || plan.machine_name || autoAssignedRef[0]) return;
+    autoAssignedRef[1](true);
+
+    (async () => {
+      setAssigning(true);
+      const { data: items } = await supabase
+        .from("cut_plan_items")
+        .select("bar_code")
+        .eq("cut_plan_id", plan.id);
+
+      const barCodes = (items || []).map(i => i.bar_code).filter(Boolean);
+      const allSmall = barCodes.length > 0 && barCodes.every(bc => SMALL_BAR_CODES.has(bc));
+      const targetMachineId = allSmall ? CUTTER_01_ID : CUTTER_02_ID;
+
+      await handleAssign(targetMachineId);
+    })();
+  }, [plan.machine_id, plan.machine_name]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-muted/20 hover:bg-muted/40 transition-colors">
       <Wrench className="w-3 h-3 text-primary/70 shrink-0" />
       <span className="text-foreground truncate">{plan.name}</span>
       <StatusBadge status={plan.status} />
 
-      {plan.machine_name ? (
-        <Badge variant="outline" className="text-[9px] px-1.5 py-0 ml-auto">
-          {plan.machine_name}
+      {assigning && !plan.machine_name ? (
+        <Badge variant="outline" className="text-[9px] px-1.5 py-0 ml-auto animate-pulse">
+          Auto-assigning…
         </Badge>
+      ) : plan.machine_name ? (
+        <div className="ml-auto flex items-center gap-1">
+          <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+            {plan.machine_name}
+          </Badge>
+          {!showOverride ? (
+            <button
+              onClick={e => { e.stopPropagation(); setShowOverride(true); }}
+              className="text-[9px] text-muted-foreground hover:text-primary underline"
+            >
+              Change
+            </button>
+          ) : (
+            <div onClick={e => e.stopPropagation()}>
+              <Select onValueChange={id => { handleAssign(id); setShowOverride(false); }}>
+                <SelectTrigger className="h-5 text-[9px] w-[90px] px-1.5 py-0 border-primary/30">
+                  <SelectValue placeholder="Pick" />
+                </SelectTrigger>
+                <SelectContent>
+                  {machines.map(m => (
+                    <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="ml-auto" onClick={e => e.stopPropagation()}>
           <Select onValueChange={handleAssign} disabled={assigning}>
@@ -312,9 +366,7 @@ function CutPlanRow({ plan, machines }: { plan: CutPlanForBarlist; machines: Mac
             </SelectTrigger>
             <SelectContent>
               {machines.map(m => (
-                <SelectItem key={m.id} value={m.id} className="text-xs">
-                  {m.name}
-                </SelectItem>
+                <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
