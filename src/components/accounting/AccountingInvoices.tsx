@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
-import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download } from "lucide-react";
+import { CustomerSelectDialog } from "./CustomerSelectDialog";
+import { CreateTransactionDialog } from "@/components/customers/CreateTransactionDialog";
+import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
@@ -53,6 +55,8 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
   const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
   const [sortField, setSortField] = useState<SortField>("DocNumber");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [customerSelectOpen, setCustomerSelectOpen] = useState(false);
+  const [txnCustomer, setTxnCustomer] = useState<{ qbId: string; name: string } | null>(null);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -157,6 +161,9 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         </div>
         <Button variant="outline" size="sm" className="h-12 gap-2" onClick={exportCsv}>
           <Download className="w-4 h-4" /> Export CSV
+        </Button>
+        <Button size="sm" className="h-12 gap-2" onClick={() => setCustomerSelectOpen(true)}>
+          <Plus className="w-4 h-4" /> Create Invoice
         </Button>
       </div>
 
@@ -290,6 +297,28 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
             });
             await loadAll();
           }}
+        />
+      )}
+
+      <CustomerSelectDialog
+        open={customerSelectOpen}
+        onOpenChange={setCustomerSelectOpen}
+        customers={customers.map((c: any) => ({
+          Id: c.qb_customer_id || c.Id,
+          DisplayName: c.display_name || c.DisplayName,
+          CompanyName: c.CompanyName,
+        }))}
+        onSelect={(qbId, name) => setTxnCustomer({ qbId, name })}
+      />
+
+      {txnCustomer && (
+        <CreateTransactionDialog
+          open={!!txnCustomer}
+          onOpenChange={(open) => { if (!open) setTxnCustomer(null); }}
+          type="Invoice"
+          customerQbId={txnCustomer.qbId}
+          customerName={txnCustomer.name}
+          onCreated={() => { setTxnCustomer(null); loadAll(); }}
         />
       )}
     </div>

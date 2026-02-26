@@ -4,9 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileCheck, Search, Send, FileText, ArrowUpDown, Download, Loader2 } from "lucide-react";
+import { FileCheck, Search, Send, FileText, ArrowUpDown, Download, Loader2, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { CustomerSelectDialog } from "./CustomerSelectDialog";
+import { CreateTransactionDialog } from "@/components/customers/CreateTransactionDialog";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -32,6 +34,8 @@ export function AccountingEstimates({ data }: Props) {
   const [sortField, setSortField] = useState<SortField>("DocNumber");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [converting, setConverting] = useState<string | null>(null);
+  const [customerSelectOpen, setCustomerSelectOpen] = useState(false);
+  const [txnCustomer, setTxnCustomer] = useState<{ qbId: string; name: string } | null>(null);
 
   // Pull estimates from the accounting mirror data if available
   const estimates = useMemo(() => {
@@ -131,6 +135,9 @@ export function AccountingEstimates({ data }: Props) {
         <Button variant="outline" size="sm" className="h-12 gap-2" onClick={exportCsv}>
           <Download className="w-4 h-4" /> Export CSV
         </Button>
+        <Button size="sm" className="h-12 gap-2" onClick={() => setCustomerSelectOpen(true)}>
+          <Plus className="w-4 h-4" /> Create Quotation
+        </Button>
       </div>
 
       <div className="grid grid-cols-4 gap-3">
@@ -214,6 +221,27 @@ export function AccountingEstimates({ data }: Props) {
           )}
         </CardContent>
       </Card>
+      <CustomerSelectDialog
+        open={customerSelectOpen}
+        onOpenChange={setCustomerSelectOpen}
+        customers={((data as any).customers || []).map((c: any) => ({
+          Id: c.qb_customer_id || c.Id,
+          DisplayName: c.display_name || c.DisplayName,
+          CompanyName: c.CompanyName,
+        }))}
+        onSelect={(qbId, name) => setTxnCustomer({ qbId, name })}
+      />
+
+      {txnCustomer && (
+        <CreateTransactionDialog
+          open={!!txnCustomer}
+          onOpenChange={(open) => { if (!open) setTxnCustomer(null); }}
+          type="Estimate"
+          customerQbId={txnCustomer.qbId}
+          customerName={txnCustomer.name}
+          onCreated={() => { setTxnCustomer(null); data.loadAll(); }}
+        />
+      )}
     </div>
   );
 }

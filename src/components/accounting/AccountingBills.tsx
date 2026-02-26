@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Receipt, Search, Building2 } from "lucide-react";
+import { Receipt, Search, Building2, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VendorDetail } from "@/components/accounting/VendorDetail";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
@@ -36,14 +38,23 @@ export function AccountingBills({ data }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-        <Input
-          placeholder="Search bills or vendors..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10 h-12 text-base"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Input
+            placeholder="Search bills or vendors..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 h-12 text-base"
+          />
+        </div>
+        <Button
+          size="sm"
+          className="h-12 gap-2"
+          onClick={() => toast({ title: "Coming soon", description: "Bill creation will be available in a future update." })}
+        >
+          <Plus className="w-4 h-4" /> Add Bill
+        </Button>
       </div>
 
       <Tabs value={subTab} onValueChange={setSubTab}>
