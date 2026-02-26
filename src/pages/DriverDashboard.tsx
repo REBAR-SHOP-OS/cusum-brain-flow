@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isValidDeliveryTransition } from "@/lib/deliveryTransitions";
@@ -73,6 +74,7 @@ const stopStatusColors: Record<string, string> = {
 };
 
 export default function DriverDashboard() {
+  const navigate = useNavigate();
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [podStopId, setPodStopId] = useState<string | null>(null);
   const [issueStopId, setIssueStopId] = useState<string | null>(null);
@@ -279,7 +281,7 @@ export default function DriverDashboard() {
                                 Mark Arrived
                               </Button>
                             )}
-                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setPodStopId(stop.id)}>
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => navigate(`/driver/dropoff/${stop.id}`)}>
                               <Camera className="w-3.5 h-3.5" />
                               Capture POD
                             </Button>
