@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useBudgets, Budget } from "@/hooks/useBudgets";
+import { useActuals, type ActualEntry } from "@/hooks/useActuals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,22 +16,11 @@ const MONTH_KEYS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct",
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 const pctFmt = (n: number) => (n >= 0 ? "+" : "") + n.toFixed(1) + "%";
 
-interface ActualEntry {
-  name: string;
-  category: string;
-  months: number[];
-}
-
-// Placeholder actuals — in production you'd pull from accounting_mirror or QuickBooks
-function useActuals(_year: number): ActualEntry[] {
-  return [];
-}
-
 export function BudgetVsActuals() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const { budgets, isLoading } = useBudgets(year);
-  const actuals = useActuals(year);
+  const { actuals } = useActuals(year);
   const currentMonth = new Date().getMonth();
 
   // Group budgets by category
