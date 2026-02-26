@@ -246,6 +246,95 @@ serve(async (req) => {
       }
     }
 
+    // ── Stripe-QB Reconciliation ──
+    // Check Stripe payments against cached payment links
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (stripeKey) {
+      try {
+        const { data: activeLinks } = await supabase
+          .from("stripe_payment_links")
+          .select("*")
+          .eq("company_id", companyId)
+          .eq("status", "active");
+
+        for (const link of activeLinks || []) {
+          // Check if this invoice is already matched
+          const { data: existingMatch } = await supabase
+            .from("reconciliation_matches")
+            .select("id")
+            .eq("company_id", companyId)
+            .eq("bank_txn_description", `stripe:${link.qb_invoice_id}`)
+            .maybeSingle();
+
+          if (existingMatch) continue;
+
+          // Query Stripe for completed checkout sessions for this payment link
+          try {
+            const sessionsRes = await fetch(
+              `https://api.stripe.com/v1/checkout/sessions?payment_link=${link.stripe_payment_link_id}&status=complete&limit=5`,
+              { headers: { Authorization: `Bearer ${stripeKey}` } }
+            );
+            if (!sessionsRes.ok) continue;
+
+            const sessionsData = await sessionsRes.json();
+            for (const session of sessionsData.data || []) {
+              if (session.payment_status !== "paid") continue;
+
+              const paidAmount = (session.amount_total || 0) / 100;
+              const amountMatch = Math.abs(paidAmount - Number(link.amount)) < 0.01;
+
+              // Find corresponding QB invoice in mirror
+              const { data: mirrorInvoice } = await supabase
+                .from("accounting_mirror")
+                .select("id, quickbooks_id, data")
+                .eq("company_id", companyId)
+                .eq("quickbooks_id", link.qb_invoice_id)
+                .eq("entity_type", "Invoice")
+                .maybeSingle();
+
+              const confidence = amountMatch ? 100 : 80;
+              const reason = amountMatch
+                ? `Stripe payment $${paidAmount} matches Invoice #${link.invoice_number} exactly`
+                : `Stripe payment $${paidAmount} for Invoice #${link.invoice_number}, amount mismatch (expected $${link.amount})`;
+
+              await supabase.from("reconciliation_matches").insert({
+                company_id: companyId,
+                bank_account_id: "stripe",
+                bank_txn_date: new Date(session.created * 1000).toISOString().split("T")[0],
+                bank_txn_amount: paidAmount,
+                bank_txn_description: `stripe:${link.qb_invoice_id}`,
+                matched_entity_type: "Invoice",
+                matched_entity_id: link.qb_invoice_id,
+                matched_mirror_id: mirrorInvoice?.id || null,
+                confidence,
+                match_reason: reason,
+                status: confidence === 100 ? "auto_matched" : "pending",
+              });
+
+              if (confidence === 100) {
+                autoMatchCount++;
+              } else {
+                pendingReviewCount++;
+                // Create human task for review
+                await supabase.from("human_tasks").insert({
+                  company_id: companyId,
+                  title: `💳 Stripe Payment Review: Invoice #${link.invoice_number} $${paidAmount}`,
+                  description: reason,
+                  severity: "info",
+                  category: "reconciliation_review",
+                  source: "auto-reconcile",
+                });
+              }
+            }
+          } catch (stripeErr) {
+            console.error("Stripe session check error:", stripeErr);
+          }
+        }
+      } catch (err) {
+        console.error("Stripe reconciliation error:", err);
+      }
+    }
+
     return json({
       total_processed: mirrorTxns.length,
       matched: autoMatchCount,

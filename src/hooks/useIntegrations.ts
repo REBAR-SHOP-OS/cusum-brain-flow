@@ -183,6 +183,34 @@ export function useIntegrations() {
         return statusData.status;
       }
 
+      // Stripe
+      if (integrationId === "stripe") {
+        const { data: statusData, error: statusError } = await supabase.functions.invoke(
+          "stripe-payment",
+          { body: { action: "check-status" } }
+        );
+
+        if (statusError) throw new Error(statusError.message);
+
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "stripe"
+              ? {
+                  ...i,
+                  status: statusData.status,
+                  error: statusData.error,
+                  lastSync: statusData.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+
+        if (statusData.status === "connected") {
+          toast({ title: "Stripe connected", description: `Connected as ${statusData.accountName}` });
+        }
+        return statusData.status;
+      }
+
       if (integrationId === "quickbooks") {
         const { data: statusData, error: statusError } = await supabase.functions.invoke(
           "quickbooks-oauth",
@@ -402,6 +430,30 @@ export function useIntegrations() {
       // Silently skip
     }
 
+    // Check Stripe
+    try {
+      const { data: stripeStatus } = await supabase.functions.invoke("stripe-payment", {
+        body: { action: "check-status" },
+      });
+
+      if (stripeStatus) {
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "stripe"
+              ? {
+                  ...i,
+                  status: stripeStatus.status,
+                  error: stripeStatus.error,
+                  lastSync: stripeStatus.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+      }
+    } catch (err) {
+      // Silently skip
+    }
+
     setLoading(false);
   }, []);
 
@@ -437,6 +489,27 @@ export function useIntegrations() {
   const startOAuth = useCallback(async (integrationId: string) => {
     try {
       const redirectUri = "https://erp.rebar.shop/integrations/callback";
+
+      // Stripe — key is already stored as a secret, just verify it works
+      if (integrationId === "stripe") {
+        const { data, error } = await supabase.functions.invoke("stripe-payment", {
+          body: { action: "check-status" },
+        });
+        if (error) throw new Error(error.message);
+        if (data.status === "connected") {
+          setIntegrations((prev) =>
+            prev.map((i) =>
+              i.id === "stripe"
+                ? { ...i, status: "connected" as const, error: undefined, lastSync: new Date().toLocaleTimeString() }
+                : i
+            )
+          );
+          toast({ title: "Stripe connected", description: `Connected as ${data.accountName}` });
+        } else {
+          throw new Error(data.error || "Stripe key is invalid");
+        }
+        return;
+      }
 
       // QuickBooks
       if (integrationId === "quickbooks") {

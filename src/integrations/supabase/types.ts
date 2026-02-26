@@ -2742,6 +2742,60 @@ export type Database = {
           },
         ]
       }
+      email_collected_documents: {
+        Row: {
+          amount: number | null
+          attachment_url: string | null
+          company_id: string
+          created_at: string | null
+          currency: string | null
+          document_date: string | null
+          document_type: string | null
+          email_id: string | null
+          extracted_data: Json | null
+          gmail_message_id: string | null
+          id: string
+          qb_entity_id: string | null
+          qb_entity_type: string | null
+          status: string | null
+          vendor_name: string | null
+        }
+        Insert: {
+          amount?: number | null
+          attachment_url?: string | null
+          company_id: string
+          created_at?: string | null
+          currency?: string | null
+          document_date?: string | null
+          document_type?: string | null
+          email_id?: string | null
+          extracted_data?: Json | null
+          gmail_message_id?: string | null
+          id?: string
+          qb_entity_id?: string | null
+          qb_entity_type?: string | null
+          status?: string | null
+          vendor_name?: string | null
+        }
+        Update: {
+          amount?: number | null
+          attachment_url?: string | null
+          company_id?: string
+          created_at?: string | null
+          currency?: string | null
+          document_date?: string | null
+          document_type?: string | null
+          email_id?: string | null
+          extracted_data?: Json | null
+          gmail_message_id?: string | null
+          id?: string
+          qb_entity_id?: string | null
+          qb_entity_type?: string | null
+          status?: string | null
+          vendor_name?: string | null
+        }
+        Relationships: []
+      }
       email_consent_events: {
         Row: {
           company_id: string
@@ -10636,6 +10690,51 @@ export type Database = {
           performance_score?: number | null
           recommendations?: Json | null
           ttfb_ms?: number | null
+        }
+        Relationships: []
+      }
+      stripe_payment_links: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string | null
+          currency: string | null
+          customer_name: string | null
+          id: string
+          invoice_number: string | null
+          qb_invoice_id: string
+          status: string | null
+          stripe_payment_link_id: string | null
+          stripe_price_id: string | null
+          stripe_url: string
+        }
+        Insert: {
+          amount: number
+          company_id: string
+          created_at?: string | null
+          currency?: string | null
+          customer_name?: string | null
+          id?: string
+          invoice_number?: string | null
+          qb_invoice_id: string
+          status?: string | null
+          stripe_payment_link_id?: string | null
+          stripe_price_id?: string | null
+          stripe_url: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string | null
+          currency?: string | null
+          customer_name?: string | null
+          id?: string
+          invoice_number?: string | null
+          qb_invoice_id?: string
+          status?: string | null
+          stripe_payment_link_id?: string | null
+          stripe_price_id?: string | null
+          stripe_url?: string
         }
         Relationships: []
       }

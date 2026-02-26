@@ -97,10 +97,7 @@ export const defaultIntegrations: Integration[] = [
     status: "available",
     icon: "stripe",
     docsUrl: "https://dashboard.stripe.com/apikeys",
-    fields: [
-      { key: "STRIPE_SECRET_KEY", label: "Secret Key", type: "password", placeholder: "sk_live_xxx or sk_test_xxx", helpText: "From Stripe Dashboard → Developers → API keys" },
-      { key: "STRIPE_WEBHOOK_SECRET", label: "Webhook Secret", type: "password", placeholder: "whsec_xxx", helpText: "From Stripe Dashboard → Developers → Webhooks" },
-    ],
+    fields: [],
   },
   {
     id: "twilio",

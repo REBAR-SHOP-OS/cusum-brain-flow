@@ -8,7 +8,8 @@ import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
 import { CustomerSelectDialog } from "./CustomerSelectDialog";
 import { CreateTransactionDialog } from "@/components/customers/CreateTransactionDialog";
-import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus } from "lucide-react";
+import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
@@ -235,6 +236,23 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                           </Button>
                           {inv.Balance > 0 && (
                             <>
+                              <Button
+                                size="sm" variant="ghost" className="h-9 w-9 p-0"
+                                title="Copy payment link"
+                                onClick={async () => {
+                                  try {
+                                    const { data } = await supabase.functions.invoke("stripe-payment", {
+                                      body: { action: "create-payment-link", amount: inv.Balance, currency: "cad", invoiceNumber: inv.DocNumber, customerName: inv.CustomerRef?.name, qbInvoiceId: inv.Id },
+                                    });
+                                    if (data?.paymentLink?.stripe_url) {
+                                      await navigator.clipboard.writeText(data.paymentLink.stripe_url);
+                                      toast({ title: "Copied!", description: "Stripe payment link copied" });
+                                    }
+                                  } catch { toast({ title: "Error generating link", variant: "destructive" }); }
+                                }}
+                              >
+                                <Link2 className="w-4 h-4" />
+                              </Button>
                               <Button
                                 size="sm" variant="ghost" className="h-9 gap-1"
                                 onClick={() => setSendTarget({ id: inv.Id, name: inv.CustomerRef?.name, doc: inv.DocNumber })}
