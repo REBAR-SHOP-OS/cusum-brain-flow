@@ -6,7 +6,9 @@ const STRIPE_API = "https://api.stripe.com/v1";
 
 async function stripeRequest(path: string, method: string, body?: Record<string, string>) {
   const key = Deno.env.get("STRIPE_SECRET_KEY");
-  if (!key) throw new Error("STRIPE_SECRET_KEY not configured");
+  if (!key) throw new Error("NO_KEY: STRIPE_SECRET_KEY not configured");
+  if (key.startsWith("pk_")) throw new Error("INVALID_KEY: Using publishable key instead of secret key");
+  if (key.startsWith("rk_")) throw new Error("INVALID_KEY: Restricted keys not supported");
 
   const opts: RequestInit = {
     method,
@@ -14,15 +16,48 @@ async function stripeRequest(path: string, method: string, body?: Record<string,
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
+    signal: AbortSignal.timeout(15000),
   };
   if (body && (method === "POST" || method === "PUT")) {
     opts.body = new URLSearchParams(body).toString();
   }
 
-  const res = await fetch(`${STRIPE_API}${path}`, opts);
+  let res: Response;
+  try {
+    res = await fetch(`${STRIPE_API}${path}`, opts);
+  } catch (e: any) {
+    if (e.name === "TimeoutError" || e.name === "AbortError") {
+      throw new Error("TIMEOUT: Stripe API request timed out after 15s");
+    }
+    throw e;
+  }
+
+  // Retry once on 5xx
+  if (res.status >= 500) {
+    console.warn(`Stripe 5xx (${res.status}), retrying in 2s…`);
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      res = await fetch(`${STRIPE_API}${path}`, opts);
+    } catch (e: any) {
+      if (e.name === "TimeoutError" || e.name === "AbortError") {
+        throw new Error("TIMEOUT: Stripe API request timed out after 15s (retry)");
+      }
+      throw e;
+    }
+  }
+
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || `Stripe ${res.status}`);
+  if (!res.ok) throw new Error(`API_ERROR: ${data?.error?.message || `Stripe ${res.status}`}`);
   return data;
+}
+
+function classifyError(e: any): { status: string; errorType: string; error: string } {
+  const msg = String(e?.message || e);
+  if (msg.startsWith("NO_KEY:")) return { status: "error", errorType: "no_key", error: msg.slice(8) };
+  if (msg.startsWith("INVALID_KEY:")) return { status: "error", errorType: "invalid_key", error: msg.slice(12) };
+  if (msg.startsWith("TIMEOUT:")) return { status: "error", errorType: "timeout", error: msg.slice(9) };
+  if (msg.startsWith("API_ERROR:")) return { status: "error", errorType: "api_error", error: msg.slice(10) };
+  return { status: "error", errorType: "unknown", error: msg };
 }
 
 serve(async (req) => {
@@ -51,7 +86,7 @@ serve(async (req) => {
           accountId: account.id,
         });
       } catch (e) {
-        return json({ status: "error", error: String(e) });
+        return json(classifyError(e));
       }
     }
 
@@ -133,15 +168,6 @@ serve(async (req) => {
 
     // ── list-payments (for reconciliation) ──
     if (action === "list-payments") {
-      const { qbInvoiceId } = params;
-      // Query Stripe for payment intents with our metadata
-      let path = "/payment_intents?limit=100";
-      if (qbInvoiceId) {
-        path += `&metadata[qb_invoice_id]=${encodeURIComponent(qbInvoiceId)}`;
-      }
-
-      // Note: Stripe metadata filtering only works on certain endpoints
-      // We'll query our cached links and check payment status
       const { data: links } = await supabase
         .from("stripe_payment_links")
         .select("*")
