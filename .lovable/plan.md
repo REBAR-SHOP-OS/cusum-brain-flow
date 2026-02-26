@@ -1,175 +1,164 @@
 
 
-# QuickBooks Integration Hardening Plan
+# QuickBooks Classic Accounting Parity -- Audit & Implementation Plan
 
-## PHASE 1 -- Dependency & Surface Audit (Complete)
+## PHASE 1: Audit Report
 
-### QB-Related Edge Functions
+### What Exists Now (Fully Implemented)
 
-| Function | Purpose | Direction |
-|----------|---------|-----------|
-| `quickbooks-oauth` (1,958 lines) | OAuth flow + ALL read/write operations (60+ actions) | Bidirectional |
-| `qb-sync-engine` (1,258 lines) | Backfill, incremental sync, reconcile, bank activity | Inbound (QB -> ERP) |
-| `qb-webhook` (184 lines) | Receives Intuit webhook notifications | Inbound |
-| `qb-audit` (72 lines) | AI-powered forensic audit of QB data | Read-only |
-| `relink-orphan-invoices` | Re-links orphaned invoice mirror records | Read + repair |
-| `penny-auto-actions` | Auto-collection actions, triggers QB sync | Read + AI |
-| `vizzy-daily-brief` | Executive briefing with QB financials | Read-only |
-| `daily-summary` | Daily digest including QB AR/AP | Read-only |
-| `auto-reconcile` | AI-assisted bank reconciliation | Read + match |
+| Capability | Edge Function | UI Component | Status |
+|---|---|---|---|
+| Customer sync (two-way) | `quickbooks-oauth` (`update-customer`) | `AccountingCustomers` | Complete |
+| Invoice create/update/void/send | `quickbooks-oauth` (4 actions) | `AccountingInvoices`, `InvoiceEditor` | Complete |
+| Estimate create | `quickbooks-oauth` (`create-estimate`) | `CreateTransactionDialog`, `AccountingAccounts` | Complete |
+| Estimate -> Invoice conversion | `quickbooks-oauth` (`convert-estimate-to-invoice`) | `AccountingAccounts` | Complete |
+| Payment create (single + multi-invoice) | `quickbooks-oauth` (`create-payment`) | `CreateTransactionDialog` | Complete |
+| Credit Memo create | `quickbooks-oauth` (`create-credit-memo`) | `CreateTransactionDialog` | Complete |
+| Sales Receipt create/list | `quickbooks-oauth` | `AccountingSalesReceipts` | Complete |
+| Refund Receipt create/list | `quickbooks-oauth` | `AccountingRefundReceipts` | Complete |
+| Bill create + Bill Payment | `quickbooks-oauth` | `AccountingBills`, `BillPaymentDialog` | Complete |
+| Deposit/Transfer/Journal Entry | `quickbooks-oauth` | Dedicated tabs | Complete |
+| Purchase Order create | `quickbooks-oauth` | -- | Complete (API only) |
+| Vendor create/update | `quickbooks-oauth` | `AccountingVendors`, `AddVendorDialog` | Complete |
+| A/R Aging Report (30/60/90) | `quickbooks-oauth` (`get-aged-receivables`) | `AccountingAgedReceivables` | Complete |
+| A/P Aging Report | `quickbooks-oauth` (`get-aged-payables`) | `AccountingAgedPayables` | Complete |
+| P&L / Balance Sheet / GL / Trial Balance | `quickbooks-oauth` (4 actions) | `AccountingQBReport` | Complete |
+| Cash Flow / Tax Summary | `quickbooks-oauth` | `AccountingCashFlow`, `TaxFilingSummary` | Complete |
+| Customer Statement | `quickbooks-oauth` (`customer-statement`) | `AccountingStatements` | Complete (with local fallback) |
+| Attachments | `quickbooks-oauth` (`upload-attachment`, `list-attachments`) | `AccountingAttachments`, `QBAttachmentUploader` | Complete |
+| Webhook (inbound, HMAC verified, deduped) | `qb-webhook` | -- | Hardened |
+| Sync Engine (incremental, locking, retries) | `qb-sync-engine` | -- | Hardened |
+| Token refresh (proactive + reactive) | `quickbooks-oauth` | -- | Complete |
+| Classes / Departments | `quickbooks-oauth` | `ClassDepartmentPicker` | Complete |
+| Void vs Delete | `quickbooks-oauth` (separate actions) | Confirmation dialogs | Complete |
+| Open/Paid/Overdue invoice views | -- | `AccountingInvoices` (filters + badges) | Complete |
+| Quotation documents (PDF template) | -- | `QuotationTemplate`, `EstimationTemplate` | Complete |
+| E-Signature on quotes | -- | `ESignatureDialog` | Complete |
+| Budget vs Actuals | -- | `BudgetVsActuals`, `BudgetManagement` | Complete |
+| Three-Way Matching | -- | `ThreeWayMatchingManager` | Complete |
+| AR aging escalation (automated) | `ar-aging-escalation` | -- | Complete |
 
-### DB Tables Storing QB IDs
+### What Is Missing
 
-| Table | QB Column(s) | Unique Constraint? |
-|-------|-------------|-------------------|
-| `customers` | `quickbooks_id` | `onConflict: "quickbooks_id"` (upsert) |
-| `orders` | `quickbooks_invoice_id` | None (checked client-side) |
-| `accounting_mirror` | `quickbooks_id` | `onConflict: "quickbooks_id"` (upsert) |
-| `qb_accounts` | `qb_id` | `onConflict: "company_id,qb_id"` |
-| `qb_customers` | `qb_id` | `onConflict: "company_id,qb_id"` |
-| `qb_vendors` | `qb_id` | `onConflict: "company_id,qb_id"` |
-| `qb_items` | `qb_id` | `onConflict: "company_id,qb_id"` |
-| `qb_transactions` | `qb_id` | `onConflict: "company_id,qb_id,entity_type"` |
-| `qb_classes` | `qb_id` | `onConflict: "company_id,qb_id"` |
-| `qb_departments` | `qb_id` | `onConflict: "company_id,qb_id"` |
-| `qb_bank_activity` | `qb_account_id` | `onConflict: "company_id,qb_account_id"` |
-| `qb_company_info` | `qb_realm_id` | `onConflict: "company_id,qb_realm_id"` |
-| `qb_webhook_events` | `realm_id + entity_id` | **NO unique index** (only PK + realm index) |
-| `qb_sync_logs` | -- | None |
-
-### Write Paths to QB (Outbound)
-
-All via `quickbooks-oauth`: `create-invoice`, `create-payment`, `create-bill`, `create-credit-memo`, `create-estimate`, `create-purchase-order`, `create-vendor`, `create-account`, `create-item`, `create-journal-entry`, `create-sales-receipt`, `create-refund-receipt`, `create-deposit`, `create-transfer`, `create-bill-payment`, `create-purchase`, `update-customer`, `update-vendor`, `update-invoice`, `update-employee`, `delete-transaction`, `void-transaction`, `void-invoice`, `send-invoice`, `upload-attachment`, `convert-estimate-to-invoice`
-
-### Inbound Webhook Paths
-
-`qb-webhook` receives Intuit notifications -> looks up company by `realm_id` -> dedup check (time-based, **not** unique index) -> inserts to `qb_webhook_events` -> triggers `qb-sync-engine` incremental sync
-
----
-
-## Identified Gaps
-
-### Security
-1. **Signature verification uses non-constant-time comparison** (`computed === signature` at line 18 of qb-webhook). Vulnerable to timing attacks.
-2. **Dedup is time-window based** (60-second `.gte()` query), not a unique constraint. Race conditions can allow duplicates.
-3. **No unique index on webhook events** for `(realm_id, entity_type, entity_id, operation)`.
-
-### Idempotency
-4. **Invoice creation** has server-side guard only for `orderId`-linked invoices. Direct `create-invoice` calls without `orderId` have no dedup.
-5. **No single-flight lock** on `qb-sync-engine`. Parallel webhook events for the same company can trigger concurrent backfill/incremental runs.
-
-### Timeouts & Retries
-6. **No fetch timeout** on QB API calls. Deno `fetch` has no built-in timeout; a hung connection blocks the edge function indefinitely.
-7. **Retry logic only covers 429 and 401**. Transient server errors (502/503/504) are not retried.
-8. **No jitter** in backoff calculation (`Math.min(1000 * Math.pow(2, retries), 10000)` is deterministic).
-
-### Observability
-9. **No structured logging** with `company_id`, `duration_ms`, `status_code`, `retry_count` per QB API call.
-10. **Failed QB writes are not persisted** to any failure table. Console logs only.
+| Gap | Priority | Detail |
+|---|---|---|
+| **A) Audit trail logging** | **P0** | No `activity_events` entries for QB creates/updates/voids/payments. The accountant has no audit trail of who did what. |
+| **B) Tax code / discount / shipping on line items** | **P1** | `create-invoice` and `create-estimate` payloads do not support `TaxCodeRef`, `DiscountLineDetail`, or shipping line items. The 13% HST is calculated client-side only. |
+| **C) Invoice Terms (Net 15/30/60)** | **P1** | No `SalesTermRef` sent on invoice creation. QB defaults are used but not configurable per-company. |
+| **D) Per-company QB configuration** | **P1** | No `qb_company_config` table for default income account, tax code, payment method mapping, invoice terms, numbering preference. |
+| **E) Reconciliation issues table** | **P1** | No `qb_reconciliation_issues` table to track mismatched balances, missing invoices/payments, stale statuses. |
+| **F) Payment idempotency** | **P1** | `create-payment` has no server-side dedupe. If called twice with the same invoice+amount+date, it creates a duplicate in QB. |
+| **G) Estimate idempotency** | **P1** | `create-estimate` has no dedupe guard. |
+| **H) Credit memo idempotency** | **P1** | `create-credit-memo` has no dedupe guard. |
+| **I) CSV export for invoice/payment views** | **P2** | No export button on invoices or payments tables. |
+| **J) Scheduled reconciliation job** | **P2** | No cron that pulls QB `LastUpdatedTime` changes and flags drift. |
 
 ---
 
-## Implementation Plan
+## PHASE 2: Implementation Plan (P0 + P1)
 
-### Migration 1: Webhook Dedupe Unique Index + Sync Lock Table
+### Migration 1: Audit Trail + Idempotency + Config Tables
 
 ```sql
--- Unique composite index for webhook dedup (replaces time-window query)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_qb_webhook_events_dedupe 
-  ON public.qb_webhook_events (realm_id, entity_type, entity_id, operation)
-  WHERE processed_at IS NULL;
+-- 1) QB Company Config (per-company defaults)
+CREATE TABLE IF NOT EXISTS public.qb_company_config (
+  company_id UUID PRIMARY KEY REFERENCES public.companies(id),
+  default_income_account_id TEXT,
+  default_tax_code TEXT DEFAULT 'TAX',
+  default_payment_method TEXT,
+  default_sales_term TEXT DEFAULT 'Net 30',
+  use_qb_numbering BOOLEAN DEFAULT true,
+  default_class_id TEXT,
+  default_department_id TEXT,
+  config JSONB DEFAULT '{}',
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE public.qb_company_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service role access qb_company_config"
+  ON public.qb_company_config FOR ALL USING (true) WITH CHECK (true);
 
--- Add dedupe_key column for stronger dedup
-ALTER TABLE public.qb_webhook_events 
-  ADD COLUMN IF NOT EXISTS dedupe_key TEXT GENERATED ALWAYS AS 
-    (realm_id || ':' || entity_type || ':' || entity_id || ':' || operation) STORED;
-
--- Sync lock table for single-flight protection
-CREATE TABLE IF NOT EXISTS public.qb_sync_locks (
+-- 2) Reconciliation issues table
+CREATE TABLE IF NOT EXISTS public.qb_reconciliation_issues (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   company_id UUID NOT NULL,
-  action TEXT NOT NULL,
-  locked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  locked_by TEXT,
-  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '10 minutes'),
-  PRIMARY KEY (company_id, action)
-);
-ALTER TABLE public.qb_sync_locks ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Service role full access qb_sync_locks" 
-  ON public.qb_sync_locks FOR ALL USING (true) WITH CHECK (true);
-
--- QB API failure log table
-CREATE TABLE IF NOT EXISTS public.qb_api_failures (
-  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  company_id UUID,
-  realm_id TEXT,
-  endpoint TEXT NOT NULL,
-  operation TEXT,
-  status_code INTEGER,
-  duration_ms INTEGER,
-  retry_count INTEGER DEFAULT 0,
-  error_message TEXT,
-  request_summary JSONB,
-  correlation_id TEXT,
-  next_retry_at TIMESTAMPTZ,
+  issue_type TEXT NOT NULL, -- 'balance_mismatch', 'missing_invoice', 'missing_payment', 'stale_status'
+  entity_type TEXT NOT NULL, -- 'Invoice', 'Payment', 'CreditMemo'
+  entity_id TEXT,
+  qb_value JSONB,
+  erp_value JSONB,
+  severity TEXT DEFAULT 'warning', -- 'info', 'warning', 'error'
   resolved_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now()
 );
-CREATE INDEX idx_qb_api_failures_company ON public.qb_api_failures (company_id, created_at DESC);
-ALTER TABLE public.qb_api_failures ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Service role full access qb_api_failures" 
-  ON public.qb_api_failures FOR ALL USING (true) WITH CHECK (true);
+CREATE INDEX idx_qb_recon_company ON public.qb_reconciliation_issues(company_id, created_at DESC);
+ALTER TABLE public.qb_reconciliation_issues ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service role access qb_reconciliation_issues"
+  ON public.qb_reconciliation_issues FOR ALL USING (true) WITH CHECK (true);
 ```
 
-### Change 2: `qb-webhook/index.ts` -- Constant-time comparison + dedupe via unique index
+### Change 1: Audit Trail Logging in `quickbooks-oauth`
 
-- Replace `computed === signature` with a constant-time comparison using `crypto.subtle.verify` or byte-by-byte XOR comparison
-- Replace the 60-second time-window dedup query with an `INSERT ... ON CONFLICT DO NOTHING` using the new unique index
-- Check the insert result: if no rows returned, the event is a duplicate
+Add `activity_events` inserts after every successful QB write operation:
 
-### Change 3: `qb-sync-engine/index.ts` -- Single-flight lock + timeouts + structured logging
+- `handleCreateInvoice` -> log `qb_invoice_created` with `{ docNumber, customerId, totalAmount, userId }`
+- `handleCreateEstimate` -> log `qb_estimate_created`
+- `handleCreatePayment` -> log `qb_payment_created`
+- `handleCreateCreditMemo` -> log `qb_credit_memo_created`
+- `handleVoidInvoice` -> log `qb_invoice_voided`
+- `handleSendInvoice` -> log `qb_invoice_sent`
+- `handleConvertEstimateToInvoice` -> log `qb_estimate_converted`
+- `handleUpdateInvoice` -> log `qb_invoice_updated`
 
-- Add `acquireLock(svc, companyId, action)` and `releaseLock(svc, companyId, action)` functions using `qb_sync_locks`
-- Wrap the main handler with lock acquisition; return 409 if already locked
-- Auto-expire stale locks (> 10 minutes old)
-- Add `AbortController` with 15-second timeout to all `fetch()` calls inside `qbFetch`
-- Extend retry logic: retry on 502/503/504 in addition to 429
-- Add jitter to backoff: `delay * (0.5 + Math.random() * 0.5)`
-- Add structured log entries for each QB API call: `{ company_id, realm_id, endpoint, duration_ms, status_code, retry_count }`
-- On failure, insert into `qb_api_failures` table
+Each log entry will include `company_id`, `user_id`, `entity_type`, `entity_id`, and a JSONB snapshot. This gives the accountant a complete audit trail.
 
-### Change 4: `quickbooks-oauth/index.ts` -- Timeout + retry hardening on `qbFetch`
+### Change 2: Payment Idempotency Guard
 
-- Add `AbortController` with 15-second timeout
-- Extend retry to cover 502/503/504 (transient server errors)
-- Add jitter to backoff
-- Never retry non-429 4xx errors
-- Add structured logging helper
+In `handleCreatePayment`, add a server-side dedupe check before calling QB:
 
-### Change 5: Shared utility `_shared/qbHttp.ts`
+```
+-- Before creating payment, query qb_transactions for existing payment
+-- with same company_id + customer QB ID + linked invoice ID + amount + date
+-- If found, return existing payment instead of creating duplicate
+```
 
-Create a shared module with:
-- `constantTimeEqual(a: string, b: string): boolean` -- timing-safe string comparison
-- `qbFetchWithTimeout(url, options, timeoutMs)` -- fetch wrapper with AbortController
-- `isTransientError(status: number): boolean` -- returns true for 429, 502, 503, 504
-- `backoffWithJitter(retryCount: number): number` -- exponential backoff with jitter
+This mirrors the existing `orderId` guard on `handleCreateInvoice`.
 
-### No Changes To
+### Change 3: Tax Code + Terms Support on Invoice/Estimate Creation
 
-- Business logic / workflows
-- QuickBooks integration itself (no removal)
-- UI components
-- Existing `qb_sync_logs` table structure
-- Any accounting rules or trial balance checks
+Extend `handleCreateInvoice` and `handleCreateEstimate` payloads to accept:
+- `taxCodeRef` (e.g., `"TAX"` or `"NON"`) added to each `SalesItemLineDetail`
+- `salesTermRef` (e.g., `"3"` for Net 30) added to Invoice payload
+- `discountPercent` or `discountAmount` as a `DiscountLineDetail` line
+- `shippingAmount` as a separate line with `DetailType: "SalesItemLineDetail"` using the Shipping item
 
-### Risk Level: Low
+If not provided by the client, the edge function will look up `qb_company_config` for the company's defaults.
 
-All changes are additive guards. No business logic is modified. The unique index on `qb_webhook_events` uses a partial index (`WHERE processed_at IS NULL`) so it won't conflict with historical processed events.
+### Change 4: Per-Company Config Lookup
 
-### Deployment Order
+Add a helper `getCompanyQBConfig(supabase, companyId)` that fetches from `qb_company_config`. Used by invoice/estimate/payment creation to apply defaults when the client doesn't specify tax codes or terms.
 
-1. Run migration (creates index + lock table + failure table)
-2. Deploy `_shared/qbHttp.ts` shared utility
-3. Deploy `qb-webhook` with constant-time comparison + INSERT dedup
-4. Deploy `qb-sync-engine` with single-flight lock + timeout + retry hardening
-5. Deploy `quickbooks-oauth` with timeout + retry hardening
+### Change 5: CSV Export on Invoices & Payments
+
+Add an "Export CSV" button to `AccountingInvoices` and `AccountingPayments` that exports the currently filtered data. Client-side only using the existing `@e965/xlsx` dependency.
+
+---
+
+## What Will NOT Change
+
+- All existing UI workflows remain identical
+- No QB objects will be removed or restructured
+- No changes to webhook, sync engine, or token refresh logic (already hardened)
+- No changes to existing DB tables (additive only)
+- Existing `CreateTransactionDialog` continues to work as-is
+
+## Deployment Order
+
+1. Run DB migration (config table + reconciliation table)
+2. Update `quickbooks-oauth` edge function (audit logging + idempotency + tax/terms)
+3. Add CSV export buttons to `AccountingInvoices` and `AccountingPayments`
+4. Deploy edge function
+
+## Risk Level: Low
+
+All changes are additive. Audit logging is fire-and-forget (wrapped in try/catch). Idempotency guards return existing data on duplicate calls. Tax/terms fields are optional with fallback to current behavior.
 
