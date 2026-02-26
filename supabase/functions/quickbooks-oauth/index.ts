@@ -532,6 +532,15 @@ serve(async (req) => {
         return jsonRes(syncData, syncRes.status);
       }
 
+      // ── Generic QB Query ───────────────────────────────────────
+      case "query": {
+        const queryStr = body.query as string;
+        if (!queryStr) return jsonRes({ error: "Missing 'query' parameter" }, 400);
+        const config = await getQBConfig(supabase, userId);
+        const data = await qbFetch(config, `query?query=${encodeURIComponent(queryStr)}`, undefined, 0, config._refreshContext);
+        return jsonRes(data);
+      }
+
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
