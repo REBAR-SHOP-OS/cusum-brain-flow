@@ -27,6 +27,7 @@ export interface StationItem {
   plan_name: string;
   project_name: string | null;
   project_id: string | null;
+  customer_name: string | null;
 }
 
 export interface BarSizeGroup {
@@ -49,7 +50,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
         // Bender: show ALL bend items that are cut_done or bending (regardless of machine assignment)
       let benderQuery = supabase
           .from("cut_plan_items")
-          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id)")
+          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(customers(name)))")
           .eq("bend_type", "bend")
           .eq("cut_plans.company_id", companyId!)
           .or("phase.eq.cut_done,phase.eq.bending");
@@ -70,13 +71,14 @@ export function useStationData(machineId: string | null, machineType?: string, p
           plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
           project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
           project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
+          customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
         })) as StationItem[];
       }
 
       // Cutter / default: plans assigned to this machine or unassigned, scoped by company
       let cutterQuery = supabase
         .from("cut_plans")
-        .select("id, name, project_name, project_id, machine_id")
+        .select("id, name, project_name, project_id, machine_id, projects(customers(name))")
         .eq("company_id", companyId!)
         .eq("machine_id", machineId)
         .in("status", ["draft", "queued", "running"]);
@@ -112,6 +114,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
             plan_name: plan?.name || "",
             project_name: plan?.project_name || null,
             project_id: plan?.project_id || null,
+            customer_name: (plan?.projects as any)?.customers?.name || null,
           } as StationItem;
         });
     },
