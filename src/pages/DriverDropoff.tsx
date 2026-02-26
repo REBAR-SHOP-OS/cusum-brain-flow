@@ -5,8 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { SignaturePad } from "@/components/shopfloor/SignaturePad";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Camera, MapPin, CheckCircle2, Loader2, RotateCcw, Package } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -28,6 +27,7 @@ export default function DriverDropoff() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [signatureData, setSignatureData] = useState<string | null>(null);
+  const [driverSignatureData, setDriverSignatureData] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -54,18 +54,18 @@ export default function DriverDropoff() {
     enabled: !!stop?.delivery_id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("packing_slips" as any)
+        .from("packing_slips")
         .select("*")
         .eq("delivery_id", stop!.delivery_id)
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as any;
+      return data;
     },
   });
 
   const deliveryNumber = (stop as any)?.deliveries?.delivery_number || "";
-  const items: SlipItem[] = packingSlip?.items_json || [];
+  const items: SlipItem[] = (packingSlip?.items_json as unknown as SlipItem[]) || [];
   const totalQty = items.reduce((s, i) => s + i.total_pieces, 0);
   const allChecked = items.length > 0 && checkedItems.size === items.length;
 
@@ -79,20 +79,14 @@ export default function DriverDropoff() {
   };
 
   const toggleAll = () => {
-    if (allChecked) {
-      setCheckedItems(new Set());
-    } else {
-      setCheckedItems(new Set(items.map((_, i) => i)));
-    }
+    if (allChecked) setCheckedItems(new Set());
+    else setCheckedItems(new Set(items.map((_, i) => i)));
   };
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error("File too large — max 10 MB");
-      return;
-    }
+    if (file.size > MAX_FILE_SIZE) { toast.error("File too large — max 10 MB"); return; }
     setPhotoFile(file);
     setPhotoPreview(URL.createObjectURL(file));
   };
@@ -129,13 +123,12 @@ export default function DriverDropoff() {
       const { error } = await supabase.from("delivery_stops").update(updates).eq("id", stopId);
       if (error) throw error;
 
-      // Update packing slips + auto-complete delivery
       if (stop?.delivery_id) {
         if (signaturePath || photoPath) {
           const slipUpdates: Record<string, unknown> = { status: "delivered" };
           if (signaturePath) slipUpdates.signature_path = signaturePath;
           if (photoPath) slipUpdates.site_photo_path = photoPath;
-          await supabase.from("packing_slips" as any).update(slipUpdates).eq("delivery_id", stop.delivery_id);
+          await supabase.from("packing_slips").update(slipUpdates).eq("delivery_id", stop.delivery_id);
         }
 
         const { data: allStops } = await supabase
@@ -163,222 +156,228 @@ export default function DriverDropoff() {
   };
 
   const canSubmit = !saving && !!signatureData && !!photoFile && (items.length === 0 || allChecked);
+  const today = format(new Date(), "MMM d, yyyy");
 
   return (
-    <div className="flex flex-col min-h-[100dvh] bg-background">
-      {/* Header */}
-      <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card sticky top-0 z-10">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/driver")}>
+    <div className="flex flex-col min-h-[100dvh] bg-white text-black">
+      {/* Top nav bar */}
+      <header className="flex items-center gap-2 px-3 py-2 border-b border-black/20 bg-white sticky top-0 z-10">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/driver")} className="text-black">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-bold tracking-tight">DROP-OFF</h1>
-          {deliveryNumber && (
-            <p className="text-xs text-muted-foreground truncate">{deliveryNumber}</p>
-          )}
-        </div>
+        <h1 className="text-base font-bold tracking-tight uppercase">Packing Slip</h1>
       </header>
 
-      {/* Address bar */}
-      {stop?.address && (
-        <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm min-w-0">
-            <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-            <span className="truncate">{stop.address}</span>
+      <div className="flex-1 overflow-y-auto">
+        {/* ═══ PACKING SLIP DOCUMENT ═══ */}
+        <div className="mx-auto max-w-[640px] p-3">
+
+          {/* Company Header */}
+          <div className="border-2 border-black">
+            <div className="flex justify-between items-start px-4 py-3 border-b border-black">
+              <div>
+                <p className="text-lg font-black tracking-tight">Rebar.Shop Inc</p>
+                <p className="text-[11px] leading-tight">7045 Edwards Blvd, Suite 401</p>
+                <p className="text-[11px] leading-tight">Mississauga, ON L5S 1X2</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xl font-black uppercase tracking-wide">Packing Slip</p>
+              </div>
+            </div>
+
+            {/* Row 1: Customer | Ship To | Delivery # | Delivery Date */}
+            <div className="grid grid-cols-4 border-b border-black text-[11px]">
+              <div className="border-r border-black px-2 py-1.5">
+                <p className="font-bold uppercase text-[9px] tracking-widest text-gray-600">Customer</p>
+                <p className="font-semibold mt-0.5 break-words">{packingSlip?.customer_name || "—"}</p>
+              </div>
+              <div className="border-r border-black px-2 py-1.5">
+                <p className="font-bold uppercase text-[9px] tracking-widest text-gray-600">Ship To</p>
+                <p className="font-semibold mt-0.5 break-words">{packingSlip?.ship_to || stop?.address || "—"}</p>
+              </div>
+              <div className="border-r border-black px-2 py-1.5">
+                <p className="font-bold uppercase text-[9px] tracking-widest text-gray-600">Delivery #</p>
+                <p className="font-semibold mt-0.5">{deliveryNumber || "—"}</p>
+              </div>
+              <div className="px-2 py-1.5">
+                <p className="font-bold uppercase text-[9px] tracking-widest text-gray-600">Delivery Date</p>
+                <p className="font-semibold mt-0.5">{today}</p>
+              </div>
+            </div>
+
+            {/* Row 2: Invoice # | Invoice Date | Scope */}
+            <div className="grid grid-cols-3 border-b border-black text-[11px]">
+              <div className="border-r border-black px-2 py-1.5">
+                <p className="font-bold uppercase text-[9px] tracking-widest text-gray-600">Invoice #</p>
+                <p className="font-semibold mt-0.5">{packingSlip?.invoice_number || "—"}</p>
+              </div>
+              <div className="border-r border-black px-2 py-1.5">
+                <p className="font-bold uppercase text-[9px] tracking-widest text-gray-600">Invoice Date</p>
+                <p className="font-semibold mt-0.5">
+                  {packingSlip?.invoice_date ? format(new Date(packingSlip.invoice_date), "MMM d, yyyy") : "—"}
+                </p>
+              </div>
+              <div className="px-2 py-1.5">
+                <p className="font-bold uppercase text-[9px] tracking-widest text-gray-600">Scope</p>
+                <p className="font-semibold mt-0.5 break-words">{packingSlip?.scope || "—"}</p>
+              </div>
+            </div>
+
+            {/* ═══ Items Table ═══ */}
+            <table className="w-full border-collapse text-[11px]">
+              <thead>
+                <tr className="bg-gray-100 border-b border-black">
+                  <th className="w-8 border-r border-black px-1 py-1.5 text-center font-bold text-[9px] uppercase tracking-wider">✓</th>
+                  <th className="border-r border-black px-2 py-1.5 text-left font-bold text-[9px] uppercase tracking-wider">DW#</th>
+                  <th className="border-r border-black px-2 py-1.5 text-left font-bold text-[9px] uppercase tracking-wider">Mark</th>
+                  <th className="border-r border-black px-2 py-1.5 text-left font-bold text-[9px] uppercase tracking-wider">Qty × Size</th>
+                  <th className="border-r border-black px-2 py-1.5 text-left font-bold text-[9px] uppercase tracking-wider">Type</th>
+                  <th className="px-2 py-1.5 text-right font-bold text-[9px] uppercase tracking-wider">Cut Length</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, idx) => (
+                  <tr
+                    key={idx}
+                    onClick={() => toggleItem(idx)}
+                    className={`border-b border-black/40 cursor-pointer active:bg-gray-100 transition-colors ${
+                      checkedItems.has(idx) ? "bg-green-50" : ""
+                    }`}
+                  >
+                    <td className="border-r border-black/40 px-1 py-2 text-center">
+                      <div
+                        className={`w-5 h-5 mx-auto border-2 rounded flex items-center justify-center transition-colors ${
+                          checkedItems.has(idx)
+                            ? "bg-green-600 border-green-600 text-white"
+                            : "border-black/50"
+                        }`}
+                      >
+                        {checkedItems.has(idx) && (
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                    </td>
+                    <td className="border-r border-black/40 px-2 py-2 font-medium">{item.drawing_ref || "—"}</td>
+                    <td className="border-r border-black/40 px-2 py-2">{item.mark_number || "—"}</td>
+                    <td className="border-r border-black/40 px-2 py-2 font-semibold tabular-nums">
+                      {item.total_pieces} × {item.bar_code}
+                    </td>
+                    <td className="border-r border-black/40 px-2 py-2">
+                      {item.asa_shape_code ? "Bent" : "Straight"}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums">
+                      {(item.cut_length_mm / 1000).toFixed(2)}m
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-black bg-gray-100">
+                  <td className="border-r border-black px-1 py-2 text-center">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleAll(); }}
+                      className="text-[9px] font-bold uppercase text-blue-700 underline"
+                    >
+                      {allChecked ? "None" : "All"}
+                    </button>
+                  </td>
+                  <td colSpan={2} className="border-r border-black/40 px-2 py-2 font-bold">Total</td>
+                  <td className="border-r border-black/40 px-2 py-2 font-bold tabular-nums">{totalQty} pcs</td>
+                  <td colSpan={2} className="px-2 py-2 text-right text-[10px] text-gray-600">
+                    {checkedItems.size}/{items.length} verified
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* ═══ Signature Areas ═══ */}
+            <div className="grid grid-cols-2 border-t border-black">
+              {/* Delivered By */}
+              <div className="border-r border-black px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600 mb-1">Delivered By (Driver)</p>
+                <SignaturePad
+                  onSignatureChange={setDriverSignatureData}
+                  width={280}
+                  height={100}
+                  className="[&_div]:border-black/30 [&_div]:rounded-none [&_div]:border-b-2 [&_div]:border-t-0 [&_div]:border-l-0 [&_div]:border-r-0 [&_div]:bg-transparent"
+                />
+              </div>
+              {/* Received By */}
+              <div className="px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600 mb-1">Received By (Customer)</p>
+                <SignaturePad
+                  onSignatureChange={setSignatureData}
+                  width={280}
+                  height={100}
+                  className="[&_div]:border-black/30 [&_div]:rounded-none [&_div]:border-b-2 [&_div]:border-t-0 [&_div]:border-l-0 [&_div]:border-r-0 [&_div]:bg-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-black px-3 py-2 text-center text-[9px] text-gray-500">
+              Rebar.Shop Inc · Tel: (905) 362-2262 · info@rebar.shop · www.rebar.shop
+            </div>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="flex-shrink-0 gap-1.5 text-xs"
-            onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(stop.address!)}`, "_blank")}
-          >
-            Navigate
-          </Button>
-        </div>
-      )}
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-
-        {/* Packing Slip Header */}
-        {packingSlip && (
-          <section className="rounded-xl border border-border bg-card p-4 space-y-2">
-            <div className="flex items-center gap-2 mb-1">
-              <Package className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Packing Slip</span>
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Customer</p>
-                <p className="font-semibold truncate">{packingSlip.customer_name || "—"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Slip #</p>
-                <p className="font-semibold">{packingSlip.slip_number || "—"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Invoice #</p>
-                <p className="font-semibold">{packingSlip.invoice_number || "—"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Scope</p>
-                <p className="font-semibold truncate">{packingSlip.scope || "—"}</p>
-              </div>
-              {packingSlip.invoice_date && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Invoice Date</p>
-                  <p className="font-semibold">{format(new Date(packingSlip.invoice_date), "MMM d, yyyy")}</p>
-                </div>
-              )}
-              {packingSlip.ship_to && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Ship To</p>
-                  <p className="font-semibold truncate">{packingSlip.ship_to}</p>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Items Checklist */}
-        {items.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                📦 Delivery Items
-              </label>
-              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1.5" onClick={toggleAll}>
-                {allChecked ? "Uncheck All" : "Check All"}
-              </Button>
-            </div>
-
-            <div className="rounded-xl border border-border overflow-hidden bg-card">
-              {/* Table header */}
-              <div className="grid grid-cols-[2rem_1fr_1fr_auto_auto] gap-1 px-3 py-2 bg-muted/50 text-[10px] uppercase tracking-widest text-muted-foreground font-semibold border-b border-border">
-                <span />
-                <span>DW# / Mark</span>
-                <span>Size</span>
-                <span className="text-right">Qty</span>
-                <span className="text-right">Length</span>
-              </div>
-
-              {/* Items */}
-              {items.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => toggleItem(idx)}
-                  className={`grid grid-cols-[2rem_1fr_1fr_auto_auto] gap-1 px-3 py-3 border-b border-border last:border-b-0 items-center cursor-pointer active:bg-muted/50 transition-colors ${
-                    checkedItems.has(idx) ? "bg-primary/5" : ""
-                  }`}
-                >
-                  <Checkbox
-                    checked={checkedItems.has(idx)}
-                    onCheckedChange={() => toggleItem(idx)}
-                    className="h-5 w-5"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{item.drawing_ref || "—"}</p>
-                    <p className="text-xs text-muted-foreground truncate">{item.mark_number || "—"}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm">{item.bar_code}</p>
-                    <p className="text-xs text-muted-foreground">{item.asa_shape_code ? "Bent" : "Straight"}</p>
-                  </div>
-                  <p className="text-sm font-semibold tabular-nums text-right w-8">{item.total_pieces}</p>
-                  <p className="text-xs text-muted-foreground tabular-nums text-right w-14">
-                    {(item.cut_length_mm / 1000).toFixed(2)}m
-                  </p>
-                </div>
-              ))}
-
-              {/* Total row */}
-              <div className="grid grid-cols-[2rem_1fr_1fr_auto_auto] gap-1 px-3 py-2 bg-muted/50 items-center font-semibold text-sm">
-                <span />
-                <span>Total</span>
-                <span />
-                <span className="text-right tabular-nums w-8">{totalQty}</span>
-                <span className="w-14" />
-              </div>
-            </div>
-
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              {checkedItems.size}/{items.length} items verified
+          {/* ═══ Site Photo (below the slip) ═══ */}
+          <div className="mt-4 mb-4">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 mb-2 flex items-center gap-1.5">
+              <Camera className="w-3.5 h-3.5" />
+              Site Drop Photo
             </p>
-          </section>
-        )}
-
-        {/* Site Photo */}
-        <section>
-          <label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
-            <Camera className="w-4 h-4" />
-            Site Photo
-          </label>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handlePhoto}
-          />
-          {photoPreview ? (
-            <div className="relative rounded-xl overflow-hidden border border-border">
-              <img src={photoPreview} alt="Site" className="w-full max-h-56 object-cover" />
-              <Button
-                variant="secondary"
-                size="sm"
-                className="absolute top-2 right-2 gap-1.5 text-xs"
-                onClick={() => { setPhotoFile(null); setPhotoPreview(null); fileRef.current?.click(); }}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhoto}
+            />
+            {photoPreview ? (
+              <div className="relative rounded border border-black/20 overflow-hidden">
+                <img src={photoPreview} alt="Site" className="w-full max-h-40 object-cover" />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="absolute top-1 right-1 gap-1 text-[10px] h-6"
+                  onClick={() => { setPhotoFile(null); setPhotoPreview(null); fileRef.current?.click(); }}
+                >
+                  <RotateCcw className="w-3 h-3" /> Retake
+                </Button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="w-full h-24 rounded border-2 border-dashed border-black/30 flex flex-col items-center justify-center gap-1 text-gray-500 active:bg-gray-50 transition-colors"
               >
-                <RotateCcw className="w-3 h-3" />
-                Retake
-              </Button>
-            </div>
-          ) : (
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="w-full h-36 rounded-xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground active:bg-muted/50 transition-colors"
-            >
-              <Camera className="w-8 h-8" />
-              <span className="text-sm font-medium">Tap to Take Photo</span>
-            </button>
-          )}
-        </section>
-
-        {/* Signature */}
-        <section>
-          <label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
-            ✍️ Customer Signature
-          </label>
-          <SignaturePad
-            onSignatureChange={setSignatureData}
-            width={600}
-            height={220}
-          />
-        </section>
+                <Camera className="w-6 h-6" />
+                <span className="text-[11px] font-medium">Tap to Capture</span>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Bottom CTA */}
-      <div className="px-4 py-4 border-t border-border bg-card sticky bottom-0">
+      <div className="px-3 py-3 border-t border-black/20 bg-white sticky bottom-0 max-w-[640px] mx-auto w-full">
         <Button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="w-full h-14 text-base gap-2 font-semibold"
+          className="w-full h-12 text-sm gap-2 font-bold"
           size="lg"
         >
-          {saving ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <CheckCircle2 className="w-5 h-5" />
-          )}
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
           Complete Drop-Off
         </Button>
         {!canSubmit && !saving && (
-          <p className="text-xs text-muted-foreground text-center mt-2">
+          <p className="text-[10px] text-gray-500 text-center mt-1.5">
             {items.length > 0 && !allChecked
               ? `Verify all items (${checkedItems.size}/${items.length})`
               : !photoFile && !signatureData
-              ? "Photo and signature required"
+              ? "Photo + signature required"
               : !photoFile
               ? "Photo required"
               : "Signature required"}
