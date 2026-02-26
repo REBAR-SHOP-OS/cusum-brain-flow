@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/toaster"; // re-trigger deploy
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/lib/auth";
@@ -11,6 +12,7 @@ import { AdminRoute } from "@/components/auth/AdminRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { SmartErrorBoundary } from "@/components/error/SmartErrorBoundary";
 import { useGlobalErrorHandler } from "@/hooks/useGlobalErrorHandler";
+import { Loader2 } from "lucide-react";
 // Pages
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -74,6 +76,8 @@ import DriverDashboard from "./pages/DriverDashboard";
 import Estimation from "./pages/Estimation";
 import QuoteEngine from "./pages/QuoteEngine";
 import AutomationsHub from "./pages/AutomationsHub";
+
+const QaWar = React.lazy(() => import("./pages/QaWar"));
 
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
@@ -189,6 +193,9 @@ const App = () => (
 
                     {/* Automations Hub */}
                     <Route path="/automations" element={<P><AdminRoute><AutomationsHub /></AdminRoute></P>} />
+
+                    {/* QA War Engine */}
+                    <Route path="/qa-war" element={<P><AdminRoute><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><QaWar /></Suspense></AdminRoute></P>} />
 
                     {/* Full-screen live chat */}
                     <Route path="/chat" element={<P><LiveChat /></P>} />

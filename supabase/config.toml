@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.email-analytics]
 verify_jwt = false
+
+[functions.qa-war-engine]
+verify_jwt = false
