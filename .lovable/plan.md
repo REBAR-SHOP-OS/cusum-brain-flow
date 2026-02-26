@@ -1,32 +1,26 @@
 
 
-## Plan: Add "Optimize" Step Between Validated and Approved
+## Plan: Fix Station Dashboard — Show Pending Queue & Hide Empty Cutters
 
-### What Changes
+### Problem 1: No Project Queue Visible
+The Work Order Queue only shows orders with `in_progress` or `on_hold` status. All 17 work orders are `pending`, so the queue is hidden entirely. Operators have no way to start work.
 
-**1. Add "optimizing" step to the pipeline (`src/components/office/AIExtractView.tsx`)**
-- Add `{ key: "optimizing", label: "Optimized", icon: Zap }` to `PIPELINE_STEPS` between "validated" and "approved" (index 5, pushing approved to index 6)
-- Update action bar logic: when `currentStepIndex >= 4` (validated), show an "Optimize" button that sets session status to "optimizing"
-- When status is "optimizing" (`currentStepIndex === 5`), render an inline optimization panel (stock length, kerf, mode selection from OptimizationView) with an "Apply & Continue" button
-- After applying optimization, update session status to "optimizing" (complete) and show the Approve button at `currentStepIndex >= 5`
+### Problem 2: Empty Cutters in Active Production Hub
+Cutters appear in the hub even when they have no assigned plans, no progress, and no jobs — making them clickable but useless.
 
-**2. Inline optimization panel in AIExtractView**
-- Import `runOptimization`, `CutItem`, `OptimizationSummary`, `OptimizerConfig` from `@/lib/cutOptimizer`
-- When session status is "optimizing", show:
-  - Stock length selector (6M, 12M, 18M)
-  - Kerf input
-  - Three plan cards (Standard, Optimized, Best Fit) — reuse the comparison logic from OptimizationView
-  - "Select & Approve" button that saves the optimization snapshot, then calls `handleApprove`
+### Changes
 
-**3. Update action bar flow**
-- Step index 4 (validated) + no blockers → show "Optimize" button (instead of directly showing Approve)
-- Step index 5 (optimizing) + plan selected → show "Approve & Create WO"
-- The "Optimize" button sets session status to "optimizing" via direct Supabase update
+**1. `src/components/shopfloor/WorkOrderQueueSection.tsx`**
+- Include `pending` work orders in the `activeOrders` filter (line 22-24)
+- Group pending orders under a "Pending / Ready to Start" section so operators can start them
+- Update status config to style pending as "READY" with a neutral/info color
 
-**4. Update session status in DB**
-- Add a handler `handleStartOptimize` that updates `extract_sessions.status` to `"optimizing"` 
-- No DB migration needed — the status column is a text field, not an enum
+**2. `src/components/shopfloor/ActiveProductionHub.tsx`**
+- Tighten the `workingMachines` filter (line 23-25): only include machines that have **both** `status === "running"` **and** actual assigned plans or non-zero progress
+- Remove machines from the hub that are "running" but have 0 plans and 0/0 pieces (empty state)
+- Alternative simpler fix: only show machines in the hub if `plansByMachine.get(machine.id)?.length > 0` or `machineProgress.get(machine.id)?.total > 0`
 
 ### Files Modified
-- `src/components/office/AIExtractView.tsx` — add pipeline step, inline optimizer UI, update action bar logic
+- `src/components/shopfloor/WorkOrderQueueSection.tsx`
+- `src/components/shopfloor/ActiveProductionHub.tsx`
 
