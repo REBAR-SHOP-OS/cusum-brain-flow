@@ -43,6 +43,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [completedAtRunStart, setCompletedAtRunStart] = useState<number | null>(null);
   const [justCompletedItemId, setJustCompletedItemId] = useState<string | null>(null);
   const [localCompletedOverride, setLocalCompletedOverride] = useState<Record<string, number>>({});
+  const [completedLocally, setCompletedLocally] = useState(false);
 
   // Keep currentIndex in bounds when items change (e.g. completed item removed by realtime)
   useEffect(() => {
@@ -133,7 +134,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const runPlan = foreman.decision?.runPlan || null;
 
   // Determine if machine is actively running (local start or DB status)
-  const machineIsRunning = isRunning || machine.status === "running";
+  const machineIsRunning = isRunning || (!completedLocally && machine.status === "running");
+
+  // Clear completedLocally flag once DB catches up
+  useEffect(() => {
+    if (machine.status !== "running") {
+      setCompletedLocally(false);
+    }
+  }, [machine.status]);
 
   // ── Slot Tracker ──
   const slotTracker = useSlotTracker({
@@ -409,6 +417,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       setLocalCompletedOverride(prev => ({ ...prev, [currentItem.id]: newCompletedPieces }));
 
       slotTracker.reset();
+      setCompletedLocally(true);
       setIsRunning(false);
       setActiveRunId(null);
       setOperatorBars(null);
