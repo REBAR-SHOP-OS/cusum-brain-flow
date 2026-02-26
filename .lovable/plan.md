@@ -1,36 +1,54 @@
 
 
-## Problem
+## Root Cause Analysis
 
-"Apply Mapping" fails with "No rows to map" because `extractService.ts` inserts rows via the frontend client (with RLS), but **doesn't check the error result**. If the insert fails (e.g., RLS timing issue, role check), the error is silently swallowed. The session transitions to "extracted" status but has zero rows.
+I traced the full flow and found **two bugs** causing the "repeat" behavior after completing a run:
 
-Looking at `extractService.ts` line ~160:
+### Bug 1: Completion doesn't persist pieces (primary cause)
+
+In `handleCompleteRun` (line 382-386 of `CutterStationView.tsx`), the final database call sends `p_increment: 0`:
+
 ```typescript
-await supabase.from("extract_rows").insert(rows as any);
-// ← No error check!
+await supabase.rpc("increment_completed_pieces", {
+  p_item_id: currentItem.id,
+  p_increment: 0, // ← PROBLEM: trusts strokes already persisted
+});
 ```
 
-Additionally, the `manage-extract` edge function already uses the **service role** client. The row insertion should also happen server-side (inside the edge function) rather than client-side, to bypass RLS entirely and ensure reliability.
+Stroke-level persistence (line 298-305) is **fire-and-forget** — if it fails silently (network blip, timeout), the DB keeps `completed_pieces = 0`. The completion call with `p_increment: 0` doesn't fix it. Result: phase never advances, item reappears after realtime refresh, operator thinks it "reset".
 
-## Fix
+**Evidence**: Mark B1001 (1 piece needed) was run **4 times** across 2 items — operator had to retry because the item kept reappearing.
 
-### `src/lib/extractService.ts` — `runExtract` function
+**Fix**: Change `p_increment` from `0` to `totalOutput`. The RPC uses `LEAST(completed + increment, total)`, so even if strokes DID persist, it safely caps — no double-counting risk.
 
-1. **Remove the client-side row insertion** (lines ~137-165). The edge function `extract-manifest` should return the items, and the `manage-extract` edge function should handle persistence.
+### Bug 2: LOCK & START not disabled for completed items
 
-2. **OR (simpler):** Add error checking to the existing insert and throw if it fails:
+The CutEngine's `canStart` logic never checks if the item is already done:
 ```typescript
-const { error: insertErr } = await supabase.from("extract_rows").insert(rows as any);
-if (insertErr) throw new Error(`Failed to save rows: ${insertErr.message}`);
+const canStart = canWrite && !isRunning && (isFeasible || ...);
+// ← missing: && !isDone
 ```
 
-3. Also verify the session status update succeeds before returning.
+So even when the left panel shows "This mark is complete", the right panel still allows starting a new run.
 
-### Recommended approach (option 2 — minimal change)
+**Fix**: Pass `isDone` to CutEngine and add it to the `canStart` guard.
 
-- Add `{ error: insertErr }` destructuring to the `extract_rows` insert call
-- Throw on error so the toast shows the real failure reason instead of succeeding silently
-- Add same error check to the session status update
+---
 
-This way if RLS blocks the insert, the user sees "Failed to save rows: ..." instead of silently proceeding to a broken "Extracted" state.
+## Implementation Plan
+
+### `src/components/shopfloor/CutterStationView.tsx`
+
+1. **Line 385**: Change `p_increment: 0` to `p_increment: totalOutput` — ensures completion always persists the full count even if stroke-level calls failed
+
+2. **Line 696-701 area**: Pass `isDone` prop to `CutEngine`
+
+### `src/components/shopfloor/CutEngine.tsx`
+
+3. Add `isDone` prop and include it in `canStart`:
+```typescript
+const canStart = canWrite && !isRunning && !isDone && (isFeasible || ...);
+```
+
+4. When `isDone`, show a "DONE" label on the button instead of "LOCK & START"
 
