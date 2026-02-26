@@ -84,13 +84,10 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
     queryClient.invalidateQueries({ queryKey: ["production-hub-progress"] });
   };
 
-  if (allWorkingMachines.length === 0 && unassignedPlans.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-border p-6 text-center">
-        <p className="text-muted-foreground text-sm">No machines currently running</p>
-      </div>
-    );
-  }
+  // Hide entirely when nothing is actively producing
+  const hasAnyProgress = [...machineProgress.values()].some(p => p.total > 0);
+  if (allWorkingMachines.length === 0 && unassignedPlans.length === 0) return null;
+  if (activePlans.length === 0 && !hasAnyProgress && allWorkingMachines.every(m => m.status !== "running")) return null;
 
   return (
     <div className="space-y-4">

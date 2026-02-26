@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useSupabaseWorkOrders } from "@/hooks/useSupabaseWorkOrders";
 import { useProductionQueues } from "@/hooks/useProductionQueues";
+import { useCutPlans } from "@/hooks/useCutPlans";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
 import { MaterialFlowDiagram } from "@/components/shopfloor/MaterialFlowDiagram";
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
@@ -18,6 +19,8 @@ export default function StationDashboard() {
   const { machines, isLoading, error } = useLiveMonitorData();
   const { data: workOrders, loading: woLoading, updateStatus } = useSupabaseWorkOrders();
   const { projectLanes } = useProductionQueues();
+  const { plans: cutPlans, loading: plansLoading } = useCutPlans();
+  const activePlans = useMemo(() => cutPlans.filter(p => ["running", "queued"].includes(p.status)), [cutPlans]);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { pinnedMachineId } = useTabletPin();
@@ -74,14 +77,14 @@ export default function StationDashboard() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-10">
-        {isLoading || woLoading ? (
+        {isLoading || woLoading || plansLoading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <>
             <MaterialFlowDiagram />
-            <ActiveProductionHub machines={machines} activePlans={[]} />
+            <ActiveProductionHub machines={machines} activePlans={activePlans} />
 
             {/* Work Order Queue */}
             <WorkOrderQueueSection

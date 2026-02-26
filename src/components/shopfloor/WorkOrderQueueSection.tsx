@@ -19,9 +19,14 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 };
 
 export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChanged }: WorkOrderQueueSectionProps) {
+  const activeOrders = useMemo(() =>
+    workOrders.filter(wo => wo.status === "in_progress" || wo.status === "on_hold"),
+    [workOrders]
+  );
+
   const groups = useMemo(() => {
     const map = new Map<string, SupabaseWorkOrder[]>();
-    for (const wo of workOrders) {
+    for (const wo of activeOrders) {
       const key = wo.workstation || "Unassigned";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(wo);
@@ -29,9 +34,9 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
     return [...map.entries()].sort((a, b) =>
       a[0] === "Unassigned" ? 1 : b[0] === "Unassigned" ? -1 : a[0].localeCompare(b[0])
     );
-  }, [workOrders]);
+  }, [activeOrders]);
 
-  if (workOrders.length === 0) return null;
+  if (activeOrders.length === 0) return null;
 
   return (
     <div className="space-y-4">
