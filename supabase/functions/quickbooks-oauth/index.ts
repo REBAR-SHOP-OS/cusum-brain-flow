@@ -1827,7 +1827,6 @@ async function handleAccountQuickReport(
   function parseRows(rows: any[]) {
     for (const row of rows) {
       if (row.Header?.ColData) {
-        // Section header (account grouping) — check for beginning balance
         const headerText = row.Header.ColData[0]?.value || "";
         if (headerText === "Beginning Balance") {
           const balCol = row.Header.ColData[colNames.length - 1];
@@ -1836,6 +1835,27 @@ async function handleAccountQuickReport(
       }
       if (row.Rows?.Row) {
         parseRows(row.Rows.Row);
+      }
+      if (row.ColData) {
+        const vals = row.ColData.map((c: any) => c.value || "");
+        transactions.push({
+          date: vals[0] || "",
+          type: vals[1] || "",
+          num: vals[2] || "",
+          name: vals[3] || "",
+          memo: vals[4] || "",
+          account: vals[5] || "",
+          amount: parseFloat(vals[6] || "0"),
+          balance: parseFloat(vals[7] || "0"),
+        });
+      }
+    }
+  }
+
+  const reportRows = (report.Rows as any)?.Row || [];
+  parseRows(reportRows);
+
+  return jsonRes({ transactions, beginningBalance, startDate, endDate, accountId });
 }
 
 // ─── Sales Receipts ───────────────────────────────────────────────
@@ -2047,27 +2067,6 @@ async function handleGetTransactionList(supabase: ReturnType<typeof createClient
   const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
   const data = await qbFetch(config, `reports/TransactionList?start_date=${startDate}&end_date=${endDate}&columns=tx_date,txn_type,doc_num,name,memo,account,subt_nat_amount`);
   return jsonRes({ report: data });
-}
-      if (row.ColData) {
-        const vals = row.ColData.map((c: any) => c.value || "");
-        transactions.push({
-          date: vals[colNames.indexOf("Date")] || vals[0] || "",
-          type: vals[colNames.indexOf("Transaction Type")] || vals[1] || "",
-          num: vals[colNames.indexOf("Num")] || vals[2] || "",
-          name: vals[colNames.indexOf("Name")] || vals[3] || "",
-          memo: vals[colNames.indexOf("Memo/Description")] || vals[4] || "",
-          account: vals[colNames.indexOf("Account")] || vals[5] || "",
-          amount: parseFloat(vals[colNames.indexOf("Amount")] || vals[6] || "0"),
-          balance: parseFloat(vals[colNames.indexOf("Balance")] || vals[7] || "0"),
-        });
-      }
-    }
-  }
-
-  const reportRows = (report.Rows as any)?.Row || [];
-  parseRows(reportRows);
-
-  return jsonRes({ transactions, beginningBalance, startDate, endDate });
 }
 
 // ═══════════════════════════════════════════════════════════════════
