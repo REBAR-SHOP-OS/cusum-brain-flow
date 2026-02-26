@@ -541,7 +541,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
       {viewQuote && (() => {
         const meta = viewQuote.metadata as Record<string, unknown> | null;
         const lines = ((meta?.order_lines || meta?.line_items) as Array<Record<string, unknown>>) || [];
-        const items = lines.map((l) => {
+        const parsedItems = lines.map((l) => {
           const quantity = Number(l.product_uom_qty || l.quantity || 1);
           const unitPrice = Number(l.price_unit || l.unit_price || 0);
           return {
@@ -551,7 +551,16 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
             amount: quantity * unitPrice,
           };
         });
-        const untaxed = items.reduce((s, i) => s + i.amount, 0) || Number(viewQuote.total_amount || 0);
+        // Fallback: if no line items were synced, show a single summary row
+        const items = parsedItems.length > 0 ? parsedItems : [{
+          description: "Rebar Fabrication & Supply",
+          quantity: 1,
+          unitPrice: Number(viewQuote.total_amount || 0),
+          amount: Number(viewQuote.total_amount || 0),
+        }];
+        const untaxed = items.reduce((s, i) => s + i.amount, 0);
+        const customerAddress = (meta?.odoo_partner_address as string) || (meta?.customer_address as string) || undefined;
+        const projectName = (meta?.odoo_project as string) || (meta?.project_name as string) || viewQuote.quote_number;
         return (
           <QuotationTemplate
             data={{
@@ -560,7 +569,9 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
               expirationDate: viewQuote.valid_until
                 ? new Date(viewQuote.valid_until).toLocaleDateString()
                 : "—",
-              customerName: (meta?.odoo_customer as string) || "Unknown",
+              customerName: (meta?.odoo_customer as string) || viewQuote.salesperson || "Unknown",
+              customerAddress,
+              projectName,
               items,
               untaxedAmount: untaxed,
               taxRate: 0.13,
