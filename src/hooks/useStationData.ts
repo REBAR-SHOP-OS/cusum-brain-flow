@@ -26,6 +26,7 @@ export interface StationItem {
   // Joined from cut_plans
   plan_name: string;
   project_name: string | null;
+  project_id: string | null;
 }
 
 export interface BarSizeGroup {
@@ -46,9 +47,9 @@ export function useStationData(machineId: string | null, machineType?: string, p
     queryFn: async () => {
       if (machineType === "bender") {
         // Bender: show ALL bend items that are cut_done or bending (regardless of machine assignment)
-        let benderQuery = supabase
+      let benderQuery = supabase
           .from("cut_plan_items")
-          .select("*, cut_plans!inner(id, name, project_name, company_id, project_id)")
+          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id)")
           .eq("bend_type", "bend")
           .eq("cut_plans.company_id", companyId!)
           .or("phase.eq.cut_done,phase.eq.bending");
@@ -68,13 +69,14 @@ export function useStationData(machineId: string | null, machineType?: string, p
           bend_dimensions: item.bend_dimensions as Record<string, number> | null,
           plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
           project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
+          project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
         })) as StationItem[];
       }
 
       // Cutter / default: plans assigned to this machine or unassigned, scoped by company
       let cutterQuery = supabase
         .from("cut_plans")
-        .select("id, name, project_name, machine_id")
+        .select("id, name, project_name, project_id, machine_id")
         .eq("company_id", companyId!)
         .eq("machine_id", machineId)
         .in("status", ["draft", "queued", "running"]);
@@ -83,13 +85,13 @@ export function useStationData(machineId: string | null, machineType?: string, p
         cutterQuery = cutterQuery.eq("project_id", projectId);
       }
 
-      const { data: plans, error: plansError } = await cutterQuery;
+      const { data: plans, error: plansError } = await cutterQuery as { data: any[] | null; error: any };
 
       if (plansError) throw plansError;
       if (!plans?.length) return [];
 
-      const planIds = plans.map((p) => p.id);
-      const planMap = new Map(plans.map((p) => [p.id, p]));
+      const planIds = plans.map((p: any) => p.id);
+      const planMap = new Map(plans.map((p: any) => [p.id, p]));
 
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
@@ -109,6 +111,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
             bend_dimensions: item.bend_dimensions as Record<string, number> | null,
             plan_name: plan?.name || "",
             project_name: plan?.project_name || null,
+            project_id: plan?.project_id || null,
           } as StationItem;
         });
     },
@@ -123,12 +126,12 @@ export function useStationData(machineId: string | null, machineType?: string, p
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plan_items" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType, companyId, projectId] })
+        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plans" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType, companyId, projectId] })
+        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId] })
       )
       .subscribe();
 

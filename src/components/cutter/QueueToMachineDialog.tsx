@@ -75,7 +75,7 @@ export function QueueToMachineDialog({
       if (eventError) console.error("Event write failed:", eventError);
 
       // Update plan status to queued
-      await supabase.from("cut_plans").update({ status: "queued" }).eq("id", plan.id);
+      await supabase.from("cut_plans").update({ status: "queued", machine_id: machineId }).eq("id", plan.id);
 
       toast({ title: "Plan queued", description: `${items.length} items queued to ${selectedMachine?.name}` });
       onQueued();

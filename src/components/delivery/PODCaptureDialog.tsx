@@ -87,16 +87,16 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
         .eq("id", stopId);
       if (error) throw error;
 
-      // Update related packing_slips if paths exist
-      if (signaturePath || photoPath) {
-        // Find delivery_id for this stop
-        const { data: stop } = await supabase
-          .from("delivery_stops")
-          .select("delivery_id")
-          .eq("id", stopId)
-          .single();
+      // Auto-complete delivery when all stops are done
+      const { data: stop } = await supabase
+        .from("delivery_stops")
+        .select("delivery_id")
+        .eq("id", stopId)
+        .single();
 
-        if (stop?.delivery_id) {
+      if (stop?.delivery_id) {
+        // Update related packing_slips if paths exist
+        if (signaturePath || photoPath) {
           const slipUpdates: Record<string, unknown> = {};
           if (signaturePath) slipUpdates.signature_path = signaturePath;
           if (photoPath) slipUpdates.site_photo_path = photoPath;
@@ -106,6 +106,20 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
             .from("packing_slips" as any)
             .update(slipUpdates)
             .eq("delivery_id", stop.delivery_id);
+        }
+
+        // Check if all stops for this delivery are now completed
+        const { data: allStops } = await supabase
+          .from("delivery_stops")
+          .select("id, status")
+          .eq("delivery_id", stop.delivery_id);
+
+        const allCompleted = allStops && allStops.length > 0 && allStops.every(s => s.status === "completed");
+        if (allCompleted) {
+          await supabase
+            .from("deliveries")
+            .update({ status: "delivered" })
+            .eq("id", stop.delivery_id);
         }
       }
 

@@ -2366,6 +2366,7 @@ export type Database = {
           cut_plan_id: string | null
           delivery_number: string
           driver_name: string | null
+          driver_profile_id: string | null
           id: string
           notes: string | null
           scheduled_date: string | null
@@ -2379,6 +2380,7 @@ export type Database = {
           cut_plan_id?: string | null
           delivery_number: string
           driver_name?: string | null
+          driver_profile_id?: string | null
           id?: string
           notes?: string | null
           scheduled_date?: string | null
@@ -2392,6 +2394,7 @@ export type Database = {
           cut_plan_id?: string | null
           delivery_number?: string
           driver_name?: string | null
+          driver_profile_id?: string | null
           id?: string
           notes?: string | null
           scheduled_date?: string | null
@@ -2405,6 +2408,20 @@ export type Database = {
             columns: ["cut_plan_id"]
             isOneToOne: false
             referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_driver_profile_id_fkey"
+            columns: ["driver_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_driver_profile_id_fkey"
+            columns: ["driver_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
           },
         ]

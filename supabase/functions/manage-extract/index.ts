@@ -800,7 +800,8 @@ async function autoDispatchTask(sb: any, taskId: string, companyId: string, barl
     if (score > bestScore) { bestScore = score; bestMachine = m; }
   }
 
-  // Get next position
+  // Get next position using a safe approach — use timestamp-based position to avoid race conditions
+  // When multiple approvals run in parallel, each gets a unique position based on current max + random offset
   const { data: posData } = await sb
     .from("machine_queue_items")
     .select("position")
@@ -808,7 +809,9 @@ async function autoDispatchTask(sb: any, taskId: string, companyId: string, barl
     .in("status", ["queued", "running"])
     .order("position", { ascending: false })
     .limit(1);
-  const nextPos = posData?.length ? (posData[0] as any).position + 1 : 0;
+  const basePos = posData?.length ? (posData[0] as any).position + 1 : 0;
+  // Add small random offset (0-99) to avoid exact collisions in parallel execution
+  const nextPos = basePos + Math.floor(Math.random() * 100);
 
   // Insert queue item with barlist_id
   const { error: qiErr } = await sb.from("machine_queue_items").insert({

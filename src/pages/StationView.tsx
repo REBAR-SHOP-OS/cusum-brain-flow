@@ -37,8 +37,8 @@ export default function StationView() {
   const projects = useMemo(() => {
     const map = new Map<string, { id: string; name: string; count: number }>();
     for (const item of allItems) {
-      // Use cut_plan's project_name or "Unassigned"
-      const projKey = item.project_name || "__unassigned__";
+      // Use project_id (UUID) as key to avoid name collisions between different projects
+      const projKey = item.project_id || "__unassigned__";
       const existing = map.get(projKey);
       if (existing) {
         existing.count++;
@@ -64,7 +64,7 @@ export default function StationView() {
   const items = useMemo(() => {
     if (!selectedProjectId) return allItems;
     return allItems.filter((i) => {
-      const projKey = i.project_name || "__unassigned__";
+      const projKey = i.project_id || "__unassigned__";
       return projKey === selectedProjectId;
     });
   }, [allItems, selectedProjectId]);
@@ -75,8 +75,8 @@ export default function StationView() {
     return allGroups
       .map((g) => ({
         ...g,
-        bendItems: g.bendItems.filter((i) => (i.project_name || "__unassigned__") === selectedProjectId),
-        straightItems: g.straightItems.filter((i) => (i.project_name || "__unassigned__") === selectedProjectId),
+        bendItems: g.bendItems.filter((i) => (i.project_id || "__unassigned__") === selectedProjectId),
+        straightItems: g.straightItems.filter((i) => (i.project_id || "__unassigned__") === selectedProjectId),
       }))
       .filter((g) => g.bendItems.length > 0 || g.straightItems.length > 0);
   }, [allGroups, selectedProjectId]);
@@ -261,7 +261,7 @@ export default function StationView() {
         isSupervisor={isSupervisor}
         onToggleSupervisor={() => setIsSupervisor((v) => !v)}
         showBedsSuffix={true}
-        workspaceName={selectedProjectId && selectedProjectId !== "__unassigned__" ? selectedProjectId : undefined}
+        workspaceName={selectedProjectId && selectedProjectId !== "__unassigned__" ? projects.find(p => p.id === selectedProjectId)?.name : undefined}
       />
 
       {/* Back to project picker (only if multiple projects) */}
