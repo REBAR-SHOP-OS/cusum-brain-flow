@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, FileOutput } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, FileOutput, Sparkles } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { InvoiceTemplate } from "./documents/InvoiceTemplate";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
@@ -24,6 +24,7 @@ import { ESignatureDialog } from "@/components/accounting/ESignatureDialog";
 import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { GenerateQuotationDialog } from "./GenerateQuotationDialog";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -51,7 +52,8 @@ const QUOTATION_STATUSES = [
 ];
 
 export function AccountingDocuments({ data, initialDocType }: Props) {
-  const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "packing-slip");
+  const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -206,9 +208,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
     assumptions: ["Standard access for delivery truck at site."],
   });
 
-  const docTabs = [
-    { id: "packing-slip" as DocType, label: "Packing Slips", icon: Package, count: data.invoices.length },
-  ];
+  const docTabs: { id: DocType; label: string; icon: typeof Package; count: number }[] = [];
 
   const handleCreateInvoiceFromQuote = async (quoteId: string) => {
     setConvertingQuoteId(quoteId);
@@ -244,18 +244,9 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           </Button>
         ))}
         <div className="ml-auto flex gap-2">
-          {activeDoc === "packing-slip" && (
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
-              // Select an invoice to generate packing slip from
-              if (data.invoices.length > 0) {
-                openPreview("packing-slip", data.invoices[0].Id);
-              } else {
-                toast({ title: "No invoices", description: "Create an invoice first to generate a packing slip.", variant: "destructive" });
-              }
-            }}>
-              <Plus className="w-4 h-4" /> Add Packing Slip
-            </Button>
-          )}
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowGenerateDialog(true)}>
+            <Sparkles className="w-4 h-4" /> Add Quotation
+          </Button>
         </div>
       </div>
 
@@ -588,6 +579,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           />
         );
       })()}
+      <GenerateQuotationDialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog} />
     </div>
   );
 }
