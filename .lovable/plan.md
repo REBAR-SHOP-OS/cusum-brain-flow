@@ -1,28 +1,26 @@
 
 
-# Fix: Dashboard Content Not Visible (Fit-to-Page)
+# Fix: Dashboard Content Blank + Scroll Issues
 
 ## Root Cause
 
-The `AppLayout` wraps page content in:
-```
-<main className="flex-1 overflow-hidden">
-```
+The `SidebarProvider` component (from `src/components/ui/sidebar.tsx` line 119) renders its wrapper div with `min-h-svh` (100svh). This forces the accounting layout to be at least full viewport height, which overflows the `AppLayout`'s `<main className="flex-1 overflow-hidden">` container -- clipping all content.
 
-The `AccountingWorkspace` then renders:
-```
-<div className="flex min-h-screen w-full">
-```
-
-`min-h-screen` (100vh) exceeds the actual available space inside `main` (which is viewport minus TopBar minus any other chrome). Combined with `overflow-hidden` on the parent, the dashboard content renders below the visible area or gets clipped to zero height.
+The fix from the previous change (`min-h-screen` → `h-full`) was correct in intent but insufficient because `SidebarProvider`'s own wrapper still demands full viewport height.
 
 ## Fix
 
-Change `min-h-screen` to `h-full` on the outer wrapper in `AccountingWorkspace.tsx` so the layout fills exactly the available space from its parent rather than demanding full viewport height.
+In `src/pages/AccountingWorkspace.tsx`, pass a `className` override to `SidebarProvider` to replace `min-h-svh` with `h-full`:
 
-| File | Change |
-|---|---|
-| `src/pages/AccountingWorkspace.tsx` (line 304) | `min-h-screen` → `h-full` |
+```tsx
+<SidebarProvider defaultOpen={true} className="h-full !min-h-0">
+```
 
-This is a one-line CSS class change. No logic or component changes needed.
+This overrides the default `min-h-svh` so the entire accounting layout fits within its parent container, allowing proper scrolling inside the content area.
+
+| File | Line | Change |
+|---|---|---|
+| `src/pages/AccountingWorkspace.tsx` | 303 | Add `className="h-full !min-h-0"` to `SidebarProvider` |
+
+One-line change, no logic modifications.
 
