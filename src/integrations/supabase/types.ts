@@ -8497,6 +8497,45 @@ export type Database = {
         }
         Relationships: []
       }
+      qb_company_config: {
+        Row: {
+          company_id: string
+          config: Json | null
+          default_class_id: string | null
+          default_department_id: string | null
+          default_income_account_id: string | null
+          default_payment_method: string | null
+          default_sales_term: string | null
+          default_tax_code: string | null
+          updated_at: string | null
+          use_qb_numbering: boolean | null
+        }
+        Insert: {
+          company_id: string
+          config?: Json | null
+          default_class_id?: string | null
+          default_department_id?: string | null
+          default_income_account_id?: string | null
+          default_payment_method?: string | null
+          default_sales_term?: string | null
+          default_tax_code?: string | null
+          updated_at?: string | null
+          use_qb_numbering?: boolean | null
+        }
+        Update: {
+          company_id?: string
+          config?: Json | null
+          default_class_id?: string | null
+          default_department_id?: string | null
+          default_income_account_id?: string | null
+          default_payment_method?: string | null
+          default_sales_term?: string | null
+          default_tax_code?: string | null
+          updated_at?: string | null
+          use_qb_numbering?: boolean | null
+        }
+        Relationships: []
+      }
       qb_company_info: {
         Row: {
           company_id: string
@@ -8662,6 +8701,45 @@ export type Database = {
           type?: string | null
           unit_price?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      qb_reconciliation_issues: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string
+          erp_value: Json | null
+          id: string
+          issue_type: string
+          qb_value: Json | null
+          resolved_at: string | null
+          severity: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type: string
+          erp_value?: Json | null
+          id?: string
+          issue_type: string
+          qb_value?: Json | null
+          resolved_at?: string | null
+          severity?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          erp_value?: Json | null
+          id?: string
+          issue_type?: string
+          qb_value?: Json | null
+          resolved_at?: string | null
+          severity?: string | null
         }
         Relationships: []
       }

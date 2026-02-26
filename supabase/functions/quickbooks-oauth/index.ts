@@ -15,6 +15,50 @@ const QUICKBOOKS_API_BASE = Deno.env.get("QUICKBOOKS_ENVIRONMENT") === "producti
   ? "https://quickbooks.api.intuit.com"
   : "https://sandbox-quickbooks.api.intuit.com";
 
+// ─── Audit Trail Helper ───────────────────────────────────────────
+
+async function logAuditEvent(
+  supabase: ReturnType<typeof createClient>,
+  companyId: string,
+  userId: string,
+  eventType: string,
+  entityType: string,
+  entityId: string,
+  metadata: Record<string, unknown> = {},
+) {
+  try {
+    await supabase.from("activity_events").insert({
+      company_id: companyId,
+      actor_id: userId,
+      actor_type: "user",
+      event_type: eventType,
+      entity_type: entityType,
+      entity_id: entityId,
+      source: "quickbooks",
+      description: `${eventType}: ${entityType} ${entityId}`,
+      metadata,
+      dedupe_key: `qb:${eventType}:${entityId}:${Date.now()}`,
+    });
+  } catch (e) {
+    console.warn(`[QB-AUDIT] Failed to log ${eventType}:`, e);
+  }
+}
+
+// ─── Per-Company QB Config Helper ─────────────────────────────────
+
+async function getCompanyQBConfig(supabase: ReturnType<typeof createClient>, companyId: string) {
+  try {
+    const { data } = await supabase
+      .from("qb_company_config")
+      .select("*")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    return data || { default_tax_code: "TAX", default_sales_term: "Net 30" };
+  } catch {
+    return { default_tax_code: "TAX", default_sales_term: "Net 30" };
+  }
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────
 
 async function verifyAuth(req: Request): Promise<string | null> {
@@ -1097,29 +1141,69 @@ async function handleGetBalanceSheet(supabase: ReturnType<typeof createClient>, 
 
 async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
-  const { customerId, customerName, lineItems, expirationDate, memo } = body as {
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { customerId, customerName, lineItems, expirationDate, memo, taxCodeRef, classRef, departmentRef } = body as {
     customerId: string; customerName: string;
     lineItems: { description: string; amount: number; quantity?: number }[];
-    expirationDate?: string; memo?: string;
+    expirationDate?: string; memo?: string; taxCodeRef?: string;
+    classRef?: string; departmentRef?: string;
   };
 
   if (!customerId || !lineItems || (lineItems as unknown[]).length === 0) {
     throw new Error("Customer ID and line items are required");
   }
 
-  const payload = {
+  // Idempotency: check if estimate already exists for this customer + same line items hash
+  const dedupeKey = `est:${companyId}:${customerId}:${lineItems.map(l => `${l.amount}x${l.quantity || 1}`).join(",")}`;
+  const { data: existingTxn } = await supabase
+    .from("qb_transactions")
+    .select("qb_id, data")
+    .eq("company_id", companyId)
+    .eq("entity_type", "Estimate")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (existingTxn) {
+    return jsonRes({ success: true, alreadyExisted: true, estimate: existingTxn.data, docNumber: (existingTxn.data as any)?.DocNumber });
+  }
+
+  const qbConfig = await getCompanyQBConfig(supabase, companyId);
+  const effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
+
+  const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
     Line: lineItems.map(item => ({
       DetailType: "SalesItemLineDetail",
       Amount: item.amount * (item.quantity || 1),
       Description: item.description,
-      SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount },
+      SalesItemLineDetail: {
+        Qty: item.quantity || 1,
+        UnitPrice: item.amount,
+        TaxCodeRef: { value: effectiveTaxCode },
+      },
     })),
     ...(expirationDate && { ExpirationDate: expirationDate }),
     ...(memo && { CustomerMemo: { value: memo } }),
+    ...(classRef && { ClassRef: { value: classRef } }),
+    ...(departmentRef && { DepartmentRef: { value: departmentRef } }),
   };
 
   const data = await qbFetch(config, "estimate", { method: "POST", body: JSON.stringify(payload) });
+
+  // Store dedupe key
+  try {
+    await supabase.from("qb_transactions").upsert({
+      company_id: companyId,
+      qb_id: data.Estimate?.Id,
+      entity_type: "Estimate",
+      data: data.Estimate,
+      dedupe_key: dedupeKey,
+    }, { onConflict: "company_id,qb_id,entity_type" });
+  } catch {}
+
+  await logAuditEvent(supabase, companyId, userId, "qb_estimate_created", "Estimate", data.Estimate?.Id || "", {
+    docNumber: data.Estimate?.DocNumber, customerId, totalAmount: data.Estimate?.TotalAmt,
+  });
+
   return jsonRes({ success: true, estimate: data.Estimate, docNumber: data.Estimate?.DocNumber });
 }
 
@@ -1127,10 +1211,13 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
 
 async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
-  const { orderId, customerId, customerName, lineItems, dueDate, memo } = body as {
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { orderId, customerId, customerName, lineItems, dueDate, memo, taxCodeRef, salesTermRef, discountPercent, shippingAmount, classRef, departmentRef } = body as {
     orderId?: string; customerId: string; customerName: string;
     lineItems: { description: string; amount: number; quantity?: number; serviceId?: string }[];
-    dueDate?: string; memo?: string;
+    dueDate?: string; memo?: string; taxCodeRef?: string; salesTermRef?: string;
+    discountPercent?: number; shippingAmount?: number;
+    classRef?: string; departmentRef?: string;
   };
 
   // ── Server-side idempotency guard ──────────────────────────────
@@ -1154,23 +1241,57 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     throw new Error("Customer ID and line items are required");
   }
 
-  const payload = {
-    CustomerRef: { value: customerId, name: customerName },
-    Line: lineItems.map(item => ({
+  const qbConfig = await getCompanyQBConfig(supabase, companyId);
+  const effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
+
+  const lines: Record<string, unknown>[] = lineItems.map(item => ({
+    DetailType: "SalesItemLineDetail",
+    Amount: item.amount * (item.quantity || 1),
+    Description: item.description,
+    SalesItemLineDetail: {
+      Qty: item.quantity || 1,
+      UnitPrice: item.amount,
+      TaxCodeRef: { value: effectiveTaxCode },
+      ...(item.serviceId && { ItemRef: { value: item.serviceId } }),
+    },
+  }));
+
+  // Add discount line if provided
+  if (discountPercent && discountPercent > 0) {
+    lines.push({
+      DetailType: "DiscountLineDetail",
+      Amount: 0,
+      DiscountLineDetail: { PercentBased: true, DiscountPercent: discountPercent },
+    });
+  }
+
+  // Add shipping line if provided
+  if (shippingAmount && shippingAmount > 0) {
+    lines.push({
       DetailType: "SalesItemLineDetail",
-      Amount: item.amount * (item.quantity || 1),
-      Description: item.description,
-      SalesItemLineDetail: {
-        Qty: item.quantity || 1,
-        UnitPrice: item.amount,
-        ...(item.serviceId && { ItemRef: { value: item.serviceId } }),
-      },
-    })),
+      Amount: shippingAmount,
+      Description: "Shipping",
+      SalesItemLineDetail: { UnitPrice: shippingAmount, Qty: 1 },
+    });
+  }
+
+  const effectiveTerms = salesTermRef || (qbConfig as any).default_sales_term;
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerName },
+    Line: lines,
     ...(dueDate && { DueDate: dueDate }),
     ...(memo && { CustomerMemo: { value: memo } }),
+    ...(effectiveTerms && { SalesTermRef: { value: effectiveTerms } }),
+    ...(classRef && { ClassRef: { value: classRef } }),
+    ...(departmentRef && { DepartmentRef: { value: departmentRef } }),
   };
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_created", "Invoice", data.Invoice?.Id || "", {
+    docNumber: data.Invoice?.DocNumber, customerId, totalAmount: data.Invoice?.TotalAmt, orderId,
+  });
+
   return jsonRes({
     success: true,
     invoice: data.Invoice,
@@ -1183,6 +1304,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
 
 async function handleCreatePayment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
   const { customerId, customerName, totalAmount, invoiceId, invoiceLines, paymentMethod, memo, txnDate } = body as {
     customerId: string; customerName: string; totalAmount: number;
     invoiceId?: string; invoiceLines?: { invoiceId: string; amount: number }[];
@@ -1190,6 +1312,20 @@ async function handleCreatePayment(supabase: ReturnType<typeof createClient>, us
   };
 
   if (!customerId || !totalAmount) throw new Error("Customer ID and total amount required");
+
+  // ── Idempotency guard: check for existing payment with same key fields ──
+  const linkedInvId = invoiceId || (invoiceLines && invoiceLines.length > 0 ? invoiceLines.map(l => l.invoiceId).sort().join(",") : "none");
+  const dedupeKey = `pmt:${companyId}:${customerId}:${linkedInvId}:${totalAmount}:${txnDate || "nodate"}`;
+  const { data: existingTxn } = await supabase
+    .from("qb_transactions")
+    .select("qb_id, data")
+    .eq("company_id", companyId)
+    .eq("entity_type", "Payment")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (existingTxn) {
+    return jsonRes({ success: true, alreadyExisted: true, payment: existingTxn.data });
+  }
 
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
@@ -1214,6 +1350,22 @@ async function handleCreatePayment(supabase: ReturnType<typeof createClient>, us
   }
 
   const data = await qbFetch(config, "payment", { method: "POST", body: JSON.stringify(payload) });
+
+  // Store dedupe key
+  try {
+    await supabase.from("qb_transactions").upsert({
+      company_id: companyId,
+      qb_id: data.Payment?.Id,
+      entity_type: "Payment",
+      data: data.Payment,
+      dedupe_key: dedupeKey,
+    }, { onConflict: "company_id,qb_id,entity_type" });
+  } catch {}
+
+  await logAuditEvent(supabase, companyId, userId, "qb_payment_created", "Payment", data.Payment?.Id || "", {
+    customerId, totalAmount, invoiceId: linkedInvId, paymentMethod,
+  });
+
   return jsonRes({ success: true, payment: data.Payment });
 }
 
@@ -1253,6 +1405,7 @@ async function handleCreateBill(supabase: ReturnType<typeof createClient>, userI
 
 async function handleCreateCreditMemo(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
   const { customerId, customerName, lineItems, memo } = body as {
     customerId: string; customerName: string;
     lineItems: { description: string; amount: number; quantity?: number }[];
@@ -1261,6 +1414,19 @@ async function handleCreateCreditMemo(supabase: ReturnType<typeof createClient>,
 
   if (!customerId || !lineItems || (lineItems as unknown[]).length === 0) {
     throw new Error("Customer ID and line items are required");
+  }
+
+  // ── Idempotency guard ──
+  const dedupeKey = `cm:${companyId}:${customerId}:${lineItems.map(l => `${l.amount}x${l.quantity || 1}`).join(",")}`;
+  const { data: existingTxn } = await supabase
+    .from("qb_transactions")
+    .select("qb_id, data")
+    .eq("company_id", companyId)
+    .eq("entity_type", "CreditMemo")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (existingTxn) {
+    return jsonRes({ success: true, alreadyExisted: true, creditMemo: existingTxn.data, docNumber: (existingTxn.data as any)?.DocNumber });
   }
 
   const payload = {
@@ -1275,6 +1441,22 @@ async function handleCreateCreditMemo(supabase: ReturnType<typeof createClient>,
   };
 
   const data = await qbFetch(config, "creditmemo", { method: "POST", body: JSON.stringify(payload) });
+
+  // Store dedupe key
+  try {
+    await supabase.from("qb_transactions").upsert({
+      company_id: companyId,
+      qb_id: data.CreditMemo?.Id,
+      entity_type: "CreditMemo",
+      data: data.CreditMemo,
+      dedupe_key: dedupeKey,
+    }, { onConflict: "company_id,qb_id,entity_type" });
+  } catch {}
+
+  await logAuditEvent(supabase, companyId, userId, "qb_credit_memo_created", "CreditMemo", data.CreditMemo?.Id || "", {
+    docNumber: data.CreditMemo?.DocNumber, customerId, totalAmount: data.CreditMemo?.TotalAmt,
+  });
+
   return jsonRes({ success: true, creditMemo: data.CreditMemo, docNumber: data.CreditMemo?.DocNumber });
 }
 
