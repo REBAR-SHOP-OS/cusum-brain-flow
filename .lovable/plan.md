@@ -1,58 +1,65 @@
 
 
-## Plan: Full-Page Driver Drop-Off Screen
+## Plan: Add Packing Slip Items & Checklist to Driver Drop-Off Page
 
-### Problem
-After loading, drivers use a tiny dialog (PODCaptureDialog) to capture signature and photo. It's cramped and not mobile-friendly — hard to sign on a small canvas inside a modal.
+The driver drop-off page currently only shows photo capture and signature. The user wants it to display all the packing slip line items (like the attached image: DW#, Mark, Quantity, Size, Type, Cut Length) with checkmarks, so the driver can verify what was delivered before signing.
 
-### Solution
-Create a dedicated full-page route `/driver/dropoff/:stopId` that provides a large, touch-friendly experience optimized for drivers on phones at job sites.
+### Changes
 
-### Implementation
+#### `src/pages/DriverDropoff.tsx` — Major update
 
-#### 1. Create `src/pages/DriverDropoff.tsx`
-A full-screen, mobile-first page with:
-- **Header**: Stop address + delivery number + "Navigate" button (Google Maps link)
-- **Site Photo section**: Large tap-to-capture area using camera, with retake option
-- **Signature section**: Full-width `SignaturePad` component (already exists) — much larger than the dialog version
-- **"Complete Drop-Off" button**: Disabled until both photo AND signature are captured. On submit, uploads photo + signature to storage, updates `delivery_stops` (status, pod_signature, pod_photo_url, departure_time), updates packing_slips, and auto-completes the delivery if all stops are terminal — same logic as `PODCaptureDialog` but in a full page
-- After success, navigates back to `/driver`
+1. **Fetch packing slip data**: Query `packing_slips` by `delivery_id` (from the stop's `delivery_id`) to get `items_json`, `customer_name`, `slip_number`, `scope`, `invoice_number`, `invoice_date`, `ship_to`
 
-#### 2. Add route in `src/App.tsx`
-```
-<Route path="/driver/dropoff/:stopId" element={<P><DriverDropoff /></P>} />
-```
+2. **Add item checklist with checkmarks**: Display the items from `items_json` as a table/card list with columns matching the packing slip image:
+   - DW# (`drawing_ref`)
+   - Mark (`mark_number`)
+   - Quantity + Size (`total_pieces` + `bar_code`)
+   - Type (Bent if `asa_shape_code`, else Straight)
+   - Cut Length (`cut_length_mm / 1000` in meters)
+   - Each item gets a checkbox the driver taps to confirm it was delivered
+   - Total row at the bottom
 
-#### 3. Update `src/pages/DriverDashboard.tsx`
-Change the "Capture POD" button to navigate to `/driver/dropoff/${stop.id}` instead of opening the PODCaptureDialog. Keep the dialog as fallback for the office Deliveries page.
+3. **Packing slip header info**: Show customer name, slip number, delivery number, invoice #, scope — matching the layout in the attached image
 
-### UI Layout (mobile-first)
+4. **Reorder sections**: 
+   - Packing slip header (customer, delivery #, invoice, scope)
+   - Items checklist with checkmarks
+   - Site photo capture
+   - Customer signature pad
+   - Complete Drop-Off button
+
+5. **Update `canSubmit`**: Require all items checked + photo + signature before enabling completion
+
+6. **Add checked item state**: `useState<Set<number>>` to track which items the driver has confirmed
+
+### Layout (mobile)
 ```text
-┌──────────────────────────┐
-│ ← Back    DROP-OFF       │
-│ 123 Main St, Toronto     │
-│ [Navigate]               │
-├──────────────────────────┤
-│                          │
-│   📷 SITE DROP PHOTO     │
-│   ┌──────────────────┐   │
-│   │  Tap to Capture  │   │
-│   └──────────────────┘   │
-│                          │
-│   ✍️ CUSTOMER SIGNATURE  │
-│   ┌──────────────────┐   │
-│   │                  │   │
-│   │  SignaturePad    │   │
-│   │                  │   │
-│   └──────────────────┘   │
-│                          │
-├──────────────────────────┤
-│ [  ✓ Complete Drop-Off ] │
-└──────────────────────────┘
+┌──────────────────────────────┐
+│ ← DROP-OFF  DEL-4569-01     │
+│ 123 Main St  [Navigate]     │
+├──────────────────────────────┤
+│ CUSTOMER: ACTION HOME SVCS  │
+│ Slip: PS-4569-01            │
+│ Invoice: 4569 | Scope: ...  │
+├──────────────────────────────┤
+│ ☑ R01  15A09  3×15M  Bent   │
+│ ☑ R01  15A18 10×15M  Bent   │
+│ ☐ R02  AS18   6×10M  Str    │
+│ ...                         │
+│ Total: 47 pcs               │
+├──────────────────────────────┤
+│ 📷 Site Photo [tap]         │
+├──────────────────────────────┤
+│ ✍️ Customer Signature       │
+│ ┌────────────────────────┐  │
+│ │   SignaturePad         │  │
+│ └────────────────────────┘  │
+├──────────────────────────────┤
+│ [  ✓ Complete Drop-Off     ]│
+│ 3/6 items checked           │
+└──────────────────────────────┘
 ```
 
 ### Files
-- **Create**: `src/pages/DriverDropoff.tsx`
-- **Edit**: `src/App.tsx` (add route)
-- **Edit**: `src/pages/DriverDashboard.tsx` (link to new page instead of dialog)
+- **Edit**: `src/pages/DriverDropoff.tsx` — add packing slip fetch, item checklist with checkboxes, header info section
 
