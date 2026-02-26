@@ -241,8 +241,12 @@ export default function Pipeline() {
     mutationFn: async ({ id, stage, fromStage }: { id: string; stage: string; fromStage?: string }) => {
       const lead = leads.find((l) => l.id === id);
       const companyId = (lead as any)?.company_id;
-      const { error } = await supabase.from("leads").update({ stage }).eq("id", id);
+      // R15-5: Optimistic lock — only update if stage hasn't changed
+      const { data: updated, error } = await supabase
+        .from("leads").update({ stage }).eq("id", id).eq("stage", fromStage ?? stage)
+        .select("id").maybeSingle();
       if (error) throw error;
+      if (!updated) throw new Error("Lead was modified by another user. Please refresh.");
       // Fire-and-forget audit log
       if (companyId) {
         logPipelineTransition({
@@ -264,6 +268,16 @@ export default function Pipeline() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // R15-1: Check for linked quotes before deletion
+      // @ts-ignore -- deep type instantiation on quotes table
+      const quoteCheck = await supabase.from("quotes").select("id", { count: "exact", head: true }).eq("lead_id", id);
+      const quoteCount = quoteCheck.count as number | null;
+      if ((quoteCount || 0) > 0) {
+        throw new Error(`Cannot delete lead with ${quoteCount} linked quote(s). Remove quotes first.`);
+      }
+      // Clean up orphanable child records
+      await supabase.from("lead_activities").delete().eq("lead_id", id);
+      await supabase.from("lead_events").delete().eq("lead_id", id);
       const { error } = await supabase.from("leads").delete().eq("id", id);
       if (error) throw error;
     },

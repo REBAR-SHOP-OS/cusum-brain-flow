@@ -206,6 +206,17 @@ export default function Customers() {
   // ── Mutations ──
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // R15-2: Check for linked orders/quotes before deletion
+      const { count: orderCount } = await supabase
+        .from("orders").select("id", { count: "exact", head: true }).eq("customer_id", id);
+      if ((orderCount || 0) > 0) {
+        throw new Error(`Cannot delete customer with ${orderCount} active order(s).`);
+      }
+      const { count: quoteCount } = await supabase
+        .from("quotes").select("id", { count: "exact", head: true }).eq("customer_id", id);
+      if ((quoteCount || 0) > 0) {
+        throw new Error(`Cannot delete customer with ${quoteCount} linked quote(s).`);
+      }
       // Delete child contacts first to avoid FK violations
       const { error: contactErr } = await supabase.from("contacts").delete().eq("customer_id", id);
       if (contactErr) console.warn("Failed to delete child contacts:", contactErr.message);

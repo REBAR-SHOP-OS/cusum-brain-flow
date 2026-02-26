@@ -200,8 +200,8 @@ Deno.serve(async (req) => {
           .join("\n\n");
 
         const aiResult = await callAI({
-          provider: "gpt",
-          model: "gpt-4o-mini",
+          provider: "gemini",
+          model: "gemini-2.5-flash-lite",
           messages: [
             {
               role: "system",

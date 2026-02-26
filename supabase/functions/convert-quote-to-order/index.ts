@@ -70,6 +70,15 @@ serve(async (req) => {
       .maybeSingle();
     if (qErr || !quote) throw new Error("Quote not found");
 
+    // R15-3: Validate quote status before conversion
+    const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
+    if (!CONVERTIBLE_STATUSES.includes(quote.status)) {
+      return new Response(
+        JSON.stringify({ error: `Cannot convert quote in status: ${quote.status}. Must be one of: ${CONVERTIBLE_STATUSES.join(", ")}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Check if order already exists for this quote
     const { data: existing } = await supabase
       .from("orders")
