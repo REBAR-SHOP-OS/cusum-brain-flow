@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, Search, FileText, AlertCircle } from "lucide-react";
+import { CreditCard, Search, FileText, AlertCircle, Download } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -56,6 +57,20 @@ export function AccountingPayments({ data }: Props) {
   const totalCollected = (selectedCustomerId === "all" ? payments : filtered)
     .reduce((sum, p) => sum + p.TotalAmt, 0);
 
+  const exportCsv = () => {
+    import("@e965/xlsx").then(({ utils, writeFile }) => {
+      const rows = filtered.map(p => ({
+        Date: p.TxnDate || "",
+        Customer: p.CustomerRef?.name || "",
+        Amount: p.TotalAmt,
+      }));
+      const ws = utils.json_to_sheet(rows);
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Payments");
+      writeFile(wb, `payments_${new Date().toISOString().slice(0, 10)}.csv`, { bookType: "csv" });
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -79,6 +94,9 @@ export function AccountingPayments({ data }: Props) {
             ))}
           </SelectContent>
         </Select>
+        <Button variant="outline" size="sm" className="h-12 gap-2" onClick={exportCsv}>
+          <Download className="w-4 h-4" /> Export CSV
+        </Button>
         <Card className="bg-success/5 border-success/20">
           <CardContent className="p-4 flex items-center gap-3">
             <CreditCard className="w-6 h-6 text-success" />

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
-import { FileText, Send, Ban, Search, Eye, ArrowUpDown } from "lucide-react";
+import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
@@ -104,6 +104,24 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
     return { label: "Open", color: "bg-primary/10 text-primary" };
   };
 
+  const exportCsv = () => {
+    import("@e965/xlsx").then(({ utils, writeFile }) => {
+      const rows = filtered.map(inv => ({
+        "Invoice #": inv.DocNumber || "",
+        Customer: inv.CustomerRef?.name || "",
+        Date: inv.TxnDate || "",
+        "Due Date": inv.DueDate || "",
+        Total: inv.TotalAmt,
+        Balance: inv.Balance,
+        Status: inv.Balance === 0 ? "Paid" : new Date(inv.DueDate) < new Date() ? "Overdue" : "Open",
+      }));
+      const ws = utils.json_to_sheet(rows);
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Invoices");
+      writeFile(wb, `invoices_${new Date().toISOString().slice(0, 10)}.csv`, { bookType: "csv" });
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -116,6 +134,9 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
             className="pl-10 h-12 text-base"
           />
         </div>
+        <Button variant="outline" size="sm" className="h-12 gap-2" onClick={exportCsv}>
+          <Download className="w-4 h-4" /> Export CSV
+        </Button>
       </div>
 
       <div className="grid grid-cols-3 gap-3">

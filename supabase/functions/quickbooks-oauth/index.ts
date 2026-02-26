@@ -1551,6 +1551,7 @@ async function handleCreateAccount(supabase: ReturnType<typeof createClient>, us
 
 async function handleDeleteTransaction(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
   const { entityType, entityId, syncToken } = body as { entityType: string; entityId: string; syncToken: string };
 
   if (!entityType || !entityId) throw new Error("entityType and entityId are required");
@@ -1558,6 +1559,9 @@ async function handleDeleteTransaction(supabase: ReturnType<typeof createClient>
   const endpoint = entityType.toLowerCase();
   const payload = { Id: entityId, SyncToken: syncToken || "0" };
   const data = await qbFetch(config, `${endpoint}?operation=delete`, { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_transaction_deleted", entityType, entityId, { syncToken });
+
   return jsonRes({ success: true, deleted: true, data });
 }
 
@@ -1565,14 +1569,17 @@ async function handleDeleteTransaction(supabase: ReturnType<typeof createClient>
 
 async function handleVoidTransaction(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
   const { entityType, entityId, syncToken } = body as { entityType: string; entityId: string; syncToken: string };
 
   if (!entityType || !entityId) throw new Error("entityType and entityId are required");
 
   const endpoint = entityType.toLowerCase();
-  // QB void: sparse update with void=true query param
   const payload = { Id: entityId, SyncToken: syncToken || "0", sparse: true };
   const data = await qbFetch(config, `${endpoint}?operation=void`, { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_transaction_voided", entityType, entityId, { syncToken });
+
   return jsonRes({ success: true, voided: true, data });
 }
 
@@ -1604,6 +1611,7 @@ async function handleCreateItem(supabase: ReturnType<typeof createClient>, userI
 
 async function handleConvertEstimateToInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
   const { estimateId } = body as { estimateId: string };
 
   if (!estimateId) throw new Error("Estimate ID is required");
@@ -1618,6 +1626,11 @@ async function handleConvertEstimateToInvoice(supabase: ReturnType<typeof create
   };
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(invoicePayload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_estimate_converted", "Estimate", estimateId, {
+    newInvoiceId: data.Invoice?.Id, newDocNumber: data.Invoice?.DocNumber,
+  });
+
   return jsonRes({ success: true, invoice: data.Invoice, docNumber: data.Invoice?.DocNumber });
 }
 
@@ -1625,12 +1638,18 @@ async function handleConvertEstimateToInvoice(supabase: ReturnType<typeof create
 
 async function handleSendInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
   const { invoiceId, email } = body as { invoiceId: string; email?: string };
 
   if (!invoiceId) throw new Error("Invoice ID is required");
 
   const emailParam = email ? `?sendTo=${encodeURIComponent(email)}` : "";
   const data = await qbFetch(config, `invoice/${invoiceId}/send${emailParam}`, { method: "POST", body: "" });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_sent", "Invoice", invoiceId, {
+    email, docNumber: data.Invoice?.DocNumber,
+  });
+
   return jsonRes({ success: true, invoice: data.Invoice });
 }
 
@@ -1638,12 +1657,16 @@ async function handleSendInvoice(supabase: ReturnType<typeof createClient>, user
 
 async function handleVoidInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
   const { invoiceId, syncToken } = body as { invoiceId: string; syncToken: string };
 
   if (!invoiceId || !syncToken) throw new Error("Invoice ID and SyncToken are required");
 
   const payload = { Id: invoiceId, SyncToken: syncToken, sparse: true };
   const data = await qbFetch(config, "invoice?operation=void", { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_voided", "Invoice", invoiceId, { syncToken });
+
   return jsonRes({ success: true, invoice: data.Invoice });
 }
 
@@ -1670,6 +1693,7 @@ async function handleGetEmployee(supabase: ReturnType<typeof createClient>, user
 
 async function handleUpdateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
   const { invoiceId, updates } = body as { invoiceId: string; updates: Record<string, unknown> };
   if (!invoiceId) throw new Error("Invoice ID is required");
 
@@ -1686,6 +1710,11 @@ async function handleUpdateInvoice(supabase: ReturnType<typeof createClient>, us
   };
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_updated", "Invoice", invoiceId, {
+    docNumber: data.Invoice?.DocNumber, updatedFields: Object.keys(updates),
+  });
+
   return jsonRes({ success: true, invoice: data.Invoice, docNumber: data.Invoice?.DocNumber });
 }
 
