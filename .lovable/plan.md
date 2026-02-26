@@ -1,14 +1,14 @@
 
 
-# Remove Estimates from Quick-Access Tabs
+# Add "Quotations" Tab to Quick-Access Strip
 
 ## Change
 
-Remove the "Estimates" entry from the quick-access navigation strip in `AccountingWorkspace.tsx`.
+Add a "Quotations" entry to the quick-access navigation strip, replacing where "Estimates" was.
 
 | File | Change |
 |---|---|
-| `src/pages/AccountingWorkspace.tsx` | Delete line 338: `{ label: "Estimates", tab: "estimates", count: qb.estimates.length },` |
+| `src/pages/AccountingWorkspace.tsx` | Line 338: Replace the blank line with `{ label: "Quotations", tab: "estimates", count: qb.estimates.length },` — reuses the existing estimates tab/data but displays as "Quotations" |
 
-Single line removal, no other files affected.
+Single line addition, no other files affected. The tab will navigate to the existing estimates section but display the label "Quotations".
 
