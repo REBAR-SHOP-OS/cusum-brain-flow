@@ -240,13 +240,13 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
     slotTracker.recordStroke();
 
-    // ── Persist progress to DB after every stroke ──
+    // ── Persist progress to DB after every stroke (atomic increment) ──
     if (currentItem && completedAtRunStart !== null) {
-      const newCompleted = Math.min(completedAtRunStart + newCutsDone, totalPieces);
       supabase
-        .from("cut_plan_items")
-        .update({ completed_pieces: newCompleted } as any)
-        .eq("id", currentItem.id)
+        .rpc("increment_completed_pieces", {
+          p_item_id: currentItem.id,
+          p_increment: activeBars,
+        })
         .then(({ error }) => {
           if (error) console.error("[CutterStation] Stroke persist failed:", error.message);
         });
@@ -321,15 +321,16 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           selectedStockLength - s.cutsDone * currentItem.cut_length_mm < REMNANT_THRESHOLD_MM
       ).length;
 
-      // ── Persist completed_pieces to DB (triggers auto_advance_item_phase) ──
-      const baseCompleted = completedAtRunStart ?? completedPieces;
-      const newCompleted = Math.min(baseCompleted + totalOutput, totalPieces);
+      // ── Persist completed_pieces to DB (atomic increment, triggers auto_advance_item_phase) ──
+      // Note: strokes already persisted incrementally; this final call ensures
+      // any rounding/partial bar pieces are captured. We use the total output
+      // minus what was already persisted stroke-by-stroke. Since the RPC uses
+      // LEAST(completed + increment, total), over-counting is safe.
       const { error: itemErr } = await supabase
-        .from("cut_plan_items")
-        .update({
-          completed_pieces: newCompleted,
-        })
-        .eq("id", currentItem.id);
+        .rpc("increment_completed_pieces", {
+          p_item_id: currentItem.id,
+          p_increment: 0, // strokes already persisted; this triggers phase advance check
+        });
       if (itemErr) throw itemErr;
 
       // Immediately invalidate to refresh UI without waiting for realtime

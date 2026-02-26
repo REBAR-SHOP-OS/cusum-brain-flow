@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Check, X, Edit3, Users, Calendar, Send } from "lucide-react";
 import { format } from "date-fns";
+import DOMPurify from "dompurify";
 import type { EmailCampaign } from "@/hooks/useEmailCampaigns";
 import { useEmailCampaigns } from "@/hooks/useEmailCampaigns";
 import { useAuth } from "@/lib/auth";
@@ -146,7 +147,7 @@ export function CampaignReviewPanel({ campaign, onClose }: Props) {
                 ) : (
                   <div
                     className="border border-border rounded-lg p-4 bg-background text-sm max-h-[300px] overflow-y-auto prose prose-sm dark:prose-invert"
-                    dangerouslySetInnerHTML={{ __html: campaign.body_html || "<p>No content yet</p>" }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(campaign.body_html || "<p>No content yet</p>") }}
                   />
                 )}
               </div>

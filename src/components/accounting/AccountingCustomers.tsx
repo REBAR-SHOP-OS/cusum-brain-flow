@@ -61,6 +61,9 @@ export function AccountingCustomers({ data }: Props) {
   // Delete mutation — also soft-deletes from qb_customers mirror
   const deleteMutation = useMutation({
     mutationFn: async ({ id, quickbooks_id }: { id: string; quickbooks_id: string | null }) => {
+      // Delete child contacts first to avoid FK violations
+      const { error: contactErr } = await supabase.from("contacts").delete().eq("customer_id", id);
+      if (contactErr) console.warn("Failed to delete child contacts:", contactErr.message);
       const { error } = await supabase.from("customers").delete().eq("id", id);
       if (error) throw error;
       if (quickbooks_id) {

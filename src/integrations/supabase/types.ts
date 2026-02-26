@@ -12441,6 +12441,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_completed_pieces: {
+        Args: { p_increment: number; p_item_id: string }
+        Returns: number
+      }
       is_channel_member: {
         Args: { _channel_id: string; _user_id: string }
         Returns: boolean

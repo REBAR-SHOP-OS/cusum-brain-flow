@@ -206,6 +206,9 @@ export default function Customers() {
   // ── Mutations ──
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Delete child contacts first to avoid FK violations
+      const { error: contactErr } = await supabase.from("contacts").delete().eq("customer_id", id);
+      if (contactErr) console.warn("Failed to delete child contacts:", contactErr.message);
       const { error } = await supabase.from("customers").delete().eq("id", id);
       if (error) throw error;
     },
