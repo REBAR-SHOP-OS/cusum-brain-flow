@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RotateCcw, Search, ArrowUpDown, Download, Eye } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { DocumentUploadZone } from "./DocumentUploadZone";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -123,6 +125,13 @@ export function AccountingCreditMemos({ data }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      <DocumentUploadZone
+        targetType="credit_memo"
+        onImport={(result) => {
+          toast({ title: "Credit memo imported", description: `${result.fields.length} fields extracted.` });
+        }}
+      />
 
       <Card>
         <CardHeader>

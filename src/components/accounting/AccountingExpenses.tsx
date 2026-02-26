@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CreateExpenseDialog } from "./CreateExpenseDialog";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { DocumentUploadZone } from "./DocumentUploadZone";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -86,6 +87,14 @@ export function AccountingExpenses({ data }: Props) {
         </div>
         <Badge variant="secondary" className="text-sm py-1 px-3">Total: {fmt(totalAmt)}</Badge>
       </div>
+
+      <DocumentUploadZone
+        targetType="expense"
+        onImport={(result) => {
+          toast({ title: "Expense imported", description: `${result.fields.length} fields extracted.` });
+          load();
+        }}
+      />
 
       {loading && purchases.length === 0 ? (
         <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>

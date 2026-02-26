@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { CustomerSelectDialog } from "./CustomerSelectDialog";
 import { CreateTransactionDialog } from "@/components/customers/CreateTransactionDialog";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { DocumentUploadZone } from "./DocumentUploadZone";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -141,6 +142,14 @@ export function AccountingEstimates({ data }: Props) {
           <Plus className="w-4 h-4" /> Create Quotation
         </Button>
       </div>
+
+      <DocumentUploadZone
+        targetType="estimate"
+        onImport={(result) => {
+          toast({ title: "Estimate imported", description: `${result.documentType} data ready — ${result.fields.length} fields extracted.` });
+          data.loadAll();
+        }}
+      />
 
       <div className="grid grid-cols-4 gap-3">
         {["Pending", "Accepted", "Rejected", "Closed"].map(status => (

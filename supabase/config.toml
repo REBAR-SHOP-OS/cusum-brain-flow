@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.qb-webhook]
 verify_jwt = false
+
+[functions.ai-document-import]
+verify_jwt = false
