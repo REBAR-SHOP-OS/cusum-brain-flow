@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { fetchWithTimeout, isTransientError, backoffWithJitter, logQBCall } from "../_shared/qbHttp.ts";
+import { fetchWithTimeout, isTransientError, backoffWithJitter, logQBCall, constantTimeEqual } from "../_shared/qbHttp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,8 +30,10 @@ async function verifyWCSignature(rawBody: string, signature: string, secret: str
   );
   const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
   const computed = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  // WooCommerce sends base64-encoded HMAC-SHA256
-  return computed === signature;
+  // Debug: log first 10 chars of each signature for diagnosis
+  console.log(`[wc-webhook] Sig check — computed: ${computed.substring(0, 10)}… received: ${signature.substring(0, 10)}… match: ${constantTimeEqual(computed, signature.trim())}`);
+  // WooCommerce sends base64-encoded HMAC-SHA256 — use constant-time comparison
+  return constantTimeEqual(computed, signature.trim());
 }
 
 // ─── QB Token Management (mirrors qb-sync-engine) ──────────────────
@@ -343,7 +345,10 @@ serve(async (req) => {
 
     // ── Verify WooCommerce webhook signature ──
     const wcSignature = req.headers.get("x-wc-webhook-signature");
+    const wcTopic = req.headers.get("x-wc-webhook-topic");
     const wcWebhookSecret = Deno.env.get("WC_WEBHOOK_SECRET");
+
+    console.log(`[wc-webhook] Topic: ${wcTopic}, Signature present: ${!!wcSignature}, Secret present: ${!!wcWebhookSecret}, Body length: ${rawBody.length}`);
 
     if (!wcWebhookSecret) {
       console.error("[wc-webhook] WC_WEBHOOK_SECRET not configured");
@@ -353,10 +358,30 @@ serve(async (req) => {
       });
     }
 
-    if (!wcSignature || !(await verifyWCSignature(rawBody, wcSignature, wcWebhookSecret))) {
-      console.warn("[wc-webhook] Invalid or missing webhook signature");
+    if (!wcSignature) {
+      console.warn("[wc-webhook] Missing x-wc-webhook-signature header");
       return new Response(JSON.stringify({ error: "Invalid signature" }), {
         status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const sigValid = await verifyWCSignature(rawBody, wcSignature.trim(), wcWebhookSecret.trim());
+    console.log(`[wc-webhook] Signature valid: ${sigValid}`);
+
+    if (!sigValid) {
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Handle WooCommerce ping (sent on "Save webhook") ──
+    if (wcTopic === "action.wc_webhook_ping" || wcTopic === "action.woocommerce_webhook_ping") {
+      console.log("[wc-webhook] Ping received — responding 200 OK");
+      const pingPayload = JSON.parse(rawBody);
+      return new Response(JSON.stringify({ ok: true, webhook_id: pingPayload?.webhook_id }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
