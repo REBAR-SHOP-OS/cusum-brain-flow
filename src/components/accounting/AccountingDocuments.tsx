@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, FileOutput, Sparkles, ChevronDown, Upload } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, FileOutput, Sparkles, ChevronDown } from "lucide-react";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
@@ -58,6 +59,36 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  const { companyId } = useCompanyId();
+
+  const handleCreateDraft = async () => {
+    setCreatingDraft(true);
+    try {
+      const suffix = Math.random().toString(36).substring(2, 7).toUpperCase();
+      const quoteNumber = `QE-DRAFT-${suffix}`;
+      const { data: newQuote, error } = await supabase
+        .from("quotes")
+        .insert({
+          quote_number: quoteNumber,
+          status: "draft",
+          source: "manual",
+          total_amount: 0,
+          company_id: companyId,
+        })
+        .select("id, quote_number")
+        .single();
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+      toast({ title: "Draft created", description: `${newQuote.quote_number} is ready for editing.` });
+      setPreviewId(newQuote.id);
+      setPreviewType("quotation");
+    } catch (err: any) {
+      toast({ title: "Error creating draft", description: err.message, variant: "destructive" });
+    } finally {
+      setCreatingDraft(false);
+    }
+  };
 
   useEffect(() => {
     if (initialDocType) {
@@ -254,13 +285,8 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-popover">
-              <DropdownMenuItem onClick={() => {
-                const zone = document.querySelector('[data-upload-zone="quotation"]');
-                if (zone) zone.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                const input = zone?.querySelector('input[type="file"]') as HTMLInputElement;
-                if (input) input.click();
-              }}>
-                <Upload className="w-4 h-4 mr-2" /> Manual Upload
+              <DropdownMenuItem onClick={handleCreateDraft} disabled={creatingDraft}>
+                {creatingDraft ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenTool className="w-4 h-4 mr-2" />} Manual
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowGenerateDialog(true)}>
                 <Sparkles className="w-4 h-4 mr-2" /> AI Auto (from Estimation)
