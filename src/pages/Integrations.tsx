@@ -5,6 +5,7 @@ import { IntegrationCard, type Integration } from "@/components/integrations/Int
 import { IntegrationSetupDialog } from "@/components/integrations/IntegrationSetupDialog";
 import { ConnectDialog } from "@/components/integrations/ConnectDialog";
 import { useIntegrations } from "@/hooks/useIntegrations";
+import { StripeQBSyncPanel } from "@/components/integrations/StripeQBSyncPanel";
 
 export default function Integrations() {
   const {
@@ -77,7 +78,7 @@ export default function Integrations() {
         </Button>
       </header>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+      <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {integrations.map((integration) => (
             <IntegrationCard
@@ -89,6 +90,11 @@ export default function Integrations() {
               disconnecting={disconnecting === integration.id}
             />
           ))}
+        </div>
+
+        {/* Stripe → QuickBooks Sync Panel */}
+        <div className="border border-border rounded-lg p-6 bg-card">
+          <StripeQBSyncPanel />
         </div>
       </div>
 
