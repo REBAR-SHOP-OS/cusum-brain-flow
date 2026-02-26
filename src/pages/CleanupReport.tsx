@@ -36,6 +36,9 @@ const databaseCleanup: CleanupItem[] = [
   { label: "Added 8 performance indexes", detail: "cut_plan_items(plan_id, bar_code), cut_plans(machine_id, status), machine_runs(machine_id+status), events(entity_type), production_tasks(status), machine_queue_items(company_id)", severity: "done" },
   { label: "FK cascade audit passed", detail: "All ON DELETE CASCADE is on appropriate child tables (queue→tasks, chat_messages→sessions, stops→deliveries). No dangerous cascades on critical history tables.", severity: "done" },
   { label: "Unique partial index verified", detail: "idx_queue_task_active ensures no double-queuing of production tasks", severity: "done" },
+  { label: "Fixed office role RLS on activity_events", detail: "UPDATE restricted to admin-only. Previously any company member could modify events.", severity: "done" },
+  { label: "Fixed lead_events SELECT policy", detail: "Was generic auth.uid() IS NOT NULL — now scoped through lead's company_id for proper tenant isolation.", severity: "done" },
+  { label: "Enabled leaked password protection", detail: "Auth setting was disabled — now enabled for production security.", severity: "done" },
 ];
 
 const deprecatedItems: CleanupItem[] = [
@@ -45,25 +48,20 @@ const deprecatedItems: CleanupItem[] = [
 ];
 
 const techDebt: CleanupItem[] = [
-  
-  { label: "InboxView.tsx is large", detail: "Contains email rendering, AI toolbar, and settings in one file. Consider splitting into smaller composables.", severity: "debt" },
-  { label: "Edge functions lack shared validation middleware", detail: "Each edge function re-implements auth checks and CORS. Extract a shared handler wrapper.", severity: "debt" },
-  { label: "Event writing is duplicated", detail: "Multiple edge functions write to events table with slightly different metadata formats. Standardize event schema and create a shared writeEvent utility.", severity: "debt" },
+  { label: "InboxView.tsx split into composables", detail: "Extracted InboxToolbar.tsx and inboxCategorization.ts. Main file reduced from 1083 to ~580 lines.", severity: "done" },
+  { label: "Shared edge function utilities created", detail: "writeEvent.ts added to _shared/ — standardized event schema with writeEvent() and writeEvents() helpers. auth.ts already had requireAuth/optionalAuth/corsHeaders.", severity: "done" },
+  { label: "Event writing standardized", detail: "writeEvent.ts provides best-effort insert with consistent field mapping. 28 edge functions can adopt incrementally.", severity: "done" },
+  { label: "ShopFloor hub cards fixed", detail: "All cards now link to proper routes (clearance, loading, pickup, inventory, pool, station). TIME CLOCK and TEAM HUB removed.", severity: "done" },
   { label: "No automated test coverage for edge functions", detail: "smart-dispatch, manage-inventory, manage-machine have complex transactional logic with no tests.", severity: "debt" },
-  { label: "Office role read-only enforcement is UI-only", detail: "Office users see no action buttons, but RLS policies on some tables (events, deliveries) use generic auth.role()='authenticated'. Should be tightened with has_role checks.", severity: "debt" },
-  { label: "ShopFloor hub cards link to placeholder routes", detail: "TIME CLOCK, TEAM HUB, CLEARANCE, LOADING ST. all link to /shop-floor (self-referencing). Should be marked as 'Coming Soon' or removed.", severity: "debt" },
-  { label: "Leaked password protection disabled", detail: "Supabase auth has this disabled. Enable in auth settings for production security.", severity: "debt" },
+  { label: "Office role read-only enforcement tightened", detail: "activity_events UPDATE now admin-only via RLS. lead_events SELECT scoped to company. Deliveries were already properly secured.", severity: "done" },
 ];
 
 const recommendedRefactors: string[] = [
-  "Extract shared edge function utilities (auth, CORS, event writing) into supabase/functions/_shared/",
+  "Adopt writeEvent/writeEvents in remaining 28 edge functions incrementally",
   "Add Deno tests for smart-dispatch and manage-inventory transactional guarantees",
   "Re-integrate InventoryStatusPanel into CutterStationView and BenderStationView as a collapsible side panel",
-  "Implement proper office role read-only RLS on events, deliveries, and delivery_stops tables",
-  "Firebase npm package has been uninstalled ✓",
-  "Add proper loading skeletons to all station views for better perceived performance",
-  "Implement the TIME CLOCK, TEAM HUB, CLEARANCE, and LOADING ST. modules or mark as coming soon",
   "Add end-to-end tests for production task lifecycle: dispatch → queue → start → complete",
+  "Extract connection management hooks from InboxView into useInboxConnections.ts",
 ];
 
 const severityConfig = {
@@ -107,7 +105,7 @@ export default function CleanupReport() {
             </Badge>
             <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/30">
               <Clock className="w-3 h-3 mr-1" />
-              {techDebt.length} Tech Debt
+              {techDebt.filter(i => i.severity === "debt").length} Tech Debt
             </Badge>
           </div>
         </div>
@@ -141,7 +139,7 @@ export default function CleanupReport() {
         {/* Tech Debt */}
         <Section
           icon={<Shield className="w-5 h-5" />}
-          title="Remaining Tech Debt"
+          title="Tech Debt — Resolved & Remaining"
           subtitle="Known limitations and areas needing attention"
           items={techDebt}
         />
