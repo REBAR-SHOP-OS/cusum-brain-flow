@@ -286,7 +286,7 @@ export async function buildFullVizzyContext(
   // Deliveries
   const scheduledToday = (deliveries || []).length;
   const inTransit = (deliveries || []).filter(
-    (d: any) => d.status === "in_transit"
+    (d: any) => d.status === "in-transit"
   ).length;
 
   // Memories
