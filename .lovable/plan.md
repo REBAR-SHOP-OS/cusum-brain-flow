@@ -1,24 +1,31 @@
 
 
-## Plan: Change "Manual Upload" to "Manual" (Create Draft Quotation)
+## Plan: Open Editable Quotation Editor for Manual Drafts
 
-### What changes
-Replace the "Manual Upload" dropdown option (which opens file picker) with a **"Manual"** option that creates a real draft quotation directly in the database and opens it for editing.
+### Problem
+When clicking "Manual", a draft record is created in the database but nothing opens because the preview logic looks for the quote in QuickBooks data (`data.estimates`), not the DB. The user expects a blank quotation form to fill in.
 
-### File: `src/components/accounting/AccountingDocuments.tsx`
+### Solution
+Create a new `DraftQuotationEditor` component — a full-screen overlay (matching `QuotationTemplate` style) with editable fields. When "Manual" is clicked, the draft is created, then this editor opens instead of the read-only template.
 
-**1. Add state for draft creation** (around line 60)
-- Add `const [creatingDraft, setCreatingDraft] = useState(false);`
+---
 
-**2. Add draft creation function**
-- Generate quote number like `QE-DRAFT-XXXXX` (random suffix)
-- Insert into `quotes` table with `status: 'draft'`, `source: 'manual'`, `total_amount: 0`
-- After insert, invalidate `archived-quotations` query to refresh list
-- Open the preview/edit view for the newly created quote
-- Show success toast
+### 1. Create `src/components/accounting/documents/DraftQuotationEditor.tsx`
+An editable quotation form with:
+- **Header fields**: Customer name (text input), project name (optional), expiration date (date picker)
+- **Line items table**: Editable rows with description, quantity, unit price, auto-calculated amount. "Add row" button to append items. Delete button per row.
+- **Totals**: Auto-calculated subtotal, tax rate input (default 13%), tax amount, total
+- **Notes/terms**: Text area for additional notes
+- **Actions**: "Save Draft" (updates the `quotes` record with all data stored in `metadata` JSONB), "Print / PDF", "Close"
+- Layout matches the existing `QuotationTemplate` branding (logo, company info, signature area)
 
-**3. Update dropdown item** (lines 257-264)
-- Change from file-picker trigger to calling the draft creation function
-- Label: **"Manual"** with `PenTool` icon instead of `Upload`
-- Show loading spinner while creating
+### 2. Update `src/components/accounting/AccountingDocuments.tsx`
+- Add state `draftEditorId` (string | null) to track when the draft editor should open
+- In `handleCreateDraft`: instead of `setPreviewId` / `setPreviewType`, set `draftEditorId` to the new quote's ID
+- Add render block: when `draftEditorId` is set, render `<DraftQuotationEditor quoteId={draftEditorId} onClose={() => setDraftEditorId(null)} />`
+- The editor fetches the quote from DB by ID, lets user edit, and saves back
+
+### Files
+- **Create**: `src/components/accounting/documents/DraftQuotationEditor.tsx`
+- **Modify**: `src/components/accounting/AccountingDocuments.tsx` — wire draft editor instead of broken preview
 
