@@ -111,16 +111,7 @@ export function ProductionQueueView() {
       const ok = await handleDeleteProject(proj.projectId);
       if (!ok) return;
     }
-    if (node.customerId) {
-      // Delete contacts referencing this customer
-      await supabase.from("contacts").delete().eq("customer_id", node.customerId);
-      const { error } = await supabase.from("customers").delete().eq("id", node.customerId);
-      if (error) {
-        toast({ title: "Error deleting customer", description: error.message, variant: "destructive" });
-        return;
-      }
-    }
-    toast({ title: "Customer deleted" });
+    toast({ title: "Production items removed" });
     queryClient.invalidateQueries({ queryKey: ["customers-for-queue"] });
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
