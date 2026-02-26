@@ -19,7 +19,7 @@ export function useProjects(companyId?: string) {
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel("projects-live")
+      .channel(`projects-live-${companyId || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "projects" },
         () => queryClient.invalidateQueries({ queryKey: ["projects"] }))
       .subscribe();

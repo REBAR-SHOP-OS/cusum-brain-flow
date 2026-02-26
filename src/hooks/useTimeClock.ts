@@ -53,7 +53,7 @@ export function useTimeClock() {
   // Subscribe to realtime
   useEffect(() => {
     const channel = supabase
-      .channel("time-clock-realtime")
+      .channel(`time-clock-realtime-${user?.id || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "time_clock_entries" }, () => {
         fetchEntries();
       })

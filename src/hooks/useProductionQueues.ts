@@ -58,7 +58,7 @@ export function useProductionQueues() {
     if (!user) return;
 
     const channel = supabase
-      .channel("production-queues-live")
+      .channel(`production-queues-live-${companyId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "machine_queue_items" },
         () => queryClient.invalidateQueries({ queryKey: ["production-queues", companyId] }))
       .on("postgres_changes", { event: "*", schema: "public", table: "production_tasks" },

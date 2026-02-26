@@ -147,7 +147,7 @@ export function useInventoryData(cutPlanId: string | null, barCode?: string) {
     if (!user) return;
 
     const channel = supabase
-      .channel("inventory-live")
+      .channel(`inventory-live-${user?.id || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_reservations" },
         () => {
           queryClient.invalidateQueries({ queryKey: ["inventory-reservations"] });

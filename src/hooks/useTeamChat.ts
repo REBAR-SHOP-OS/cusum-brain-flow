@@ -52,7 +52,7 @@ export function useTeamChannels() {
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel("team-channels-live")
+      .channel(`team-channels-live-${user?.id || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "team_channels" },
         () => queryClient.invalidateQueries({ queryKey: ["team-channels"] }))
       .subscribe();

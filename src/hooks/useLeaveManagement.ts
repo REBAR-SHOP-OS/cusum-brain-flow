@@ -83,7 +83,7 @@ export function useLeaveManagement() {
   // Realtime subscription
   useEffect(() => {
     const channel = supabase
-      .channel("leave-realtime")
+      .channel(`leave-realtime-${companyId || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "leave_balances" }, () => fetchData())
       .subscribe();

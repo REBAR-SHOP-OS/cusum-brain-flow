@@ -56,7 +56,7 @@ export function useRCPresence() {
   // Realtime subscription
   useEffect(() => {
     const channel = supabase
-      .channel("rc_presence_changes")
+      .channel("rc_presence_changes-" + Math.random().toString(36).slice(2, 8))
       .on("postgres_changes", { event: "*", schema: "public", table: "rc_presence" }, (payload) => {
         const row = payload.new as any;
         if (row?.user_id) {

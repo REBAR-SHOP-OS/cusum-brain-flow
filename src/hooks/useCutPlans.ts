@@ -99,7 +99,7 @@ export function useCutPlans() {
   useEffect(() => {
     if (!user || !companyId) return;
     const channel = supabase
-      .channel("cut-plans-realtime")
+      .channel(`cut-plans-realtime-${companyId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "cut_plans" },
         () => fetchPlans())
       .subscribe();

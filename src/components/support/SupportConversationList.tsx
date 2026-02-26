@@ -59,7 +59,7 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
   // Real-time updates
   useEffect(() => {
     const channel = supabase
-      .channel("support-convos-list")
+      .channel("support-convos-list-" + Math.random().toString(36).slice(2, 8))
       .on("postgres_changes", { event: "*", schema: "public", table: "support_conversations" }, () => {
         fetchConversations();
       })

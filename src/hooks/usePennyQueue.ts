@@ -63,7 +63,7 @@ export function usePennyQueue() {
   useEffect(() => {
     load();
     const channel = supabase
-      .channel("penny-queue-changes")
+      .channel("penny-queue-changes-" + Math.random().toString(36).slice(2, 8))
       .on("postgres_changes", { event: "*", schema: "public", table: "penny_collection_queue" }, () => {
         load();
       })

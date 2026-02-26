@@ -25,7 +25,7 @@ export function useExtractSessions() {
   // Subscribe to realtime changes
   useEffect(() => {
     const channel = supabase
-      .channel("extract-sessions-changes")
+      .channel("extract-sessions-changes-" + Math.random().toString(36).slice(2, 8))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "extract_sessions" },
