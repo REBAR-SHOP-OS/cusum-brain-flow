@@ -185,6 +185,7 @@ export function useOrders() {
     const { data, error } = await supabase.functions.invoke("quickbooks-oauth", {
       body: {
         action: "create-invoice",
+        companyId,
         orderId,
         customerId: order.customers.quickbooks_id,
         customerName: order.customers.name,
