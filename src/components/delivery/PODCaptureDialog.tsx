@@ -103,7 +103,7 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
           slipUpdates.status = "delivered";
 
           await supabase
-            .from("packing_slips" as any)
+            .from("packing_slips")
             .update(slipUpdates)
             .eq("delivery_id", stop.delivery_id);
         }

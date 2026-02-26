@@ -161,7 +161,7 @@ export function useDeliveryActions() {
 
       // 5. Create packing slip
       const { data: slip, error: slipErr } = await supabase
-        .from("packing_slips" as any)
+        .from("packing_slips")
         .insert({
           company_id: companyId,
           delivery_id: delivery.id,

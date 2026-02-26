@@ -117,7 +117,7 @@ export default function Deliveries() {
     
     setDeletingDeliveryId(pendingDeleteId);
     try {
-      await supabase.from("packing_slips" as any).delete().eq("delivery_id", pendingDeleteId);
+      await supabase.from("packing_slips").delete().eq("delivery_id", pendingDeleteId);
       await supabase.from("delivery_stops").delete().eq("delivery_id", pendingDeleteId);
       const { error } = await supabase.from("deliveries").delete().eq("id", pendingDeleteId);
       if (error) throw error;
@@ -190,12 +190,12 @@ export default function Deliveries() {
     enabled: !!companyId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("packing_slips" as any)
+        .from("packing_slips")
         .select("*, deliveries(delivery_number)")
         .eq("company_id", companyId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as any[];
+      return data;
     },
   });
 
@@ -237,7 +237,7 @@ export default function Deliveries() {
     e.stopPropagation();
     setDeletingSlipId(slipId);
     const { error } = await supabase
-      .from("packing_slips" as any)
+      .from("packing_slips")
       .delete()
       .eq("id", slipId)
       .eq("status", "draft");
