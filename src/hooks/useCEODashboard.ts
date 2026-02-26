@@ -448,11 +448,11 @@ async function fetchCEOMetrics(companyId: string): Promise<CEOMetrics> {
 
   // QC & SLA metrics
   const [blockedOrdersRes, qcBacklogRes, revenueHeldRes, slaBreachLeadsRes, slaBreachOrdersRes] = await Promise.all([
-    supabase.from("orders").select("id", { count: "exact", head: true }).eq("production_locked", true).in("status", ["confirmed", "in_production"]),
-    supabase.from("orders").select("id", { count: "exact", head: true }).eq("qc_final_approved", false).in("status", ["in_production"]),
-    supabase.from("orders").select("total_amount").eq("qc_evidence_uploaded", false).in("status", ["in_production"]),
-    supabase.from("leads").select("id", { count: "exact", head: true }).eq("sla_breached", true).not("stage", "in", "(won,lost,archived_orphan)"),
-    supabase.from("sla_escalation_log").select("id, entity_type", { count: "exact", head: true }).is("resolved_at", null),
+    supabase.from("orders").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("production_locked", true).in("status", ["confirmed", "in_production"]),
+    supabase.from("orders").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("qc_final_approved", false).in("status", ["in_production"]),
+    supabase.from("orders").select("total_amount").eq("company_id", companyId).eq("qc_evidence_uploaded", false).in("status", ["in_production"]),
+    supabase.from("leads").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("sla_breached", true).not("stage", "in", "(won,lost,archived_orphan)"),
+    supabase.from("sla_escalation_log").select("id, entity_type", { count: "exact", head: true }).eq("company_id", companyId).is("resolved_at", null),
   ]);
 
   const blockedJobs = blockedOrdersRes.count || 0;
