@@ -120,7 +120,8 @@ export default function PoolView() {
       (item.mark_number?.toLowerCase().includes(searchLower)) ||
       (item.bar_code?.toLowerCase().includes(searchLower)) ||
       (item.drawing_ref?.toLowerCase().includes(searchLower)) ||
-      (item.project_name?.toLowerCase().includes(searchLower))
+      (item.project_name?.toLowerCase().includes(searchLower)) ||
+      (item.plan_name?.toLowerCase().includes(searchLower))
     );
   };
 

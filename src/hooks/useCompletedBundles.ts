@@ -81,7 +81,7 @@ export function useCompletedBundles() {
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel("completed-bundles-live")
+      .channel(`completed-bundles-live-${companyId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "cut_plan_items" },
         () => queryClient.invalidateQueries({ queryKey: ["completed-bundles", companyId] }))
       .subscribe();

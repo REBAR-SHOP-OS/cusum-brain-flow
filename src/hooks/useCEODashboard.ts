@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface CEOAlert {
   type: "error" | "warning";
@@ -158,7 +159,7 @@ function calculateHealthScore(params: {
   return Math.max(0, Math.min(100, score));
 }
 
-async function fetchCEOMetrics(): Promise<CEOMetrics> {
+async function fetchCEOMetrics(companyId: string): Promise<CEOMetrics> {
   const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
@@ -172,7 +173,7 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }).eq("status", "active"),
     supabase.from("orders").select("id", { count: "exact", head: true }).in("status", ["active", "pending"]),
-    supabase.from("cut_plan_items").select("total_pieces, completed_pieces"),
+    supabase.from("cut_plan_items").select("total_pieces, completed_pieces, cut_plans!inner(company_id)").eq("cut_plans.company_id", companyId!),
     supabase.from("machines").select("id, name, type, status"),
     supabase.from("deliveries").select("id", { count: "exact", head: true }).in("status", ["pending", "in-transit", "loading"]),
     supabase.from("leads").select("stage, expected_value").not("stage", "in", "(closed_won,closed_lost)"),
@@ -186,10 +187,10 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
     supabase.from("machine_runs").select("id, status, started_at, ended_at").gte("started_at", todayStart),
     supabase.from("cut_plans").select("id", { count: "exact", head: true }).in("status", ["queued", "running"]),
     supabase.from("pickup_orders").select("id", { count: "exact", head: true }).eq("status", "ready"),
-    supabase.from("orders").select("id, order_number, status, total_amount, customer_id, order_date, customers(name)").order("created_at", { ascending: false }).limit(5),
+    supabase.from("orders").select("id, order_number, status, total_amount, customer_id, order_date, customers(name)").eq("company_id", companyId).order("created_at", { ascending: false }).limit(5),
     supabase.from("leads").select("stage, expected_value"),
     supabase.from("machine_runs").select("started_at, status").gte("started_at", weekAgo),
-    supabase.from("cut_plan_items").select("phase"),
+    supabase.from("cut_plan_items").select("phase, cut_plans!inner(company_id)").eq("cut_plans.company_id", companyId),
   ]);
 
   // Production metrics
@@ -525,9 +526,11 @@ function formatCurrencySimple(v: number): string {
 }
 
 export function useCEODashboard() {
+  const { companyId } = useCompanyId();
   return useQuery({
-    queryKey: ["ceo-dashboard"],
-    queryFn: fetchCEOMetrics,
+    queryKey: ["ceo-dashboard", companyId],
+    queryFn: () => fetchCEOMetrics(companyId!),
+    enabled: !!companyId,
     refetchInterval: 30000,
     staleTime: 15000,
   });

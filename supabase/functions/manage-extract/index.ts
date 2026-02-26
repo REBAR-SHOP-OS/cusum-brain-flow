@@ -487,6 +487,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     const { data: existingCust } = await sb
       .from("customers")
       .select("id")
+      .eq("company_id", session.company_id)
       .ilike("name", customerName)
       .maybeSingle();
     if (existingCust) {
