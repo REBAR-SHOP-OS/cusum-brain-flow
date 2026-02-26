@@ -411,10 +411,16 @@ export function AIExtractView() {
     setProcessing(true);
     setProcessingStep("Starting optimization...");
     try {
-      await supabase
-        .from("extract_sessions")
-        .update({ status: "optimizing" } as any)
-        .eq("id", activeSessionId);
+      // Set local flag immediately for UI visibility (DB update may fail due to RLS)
+      setIsOptimizing(true);
+
+      // Best-effort DB status update
+      try {
+        await supabase
+          .from("extract_sessions")
+          .update({ status: "optimizing" } as any)
+          .eq("id", activeSessionId);
+      } catch (_) { /* RLS may block — local flag handles UI */ }
       
       // Run all three modes for comparison
       const cutItems: CutItem[] = rows
@@ -498,6 +504,12 @@ export function AIExtractView() {
     setInvoiceNumber(session.invoice_number || "");
     setInvoiceDate(session.invoice_date || "");
     setShowHistory(false);
+    setIsOptimizing(session.status === "optimizing");
+    if (session.status !== "optimizing") {
+      setOptimizationResult(null);
+      setSelectedOptMode(null);
+      setAllModeResults({});
+    }
   };
 
   const startNew = () => {
@@ -514,6 +526,10 @@ export function AIExtractView() {
     setCreateNewProject(false);
     setCreateNewBarlist(false);
     setNewRevision(false);
+    setIsOptimizing(false);
+    setOptimizationResult(null);
+    setSelectedOptMode(null);
+    setAllModeResults({});
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -1130,12 +1146,12 @@ export function AIExtractView() {
                 <Shield className="w-4 h-4" /> Validate
               </Button>
             )}
-            {currentStepIndex === 4 && blockerCount === 0 && (
+            {currentStepIndex === 4 && blockerCount === 0 && !isOptimizing && (
               <Button onClick={handleStartOptimize} className="gap-1.5">
                 <Zap className="w-4 h-4" /> Optimize
               </Button>
             )}
-            {currentStepIndex >= 5 && (
+            {(currentStepIndex >= 5 || isOptimizing) && (
               <>
                 <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                   <Zap className="w-3 h-3 mr-1" /> Select a cutting plan below, then click Approve
@@ -1186,7 +1202,7 @@ export function AIExtractView() {
         )}
 
         {/* Optimization Panel — rendered above the table for visibility */}
-        {activeSession?.status === "optimizing" && (
+        {(activeSession?.status === "optimizing" || isOptimizing) && (
           <Card ref={optimizationPanelRef} className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center gap-2">
