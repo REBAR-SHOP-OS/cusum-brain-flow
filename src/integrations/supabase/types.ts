@@ -10738,6 +10738,69 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_qb_sync_map: {
+        Row: {
+          company_id: string
+          created_at: string
+          currency: string | null
+          customer_email: string | null
+          error_message: string | null
+          id: string
+          qb_customer_id: string | null
+          qb_doc_number: string | null
+          qb_invoice_id: string | null
+          qb_payment_id: string | null
+          retry_count: number | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_payment_intent_id: string
+          stripe_session_id: string | null
+          synced_at: string | null
+          total_amount: number | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          currency?: string | null
+          customer_email?: string | null
+          error_message?: string | null
+          id?: string
+          qb_customer_id?: string | null
+          qb_doc_number?: string | null
+          qb_invoice_id?: string | null
+          qb_payment_id?: string | null
+          retry_count?: number | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_payment_intent_id: string
+          stripe_session_id?: string | null
+          synced_at?: string | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          currency?: string | null
+          customer_email?: string | null
+          error_message?: string | null
+          id?: string
+          qb_customer_id?: string | null
+          qb_doc_number?: string | null
+          qb_invoice_id?: string | null
+          qb_payment_id?: string | null
+          retry_count?: number | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_payment_intent_id?: string
+          stripe_session_id?: string | null
+          synced_at?: string | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       suggestions: {
         Row: {
           actions: Json | null
