@@ -8362,6 +8362,57 @@ export type Database = {
         }
         Relationships: []
       }
+      qb_api_failures: {
+        Row: {
+          company_id: string | null
+          correlation_id: string | null
+          created_at: string
+          duration_ms: number | null
+          endpoint: string
+          error_message: string | null
+          id: string
+          next_retry_at: string | null
+          operation: string | null
+          realm_id: string | null
+          request_summary: Json | null
+          resolved_at: string | null
+          retry_count: number | null
+          status_code: number | null
+        }
+        Insert: {
+          company_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          endpoint: string
+          error_message?: string | null
+          id?: string
+          next_retry_at?: string | null
+          operation?: string | null
+          realm_id?: string | null
+          request_summary?: Json | null
+          resolved_at?: string | null
+          retry_count?: number | null
+          status_code?: number | null
+        }
+        Update: {
+          company_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          endpoint?: string
+          error_message?: string | null
+          id?: string
+          next_retry_at?: string | null
+          operation?: string | null
+          realm_id?: string | null
+          request_summary?: Json | null
+          resolved_at?: string | null
+          retry_count?: number | null
+          status_code?: number | null
+        }
+        Relationships: []
+      }
       qb_bank_activity: {
         Row: {
           account_name: string
@@ -8614,6 +8665,30 @@ export type Database = {
         }
         Relationships: []
       }
+      qb_sync_locks: {
+        Row: {
+          action: string
+          company_id: string
+          expires_at: string
+          locked_at: string
+          locked_by: string | null
+        }
+        Insert: {
+          action: string
+          company_id: string
+          expires_at?: string
+          locked_at?: string
+          locked_by?: string | null
+        }
+        Update: {
+          action?: string
+          company_id?: string
+          expires_at?: string
+          locked_at?: string
+          locked_by?: string | null
+        }
+        Relationships: []
+      }
       qb_sync_logs: {
         Row: {
           action: string
@@ -8780,6 +8855,7 @@ export type Database = {
         Row: {
           company_id: string | null
           created_at: string
+          dedupe_key: string | null
           entity_id: string
           entity_type: string
           error_message: string | null
@@ -8792,6 +8868,7 @@ export type Database = {
         Insert: {
           company_id?: string | null
           created_at?: string
+          dedupe_key?: string | null
           entity_id: string
           entity_type: string
           error_message?: string | null
@@ -8804,6 +8881,7 @@ export type Database = {
         Update: {
           company_id?: string | null
           created_at?: string
+          dedupe_key?: string | null
           entity_id?: string
           entity_type?: string
           error_message?: string | null

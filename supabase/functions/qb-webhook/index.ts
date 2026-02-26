@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { constantTimeEqual } from "../_shared/qbHttp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Verify HMAC-SHA256 signature from QuickBooks */
+/** Verify HMAC-SHA256 signature from QuickBooks using constant-time comparison */
 async function verifySignature(rawBody: string, signature: string, secret: string): Promise<boolean> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -15,7 +16,7 @@ async function verifySignature(rawBody: string, signature: string, secret: strin
   );
   const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
   const computed = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return computed === signature;
+  return constantTimeEqual(computed, signature);
 }
 
 serve(async (req) => {
@@ -42,7 +43,7 @@ serve(async (req) => {
       });
     }
 
-    // --- R16-1: HMAC signature verification on POST ---
+    // --- HMAC signature verification on POST ---
     const rawBody = await req.text();
     const intuitSignature = req.headers.get("intuit-signature");
 
@@ -94,38 +95,34 @@ serve(async (req) => {
         const entityId = entity.id;
         const operation = entity.operation;
 
-        // --- R16-2: Replay/dedup protection ---
+        // --- Dedupe via INSERT ON CONFLICT (uses partial unique index) ---
         try {
-          const { data: existing } = await svc
+          const { data: inserted } = await svc
             .from("qb_webhook_events")
-            .select("id, created_at")
-            .eq("realm_id", realmId)
-            .eq("entity_type", entityType)
-            .eq("entity_id", entityId)
-            .eq("operation", operation)
-            .gte("created_at", new Date(Date.now() - 60_000).toISOString())
-            .limit(1);
+            .insert({
+              company_id: companyId,
+              realm_id: realmId,
+              entity_type: entityType,
+              entity_id: entityId,
+              operation: operation,
+              raw_payload: entity,
+            })
+            .select("id")
+            .maybeSingle();
 
-          if (existing && existing.length > 0) {
+          if (!inserted) {
             console.log(`[qb-webhook] Duplicate event skipped: ${entityType}/${entityId}/${operation}`);
             continue;
           }
         } catch (e) {
-          console.warn("[qb-webhook] Dedup check failed, proceeding:", e);
-        }
-
-        // Log the event
-        try {
-          await svc.from("qb_webhook_events").insert({
-            company_id: companyId,
-            realm_id: realmId,
-            entity_type: entityType,
-            entity_id: entityId,
-            operation: operation,
-            raw_payload: entity,
-          });
-        } catch (e) {
+          // Unique constraint violation = duplicate
+          const msg = String(e);
+          if (msg.includes("duplicate key") || msg.includes("unique constraint") || msg.includes("idx_qb_webhook_events_dedupe")) {
+            console.log(`[qb-webhook] Duplicate event (constraint): ${entityType}/${entityId}/${operation}`);
+            continue;
+          }
           console.error("[qb-webhook] Failed to log event:", e);
+          continue;
         }
 
         // Trigger incremental sync for this company
