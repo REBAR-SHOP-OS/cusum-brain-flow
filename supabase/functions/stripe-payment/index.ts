@@ -174,7 +174,15 @@ serve(async (req) => {
         .eq("company_id", companyId)
         .eq("status", "active");
 
-      return json({ links: links || [] });
+    return json({ links: links || [] });
+    }
+
+    // ── list-charges (real Stripe payment history) ──
+    if (action === "list-charges") {
+      const limit = Math.min(Number(params.limit) || 100, 100);
+      const charges = await stripeRequest(`/charges?limit=${limit}`, "GET");
+      const succeeded = (charges.data || []).filter((c: any) => c.status === "succeeded");
+      return json({ charges: succeeded });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

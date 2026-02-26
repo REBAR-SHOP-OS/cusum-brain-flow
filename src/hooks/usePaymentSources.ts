@@ -78,6 +78,19 @@ export function usePaymentSources(qbPayments: QBPayment[]) {
     retry: 1,
   });
 
+  // Stripe real charges (payment history)
+  const { data: stripeCharges } = useQuery({
+    queryKey: ["stripe_charges"],
+    queryFn: async () => {
+      const { data } = await supabase.functions.invoke("stripe-payment", {
+        body: { action: "list-charges", limit: 100 },
+      });
+      return data?.charges ?? [];
+    },
+    staleTime: 1000 * 60 * 5,
+    retry: 1,
+  });
+
   // Odoo / WooCommerce archived orders
   const { data: wcOrders } = useQuery({
     queryKey: ["wc_qb_order_map_count", companyId],
@@ -115,15 +128,28 @@ export function usePaymentSources(qbPayments: QBPayment[]) {
       raw: l,
     }));
 
-    return [...qb, ...stripe].sort(
+    const stripeChg: UnifiedPayment[] = (stripeCharges ?? []).map((c: any) => ({
+      id: `stripe-ch-${c.id}`,
+      date: new Date(c.created * 1000).toISOString().slice(0, 10),
+      customerName: c.billing_details?.name || c.metadata?.customer_name || "Stripe Customer",
+      amount: (c.amount || 0) / 100,
+      source: "stripe" as const,
+      sourceRef: c.receipt_url,
+      raw: c,
+    }));
+
+    return [...qb, ...stripe, ...stripeChg].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-  }, [qbPayments, stripeLinks]);
+  }, [qbPayments, stripeLinks, stripeCharges]);
 
   // ── Source summaries ──
   const sourceSummaries = useMemo<SourceSummary[]>(() => {
     const qbTotal = qbPayments.reduce((s, p) => s + p.TotalAmt, 0);
-    const stripeTotal = (stripeLinks ?? []).reduce((s: number, l: any) => s + (Number(l.amount) || 0), 0);
+    const stripeChargeTotal = (stripeCharges ?? []).reduce((s: number, c: any) => s + ((c.amount || 0) / 100), 0);
+    const stripeLinkTotal = (stripeLinks ?? []).reduce((s: number, l: any) => s + (Number(l.amount) || 0), 0);
+    const stripeTotal = stripeChargeTotal + stripeLinkTotal;
+    const stripeCount = (stripeCharges ?? []).length + (stripeLinks ?? []).length;
     const bmoLedger = (bankActivity ?? []).reduce((s: number, a: any) => s + (Number(a.ledger_balance) || 0), 0);
     const bmoLastSync = (bankActivity ?? []).reduce(
       (latest: string | null, a: any) => {
@@ -146,7 +172,7 @@ export function usePaymentSources(qbPayments: QBPayment[]) {
         source: "stripe" as const,
         label: "Stripe",
         total: stripeTotal,
-        count: (stripeLinks ?? []).length,
+        count: stripeCount,
         status: stripeStatus?.status === "connected"
           ? "connected" as const
           : stripeStatus?.errorType
@@ -169,7 +195,7 @@ export function usePaymentSources(qbPayments: QBPayment[]) {
         status: "archived" as const,
       },
     ];
-  }, [qbPayments, stripeLinks, bankActivity, wcOrders, stripeStatus]);
+  }, [qbPayments, stripeLinks, stripeCharges, bankActivity, wcOrders, stripeStatus]);
 
   // ── Reconciliation ──
   const reconciliation = useMemo<ReconciliationIndicator[]>(() => {
