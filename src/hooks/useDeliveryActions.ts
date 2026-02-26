@@ -128,7 +128,7 @@ export function useDeliveryActions() {
           delivery_id: delivery.id,
           cut_plan_id: bundle.cutPlanId,
           slip_number: slipNumber,
-          customer_name: bundle.projectName,
+          customer_name: bundle.customerName || bundle.projectName,
           items_json: itemsSnapshot,
           status: "draft",
           delivery_date: scheduledDate,

@@ -95,7 +95,7 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
     return (
       <PhotoPackingSlip
         slipNumber={slipNumber}
-        customerName={selectedBundle.projectName}
+        customerName={selectedBundle.customerName || selectedBundle.projectName}
         date={new Date().toISOString()}
         items={selectedItems}
         photoUrls={photoUrls}
@@ -112,7 +112,7 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
       <DeliveryPackingSlip
         slipNumber={slipNumber}
         deliveryNumber={slipNumber}
-        customerName={selectedBundle.projectName}
+        customerName={selectedBundle.customerName || selectedBundle.projectName}
         date={new Date().toISOString()}
         items={selectedItems}
         onClose={() => { setShowPackingSlip(false); setSlipType(null); }}

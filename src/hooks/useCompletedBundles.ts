@@ -6,6 +6,7 @@ import { useEffect } from "react";
 
 export interface CompletedBundle {
   projectName: string;
+  customerName: string | null;
   planName: string;
   cutPlanId: string;
   items: CompletedBundleItem[];
@@ -33,7 +34,7 @@ export function useCompletedBundles() {
     queryFn: async () => {
       const { data: items, error: err } = await supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, project_name, company_id)")
+        .select("*, cut_plans!inner(id, name, project_name, company_id, project_id, projects(customer_id, customers(name)))")
         .eq("phase", "complete")
         .eq("cut_plans.company_id", companyId!);
 
@@ -41,13 +42,16 @@ export function useCompletedBundles() {
       if (!items?.length) return [];
 
       // Group by cutPlanId to prevent merge bugs when multiple plans share a project name
-      const byPlan = new Map<string, { projectName: string; planName: string; items: CompletedBundleItem[] }>();
+      const byPlan = new Map<string, { projectName: string; customerName: string | null; planName: string; items: CompletedBundleItem[] }>();
       for (const item of items as Record<string, unknown>[]) {
         const cutPlans = item.cut_plans as Record<string, unknown> | undefined;
+        const projects = cutPlans?.projects as Record<string, unknown> | undefined;
+        const customers = projects?.customers as Record<string, unknown> | undefined;
         const key = item.cut_plan_id as string;
         if (!byPlan.has(key)) {
           byPlan.set(key, {
             projectName: (cutPlans?.project_name as string) || (cutPlans?.name as string) || "Unassigned",
+            customerName: (customers?.name as string) || null,
             planName: (cutPlans?.name as string) || "",
             items: [],
           });
@@ -67,6 +71,7 @@ export function useCompletedBundles() {
       for (const [cutPlanId, data] of byPlan) {
         bundles.push({
           projectName: data.projectName,
+          customerName: data.customerName,
           planName: data.planName,
           cutPlanId,
           items: data.items,
