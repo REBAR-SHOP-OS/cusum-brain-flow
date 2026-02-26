@@ -1,29 +1,25 @@
 
 
-## Investigation: Ben's Inbox Appears Empty
+## Plan: Add Inbox to Sidebar
 
-### Findings
+### Problem
+The sidebar (`AppSidebar.tsx`) has no "Inbox" item. The `/inbox-manager` route currently redirects to `/home`, making the email inbox unreachable.
 
-After thorough investigation, there is **no `inbox_items` table** in this project. The bug report's root cause analysis is incorrect.
+### Changes
 
-**What actually exists:**
-- `notifications` table — powers the InboxPanel (sidebar notification bell). Ben has **78 unread** notifications with correct RLS policies (`user_id = auth.uid()` and `assigned_to` via profiles join)
-- `communications` table — powers the email InboxView. Ben has **183 records** (131 Gmail, 52 RingCentral) with correct RLS policies
-- `get_user_company_id()` returns the correct company for Ben
+**1. Restore `/inbox-manager` route in `src/App.tsx`**
+- Line 204: Change `<Navigate to="/home" replace />` back to `<P><InboxManager /></P>` (the import already exists on line 84 area — verify or add)
 
-**RLS policies verified and working:**
-- `notifications` SELECT: two policies, both correctly matching Ben's user_id and profile
-- `communications` SELECT: correctly scoped by `company_id` AND `user_id`
+**2. Add Inbox items to `src/components/layout/AppSidebar.tsx`**
+- Add `{ name: "Inbox", href: "/inbox-manager", icon: Inbox, roles: ["admin", "office"], tourId: "nav-inbox" }` to the Office nav group (after Dashboard)
+- The Inbox icon is already imported in `Sidebar.tsx` but needs to be added to the AppSidebar import
+- The notification bell already exists in the TopBar — no sidebar duplication needed for the panel
 
-### Possible Real Causes
+**3. Add Inbox to mobile nav in `src/components/layout/MobileNavV2.tsx`**
+- Add `{ name: "Inbox", href: "/inbox-manager", icon: Inbox, roles: ["admin", "office"] }` to the `moreItems` array
 
-1. **Email InboxView is unreachable** — The `/inbox-manager` route redirects to `/home`, so users can't access the email inbox. If Ben is looking for his email inbox, there's no route to get there.
-2. **Session/auth issue** — If Ben's token is expired or he's not fully authenticated, the client-side `supabase.auth.getUser()` returns null, causing `useCommunications` to short-circuit and show nothing.
-3. **InboxPanel filtering** — The notification panel only shows the last 50 items and filters out "dismissed" ones. If Ben previously dismissed notifications, they won't reappear.
-
-### Recommended Action
-
-Since the backend data and RLS are correct, this is likely a **frontend routing or session issue**, not a database access problem. No SQL migration is needed.
-
-If you can clarify which specific page/panel appears empty for Ben (the bell notification panel, or an email inbox view), I can provide a targeted fix.
+### Files
+- `src/App.tsx` — restore inbox-manager route
+- `src/components/layout/AppSidebar.tsx` — add Inbox nav item
+- `src/components/layout/MobileNavV2.tsx` — add Inbox to mobile more menu
 
