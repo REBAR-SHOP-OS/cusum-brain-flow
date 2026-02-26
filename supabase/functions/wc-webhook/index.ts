@@ -343,12 +343,32 @@ serve(async (req) => {
   try {
     const rawBody = await req.text();
 
-    // ── Verify WooCommerce webhook signature ──
+    // ── Read headers and classify ping vs event ──
     const wcSignature = req.headers.get("x-wc-webhook-signature");
     const wcTopic = req.headers.get("x-wc-webhook-topic");
     const wcWebhookSecret = Deno.env.get("WC_WEBHOOK_SECRET");
 
     console.log(`[wc-webhook] Topic: ${wcTopic}, Signature present: ${!!wcSignature}, Secret present: ${!!wcWebhookSecret}, Body length: ${rawBody.length}`);
+
+    // WooCommerce "Save webhook" validation ping can arrive without topic/signature.
+    // Accept only ping-like payloads (webhook_id present, no order id) and never process as orders.
+    let pingPayload: Record<string, unknown> | null = null;
+    try {
+      pingPayload = JSON.parse(rawBody);
+    } catch {
+      pingPayload = null;
+    }
+
+    const isPingTopic = wcTopic === "action.wc_webhook_ping" || wcTopic === "action.woocommerce_webhook_ping";
+    const isPingPayload = !!(pingPayload && (pingPayload.webhook_id || pingPayload.webhookId) && !pingPayload.id);
+
+    if (isPingTopic || (!wcSignature && isPingPayload)) {
+      console.log("[wc-webhook] Ping/validation request received — responding 200 OK");
+      return new Response(JSON.stringify({ ok: true, webhook_id: pingPayload?.webhook_id ?? pingPayload?.webhookId ?? null }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!wcWebhookSecret) {
       console.error("[wc-webhook] WC_WEBHOOK_SECRET not configured");
@@ -358,6 +378,7 @@ serve(async (req) => {
       });
     }
 
+    // Real events must be signed
     if (!wcSignature) {
       console.warn("[wc-webhook] Missing x-wc-webhook-signature header");
       return new Response(JSON.stringify({ error: "Invalid signature" }), {
@@ -372,16 +393,6 @@ serve(async (req) => {
     if (!sigValid) {
       return new Response(JSON.stringify({ error: "Invalid signature" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // ── Handle WooCommerce ping (sent on "Save webhook") ──
-    if (wcTopic === "action.wc_webhook_ping" || wcTopic === "action.woocommerce_webhook_ping") {
-      console.log("[wc-webhook] Ping received — responding 200 OK");
-      const pingPayload = JSON.parse(rawBody);
-      return new Response(JSON.stringify({ ok: true, webhook_id: pingPayload?.webhook_id }), {
-        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
