@@ -125,7 +125,7 @@ export default function DriverDropoff() {
 
       if (stop?.delivery_id) {
         if (signaturePath || photoPath) {
-          const slipUpdates: Record<string, unknown> = { status: "delivered" };
+          const slipUpdates: { status: string; signature_path?: string; site_photo_path?: string } = { status: "delivered" };
           if (signaturePath) slipUpdates.signature_path = signaturePath;
           if (photoPath) slipUpdates.site_photo_path = photoPath;
           await supabase.from("packing_slips").update(slipUpdates).eq("delivery_id", stop.delivery_id);

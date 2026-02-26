@@ -97,10 +97,9 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
       if (stop?.delivery_id) {
         // Update related packing_slips if paths exist
         if (signaturePath || photoPath) {
-          const slipUpdates: Record<string, unknown> = {};
+          const slipUpdates: { status: string; signature_path?: string; site_photo_path?: string } = { status: "delivered" };
           if (signaturePath) slipUpdates.signature_path = signaturePath;
           if (photoPath) slipUpdates.site_photo_path = photoPath;
-          slipUpdates.status = "delivered";
 
           await supabase
             .from("packing_slips")
