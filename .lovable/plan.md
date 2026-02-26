@@ -1,26 +1,49 @@
 
 
-# Fix: Dashboard Content Blank + Scroll Issues
+# Clear Stale AI Queue and Rescan
 
-## Root Cause
+## Problem
+The `penny_collection_queue` table has 35 stale items with outdated data. The existing tools don't expose a direct write path to delete rows from the client side.
 
-The `SidebarProvider` component (from `src/components/ui/sidebar.tsx` line 119) renders its wrapper div with `min-h-svh` (100svh). This forces the accounting layout to be at least full viewport height, which overflows the `AppLayout`'s `<main className="flex-1 overflow-hidden">` container -- clipping all content.
+## Solution
 
-The fix from the previous change (`min-h-screen` → `h-full`) was correct in intent but insufficient because `SidebarProvider`'s own wrapper still demands full viewport height.
+**Step 1: Add a `purge` option to `penny-auto-actions` edge function**
 
-## Fix
+Modify `supabase/functions/penny-auto-actions/index.ts` to accept an optional `{ purge: true }` flag in the request body. When set, it deletes all existing queue items before scanning.
 
-In `src/pages/AccountingWorkspace.tsx`, pass a `className` override to `SidebarProvider` to replace `min-h-svh` with `h-full`:
+| File | Change |
+|---|---|
+| `supabase/functions/penny-auto-actions/index.ts` | After auth (line 19), parse request body for `purge` flag. If true, `DELETE FROM penny_collection_queue WHERE company_id = companyId` before proceeding with the scan. |
 
-```tsx
-<SidebarProvider defaultOpen={true} className="h-full !min-h-0">
+**Step 2: Add a "Clear & Rescan" button to the UI**
+
+Update `usePennyQueue.ts` `triggerAutoActions` to accept an optional `purge` parameter, passed to the edge function body.
+
+Update `AccountingActionQueue.tsx` to add a "Clear & Rescan" option (or modify the existing "Scan Now" button to include a clear option).
+
+| File | Change |
+|---|---|
+| `src/hooks/usePennyQueue.ts` | Update `triggerAutoActions` to accept `{ purge?: boolean }` and pass it in the function invoke body |
+| `src/components/accounting/AccountingActionQueue.tsx` | Add a "Clear & Rescan" button that calls `triggerAutoActions` with `purge: true` |
+
+**Step 3: Invoke immediately to clear stale data**
+
+After deploying, call the edge function with `{ purge: true }` to clear all 35 stale items and regenerate fresh ones from current QuickBooks data.
+
+## Deduplication
+The existing function already deduplicates by `invoice_id` and `customer_name` (lines 108-118), so no duplicates will be created during the rescan.
+
+## Technical Details
+
+The edge function change adds ~5 lines after line 19:
+
+```typescript
+const body = await req.json().catch(() => ({}));
+const purge = body?.purge === true;
+
+if (purge) {
+  await supabase.from("penny_collection_queue").delete().eq("company_id", companyId);
+  console.log("[penny-auto-actions] Purged all queue items for company", companyId);
+}
 ```
-
-This overrides the default `min-h-svh` so the entire accounting layout fits within its parent container, allowing proper scrolling inside the content area.
-
-| File | Line | Change |
-|---|---|---|
-| `src/pages/AccountingWorkspace.tsx` | 303 | Add `className="h-full !min-h-0"` to `SidebarProvider` |
-
-One-line change, no logic modifications.
 
