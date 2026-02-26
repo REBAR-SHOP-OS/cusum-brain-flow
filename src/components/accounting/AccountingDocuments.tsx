@@ -208,8 +208,6 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
 
   const docTabs = [
     { id: "packing-slip" as DocType, label: "Packing Slips", icon: Package, count: data.invoices.length },
-    { id: "invoice" as DocType, label: "Invoices", icon: FileText, count: data.invoices.length },
-    { id: "quotation" as DocType, label: "Quotations", icon: ClipboardList, count: totalCount || data.estimates.length },
   ];
 
   const handleCreateInvoiceFromQuote = async (quoteId: string) => {
@@ -256,13 +254,6 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
               }
             }}>
               <Plus className="w-4 h-4" /> Add Packing Slip
-            </Button>
-          )}
-          {activeDoc === "quotation" && (
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
-              toast({ title: "Create Quotation", description: "Use the + Create Quotation button on the Dashboard or Invoices tab." });
-            }}>
-              <Plus className="w-4 h-4" /> Add New Quotation
             </Button>
           )}
         </div>
