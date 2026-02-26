@@ -165,7 +165,7 @@ Available tools:
 • update_cut_plan_status(id, status) — Change cut plan to: draft, queued, running, completed, canceled
 • update_lead_status(id, status) — Move lead to: new, contacted, qualified, proposal, won, lost
 • update_machine_status(id, status) — Set machine to: idle, running, blocked, down
-• update_delivery_status(id, status) — Update delivery: scheduled, in_transit, delivered, canceled
+• update_delivery_status(id, status) — Update delivery: scheduled, in-transit, delivered, canceled, completed_with_issues
 • update_cut_plan_item(id, updates) — Modify item: phase, completed_pieces, notes, needs_fix
 • log_event(entity_type, event_type, description) — Log any business event
 • log_fix_request(description, affected_area) — Log a bug or issue for the dev team to fix later
