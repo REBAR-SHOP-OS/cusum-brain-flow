@@ -501,7 +501,7 @@ export function AIExtractView() {
       {processing && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center pointer-events-none animate-fade-in">
           {/* Dark backdrop */}
-          <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px]" />
+          <div className="absolute inset-0 bg-background/85 backdrop-blur-md" />
           
           {/* Outer glow */}
           <div
@@ -516,12 +516,14 @@ export function AIExtractView() {
           <img
             src={brainHero}
             alt=""
-            className="relative w-[40vh] h-[40vh] max-w-[500px] max-h-[500px] object-contain opacity-70 select-none"
+            className="relative w-[35vh] h-[35vh] max-w-[400px] max-h-[400px] object-contain opacity-80 select-none"
             draggable={false}
             style={{
               mixBlendMode: "screen",
               filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.5))",
               animation: "brain-extract-float 4s ease-in-out infinite",
+              maskImage: "radial-gradient(circle, white 30%, transparent 70%)",
+              WebkitMaskImage: "radial-gradient(circle, white 30%, transparent 70%)",
             }}
           />
           
