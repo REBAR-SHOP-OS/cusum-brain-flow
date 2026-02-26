@@ -74,7 +74,12 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
         signaturePath = sigPath;
       }
 
-      const updates: Record<string, unknown> = {
+      const updates: {
+        status: string;
+        departure_time: string;
+        pod_signature?: string;
+        pod_photo_url?: string;
+      } = {
         status: "completed",
         departure_time: new Date().toISOString(),
       };
