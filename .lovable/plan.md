@@ -2,29 +2,15 @@
 
 ## Problem
 
-The barlist "1000197066 ONTARIO INC." shows as **Draft** and **UNASSIGNED** in the Production Queue. It has no `machine_id` set on the `cut_plans` row, so when you click Cutter-01 or Cutter-02, the station view shows "No items queued to this machine" — there's nothing to start.
+When the user clicks "Optimize", the status updates to "optimizing" and the optimization panel with mode cards renders — but it renders **below the table** (which is `h-[55vh]`), out of the visible viewport. The user doesn't see it and thinks nothing happened. Additionally, the Optimize button disappears (replaced by "Approve & Create WO") giving the impression the page is stuck.
 
-The flow requires: **Barlist → Assign to Machine → Items appear on Station → Start cutting**. Currently, assigning a barlist to a machine can only be done from the Office view (QueueToMachineDialog). The Shop Floor Production Queue is read-only.
+## Fix
 
-## Solution
+### `src/components/office/AIExtractView.tsx`
 
-Add an "Assign to Machine" action on each barlist row in the Shop Floor Production Queue. Clicking it opens a small dialog where the operator picks a cutter machine, which sets `cut_plans.machine_id` and updates status to `queued`. After that, items appear on the selected cutter's station view and can be started.
+1. **Move the Optimization Panel above the table**: Reorder the JSX so the optimization panel (mode cards + config) renders **between** the action bar and the line items table, not after it. This ensures it's immediately visible when the user clicks Optimize.
 
-## Changes
+2. **Auto-scroll to optimization panel**: After `handleStartOptimize` completes, scroll the optimization panel into view using a `ref` and `scrollIntoView()`.
 
-### 1. `src/components/shopfloor/ShopFloorProductionQueue.tsx`
-- Add a clickable "Assign" button (or the entire barlist row) on each barlist that has no machine assigned
-- On click, show a small machine picker dialog (inline dropdown or modal)
-- On selection: update `cut_plans.machine_id` and `cut_plans.status` to `queued`
-- Show which machine a barlist is already assigned to (if any)
-- Use existing `useCutterMachines()` hook to get available machines
-
-### 2. Wire up the assignment
-- Query `cut_plans` matching each barlist's project to find the relevant plan
-- Or join barlists → cut_plans directly if the barlist ID maps to a cut_plan
-- Update `machine_id` on the cut_plan row and set status from `draft` to `queued`
-- Invalidate station-data queries so the machine's station view refreshes
-
-### Files Modified
-- `src/components/shopfloor/ShopFloorProductionQueue.tsx` — add assign-to-machine action per barlist row
+3. **Keep the step context clear**: When in "optimizing" status, show a small info banner above the Approve button explaining "Select a cutting plan below, then click Approve."
 
