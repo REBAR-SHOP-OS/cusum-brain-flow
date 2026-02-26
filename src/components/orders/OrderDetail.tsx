@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Plus, Trash2, Send, AlertTriangle, ChevronLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Order, OrderItem } from "@/hooks/useOrders";
-import { useOrders } from "@/hooks/useOrders";
+import { useOrders, ALLOWED_TRANSITIONS } from "@/hooks/useOrders";
 import { ShopDrawingStepper } from "./ShopDrawingStepper";
 import { QCChecklist } from "./QCChecklist";
 import { ProductionLockBanner } from "./ProductionLockBanner";
@@ -115,15 +115,20 @@ export function OrderDetail({ order, onBack }: Props) {
         </div>
         <Select
           value={order.status || "pending"}
-          onValueChange={(v) => updateOrderStatus.mutate({ id: order.id, status: v })}
+          onValueChange={(v) => updateOrderStatus.mutate({ id: order.id, status: v, currentStatus: order.status || "pending" })}
         >
           <SelectTrigger className="w-[160px] h-9">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>{s.replace(/_/g, " ")}</SelectItem>
-            ))}
+            {(() => {
+              const current = order.status || "pending";
+              const allowed = ALLOWED_TRANSITIONS[current] || [];
+              const visible = [current, ...allowed];
+              return visible.map((s) => (
+                <SelectItem key={s} value={s}>{s.replace(/_/g, " ")}</SelectItem>
+              ));
+            })()}
           </SelectContent>
         </Select>
       </div>
