@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +59,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   const [previewType, setPreviewType] = useState<DocType | null>(null);
   const [convertQuote, setConvertQuote] = useState<{ id: string; quote_number: string; total_amount: number | null; customer_name: string } | null>(null);
   const [signQuote, setSignQuote] = useState<{ id: string; quote_number: string } | null>(null);
+  const [viewQuote, setViewQuote] = useState<typeof quotations[number] | null>(null);
 
   // Quotation pagination & filter state
   const [qPage, setQPage] = useState(1);
@@ -320,6 +322,9 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                     <Badge variant="outline" className={`text-xs ${STATUS_BADGE_COLORS[q.odoo_status || ""] || ""}`}>
                       {q.odoo_status || q.status}
                     </Badge>
+                    <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setViewQuote(q); }}>
+                      <Eye className="w-3.5 h-3.5" /> View
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -449,6 +454,51 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           onSigned={() => { setSignQuote(null); }}
         />
       )}
+      {/* Quotation Detail Sheet */}
+      <Sheet open={!!viewQuote} onOpenChange={(o) => !o && setViewQuote(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Quotation {viewQuote?.quote_number}</SheetTitle>
+            <SheetDescription>Full quotation details</SheetDescription>
+          </SheetHeader>
+          {viewQuote && (() => {
+            const meta = viewQuote.metadata as Record<string, unknown> | null;
+            const customer = meta?.odoo_customer as string || "Unknown";
+            const lines = (meta?.order_lines || meta?.line_items) as Array<Record<string, unknown>> | undefined;
+            return (
+              <div className="space-y-6 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div><p className="text-sm text-muted-foreground">Quote #</p><p className="font-medium">{viewQuote.quote_number}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Customer</p><p className="font-medium">{customer}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{new Date(viewQuote.created_at).toLocaleDateString()}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Status</p><Badge variant="outline">{viewQuote.odoo_status || viewQuote.status}</Badge></div>
+                  <div><p className="text-sm text-muted-foreground">Total Amount</p><p className="font-medium text-lg">${Number(viewQuote.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Salesperson</p><p className="font-medium">{viewQuote.salesperson || "—"}</p></div>
+                  {viewQuote.valid_until && <div><p className="text-sm text-muted-foreground">Valid Until</p><p className="font-medium">{new Date(viewQuote.valid_until).toLocaleDateString()}</p></div>}
+                  {viewQuote.signature_data && <div><p className="text-sm text-muted-foreground">Signed</p><Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200">✓ Signed</Badge></div>}
+                </div>
+                {viewQuote.notes && (
+                  <div><p className="text-sm text-muted-foreground mb-1">Notes</p><p className="text-sm">{viewQuote.notes}</p></div>
+                )}
+                {lines && lines.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">Line Items ({lines.length})</p>
+                    <div className="space-y-2">
+                      {lines.map((line, i) => (
+                        <div key={i} className="flex justify-between items-center p-2 rounded bg-muted/50 text-sm">
+                          <span className="flex-1">{String(line.name || line.description || `Item ${i + 1}`)}</span>
+                          <span className="text-muted-foreground mx-2">×{Number(line.product_uom_qty || line.quantity || 1)}</span>
+                          <span className="font-medium">${Number(line.price_unit || line.unit_price || 0).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
