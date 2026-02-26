@@ -34,17 +34,17 @@ serve(async (req) => {
       const syncController = new AbortController();
       const syncTimeout = setTimeout(() => syncController.abort(), 15000);
 
-      await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
+      await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${svcKey}`,
+          Authorization: req.headers.get("Authorization") || `Bearer ${svcKey}`,
         },
-        body: JSON.stringify({ action: "incremental", company_id: companyId }),
+        body: JSON.stringify({ action: "sync_invoices" }),
         signal: syncController.signal,
       });
       clearTimeout(syncTimeout);
-      console.log("[penny-auto-actions] QB sync completed before scan");
+      console.log("[penny-auto-actions] accounting_mirror refreshed via sync_invoices");
     } catch (syncErr) {
       console.warn("[penny-auto-actions] QB sync failed, proceeding with cached data:", syncErr);
     }
