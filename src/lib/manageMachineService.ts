@@ -38,6 +38,20 @@ export interface ManageMachineParams {
 export async function manageMachine(
   params: ManageMachineParams
 ): Promise<{ success: boolean; machineId: string; action: string; machineRunId?: string }> {
+  // Client-side input validation
+  if (!params.machineId || params.machineId === "null" || params.machineId === "undefined") {
+    throw new Error("Invalid machineId");
+  }
+  if (params.qty !== undefined && params.qty < 0) {
+    throw new Error("qty cannot be negative");
+  }
+  if (params.outputQty !== undefined && params.outputQty < 0) {
+    throw new Error("outputQty cannot be negative");
+  }
+  if (params.scrapQty !== undefined && params.scrapQty < 0) {
+    throw new Error("scrapQty cannot be negative");
+  }
+
   const { data, error } = await supabase.functions.invoke("manage-machine", {
     body: params,
   });
