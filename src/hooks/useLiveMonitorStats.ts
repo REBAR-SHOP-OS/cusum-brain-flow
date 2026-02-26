@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { useEffect } from "react";
 
 export interface ProductionJob {
@@ -27,6 +28,7 @@ export interface ClearedJob {
 
 export function useLiveMonitorStats() {
   const { user } = useAuth();
+  const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
   // Fetch production jobs with weight calculations
@@ -130,7 +132,7 @@ export function useLiveMonitorStats() {
     if (!user) return;
 
     const channel = supabase
-      .channel("live-monitor-stats")
+      .channel(`live-monitor-stats-${companyId || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "cut_plans" }, () => {
         queryClient.invalidateQueries({ queryKey: ["live-monitor-jobs"] });
         queryClient.invalidateQueries({ queryKey: ["live-monitor-cleared"] });
@@ -141,7 +143,7 @@ export function useLiveMonitorStats() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user, queryClient]);
+  }, [user, companyId, queryClient]);
 
   // Aggregate stats
   const activeJobs = jobs || [];

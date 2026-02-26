@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { toast } from "sonner";
 
 /**
@@ -9,11 +10,12 @@ import { toast } from "sonner";
  */
 export function usePipelineRealtime() {
   const queryClient = useQueryClient();
+  const { companyId } = useCompanyId();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     const channel = supabase
-      .channel("pipeline-realtime")
+      .channel(`pipeline-realtime-${companyId || "global"}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "leads" },
@@ -65,5 +67,5 @@ export function usePipelineRealtime() {
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, [queryClient]);
+  }, [queryClient, companyId]);
 }

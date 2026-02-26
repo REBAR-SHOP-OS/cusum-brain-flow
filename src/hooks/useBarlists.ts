@@ -18,7 +18,7 @@ export function useBarlists(projectId?: string) {
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel("barlists-live")
+      .channel(`barlists-live-${user?.id || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "barlists" },
         () => queryClient.invalidateQueries({ queryKey: ["barlists"] }))
       .subscribe();
