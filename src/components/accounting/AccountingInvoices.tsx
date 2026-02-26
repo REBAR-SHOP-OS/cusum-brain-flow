@@ -8,7 +8,9 @@ import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
 import { CustomerSelectDialog } from "./CustomerSelectDialog";
 import { CreateTransactionDialog } from "@/components/customers/CreateTransactionDialog";
-import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2 } from "lucide-react";
+import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2, Package } from "lucide-react";
+import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
+import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
@@ -58,6 +60,19 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false);
   const [txnCustomer, setTxnCustomer] = useState<{ qbId: string; name: string } | null>(null);
+  const [packingSlipInvoice, setPackingSlipInvoice] = useState<QBInvoice | null>(null);
+
+  const getPackingSlipData = (inv: QBInvoice) => ({
+    invoiceNumber: inv.DocNumber,
+    invoiceDate: new Date(inv.TxnDate).toLocaleDateString(),
+    customerName: inv.CustomerRef?.name || "Unknown",
+    items: [{
+      date: new Date(inv.TxnDate).toLocaleDateString(),
+      description: "Rebar Fabrication & Supply",
+      quantity: `${inv.TotalAmt > 0 ? "1.00" : "0"} Units`,
+    }],
+    inclusions: [],
+  });
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -168,6 +183,13 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         </Button>
       </div>
 
+      <DocumentUploadZone
+        targetType="invoice"
+        onImport={(result) => {
+          toast({ title: "Invoice imported", description: `${result.documentType} with ${result.fields.length} fields extracted.` });
+        }}
+      />
+
       <div className="grid grid-cols-3 gap-3">
         <Card className="bg-success/5">
           <CardContent className="p-4 text-center">
@@ -233,6 +255,13 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                         <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                           <Button size="sm" variant="ghost" className="h-9 gap-1" onClick={() => setPreviewInvoice(inv)}>
                             <Eye className="w-4 h-4" /> View
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost" className="h-9 w-9 p-0"
+                            title="Print Packing Slip"
+                            onClick={() => setPackingSlipInvoice(inv)}
+                          >
+                            <Package className="w-4 h-4" />
                           </Button>
                           {inv.Balance > 0 && (
                             <>
@@ -337,6 +366,13 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
           customerQbId={txnCustomer.qbId}
           customerName={txnCustomer.name}
           onCreated={() => { setTxnCustomer(null); loadAll(); }}
+        />
+      )}
+
+      {packingSlipInvoice && (
+        <PackingSlipTemplate
+          data={getPackingSlipData(packingSlipInvoice)}
+          onClose={() => setPackingSlipInvoice(null)}
         />
       )}
     </div>

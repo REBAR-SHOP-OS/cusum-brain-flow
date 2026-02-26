@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, FileOutput } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { InvoiceTemplate } from "./documents/InvoiceTemplate";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
@@ -22,6 +22,7 @@ import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
 import { ConvertQuoteDialog } from "@/components/orders/ConvertQuoteDialog";
 import { ESignatureDialog } from "@/components/accounting/ESignatureDialog";
 import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
 interface Props {
@@ -50,7 +51,8 @@ const QUOTATION_STATUSES = [
 ];
 
 export function AccountingDocuments({ data, initialDocType }: Props) {
-  const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
+  const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "packing-slip");
+  const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialDocType) {
@@ -205,16 +207,31 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   });
 
   const docTabs = [
-    { id: "invoice" as DocType, label: "Invoices", icon: FileText, count: data.invoices.length },
     { id: "packing-slip" as DocType, label: "Packing Slips", icon: Package, count: data.invoices.length },
+    { id: "invoice" as DocType, label: "Invoices", icon: FileText, count: data.invoices.length },
     { id: "quotation" as DocType, label: "Quotations", icon: ClipboardList, count: totalCount || data.estimates.length },
-    
   ];
+
+  const handleCreateInvoiceFromQuote = async (quoteId: string) => {
+    setConvertingQuoteId(quoteId);
+    try {
+      const { data: result, error } = await supabase.functions.invoke("qb-sync-engine", {
+        body: { action: "convert-estimate-to-invoice", estimate_id: quoteId },
+      });
+      if (error) throw error;
+      toast({ title: "Invoice created", description: "Quotation converted to invoice successfully." });
+      data.loadAll?.();
+    } catch (err: any) {
+      toast({ title: "Conversion failed", description: err?.message || "Could not convert quotation to invoice.", variant: "destructive" });
+    } finally {
+      setConvertingQuoteId(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
       {/* Doc type tabs */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         {docTabs.map((tab) => (
           <Button
             key={tab.id}
@@ -228,6 +245,27 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
             <Badge variant="secondary" className="ml-1 text-xs">{tab.count}</Badge>
           </Button>
         ))}
+        <div className="ml-auto flex gap-2">
+          {activeDoc === "packing-slip" && (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
+              // Select an invoice to generate packing slip from
+              if (data.invoices.length > 0) {
+                openPreview("packing-slip", data.invoices[0].Id);
+              } else {
+                toast({ title: "No invoices", description: "Create an invoice first to generate a packing slip.", variant: "destructive" });
+              }
+            }}>
+              <Plus className="w-4 h-4" /> Add Packing Slip
+            </Button>
+          )}
+          {activeDoc === "quotation" && (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
+              toast({ title: "Create Quotation", description: "Use the + Create Quotation button on the Dashboard or Invoices tab." });
+            }}>
+              <Plus className="w-4 h-4" /> Add New Quotation
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Quotation filters & search */}
@@ -275,23 +313,29 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
         <div className="space-y-2">
           {(activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.map((inv) => (
             <Card key={`${activeDoc}-${inv.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    {activeDoc === "invoice" ? <FileText className="w-5 h-5 text-primary" /> : <Package className="w-5 h-5 text-primary" />}
+              <CardContent className={`flex items-center justify-between ${activeDoc === "packing-slip" ? "p-3" : "p-4"}`}>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="p-1.5 rounded-lg bg-primary/10 shrink-0">
+                    {activeDoc === "invoice" ? <FileText className="w-4 h-4 text-primary" /> : <Package className="w-4 h-4 text-primary" />}
                   </div>
-                  <div>
-                    <p className="font-semibold">#{inv.DocNumber} — {inv.CustomerRef?.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(inv.TxnDate).toLocaleDateString()} · {fmt(inv.TotalAmt)}
-                      {inv.Balance > 0 && <span className="text-destructive ml-2">Due: {fmt(inv.Balance)}</span>}
+                  {activeDoc === "packing-slip" ? (
+                    <p className="text-sm font-medium truncate">
+                      #{inv.DocNumber} — {inv.CustomerRef?.name} · {new Date(inv.TxnDate).toLocaleDateString()} · {fmt(inv.TotalAmt)}
                     </p>
-                  </div>
+                  ) : (
+                    <div>
+                      <p className="font-semibold">#{inv.DocNumber} — {inv.CustomerRef?.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(inv.TxnDate).toLocaleDateString()} · {fmt(inv.TotalAmt)}
+                        {inv.Balance > 0 && <span className="text-destructive ml-2">Due: {fmt(inv.Balance)}</span>}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="gap-1.5"
+                  className="gap-1.5 shrink-0"
                   onClick={() => openPreview(activeDoc, inv.Id)}
                 >
                   <Eye className="w-3.5 h-3.5" /> View
@@ -335,22 +379,37 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                       </Badge>
                     )}
                     {isSale && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5 text-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConvertQuote({
-                            id: q.id,
-                            quote_number: q.quote_number,
-                            total_amount: q.total_amount,
-                            customer_name: customer,
-                          });
-                        }}
-                      >
-                        <ArrowRight className="w-3.5 h-3.5" /> Convert to Order
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-xs"
+                          disabled={convertingQuoteId === q.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCreateInvoiceFromQuote(q.id);
+                          }}
+                        >
+                          {convertingQuoteId === q.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileOutput className="w-3.5 h-3.5" />}
+                          → Create Invoice
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConvertQuote({
+                              id: q.id,
+                              quote_number: q.quote_number,
+                              total_amount: q.total_amount,
+                              customer_name: customer,
+                            });
+                          }}
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" /> Convert to Order
+                        </Button>
+                      </>
                     )}
                     <Badge variant="outline" className={`text-xs ${STATUS_BADGE_COLORS[q.odoo_status || ""] || ""}`}>
                       {q.odoo_status || q.status}
