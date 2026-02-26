@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.ai-generate-quotation]
 verify_jwt = false
+
+[functions.sync-overdue-tasks]
+verify_jwt = false
