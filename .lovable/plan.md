@@ -1,14 +1,14 @@
 
 
-# Add "Quotations" Tab to Quick-Access Strip
+# Remove "Estimations" Tab from Documents Sub-Navigation
 
 ## Change
 
-Add a "Quotations" entry to the quick-access navigation strip, replacing where "Estimates" was.
+Remove the "Estimations" entry from the secondary tab strip inside the Accounting Documents section, keeping "Quotations" intact.
 
 | File | Change |
 |---|---|
-| `src/pages/AccountingWorkspace.tsx` | Line 338: Replace the blank line with `{ label: "Quotations", tab: "estimates", count: qb.estimates.length },` — reuses the existing estimates tab/data but displays as "Quotations" |
+| `src/components/accounting/AccountingDocuments.tsx` | Line 179: Delete `{ id: "estimation" as DocType, label: "Estimations", icon: Calculator, count: data.estimates.length },` from the tabs array |
 
-Single line addition, no other files affected. The tab will navigate to the existing estimates section but display the label "Quotations".
+Single line removal. The "Quotations" tab (line 178) remains unchanged. No other files affected.
 
