@@ -1,42 +1,32 @@
 
 
-## Plan: Add "Today" (Orange) Pipeline Leads to Ben's Tasks
+## Plan: Add "Optimize" Step Between Validated and Approved
 
-### Current State
-The `sync-overdue-tasks` edge function only syncs **overdue** leads (red bar — `expected_close_date < today`). It creates tasks with `source: "pipeline_overdue"` for Ben's stages (`estimation_ben`, `qc_ben`, `addendums`).
+### What Changes
 
-The user wants **orange** leads (due today, `expected_close_date = today`) to also generate tasks.
+**1. Add "optimizing" step to the pipeline (`src/components/office/AIExtractView.tsx`)**
+- Add `{ key: "optimizing", label: "Optimized", icon: Zap }` to `PIPELINE_STEPS` between "validated" and "approved" (index 5, pushing approved to index 6)
+- Update action bar logic: when `currentStepIndex >= 4` (validated), show an "Optimize" button that sets session status to "optimizing"
+- When status is "optimizing" (`currentStepIndex === 5`), render an inline optimization panel (stock length, kerf, mode selection from OptimizationView) with an "Apply & Continue" button
+- After applying optimization, update session status to "optimizing" (complete) and show the Approve button at `currentStepIndex >= 5`
 
-### Data Check
-- Currently 2 overdue leads already have tasks created
-- Tomorrow (Feb 27) has 2 leads in `estimation_ben` that will become "today" leads
-- 21 more leads with future dates in Ben's stages
+**2. Inline optimization panel in AIExtractView**
+- Import `runOptimization`, `CutItem`, `OptimizationSummary`, `OptimizerConfig` from `@/lib/cutOptimizer`
+- When session status is "optimizing", show:
+  - Stock length selector (6M, 12M, 18M)
+  - Kerf input
+  - Three plan cards (Standard, Optimized, Best Fit) — reuse the comparison logic from OptimizationView
+  - "Select & Approve" button that saves the optimization snapshot, then calls `handleApprove`
 
-### Changes
+**3. Update action bar flow**
+- Step index 4 (validated) + no blockers → show "Optimize" button (instead of directly showing Approve)
+- Step index 5 (optimizing) + plan selected → show "Approve & Create WO"
+- The "Optimize" button sets session status to "optimizing" via direct Supabase update
 
-**1. Update `supabase/functions/sync-overdue-tasks/index.ts`**
-- Change the query filter from `lt("expected_close_date", today)` to `lte("expected_close_date", today)` — this includes both overdue AND today's leads
-- Use a different source tag `"pipeline_today"` for today-dated leads to distinguish from overdue ones, or simplify by using a single source `"pipeline_overdue"` for both (since the logic is the same — follow up needed)
-- Adjust title prefix: "Due Today:" for today leads vs "Overdue:" for past leads
-- Set priority to "medium" for today leads (vs "high" for overdue)
+**4. Update session status in DB**
+- Add a handler `handleStartOptimize` that updates `extract_sessions.status` to `"optimizing"` 
+- No DB migration needed — the status column is a text field, not an enum
 
-**2. Rename function context (optional clarity)**
-- Keep same function name `sync-overdue-tasks` but update the description/message to mention "overdue & due-today"
-
-### Implementation Detail
-
-In the edge function, change line 25:
-```
-.lt("expected_close_date", today)
-```
-to:
-```
-.lte("expected_close_date", today)
-```
-
-Then in the task-creation map (line 50-65), check if the lead's date equals today to set appropriate title prefix and priority:
-- If `expected_close_date === today` → title: `"Due Today: {customer} – {stage}"`, priority: `"medium"`, source: `"pipeline_today"`
-- If `expected_close_date < today` → title: `"Overdue: {customer} – {stage}"`, priority: `"high"`, source: `"pipeline_overdue"`
-
-Deduplication check updated to include both `pipeline_overdue` and `pipeline_today` sources.
+### Files Modified
+- `src/components/office/AIExtractView.tsx` — add pipeline step, inline optimizer UI, update action bar logic
 
