@@ -1,26 +1,35 @@
 
 
-## Plan: Fix Station Dashboard — Show Pending Queue & Hide Empty Cutters
+## Plan: Filter Work Order Queue to Only Show Production-Ready Orders
 
-### Problem 1: No Project Queue Visible
-The Work Order Queue only shows orders with `in_progress` or `on_hold` status. All 17 work orders are `pending`, so the queue is hidden entirely. Operators have no way to start work.
+### Problem
+The Station Dashboard Work Order Queue shows all 17 pending work orders, but **none of them have any cut plan items** (0 items each). They are empty shells auto-generated from orders. The only real active job is the "Sector Contracting Ltd / Vault / Wall-E" entry visible in the Production Queue — which uses a different data path entirely.
 
-### Problem 2: Empty Cutters in Active Production Hub
-Cutters appear in the hub even when they have no assigned plans, no progress, and no jobs — making them clickable but useless.
+### Root Cause
+Work orders are created automatically when orders are made, but they don't have production content (cut_plan_items) linked to them yet. The Station Dashboard blindly shows all pending WOs regardless of whether they have work to do.
 
-### Changes
+### Solution Options
 
-**1. `src/components/shopfloor/WorkOrderQueueSection.tsx`**
-- Include `pending` work orders in the `activeOrders` filter (line 22-24)
-- Group pending orders under a "Pending / Ready to Start" section so operators can start them
-- Update status config to style pending as "READY" with a neutral/info color
+**Option A (Recommended): Hide empty work orders from Station Dashboard**
+- In `useSupabaseWorkOrders.ts`, add a subquery or post-fetch filter to exclude work orders that have zero `cut_plan_items`
+- This ensures only production-ready WOs appear in the queue
+- Result: The queue would currently be empty (since no WOs have items), which is correct — the active job lives in the Production Queue
 
-**2. `src/components/shopfloor/ActiveProductionHub.tsx`**
-- Tighten the `workingMachines` filter (line 23-25): only include machines that have **both** `status === "running"` **and** actual assigned plans or non-zero progress
-- Remove machines from the hub that are "running" but have 0 plans and 0/0 pieces (empty state)
-- Alternative simpler fix: only show machines in the hub if `plansByMachine.get(machine.id)?.length > 0` or `machineProgress.get(machine.id)?.total > 0`
+**Option B: Show Production Queue items on Station Dashboard**
+- Surface the Production Queue data (from `useProductionQueues`) more prominently on the Station Dashboard alongside or instead of the Work Order Queue
+- This would show the actual active job (Wall-E / Sector Contracting)
+
+### Recommended Changes
+
+**1. `src/hooks/useSupabaseWorkOrders.ts`**
+- After fetching work orders, run a secondary query to get `cut_plan_items` counts per work order
+- Filter out WOs with 0 items before returning
+- Or use a database view/join to do this in one query
+
+**2. `src/components/shopfloor/WorkOrderQueueSection.tsx`**
+- Add a small empty-state message when all WOs are filtered out: "No production-ready work orders. Check the Production Queue."
 
 ### Files Modified
-- `src/components/shopfloor/WorkOrderQueueSection.tsx`
-- `src/components/shopfloor/ActiveProductionHub.tsx`
+- `src/hooks/useSupabaseWorkOrders.ts` — filter out empty work orders
+- `src/components/shopfloor/WorkOrderQueueSection.tsx` — add empty state with link to Production Queue
 
