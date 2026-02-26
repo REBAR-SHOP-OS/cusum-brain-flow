@@ -1,139 +1,39 @@
 import { useState, useMemo, useCallback, useEffect, useLayoutEffect } from "react";
 import {
-  RefreshCw, Settings, Loader2, Search, CheckSquare,
-  Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid,
-  List, MessageSquare, Wifi, WifiOff, PenSquare,
-  FileText, Volume2, BarChart3, Send
+  Trash2, Archive, X, Mail, Phone,
+  MessageSquare, FileText, Volume2
 } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
-import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxDetailView } from "./InboxDetailView";
 import { InboxManagerSettings } from "./InboxManagerSettings";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
-import { InboxAIToolbar, type AIAction } from "./InboxAIToolbar";
+import type { AIAction } from "./InboxAIToolbar";
 import { InboxSummaryPanel, type InboxSummary } from "./InboxSummaryPanel";
 import { InboxKanbanBoard } from "./InboxKanbanBoard";
+import { InboxToolbar } from "./InboxToolbar";
 import { SendFaxDialog } from "./SendFaxDialog";
 import { BulkSMSDialog } from "./BulkSMSDialog";
 import { SMSTemplateManager } from "./SMSTemplateManager";
 import { CallAnalyticsDashboard } from "./CallAnalyticsDashboard";
 import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
+import {
+  categorizeCommunication,
+  extractSenderName,
+  extractEmail,
+  labelFilters,
+} from "./inboxCategorization";
 import { useCommunications } from "@/hooks/useCommunications";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-
-// ─── Categorization ────────────────────────────────────────────────
-// AI category → label/color mapping
-function aiCategoryToLabel(category: string, urgency: string): { label: string; labelColor: string; priority: number } {
-  switch (category) {
-    case "RFQ": return { label: urgency === "high" ? "Urgent" : "To Respond", labelColor: urgency === "high" ? "bg-red-500" : "bg-red-400", priority: urgency === "high" ? 0 : 1 };
-    case "Active Customer": return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
-    case "Payment": return { label: "FYI", labelColor: "bg-amber-400", priority: 2 };
-    case "Vendor": return { label: "Awaiting Reply", labelColor: "bg-amber-400", priority: 3 };
-    case "Internal": return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
-    case "Marketing": return { label: "Marketing", labelColor: "bg-pink-400", priority: 5 };
-    case "Spam": return { label: "Spam", labelColor: "bg-gray-500", priority: 6 };
-    default: return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
-  }
-}
-
-function categorizeCommunication(
-  from: string,
-  subject: string,
-  preview: string,
-  type: "email" | "call" | "sms" | "voicemail" | "fax",
-  aiCategory?: string | null,
-  aiUrgency?: string | null,
-): { label: string; labelColor: string; priority: number } {
-  // Use AI classification if available
-  if (aiCategory) {
-    return aiCategoryToLabel(aiCategory, aiUrgency || "medium");
-  }
-
-  // Fallback to keyword-based
-  const fromLower = from.toLowerCase();
-  const subjectLower = (subject || "").toLowerCase();
-  const previewLower = (preview || "").toLowerCase();
-
-  if (type === "call") {
-    if (subjectLower.includes("missed")) return { label: "Urgent", labelColor: "bg-red-500", priority: 0 };
-    return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
-  }
-  if (type === "sms") {
-    if (subjectLower.includes("urgent") || previewLower.includes("urgent") || previewLower.includes("asap")) {
-      return { label: "Urgent", labelColor: "bg-red-500", priority: 0 };
-    }
-    return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
-  }
-
-  if (fromLower.includes("mailer-daemon") || fromLower.includes("postmaster") || subjectLower.includes("delivery status")) {
-    return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
-  }
-  if (fromLower.includes("noreply") || fromLower.includes("no-reply") || fromLower.includes("newsletter") || fromLower.includes("marketing")) {
-    return { label: "Marketing", labelColor: "bg-pink-400", priority: 5 };
-  }
-  if (subjectLower.includes("security") || subjectLower.includes("access code") || subjectLower.includes("verification")) {
-    return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
-  }
-  if (subjectLower.includes("invoice") || subjectLower.includes("payment") || subjectLower.includes("transfer")) {
-    return { label: "FYI", labelColor: "bg-amber-400", priority: 2 };
-  }
-  if (subjectLower.includes("support case") || subjectLower.includes("ticket")) {
-    return { label: "Awaiting Reply", labelColor: "bg-amber-400", priority: 3 };
-  }
-  if (subjectLower.includes("urgent") || subjectLower.includes("asap") || subjectLower.includes("important")) {
-    return { label: "Urgent", labelColor: "bg-red-500", priority: 0 };
-  }
-  if (subjectLower.includes("spam") || fromLower.includes("alibaba") || subjectLower.includes("unsubscribe")) {
-    return { label: "Spam", labelColor: "bg-gray-500", priority: 6 };
-  }
-  return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
-}
-
-function extractSenderName(fromAddress: string): string {
-  const match = fromAddress.match(/^([^<]+)</);
-  if (match) return match[1].trim();
-  const emailMatch = fromAddress.match(/([^@]+)@/);
-  if (emailMatch) return emailMatch[1].replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  return fromAddress;
-}
-
-function extractEmail(fromAddress: string): string {
-  const match = fromAddress.match(/<([^>]+)>/);
-  if (match) return match[1];
-  return fromAddress;
-}
-
-const labelFilters = [
-  { label: "All", value: "all" },
-  { label: "⭐ Starred", value: "starred" },
-  { label: "Follow-up", value: "follow-up", color: "bg-orange-400" },
-  { label: "To Respond", value: "To Respond", color: "bg-red-400" },
-  { label: "Urgent", value: "Urgent", color: "bg-red-500" },
-  { label: "FYI", value: "FYI", color: "bg-amber-400" },
-  { label: "Awaiting Reply", value: "Awaiting Reply", color: "bg-amber-400" },
-  { label: "Notification", value: "Notification", color: "bg-cyan-400" },
-  { label: "Marketing", value: "Marketing", color: "bg-pink-400" },
-  { label: "Spam", value: "Spam", color: "bg-gray-500" },
-];
 
 // ─── Component ─────────────────────────────────────────────────────
 interface InboxViewProps {
@@ -151,7 +51,6 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
   const [sortByPriority, setSortByPriority] = useState(false);
-  // Default to list view on mobile, kanban on desktop
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   const [viewMode, setViewMode] = useState<"list" | "kanban">(isMobile ? "list" : "kanban");
   const [kanbanTypeFilter, setKanbanTypeFilter] = useState<"all" | "email" | "call" | "sms" | "voicemail" | "fax">("all");
@@ -335,7 +234,6 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         sourceId: comm.sourceId,
         priority: category.priority,
         commType,
-        // AI fields
         aiCategory: comm.aiCategory,
         aiUrgency: comm.aiUrgency,
         aiActionRequired: comm.aiActionRequired,
@@ -346,7 +244,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       };
     });
 
-    // Collapse SMS messages that share the same threadId into one list entry
+    // Collapse SMS threads
     const smsThreadMap = new Map<string, typeof mapped[number][]>();
     const result: typeof mapped = [];
 
@@ -360,10 +258,8 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       }
     }
 
-    // For each SMS thread, emit one representative entry (most recent first,
-    // since the DB query orders by received_at DESC)
     for (const [, group] of smsThreadMap) {
-      const representative = group[0]; // most recent
+      const representative = group[0];
       const hasUnread = group.some((m) => m.isUnread);
       const count = group.length;
       result.push({
@@ -379,7 +275,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     return result;
   }, [communications]);
 
-  // Follow-up nudge IDs (emails > 48h old with no outbound reply)
+  // Follow-up nudge IDs
   const followUpIds = useMemo(() => {
     const now = Date.now();
     const _48h = 48 * 60 * 60 * 1000;
@@ -435,7 +331,6 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     return counts;
   }, [allEmails, starredIds.size, followUpIds.size]);
 
-
   const handleSync = async () => {
     setSyncing(true);
     await sync();
@@ -486,13 +381,11 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
     setSelectedEmail(prev => prev?.id === id ? null : prev);
     try {
-      // Trash in Gmail first so it doesn't reappear on next sync
       if (email?.sourceId) {
         const { error: gmailErr } = await supabase.functions.invoke("gmail-delete", {
           body: { messageId: email.sourceId },
         });
         if (gmailErr) {
-          console.warn("Gmail trash failed, deleting locally only:", gmailErr);
           toast({ title: "Warning", description: "Could not remove from Gmail — it may reappear on next sync.", variant: "destructive" });
         }
       }
@@ -524,7 +417,6 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     setHiddenIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
     setSelectedEmail(prev => prev && selectedIds.has(prev.id) ? null : prev);
     try {
-      // Trash each in Gmail first
       const gmailDeletes = ids
         .map((id) => allEmails.find((e) => e.id === id))
         .filter((e) => e?.sourceId)
@@ -564,7 +456,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     setSelectionMode(false);
   }, [selectedIds, toast, allEmails, logActivity, refresh]);
 
-  // ─── Keyboard shortcuts (desktop only) ────────────────────────────
+  // ─── Keyboard shortcuts ────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -609,13 +501,11 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const handleAIAction = async (action: AIAction) => {
     switch (action) {
       case "run-relay": {
-        // Call relay-pipeline edge function
         const { data, error } = await supabase.functions.invoke("relay-pipeline", {
           body: { action: "process" },
         });
         if (error) throw error;
         toast({ title: "Relay Pipeline", description: `Processed ${data?.processed || 0} emails with AI.` });
-        // Refresh communications
         await sync();
         return;
       }
@@ -668,232 +558,50 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     }
   };
 
-  // Count unprocessed emails for Relay badge
   const unprocessedCount = useMemo(() => {
     return communications.filter(c => !c.aiProcessedAt && c.direction === "inbound").length;
   }, [communications]);
 
-  const gmailConnected = gmailStatus === "connected";
-  const rcConnected = rcStatus === "connected";
-  const bothLoading = gmailStatus === "loading" && rcStatus === "loading";
-
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full">
-        {/* ─── Single Unified Toolbar ─── */}
-        <div className="flex items-center gap-1 px-2 py-1.5 border-b shrink-0">
-          {/* View toggle */}
-          <div className="flex items-center border border-border rounded-md overflow-hidden">
-            <Button
-              variant={viewMode === "kanban" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-6 w-6 rounded-none"
-              onClick={() => setViewMode("kanban")}
-              title="Kanban view"
-            >
-              <LayoutGrid className="w-3 h-3" />
-            </Button>
-            <Button
-              variant={viewMode === "list" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-6 w-6 rounded-none"
-              onClick={() => setViewMode("list")}
-              title="List view"
-            >
-              <List className="w-3 h-3" />
-            </Button>
-          </div>
+        {/* Unified Toolbar (extracted component) */}
+        <InboxToolbar
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          onCompose={() => setShowCompose(true)}
+          onFax={() => setShowFaxDialog(true)}
+          onBulkSMS={() => setShowBulkSMS(true)}
+          onCallAnalytics={() => setShowCallAnalytics(true)}
+          onEmailAnalytics={() => setShowEmailAnalytics(true)}
+          emailCount={allEmails.length}
+          unprocessedCount={unprocessedCount}
+          onAIAction={handleAIAction}
+          search={search}
+          setSearch={setSearch}
+          showSearch={showSearch}
+          setShowSearch={setShowSearch}
+          selectionMode={selectionMode}
+          toggleSelectMode={toggleSelectMode}
+          syncing={syncing}
+          onSync={handleSync}
+          onSettings={() => setShowSettings(true)}
+          gmailStatus={gmailStatus}
+          gmailEmail={gmailEmail}
+          rcStatus={rcStatus}
+          rcEmail={rcEmail}
+          onConnectGmail={handleConnectGmail}
+          onDisconnectGmail={handleDisconnectGmail}
+          onConnectRC={handleConnectRC}
+          onDisconnectRC={handleDisconnectRC}
+          connecting={connecting}
+          rcConnecting={rcConnecting}
+        />
 
-          {/* Compose button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="default"
-                size="sm"
-                className="h-6 gap-1 text-[11px] px-2"
-                onClick={() => setShowCompose(true)}
-              >
-                <PenSquare className="w-3 h-3" />
-                Compose
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Compose new email (c)</TooltipContent>
-          </Tooltip>
-
-          {/* Send Fax */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowFaxDialog(true)}>
-                <FileText className="w-3 h-3" />
-                Fax
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Send a fax</TooltipContent>
-          </Tooltip>
-
-          {/* Bulk SMS */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowBulkSMS(true)}>
-                <Send className="w-3 h-3" />
-                SMS
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Bulk SMS</TooltipContent>
-          </Tooltip>
-
-          {/* Call Analytics */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowCallAnalytics(true)}>
-                <BarChart3 className="w-3 h-3" />
-                Call Analytics
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Call Analytics</TooltipContent>
-          </Tooltip>
-
-          {/* Email Analytics */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowEmailAnalytics(true)}>
-                <Mail className="w-3 h-3" />
-                Email Analytics
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Email Analytics</TooltipContent>
-          </Tooltip>
-
-          {/* Divider */}
-          <div className="w-px h-4 bg-border shrink-0" />
-
-          {/* AI actions inline */}
-          <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} unprocessedCount={unprocessedCount} />
-
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Search — inline expandable */}
-          {showSearch ? (
-            <div className="relative max-w-[180px]">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search..."
-                className="h-6 pl-7 pr-6 text-[11px]"
-                autoFocus
-                onBlur={() => { if (!search) setShowSearch(false); }}
-              />
-              {search && (
-                <button className="absolute right-1.5 top-1/2 -translate-y-1/2" onClick={() => { setSearch(""); setShowSearch(false); }}>
-                  <X className="w-2.5 h-2.5 text-muted-foreground" />
-                </button>
-              )}
-            </div>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowSearch(true)}>
-                  <Search className="w-3 h-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">Search</TooltipContent>
-            </Tooltip>
-          )}
-
-          {/* Connection status dots */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted transition-colors">
-                {bothLoading ? (
-                  <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
-                ) : (
-                  <>
-                    <div className={cn("w-1.5 h-1.5 rounded-full", gmailConnected ? "bg-emerald-400" : "bg-muted-foreground/40")} />
-                    <div className={cn("w-1.5 h-1.5 rounded-full", rcConnected ? "bg-blue-400" : "bg-muted-foreground/40")} />
-                  </>
-                )}
-                <Wifi className="w-3 h-3 text-muted-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64 p-2.5 space-y-2">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Connections</p>
-              <div className="flex items-center gap-2">
-                <div className={cn("w-6 h-6 rounded-full flex items-center justify-center shrink-0", gmailConnected ? "bg-emerald-500/15" : "bg-muted")}>
-                  <Mail className={cn("w-3 h-3", gmailConnected ? "text-emerald-400" : "text-muted-foreground")} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-medium">Gmail</p>
-                  <p className="text-[9px] text-muted-foreground truncate">{gmailConnected ? gmailEmail : "Not connected"}</p>
-                </div>
-                {gmailConnected ? (
-                  <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[9px] text-muted-foreground hover:text-destructive" onClick={handleDisconnectGmail}>
-                    <LogOut className="w-2.5 h-2.5" />
-                  </Button>
-                ) : (
-                  <Button size="sm" className="h-5 px-2 text-[9px]" onClick={handleConnectGmail} disabled={connecting}>
-                    {connecting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : "Connect"}
-                  </Button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={cn("w-6 h-6 rounded-full flex items-center justify-center shrink-0", rcConnected ? "bg-blue-500/15" : "bg-muted")}>
-                  <Phone className={cn("w-3 h-3", rcConnected ? "text-blue-400" : "text-muted-foreground")} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-medium">RingCentral</p>
-                  <p className="text-[9px] text-muted-foreground truncate">{rcConnected ? rcEmail : "Not connected"}</p>
-                </div>
-                {rcConnected ? (
-                  <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[9px] text-muted-foreground hover:text-destructive" onClick={handleDisconnectRC}>
-                    <LogOut className="w-2.5 h-2.5" />
-                  </Button>
-                ) : (
-                  <Button size="sm" className="h-5 px-2 text-[9px]" onClick={handleConnectRC} disabled={rcConnecting}>
-                    {rcConnecting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : "Connect"}
-                  </Button>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {/* Utility actions */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={selectionMode ? "secondary" : "ghost"}
-                size="icon"
-                className="h-6 w-6"
-                onClick={toggleSelectMode}
-              >
-                {selectionMode ? <X className="w-3 h-3" /> : <CheckSquare className="w-3 h-3" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">{selectionMode ? "Exit selection" : "Select"}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleSync} disabled={syncing}>
-                <RefreshCw className={cn("w-3 h-3", syncing && "animate-spin")} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Sync</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowSettings(true)}>
-                <Settings className="w-3 h-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Settings</TooltipContent>
-          </Tooltip>
-        </div>
-
-        {/* Summary panel (appears below toolbar when triggered) */}
+        {/* Summary panel */}
         <InboxSummaryPanel summary={summary} onClose={() => setSummary(null)} />
 
-        {/* ─── List-only extras: filter chips ─── */}
+        {/* List-only filter chips */}
         {viewMode === "list" && (
           <div className="shrink-0">
             <div className="flex items-center gap-1.5 px-3 py-1.5 border-b overflow-x-auto">
@@ -988,9 +696,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               "bg-background border-r flex flex-col min-h-0",
               selectedEmail ? "hidden md:flex md:w-[400px]" : "flex w-full md:w-[400px]"
             )}>
-              {/* Email Count + selection bar */}
               <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center gap-2">
-                {/* Always-visible Select checkbox */}
                 <Checkbox
                   checked={selectionMode && emails.length > 0 && selectedIds.size === emails.length}
                   onCheckedChange={() => {
@@ -1045,7 +751,6 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               />
             </div>
 
-            {/* Email Viewer */}
             <div className={cn("flex-1 min-h-0 overflow-hidden", selectedEmail ? "flex" : "hidden md:flex")}>
               {selectedEmail ? (
                 <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} onDelete={handleDeleteEmail} onArchive={handleArchiveEmail} />
@@ -1059,22 +764,12 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
           </div>
         )}
 
-        {/* Settings Panel */}
+        {/* Dialogs */}
         <InboxManagerSettings open={showSettings} onOpenChange={setShowSettings} connectedEmail={userEmail} />
-
-        {/* Compose Dialog */}
         <ComposeEmailDialog open={showCompose} onOpenChange={setShowCompose} />
-
-        {/* Send Fax Dialog */}
         <SendFaxDialog open={showFaxDialog} onOpenChange={setShowFaxDialog} />
-
-        {/* Bulk SMS Dialog */}
         <BulkSMSDialog open={showBulkSMS} onOpenChange={setShowBulkSMS} />
-
-        {/* SMS Template Manager */}
         <SMSTemplateManager open={showSMSTemplates} onOpenChange={setShowSMSTemplates} />
-
-        {/* Call Analytics */}
         <CallAnalyticsDashboard open={showCallAnalytics} onOpenChange={setShowCallAnalytics} />
         <EmailAnalyticsDashboard open={showEmailAnalytics} onOpenChange={setShowEmailAnalytics} />
       </div>
