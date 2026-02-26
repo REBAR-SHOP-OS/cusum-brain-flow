@@ -362,8 +362,7 @@ Deno.serve(async (req) => {
     const { data: rolesData } = await svcClient
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
-      .eq("company_id", companyId);
+      .eq("user_id", user.id);
     const roles = (rolesData || []).map(r => r.role);
 
     // Context fetching (Moved to shared module)
