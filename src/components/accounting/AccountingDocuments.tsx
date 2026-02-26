@@ -21,6 +21,8 @@ import { EstimationTemplate } from "./documents/EstimationTemplate";
 import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
 import { ConvertQuoteDialog } from "@/components/orders/ConvertQuoteDialog";
 import { ESignatureDialog } from "@/components/accounting/ESignatureDialog";
+import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
+import { toast } from "@/hooks/use-toast";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -256,6 +258,16 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
             {quotationsLoading && <Loader2 className="inline w-3 h-3 ml-1 animate-spin" />}
           </span>
         </div>
+      )}
+
+      {/* Quotation upload zone */}
+      {activeDoc === "quotation" && (
+        <DocumentUploadZone
+          targetType="estimate"
+          onImport={(result) => {
+            toast({ title: "Quotation imported", description: `${result.documentType} with ${result.fields.length} fields extracted.` });
+          }}
+        />
       )}
 
       {/* Document list */}
