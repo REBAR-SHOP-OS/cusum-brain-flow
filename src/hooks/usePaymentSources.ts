@@ -21,7 +21,7 @@ export interface SourceSummary {
   label: string;
   total: number;
   count: number;
-  status: "connected" | "synced" | "archived" | "disconnected";
+  status: "connected" | "synced" | "archived" | "disconnected" | "error";
   lastSync?: string | null;
 }
 
@@ -63,6 +63,19 @@ export function usePaymentSources(qbPayments: QBPayment[]) {
     },
     enabled: !!companyId,
     staleTime: 1000 * 60 * 5,
+  });
+
+  // Stripe live connection status
+  const { data: stripeStatus } = useQuery({
+    queryKey: ["stripe_live_status"],
+    queryFn: async () => {
+      const { data } = await supabase.functions.invoke("stripe-payment", {
+        body: { action: "check-status" },
+      });
+      return data;
+    },
+    staleTime: 1000 * 60 * 5,
+    retry: 1,
   });
 
   // Odoo / WooCommerce archived orders
@@ -134,7 +147,11 @@ export function usePaymentSources(qbPayments: QBPayment[]) {
         label: "Stripe",
         total: stripeTotal,
         count: (stripeLinks ?? []).length,
-        status: (stripeLinks ?? []).length > 0 ? "connected" as const : "disconnected" as const,
+        status: stripeStatus?.status === "connected"
+          ? "connected" as const
+          : stripeStatus?.errorType
+            ? "error" as const
+            : "disconnected" as const,
       },
       {
         source: "bmo" as const,
@@ -152,7 +169,7 @@ export function usePaymentSources(qbPayments: QBPayment[]) {
         status: "archived" as const,
       },
     ];
-  }, [qbPayments, stripeLinks, bankActivity, wcOrders]);
+  }, [qbPayments, stripeLinks, bankActivity, wcOrders, stripeStatus]);
 
   // ── Reconciliation ──
   const reconciliation = useMemo<ReconciliationIndicator[]>(() => {
