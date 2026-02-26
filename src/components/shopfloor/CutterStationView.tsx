@@ -227,20 +227,27 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const runId = result.machineRunId;
       setActiveRunId(runId || null);
 
-      // Try to consume from best available source
-      const bestLot = lots.find((l) => l.qty_on_hand - l.qty_reserved >= bars);
-      if (bestLot && runId) {
+      // Try to consume from best available source — re-fetch lots to avoid stale cache
+      if (runId) {
         try {
-          await manageInventory({
-            action: "consume-on-start",
-            machineRunId: runId,
-            cutPlanItemId: currentItem.id,
-            barCode: currentItem.bar_code,
-            qty: bars,
-            sourceType: bestLot.source === "remnant" ? "remnant" : "lot",
-            sourceId: bestLot.id,
-            stockLengthMm: stockLength,
-          });
+          const { data: freshLots } = await supabase
+            .from("inventory_lots")
+            .select("id, bar_code, source, standard_length_mm, qty_on_hand, qty_reserved")
+            .eq("bar_code", currentItem.bar_code)
+            .gt("qty_on_hand", 0);
+          const bestLot = (freshLots || []).find((l) => l.qty_on_hand - l.qty_reserved >= bars);
+          if (bestLot) {
+            await manageInventory({
+              action: "consume-on-start",
+              machineRunId: runId,
+              cutPlanItemId: currentItem.id,
+              barCode: currentItem.bar_code,
+              qty: bars,
+              sourceType: bestLot.source === "remnant" ? "remnant" : "lot",
+              sourceId: bestLot.id,
+              stockLengthMm: stockLength,
+            });
+          }
         } catch {
           // Inventory consumption is best-effort
         }
