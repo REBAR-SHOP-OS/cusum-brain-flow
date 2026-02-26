@@ -1,54 +1,58 @@
 
 
-## Root Cause Analysis
+## Plan: Full-Page Driver Drop-Off Screen
 
-I traced the full flow and found **two bugs** causing the "repeat" behavior after completing a run:
+### Problem
+After loading, drivers use a tiny dialog (PODCaptureDialog) to capture signature and photo. It's cramped and not mobile-friendly — hard to sign on a small canvas inside a modal.
 
-### Bug 1: Completion doesn't persist pieces (primary cause)
+### Solution
+Create a dedicated full-page route `/driver/dropoff/:stopId` that provides a large, touch-friendly experience optimized for drivers on phones at job sites.
 
-In `handleCompleteRun` (line 382-386 of `CutterStationView.tsx`), the final database call sends `p_increment: 0`:
+### Implementation
 
-```typescript
-await supabase.rpc("increment_completed_pieces", {
-  p_item_id: currentItem.id,
-  p_increment: 0, // ← PROBLEM: trusts strokes already persisted
-});
+#### 1. Create `src/pages/DriverDropoff.tsx`
+A full-screen, mobile-first page with:
+- **Header**: Stop address + delivery number + "Navigate" button (Google Maps link)
+- **Site Photo section**: Large tap-to-capture area using camera, with retake option
+- **Signature section**: Full-width `SignaturePad` component (already exists) — much larger than the dialog version
+- **"Complete Drop-Off" button**: Disabled until both photo AND signature are captured. On submit, uploads photo + signature to storage, updates `delivery_stops` (status, pod_signature, pod_photo_url, departure_time), updates packing_slips, and auto-completes the delivery if all stops are terminal — same logic as `PODCaptureDialog` but in a full page
+- After success, navigates back to `/driver`
+
+#### 2. Add route in `src/App.tsx`
+```
+<Route path="/driver/dropoff/:stopId" element={<P><DriverDropoff /></P>} />
 ```
 
-Stroke-level persistence (line 298-305) is **fire-and-forget** — if it fails silently (network blip, timeout), the DB keeps `completed_pieces = 0`. The completion call with `p_increment: 0` doesn't fix it. Result: phase never advances, item reappears after realtime refresh, operator thinks it "reset".
+#### 3. Update `src/pages/DriverDashboard.tsx`
+Change the "Capture POD" button to navigate to `/driver/dropoff/${stop.id}` instead of opening the PODCaptureDialog. Keep the dialog as fallback for the office Deliveries page.
 
-**Evidence**: Mark B1001 (1 piece needed) was run **4 times** across 2 items — operator had to retry because the item kept reappearing.
-
-**Fix**: Change `p_increment` from `0` to `totalOutput`. The RPC uses `LEAST(completed + increment, total)`, so even if strokes DID persist, it safely caps — no double-counting risk.
-
-### Bug 2: LOCK & START not disabled for completed items
-
-The CutEngine's `canStart` logic never checks if the item is already done:
-```typescript
-const canStart = canWrite && !isRunning && (isFeasible || ...);
-// ← missing: && !isDone
+### UI Layout (mobile-first)
+```text
+┌──────────────────────────┐
+│ ← Back    DROP-OFF       │
+│ 123 Main St, Toronto     │
+│ [Navigate]               │
+├──────────────────────────┤
+│                          │
+│   📷 SITE DROP PHOTO     │
+│   ┌──────────────────┐   │
+│   │  Tap to Capture  │   │
+│   └──────────────────┘   │
+│                          │
+│   ✍️ CUSTOMER SIGNATURE  │
+│   ┌──────────────────┐   │
+│   │                  │   │
+│   │  SignaturePad    │   │
+│   │                  │   │
+│   └──────────────────┘   │
+│                          │
+├──────────────────────────┤
+│ [  ✓ Complete Drop-Off ] │
+└──────────────────────────┘
 ```
 
-So even when the left panel shows "This mark is complete", the right panel still allows starting a new run.
-
-**Fix**: Pass `isDone` to CutEngine and add it to the `canStart` guard.
-
----
-
-## Implementation Plan
-
-### `src/components/shopfloor/CutterStationView.tsx`
-
-1. **Line 385**: Change `p_increment: 0` to `p_increment: totalOutput` — ensures completion always persists the full count even if stroke-level calls failed
-
-2. **Line 696-701 area**: Pass `isDone` prop to `CutEngine`
-
-### `src/components/shopfloor/CutEngine.tsx`
-
-3. Add `isDone` prop and include it in `canStart`:
-```typescript
-const canStart = canWrite && !isRunning && !isDone && (isFeasible || ...);
-```
-
-4. When `isDone`, show a "DONE" label on the button instead of "LOCK & START"
+### Files
+- **Create**: `src/pages/DriverDropoff.tsx`
+- **Edit**: `src/App.tsx` (add route)
+- **Edit**: `src/pages/DriverDashboard.tsx` (link to new page instead of dialog)
 
