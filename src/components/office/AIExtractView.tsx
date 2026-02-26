@@ -522,8 +522,8 @@ export function AIExtractView() {
               mixBlendMode: "screen",
               filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.5))",
               animation: "brain-extract-float 4s ease-in-out infinite",
-              maskImage: "radial-gradient(circle, white 30%, transparent 70%)",
-              WebkitMaskImage: "radial-gradient(circle, white 30%, transparent 70%)",
+              maskImage: "radial-gradient(circle, white 15%, transparent 55%)",
+              WebkitMaskImage: "radial-gradient(circle, white 15%, transparent 55%)",
             }}
           />
           
