@@ -141,7 +141,7 @@ export default function DriverDashboard() {
   useEffect(() => {
     if (!companyId) return;
     const channel = supabase
-      .channel("driver-live")
+      .channel(`driver-live-${companyId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "deliveries" }, () =>
         queryClient.invalidateQueries({ queryKey: ["driver-deliveries", companyId, myProfile?.id] })
       )

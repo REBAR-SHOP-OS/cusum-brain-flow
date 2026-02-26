@@ -94,7 +94,7 @@ export function useClearanceData() {
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel("clearance-live")
+      .channel(`clearance-live-${companyId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "cut_plan_items" }, () =>
         queryClient.invalidateQueries({ queryKey: ["clearance-items"] })
       )
@@ -108,18 +108,31 @@ export function useClearanceData() {
   const clearedCount = (data || []).filter((i) => i.evidence_status === "cleared").length;
   const totalCount = (data || []).length;
 
-  const byProject = new Map<string, ClearanceItem[]>();
+  const byProject = new Map<string, { label: string; items: ClearanceItem[] }>();
   for (const item of data || []) {
-    const key = item.project_name || item.plan_name || "Unassigned";
-    if (!byProject.has(key)) byProject.set(key, []);
-    byProject.get(key)!.push(item);
+    // Use cut_plan_id as grouping key to avoid same-name project collision
+    const key = item.cut_plan_id;
+    const label = item.project_name || item.plan_name || "Unassigned";
+    if (!byProject.has(key)) byProject.set(key, { label, items: [] });
+    byProject.get(key)!.items.push(item);
+  }
+
+  // Flatten to Map<label, items> for backward compat but using unique keys
+  const byProjectLabel = new Map<string, ClearanceItem[]>();
+  for (const [, group] of byProject) {
+    const existing = byProjectLabel.get(group.label);
+    if (existing) {
+      existing.push(...group.items);
+    } else {
+      byProjectLabel.set(group.label, [...group.items]);
+    }
   }
 
   return {
     items: data ?? [],
     clearedCount,
     totalCount,
-    byProject,
+    byProject: byProjectLabel,
     isLoading,
     error,
   };

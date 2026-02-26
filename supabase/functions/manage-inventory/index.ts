@@ -228,6 +228,20 @@ serve(async (req) => {
           // WIP doesn't have qty_reserved, we just track via reservations
         }
 
+        // Idempotency: check for existing reservation with same source
+        if (cutPlanItemId) {
+          const { data: existingRes } = await svc
+            .from("inventory_reservations")
+            .select("id")
+            .eq("cut_plan_item_id", cutPlanItemId)
+            .eq("source_id", sourceId)
+            .eq("status", "reserved")
+            .maybeSingle();
+          if (existingRes) {
+            return json({ success: true, action, reservationId: existingRes.id, deduplicated: true });
+          }
+        }
+
         // Create reservation
         const { data: reservation, error: resErr } = await svc
           .from("inventory_reservations")
@@ -402,6 +416,7 @@ serve(async (req) => {
                 source: "remnant",
                 standard_length_mm: leftoverPerBar,
                 qty_on_hand: 1,
+                qty_reserved: 0,
                 location: "floor",
               });
             if (remErr) console.error("Remnant insert error:", remErr);

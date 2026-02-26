@@ -457,7 +457,7 @@ serve(async (req) => {
           // No formal run was started — for complete-run this is OK
           // (cuts were tracked directly via cut_plan_items), just return success
           if (action === "complete-run") {
-            break;
+            return json({ success: true, action, warning: "no_active_run" });
           }
           return json({ error: "No active run on this machine" }, 400);
         }

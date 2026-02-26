@@ -83,68 +83,80 @@ serve(async (req) => {
       );
     }
 
-    // Generate order number (ORD-YYYYMMDD-NNN)
+    // Generate order number with retry loop to handle concurrency
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const { count } = await supabase
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .like("order_number", `ORD-${today}%`);
-    const seq = String((count || 0) + 1).padStart(3, "0");
-    const orderNumber = `ORD-${today}-${seq}`;
+    let orderNumber = "";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { count } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .like("order_number", `ORD-${today}%`);
+      const seq = String((count || 0) + 1 + attempt).padStart(3, "0");
+      orderNumber = `ORD-${today}-${seq}`;
 
-    // Create the order
-    const { data: order, error: oErr } = await supabase
-      .from("orders")
-      .insert({
-        order_number: orderNumber,
-        customer_id: quote.customer_id,
-        quote_id: quoteId,
-        company_id: companyId,
-        total_amount: quote.total_amount || 0,
-        status: "pending",
-        order_date: new Date().toISOString().slice(0, 10),
-        notes: `Converted from quote ${quote.quote_number}`,
-      })
-      .select()
-      .single();
-    if (oErr) throw new Error(`Failed to create order: ${oErr.message}`);
+      // Try inserting — if duplicate, retry with next seq
+      const { data: order, error: oErr } = await supabase
+        .from("orders")
+        .insert({
+          order_number: orderNumber,
+          customer_id: quote.customer_id,
+          quote_id: quoteId,
+          company_id: companyId,
+          total_amount: quote.total_amount || 0,
+          status: "pending",
+          order_date: new Date().toISOString().slice(0, 10),
+          notes: `Converted from quote ${quote.quote_number}`,
+        })
+        .select()
+        .single();
 
-    // Try to extract line items from quote metadata
-    const metadata = quote.metadata as Record<string, unknown> | null;
-    const odooLines = (metadata?.order_lines || metadata?.line_items) as Array<Record<string, unknown>> | undefined;
+      if (!oErr) {
+        // Success — continue with line items
+        // Try to extract line items from quote metadata
+        const metadata = quote.metadata as Record<string, unknown> | null;
+        const odooLines = (metadata?.order_lines || metadata?.line_items) as Array<Record<string, unknown>> | undefined;
 
-    let itemsCreated = 0;
-    if (odooLines && Array.isArray(odooLines) && odooLines.length > 0) {
-      const items = odooLines.map((line) => ({
-        order_id: order.id,
-        description: String(line.name || line.description || "Line item"),
-        quantity: Number(line.product_uom_qty || line.quantity || 1),
-        unit_price: Number(line.price_unit || line.unit_price || 0),
-        notes: line.notes ? String(line.notes) : null,
-      }));
+        let itemsCreated = 0;
+        if (odooLines && Array.isArray(odooLines) && odooLines.length > 0) {
+          const items = odooLines.map((line) => ({
+            order_id: order.id,
+            description: String(line.name || line.description || "Line item"),
+            quantity: Number(line.product_uom_qty || line.quantity || 1),
+            unit_price: Number(line.price_unit || line.unit_price || 0),
+            notes: line.notes ? String(line.notes) : null,
+          }));
 
-      const { error: iErr } = await supabase.from("order_items").insert(items);
-      if (iErr) console.error("Failed to insert line items:", iErr.message);
-      else itemsCreated = items.length;
-    } else if (quote.total_amount && Number(quote.total_amount) > 0) {
-      // Create a single line item with the total
-      const { error: iErr } = await supabase.from("order_items").insert({
-        order_id: order.id,
-        description: `Rebar supply & fabrication (from ${quote.quote_number})`,
-        quantity: 1,
-        unit_price: Number(quote.total_amount),
-      });
-      if (!iErr) itemsCreated = 1;
+          const { error: iErr } = await supabase.from("order_items").insert(items);
+          if (iErr) console.error("Failed to insert line items:", iErr.message);
+          else itemsCreated = items.length;
+        } else if (quote.total_amount && Number(quote.total_amount) > 0) {
+          const { error: iErr } = await supabase.from("order_items").insert({
+            order_id: order.id,
+            description: `Rebar supply & fabrication (from ${quote.quote_number})`,
+            quantity: 1,
+            unit_price: Number(quote.total_amount),
+          });
+          if (!iErr) itemsCreated = 1;
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            order: { id: order.id, order_number: order.order_number, total_amount: order.total_amount },
+            itemsCreated,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // If error is not a unique violation, throw
+      if (!oErr.message?.includes("duplicate") && !oErr.message?.includes("unique")) {
+        throw new Error(`Failed to create order: ${oErr.message}`);
+      }
+      // Otherwise retry with next attempt
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        order: { id: order.id, order_number: order.order_number, total_amount: order.total_amount },
-        itemsCreated,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    throw new Error("Failed to generate unique order number after 5 attempts");
   } catch (err) {
     console.error("convert-quote-to-order error:", err);
     return new Response(

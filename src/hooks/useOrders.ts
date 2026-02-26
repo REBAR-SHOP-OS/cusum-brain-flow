@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCallback } from "react";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface OrderItem {
   id: string;
@@ -50,14 +51,17 @@ export interface Order {
 export function useOrders() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { companyId } = useCompanyId();
 
   // ─── Orders list ────────────────────────────────────
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["orders"],
+    queryKey: ["orders", companyId],
+    enabled: !!companyId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
         .select("*, customers(id, name, quickbooks_id, company_name), quotes(id, quote_number)")
+        .eq("company_id", companyId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as Order[];
