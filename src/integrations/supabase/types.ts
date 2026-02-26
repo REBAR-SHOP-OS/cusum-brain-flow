@@ -8816,6 +8816,7 @@ export type Database = {
           company_id: string
           created_at: string
           customer_qb_id: string | null
+          dedupe_key: string | null
           department_qb_id: string | null
           doc_number: string | null
           entity_type: string
@@ -8838,6 +8839,7 @@ export type Database = {
           company_id: string
           created_at?: string
           customer_qb_id?: string | null
+          dedupe_key?: string | null
           department_qb_id?: string | null
           doc_number?: string | null
           entity_type: string
@@ -8860,6 +8862,7 @@ export type Database = {
           company_id?: string
           created_at?: string
           customer_qb_id?: string | null
+          dedupe_key?: string | null
           department_qb_id?: string | null
           doc_number?: string | null
           entity_type?: string
