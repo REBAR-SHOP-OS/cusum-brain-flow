@@ -52,7 +52,23 @@ export function useSupabaseWorkOrders() {
         order_number: wo.orders?.order_number || null,
       }));
 
-      setData(mapped);
+      // Filter out work orders with zero cut_plan_items (empty shells)
+      const woIds = mapped.map(wo => wo.id);
+      if (woIds.length > 0) {
+        const { data: itemCounts } = await supabase
+          .from("cut_plan_items")
+          .select("work_order_id")
+          .in("work_order_id", woIds);
+
+        const idsWithItems = new Set((itemCounts || []).map((r: any) => r.work_order_id));
+        // Keep WOs that have items OR are already in progress/completed
+        const filtered = mapped.filter(wo =>
+          idsWithItems.has(wo.id) || wo.status === "in_progress" || wo.status === "completed"
+        );
+        setData(filtered);
+      } else {
+        setData(mapped);
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e : new Error("Failed to fetch work orders"));

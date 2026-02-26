@@ -36,14 +36,19 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
     );
   }, [activeOrders]);
 
-  if (activeOrders.length === 0) return null;
-
   return (
     <div className="space-y-4">
       <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Work Order Queue</h2>
-      {groups.map(([station, orders]) => (
-        <StationGroup key={station} stationName={station} orders={orders} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
-      ))}
+      {activeOrders.length === 0 ? (
+        <div className="border border-dashed border-border rounded-lg p-6 text-center">
+          <p className="text-sm text-muted-foreground">No production-ready work orders.</p>
+          <p className="text-xs text-muted-foreground mt-1">Active jobs appear in the Production Queue above.</p>
+        </div>
+      ) : (
+        groups.map(([station, orders]) => (
+          <StationGroup key={station} stationName={station} orders={orders} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+        ))
+      )}
     </div>
   );
 }
