@@ -758,7 +758,7 @@ async function handleIncremental(svc: SvcClient, companyId: string) {
 
   // Detect deletions via CDC
   try {
-    const cdcData = await qbFetch(config, `cdc?changedSince=${since}&entities=${TXN_TYPES.join(",")}`, ctx) as Record<string, unknown>;
+    const cdcData = await qbFetch(config, `cdc?changedSince=${encodeURIComponent(since)}&entities=${TXN_TYPES.join(",")}`, ctx) as Record<string, unknown>;
     const cdcResponse = cdcData.CDCResponse as Array<{ QueryResponse?: Array<Record<string, unknown>> }> | undefined;
     if (cdcResponse) {
       for (const resp of cdcResponse) {
