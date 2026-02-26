@@ -16,6 +16,8 @@ interface CutEngineProps {
   isRunning: boolean;
   canWrite: boolean;
   darkMode?: boolean;
+  /** Authoritative bar count locked at run start (from SlotTracker) */
+  lockedBars?: number;
   /** Live counter data from slot tracker */
   strokesDone?: number;
   totalStrokesNeeded?: number;
@@ -37,6 +39,7 @@ export function CutEngine({
   isRunning,
   canWrite,
   darkMode = false,
+  lockedBars,
   strokesDone = 0,
   totalStrokesNeeded = 0,
   totalPiecesDone = 0,
@@ -215,7 +218,7 @@ export function CutEngine({
             <ChevronDown className="w-4 h-4" />
           </Button>
           <div className="text-center">
-            <span className="text-3xl font-black font-mono">{bars}</span>
+            <span className="text-3xl font-black font-mono">{isRunning && lockedBars != null ? lockedBars : bars}</span>
             <span className={cn("text-xs ml-1.5 uppercase tracking-wider", mutedClasses)}>
               Bars
             </span>

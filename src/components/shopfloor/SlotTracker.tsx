@@ -132,13 +132,15 @@ export function SlotTracker({
             </div>
           </div>
 
-          {/* Per-stroke info */}
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground">
-              Each stroke = <span className="font-bold text-primary">{piecesPerStroke} pieces</span>
-              {" "}({piecesPerStroke} bar{piecesPerStroke > 1 ? "s" : ""} × 1 cut)
-            </p>
-          </div>
+          {/* Per-stroke info — hide when all slots done */}
+          {activeSlots.length > 0 && (
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">
+                Each stroke = <span className="font-bold text-primary">{piecesPerStroke} pieces</span>
+                {" "}({piecesPerStroke} bar{piecesPerStroke > 1 ? "s" : ""} × 1 cut)
+              </p>
+            </div>
+          )}
 
           {/* Progress bar */}
           <div className="h-2.5 bg-muted rounded-full overflow-hidden">
