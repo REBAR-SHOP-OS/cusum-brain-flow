@@ -161,6 +161,7 @@ export default function AccountingWorkspace() {
   const urlTab = searchParams.get("tab");
   const urlSearch = searchParams.get("search") || "";
   const [activeTab, setActiveTab] = useState(urlTab || "dashboard");
+  const [docSubTab, setDocSubTab] = useState<string | undefined>();
   const [showAgent, setShowAgent] = useState(true);
   const [agentMode, setAgentMode] = useState<"default" | "minimized" | "fullscreen">("default");
   const qb = useQuickBooksData();
@@ -335,16 +336,23 @@ export default function AccountingWorkspace() {
           <div className="flex items-center gap-2 px-4 py-2 border-b border-border shrink-0 overflow-x-auto">
             {[
               { label: "Invoices", tab: "invoices", count: qb.invoices.length },
-              { label: "Quotations", tab: "estimates", count: qb.estimates.length },
+              { label: "Quotations", tab: "documents", count: qb.estimates.length, docType: "quotation" },
               { label: "Bills", tab: "bills", count: qb.bills.length },
               { label: "Customers", tab: "customers", count: qb.customers.length },
             ].map(item => (
               <Button
-                key={item.tab}
+                key={item.label}
                 variant={activeTab === item.tab ? "default" : "outline"}
                 size="sm"
                 className="h-8 text-xs gap-1.5 shrink-0"
-                onClick={() => setActiveTab(item.tab)}
+                onClick={() => {
+                  setActiveTab(item.tab);
+                  if ('docType' in item && item.docType) {
+                    setDocSubTab(item.docType);
+                  } else {
+                    setDocSubTab(undefined);
+                  }
+                }}
               >
                 {item.label}
                 <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
@@ -396,7 +404,7 @@ export default function AccountingWorkspace() {
                   {activeTab === "budget-vs-actuals" && <BudgetVsActuals />}
                   {activeTab === "cash-flow-report" && <AccountingCashFlow />}
                   {activeTab === "tax-filing" && <TaxFilingSummary />}
-                  {activeTab === "documents" && <AccountingDocuments data={qb} />}
+                  {activeTab === "documents" && <AccountingDocuments data={qb} initialDocType={docSubTab as any} />}
                   {activeTab === "estimates" && <AccountingEstimates data={qb} />}
                   {activeTab === "credit-memos" && <AccountingCreditMemos data={qb} />}
                   {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
