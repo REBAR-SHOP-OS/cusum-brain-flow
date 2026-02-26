@@ -10,6 +10,8 @@ import { CreditCard, Search, FileText, AlertCircle, Download, Eye } from "lucide
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { DocumentUploadZone } from "./DocumentUploadZone";
+import { PaymentSourceStrip } from "./PaymentSourceStrip";
+import { usePaymentSources, type UnifiedPayment } from "@/hooks/usePaymentSources";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -18,11 +20,20 @@ interface Props {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
+const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
+  quickbooks: { label: "QB", className: "text-success border-success/30 bg-success/10" },
+  stripe: { label: "Stripe", className: "text-purple-500 border-purple-400/30 bg-purple-500/10" },
+  bmo: { label: "BMO", className: "text-blue-500 border-blue-400/30 bg-blue-500/10" },
+  odoo: { label: "Odoo", className: "text-muted-foreground border-muted-foreground/30 bg-muted/50" },
+};
+
 export function AccountingPayments({ data }: Props) {
   const { payments, invoices, customers } = data;
   const [search, setSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("all");
-  const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<UnifiedPayment | null>(null);
+
+  const { unifiedPayments, sourceSummaries, reconciliation } = usePaymentSources(payments);
 
   // Build unique customer list from payments + invoices
   const customerOptions = useMemo(() => {
@@ -30,17 +41,14 @@ export function AccountingPayments({ data }: Props) {
     for (const c of customers) {
       map.set(c.Id, c.DisplayName);
     }
-    return Array.from(map.entries())
-      .sort((a, b) => a[1].localeCompare(b[1]));
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [customers]);
 
   // Outstanding invoices for selected customer (Balance > 0)
   const outstandingInvoices = useMemo(() => {
     if (selectedCustomerId === "all") return [];
     return invoices.filter(
-      (inv) =>
-        inv.Balance > 0 &&
-        inv.CustomerRef?.value === selectedCustomerId
+      (inv) => inv.Balance > 0 && inv.CustomerRef?.value === selectedCustomerId
     );
   }, [invoices, selectedCustomerId]);
 
@@ -49,24 +57,29 @@ export function AccountingPayments({ data }: Props) {
     [outstandingInvoices]
   );
 
-  const sorted = [...payments]
-    .sort((a, b) => new Date(b.TxnDate).getTime() - new Date(a.TxnDate).getTime());
+  // Filter unified payments
+  const filtered = useMemo(() => {
+    return unifiedPayments.filter((p) => {
+      const matchesSearch = p.customerName.toLowerCase().includes(search.toLowerCase());
+      const matchesCustomer =
+        selectedCustomerId === "all" ||
+        (p.source === "quickbooks" && p.raw?.CustomerRef?.value === selectedCustomerId);
+      return matchesSearch && matchesCustomer;
+    });
+  }, [unifiedPayments, search, selectedCustomerId]);
 
-  const filtered = sorted.filter((p) => {
-    const matchesSearch = (p.CustomerRef?.name || "").toLowerCase().includes(search.toLowerCase());
-    const matchesCustomer = selectedCustomerId === "all" || p.CustomerRef?.value === selectedCustomerId;
-    return matchesSearch && matchesCustomer;
-  });
-
-  const totalCollected = (selectedCustomerId === "all" ? payments : filtered)
-    .reduce((sum, p) => sum + p.TotalAmt, 0);
+  const totalCollected = (selectedCustomerId === "all" ? unifiedPayments : filtered).reduce(
+    (sum, p) => sum + p.amount,
+    0
+  );
 
   const exportCsv = () => {
     import("@e965/xlsx").then(({ utils, writeFile }) => {
-      const rows = filtered.map(p => ({
-        Date: p.TxnDate || "",
-        Customer: p.CustomerRef?.name || "",
-        Amount: p.TotalAmt,
+      const rows = filtered.map((p) => ({
+        Date: p.date || "",
+        Customer: p.customerName,
+        Amount: p.amount,
+        Source: p.source,
       }));
       const ws = utils.json_to_sheet(rows);
       const wb = utils.book_new();
@@ -77,6 +90,9 @@ export function AccountingPayments({ data }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Multi-Source Summary Strip */}
+      <PaymentSourceStrip summaries={sourceSummaries} reconciliation={reconciliation} />
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -190,31 +206,41 @@ export function AccountingPayments({ data }: Props) {
                   <TableHead className="text-base">Date</TableHead>
                   <TableHead className="text-base">Customer</TableHead>
                   <TableHead className="text-base text-right">Amount</TableHead>
+                  <TableHead className="text-base">Source</TableHead>
                   <TableHead className="text-base">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((p) => (
-                  <TableRow key={p.Id} className="text-base">
-                    <TableCell>{new Date(p.TxnDate).toLocaleDateString()}</TableCell>
-                    <TableCell className="font-medium">{p.CustomerRef?.name || "Unknown"}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="outline" className="text-base px-3 py-1 text-success border-success/30">
-                        +{fmt(p.TotalAmt)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="ghost" className="gap-1" onClick={() => setSelectedPayment(p)}>
-                        <Eye className="w-4 h-4" /> View
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filtered.map((p) => {
+                  const badge = SOURCE_BADGE[p.source] ?? SOURCE_BADGE.quickbooks;
+                  return (
+                    <TableRow key={p.id} className="text-base">
+                      <TableCell>{p.date ? new Date(p.date).toLocaleDateString() : "—"}</TableCell>
+                      <TableCell className="font-medium">{p.customerName}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className="text-base px-3 py-1 text-success border-success/30">
+                          +{fmt(p.amount)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${badge.className}`}>
+                          {badge.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" className="gap-1" onClick={() => setSelectedPayment(p)}>
+                          <Eye className="w-4 h-4" /> View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
+
       {/* Payment Detail Sheet */}
       <Sheet open={!!selectedPayment} onOpenChange={(o) => { if (!o) setSelectedPayment(null); }}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
@@ -225,10 +251,40 @@ export function AccountingPayments({ data }: Props) {
           {selectedPayment && (
             <div className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
-                <div><p className="text-sm text-muted-foreground">Customer</p><p className="font-medium">{selectedPayment.CustomerRef?.name || "—"}</p></div>
-                <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{new Date(selectedPayment.TxnDate).toLocaleDateString()}</p></div>
-                <div><p className="text-sm text-muted-foreground">Amount</p><p className="font-semibold text-lg text-success">{fmt(selectedPayment.TotalAmt)}</p></div>
-                <div><p className="text-sm text-muted-foreground">Payment Method</p><p className="font-medium">{selectedPayment.PaymentMethodRef?.name || selectedPayment.PaymentType || "—"}</p></div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Customer</p>
+                  <p className="font-medium">{selectedPayment.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Date</p>
+                  <p className="font-medium">{selectedPayment.date ? new Date(selectedPayment.date).toLocaleDateString() : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Amount</p>
+                  <p className="font-semibold text-lg text-success">{fmt(selectedPayment.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Source</p>
+                  <Badge variant="outline" className={SOURCE_BADGE[selectedPayment.source]?.className}>
+                    {SOURCE_BADGE[selectedPayment.source]?.label}
+                  </Badge>
+                </div>
+                {selectedPayment.source === "quickbooks" && selectedPayment.raw && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Payment Method</p>
+                    <p className="font-medium">
+                      {selectedPayment.raw.PaymentMethodRef?.name || selectedPayment.raw.PaymentType || "—"}
+                    </p>
+                  </div>
+                )}
+                {selectedPayment.sourceRef && (
+                  <div className="col-span-2">
+                    <p className="text-sm text-muted-foreground">Reference</p>
+                    <a href={selectedPayment.sourceRef} target="_blank" rel="noopener noreferrer" className="text-primary underline text-sm">
+                      {selectedPayment.sourceRef}
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           )}
