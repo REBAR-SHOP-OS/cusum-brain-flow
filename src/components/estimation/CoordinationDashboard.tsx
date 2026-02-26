@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { Brain, TrendingUp, Target, AlertTriangle, Play, RefreshCw, RotateCcw, E
 import { toast } from "sonner";
 
 export default function CoordinationDashboard() {
+  const { companyId } = useCompanyId();
   const [ingesting, setIngesting] = useState<string | null>(null);
   const [autoRun, setAutoRun] = useState<Record<string, boolean>>({});
   const autoRunRef = useRef(autoRun);
@@ -19,11 +21,13 @@ export default function CoordinationDashboard() {
 
   // Coordination logs
   const { data: coordLogs = [] } = useQuery({
-    queryKey: ["coordination_logs"],
+    queryKey: ["coordination_logs", companyId],
+    enabled: !!companyId,
     queryFn: async () => {
       const { data } = await supabase
         .from("project_coordination_log")
         .select("*")
+        .eq("company_id", companyId!)
         .order("created_at", { ascending: false })
         .limit(100);
       return (data ?? []) as any[];
@@ -32,11 +36,13 @@ export default function CoordinationDashboard() {
 
   // Ingestion progress
   const { data: progress = [], refetch: refetchProgress } = useQuery({
-    queryKey: ["ingestion_progress"],
+    queryKey: ["ingestion_progress", companyId],
+    enabled: !!companyId,
     queryFn: async () => {
       const { data } = await supabase
         .from("ingestion_progress")
         .select("*")
+        .eq("company_id", companyId!)
         .order("created_at", { ascending: false });
       return (data ?? []) as any[];
     },
@@ -45,11 +51,13 @@ export default function CoordinationDashboard() {
 
   // Learning pairs
   const { data: learnings = [] } = useQuery({
-    queryKey: ["estimation_learnings_stats"],
+    queryKey: ["estimation_learnings_stats", companyId],
+    enabled: !!companyId,
     queryFn: async () => {
       const { data } = await supabase
         .from("estimation_learnings")
         .select("element_type, bar_size, weight_delta_pct, confidence_score, source, created_at")
+        .eq("company_id", companyId!)
         .order("created_at", { ascending: false })
         .limit(500);
       return (data ?? []) as any[];

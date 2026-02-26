@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ExtractSession, ExtractRow, ExtractError } from "@/lib/extractService";
 import { fetchExtractSessions, fetchExtractRows, fetchExtractErrors } from "@/lib/extractService";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export function useExtractSessions() {
   const [sessions, setSessions] = useState<ExtractSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const { companyId } = useCompanyId();
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -28,7 +30,10 @@ export function useExtractSessions() {
       .channel("extract-sessions-changes-" + Math.random().toString(36).slice(2, 8))
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "extract_sessions" },
+        {
+          event: "*", schema: "public", table: "extract_sessions",
+          ...(companyId ? { filter: `company_id=eq.${companyId}` } : {}),
+        },
         () => refresh()
       )
       .subscribe();
@@ -36,7 +41,7 @@ export function useExtractSessions() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refresh]);
+  }, [refresh, companyId]);
 
   return { sessions, loading, refresh };
 }

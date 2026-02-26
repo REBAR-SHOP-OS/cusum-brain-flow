@@ -123,8 +123,24 @@ export function useOrders() {
   });
 
   // ─── Update order status ────────────────────────────
+  const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+    draft: ["confirmed", "cancelled"],
+    confirmed: ["in_production", "cancelled"],
+    in_production: ["ready", "cancelled"],
+    ready: ["loading", "cancelled"],
+    loading: ["in-transit"],
+    "in-transit": ["delivered"],
+    delivered: ["invoiced"],
+    invoiced: ["paid"],
+  };
+
   const updateOrderStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, currentStatus }: { id: string; status: string; currentStatus?: string }) => {
+      if (currentStatus && ALLOWED_TRANSITIONS[currentStatus]) {
+        if (!ALLOWED_TRANSITIONS[currentStatus].includes(status)) {
+          throw new Error(`Invalid transition: ${currentStatus} → ${status}. Allowed: ${ALLOWED_TRANSITIONS[currentStatus].join(", ")}`);
+        }
+      }
       const { error } = await supabase.from("orders").update({ status }).eq("id", id);
       if (error) throw error;
     },

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { getErrorMessage } from "@/lib/utils";
 
 export interface PennyQueueItem {
@@ -35,6 +36,7 @@ export function usePennyQueue() {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const { toast } = useToast();
+  const { companyId } = useCompanyId();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,12 +66,15 @@ export function usePennyQueue() {
     load();
     const channel = supabase
       .channel("penny-queue-changes-" + Math.random().toString(36).slice(2, 8))
-      .on("postgres_changes", { event: "*", schema: "public", table: "penny_collection_queue" }, () => {
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "penny_collection_queue",
+        ...(companyId ? { filter: `company_id=eq.${companyId}` } : {}),
+      }, () => {
         load();
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [load]);
+  }, [load, companyId]);
 
   const pendingItems = items.filter(i => i.status === "pending_approval")
     .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
