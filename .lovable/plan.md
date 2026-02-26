@@ -2,37 +2,28 @@
 
 ## Problem
 
-The Loading Station requires manual entry of an invoice number, but this data already exists in the extract session (set during the "Initialize Scope" step). The operator has to re-type it.
+The packing slip's "Customer" field shows the project/scope name (e.g., "Masonary Wall") instead of the actual customer name. This happens in two places:
 
-## Data Chain
+1. **`useDeliveryActions.ts` line 131**: `customer_name: bundle.projectName` — persists the wrong value to `packing_slips` table
+2. **`PickupStation.tsx` lines 98, 115**: `customerName={selectedBundle.projectName}` — passes the wrong value to the slip preview
 
-```text
-cut_plans.project_id → barlists.project_id + barlists.extract_session_id → extract_sessions.invoice_number
-```
+**Root cause**: `bundle.projectName` comes from `cut_plans.project_name` which is the project/scope name. The actual customer name lives in `projects.customer_id → customers.name`.
 
 ## Fix
 
-### `src/pages/LoadingStation.tsx`
+### 1. `src/hooks/useCompletedBundles.ts`
+- Expand the query to join through `cut_plans → projects → customers`:
+  ```
+  cut_plans!inner(id, name, project_name, company_id, project_id,
+    projects(customer_id, customers(name)))
+  ```
+- Add a `customerName` field to `CompletedBundle` resolved from `customers.name`
+- Keep `projectName` as-is (it's used correctly elsewhere as the project label)
 
-1. **Auto-fetch invoice number on bundle selection**: When `selectedBundle` changes, query the DB to find the invoice number:
-   - Join from `barlists` where `project_id = cut_plans.project_id` (using the bundle's `cutPlanId` to get the project)
-   - Follow `extract_session_id` → `extract_sessions.invoice_number`
-   - Pick the most recent non-null invoice number
+### 2. `src/hooks/useDeliveryActions.ts` (line 131)
+- Change `customer_name: bundle.projectName` → `customer_name: bundle.customerName || bundle.projectName`
+- This uses the real customer name when available, falls back to project name
 
-2. **Pre-fill `invoiceNumber` state**: If a match is found, call `setInvoiceNumber(result)` so the field is pre-populated. The operator can still edit it if needed.
-
-3. **Implementation**: Add a `useEffect` or inline query that runs when `selectedBundle` changes:
-   ```text
-   SELECT es.invoice_number
-   FROM cut_plans cp
-   JOIN barlists b ON b.project_id = cp.project_id
-   JOIN extract_sessions es ON es.id = b.extract_session_id
-   WHERE cp.id = <cutPlanId>
-     AND es.invoice_number IS NOT NULL
-   ORDER BY es.created_at DESC
-   LIMIT 1
-   ```
-   If found, set `invoiceNumber` to that value.
-
-4. The invoice number input remains editable — this is a convenience pre-fill, not a lock.
+### 3. `src/pages/PickupStation.tsx` (lines 98, 115)
+- Change `customerName={selectedBundle.projectName}` → `customerName={selectedBundle.customerName || selectedBundle.projectName}`
 
