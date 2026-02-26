@@ -26,6 +26,7 @@ import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, sub
 import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParser";
 import { getRequiredGates, type GateType } from "@/lib/pipelineTransitionGates";
 import { usePipelineMemory } from "@/hooks/usePipelineMemory";
+import { usePipelineRealtime } from "@/hooks/usePipelineRealtime";
 import { logPipelineTransition } from "@/lib/logPipelineTransition";
 import { QualificationGateModal } from "@/components/pipeline/gates/QualificationGateModal";
 import { PricingGateModal } from "@/components/pipeline/gates/PricingGateModal";
@@ -86,6 +87,7 @@ function getDateCutoff(rangeId: string): Date | null {
 }
 
 export default function Pipeline() {
+  usePipelineRealtime();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [smartResult, setSmartResult] = useState<SmartSearchResult | null>(null);

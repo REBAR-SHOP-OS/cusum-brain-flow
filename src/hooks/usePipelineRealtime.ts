@@ -26,6 +26,7 @@ export function usePipelineRealtime() {
           // Invalidate pipeline queries
           queryClient.invalidateQueries({ queryKey: ["pipeline-intelligence-leads"] });
           queryClient.invalidateQueries({ queryKey: ["pipeline-leads"] });
+          queryClient.invalidateQueries({ queryKey: ["leads"] });
 
           // Toast for stage changes
           if (oldLead.stage && newLead.stage && oldLead.stage !== newLead.stage) {
@@ -49,6 +50,7 @@ export function usePipelineRealtime() {
         () => {
           queryClient.invalidateQueries({ queryKey: ["pipeline-intelligence-leads"] });
           queryClient.invalidateQueries({ queryKey: ["pipeline-leads"] });
+          queryClient.invalidateQueries({ queryKey: ["leads"] });
         }
       )
       .on(
