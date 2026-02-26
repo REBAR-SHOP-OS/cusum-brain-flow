@@ -12232,6 +12232,63 @@ export type Database = {
         }
         Relationships: []
       }
+      wc_qb_order_map: {
+        Row: {
+          company_id: string
+          created_at: string
+          currency: string | null
+          error_message: string | null
+          id: string
+          qb_customer_id: string | null
+          qb_doc_number: string | null
+          qb_invoice_id: string | null
+          retry_count: number | null
+          status: string
+          synced_at: string | null
+          total_amount: number | null
+          updated_at: string
+          wc_order_id: number
+          wc_order_number: string | null
+          wc_status: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          currency?: string | null
+          error_message?: string | null
+          id?: string
+          qb_customer_id?: string | null
+          qb_doc_number?: string | null
+          qb_invoice_id?: string | null
+          retry_count?: number | null
+          status?: string
+          synced_at?: string | null
+          total_amount?: number | null
+          updated_at?: string
+          wc_order_id: number
+          wc_order_number?: string | null
+          wc_status?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          currency?: string | null
+          error_message?: string | null
+          id?: string
+          qb_customer_id?: string | null
+          qb_doc_number?: string | null
+          qb_invoice_id?: string | null
+          retry_count?: number | null
+          status?: string
+          synced_at?: string | null
+          total_amount?: number | null
+          updated_at?: string
+          wc_order_id?: number
+          wc_order_number?: string | null
+          wc_status?: string | null
+        }
+        Relationships: []
+      }
       work_orders: {
         Row: {
           actual_end: string | null
