@@ -69,6 +69,7 @@ const statusColors: Record<string, string> = {
   "in-transit": "bg-primary/20 text-primary",
   delivered: "bg-primary/30 text-primary",
   completed: "bg-primary/30 text-primary",
+  completed_with_issues: "bg-destructive/20 text-destructive",
   partial: "bg-destructive/20 text-destructive",
   failed: "bg-destructive/20 text-destructive",
 };
@@ -207,7 +208,7 @@ export default function Deliveries() {
   
   // Mutually exclusive categories so counts add up to total
   const completedDeliveries = filteredDeliveries.filter(d => 
-    d.status === "completed" || d.status === "delivered"
+    d.status === "completed" || d.status === "delivered" || d.status === "completed_with_issues"
   );
 
   const activeDeliveries = filteredDeliveries.filter(d => 
@@ -215,7 +216,7 @@ export default function Deliveries() {
   );
 
   const pendingDeliveries = filteredDeliveries.filter(d => 
-    d.status !== "completed" && d.status !== "delivered" && d.status !== "in-transit"
+    d.status !== "completed" && d.status !== "delivered" && d.status !== "completed_with_issues" && d.status !== "in-transit"
   );
 
   const todayDeliveries = pendingDeliveries.filter(d => {

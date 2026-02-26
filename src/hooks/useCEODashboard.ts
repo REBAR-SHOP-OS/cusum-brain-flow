@@ -174,7 +174,7 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
     supabase.from("orders").select("id", { count: "exact", head: true }).in("status", ["active", "pending"]),
     supabase.from("cut_plan_items").select("total_pieces, completed_pieces"),
     supabase.from("machines").select("id, name, type, status"),
-    supabase.from("deliveries").select("id", { count: "exact", head: true }).in("status", ["pending", "in_transit", "loading"]),
+    supabase.from("deliveries").select("id", { count: "exact", head: true }).in("status", ["pending", "in-transit", "loading"]),
     supabase.from("leads").select("stage, expected_value").not("stage", "in", "(closed_won,closed_lost)"),
     supabase.from("customers").select("id", { count: "exact", head: true }).eq("status", "active"),
     supabase.from("profiles").select("id", { count: "exact", head: true }),

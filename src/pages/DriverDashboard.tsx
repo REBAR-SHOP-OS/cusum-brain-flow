@@ -59,6 +59,7 @@ const statusColors: Record<string, string> = {
   "in-transit": "bg-primary/20 text-primary",
   delivered: "bg-primary/30 text-primary",
   completed: "bg-primary/30 text-primary",
+  completed_with_issues: "bg-destructive/20 text-destructive",
 };
 
 const stopStatusColors: Record<string, string> = {
@@ -128,8 +129,8 @@ export default function DriverDashboard() {
 
   const todayDeliveries = deliveries.filter(d => d.scheduled_date?.startsWith(today));
   const activeDelivery = deliveries.find(d => d.status === "in-transit");
-  const completedToday = todayDeliveries.filter(d => d.status === "completed" || d.status === "delivered");
-  const pendingToday = todayDeliveries.filter(d => d.status !== "completed" && d.status !== "delivered");
+  const completedToday = todayDeliveries.filter(d => d.status === "completed" || d.status === "delivered" || d.status === "completed_with_issues");
+  const pendingToday = todayDeliveries.filter(d => d.status !== "completed" && d.status !== "delivered" && d.status !== "completed_with_issues");
 
   const refreshStops = () => {
     queryClient.invalidateQueries({ queryKey: ["driver-stops", selectedDelivery?.id, companyId] });

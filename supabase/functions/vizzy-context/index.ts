@@ -137,7 +137,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     customers: { totalActive: (customers || []).length },
     deliveries: {
       scheduledToday: (deliveries || []).length,
-      inTransit: (deliveries || []).filter((d: any) => d.status === "in_transit").length,
+      inTransit: (deliveries || []).filter((d: any) => d.status === "in-transit").length,
     },
     team: { totalStaff: (profiles || []).length },
     recentEvents: events || [],
