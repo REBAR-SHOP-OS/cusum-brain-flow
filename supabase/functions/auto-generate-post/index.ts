@@ -311,13 +311,15 @@ Return an array of 5 objects:
 
           // Create approval record for configured approvers
           try {
-            // Find admin users to be approvers
-            const { data: admins } = await supabaseAdmin
-              .from("user_roles")
-              .select("user_id")
-              .in("role", ["admin", "sales"]);
+            // Find admin users to be approvers (scoped via profiles)
+            const { data: adminProfiles } = await supabaseAdmin
+              .from("profiles")
+              .select("user_id, user_roles!inner(role)")
+              .eq("is_active", true);
+            const admins = (adminProfiles || [])
+              .filter((p: any) => p.user_roles?.some((r: any) => ["admin", "sales"].includes(r.role)));
 
-            const approverIds = admins?.map((a) => a.user_id).filter((id) => id !== userId) || [];
+            const approverIds = admins.map((a: any) => a.user_id).filter((id: any) => id !== userId) || [];
             
             for (const approverId of approverIds.slice(0, 2)) {
               await supabaseAdmin.from("social_approvals").insert({

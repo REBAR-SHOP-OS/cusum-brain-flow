@@ -770,6 +770,8 @@ export default function Tasks() {
 
   const deleteTask = async (taskId: string) => {
     if (!window.confirm("Delete this task?")) return;
+    // Clean up child records first (cascade-safe pattern)
+    await supabase.from("task_comments").delete().eq("task_id", taskId);
     const { error } = await supabase.from("tasks").delete().eq("id", taskId);
     if (error) { toast.error(error.message); return; }
     toast.success("Task deleted");
@@ -1396,7 +1398,7 @@ export default function Tasks() {
                   {fixLoading ? "Generating..." : "Generate Fix"}
                 </Button>
 
-                <Button size="sm" variant="destructive" disabled={!canDeleteOrFix(selectedTask)} onClick={() => { if (window.confirm("Delete this task?")) { supabase.from("tasks").delete().eq("id", selectedTask.id).then(({ error }) => { if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } }); } }}>Delete</Button>
+                <Button size="sm" variant="destructive" disabled={!canDeleteOrFix(selectedTask)} onClick={async () => { if (window.confirm("Delete this task?")) { await supabase.from("task_comments").delete().eq("task_id", selectedTask.id); const { error } = await supabase.from("tasks").delete().eq("id", selectedTask.id); if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } } }}>Delete</Button>
               </div>
 
               {/* Reopen with Issue Dialog */}

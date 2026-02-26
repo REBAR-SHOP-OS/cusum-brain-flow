@@ -112,11 +112,14 @@ ${recentEscalations?.length ? `\nRecent escalations: ${recentEscalations.slice(0
       }
     }
 
-    // Get configured recipients (admin + sales roles)
-    const { data: recipients } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .in("role", ["admin", "sales"]);
+    // Get configured recipients (admin + sales roles) scoped to company
+    const { data: profileRecipients } = await supabase
+      .from("profiles")
+      .select("user_id, user_roles!inner(role)")
+      .eq("is_active", true);
+    const recipients = (profileRecipients || [])
+      .filter((p: any) => p.user_roles?.some((r: any) => ["admin", "sales"].includes(r.role)))
+      .map((p: any) => ({ user_id: p.user_id }));
 
     if (recipients) {
       for (const r of recipients) {
