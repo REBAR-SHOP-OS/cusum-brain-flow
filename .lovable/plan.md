@@ -1,24 +1,19 @@
 
 
-## Plan: Show Customer Name on Production Cards
+## Plan: Fix Customer Deletion Error in Production Queue
 
 ### Problem
-The Production Cards on the station page show the Mark number and project name, but not the customer name. The data query (`useStationData`) doesn't fetch the customer name from the `projects → customers` join chain.
+Clicking "Delete" on a customer folder in the Production Queue tries to delete the actual `customers` record from the database. A database trigger (`block_customer_delete_with_orders`) blocks this because the customer has 2 active orders. The Production Queue should only remove production-related items (plans, barlists, projects), not the customer record itself.
 
-### Changes
+### File: `src/components/office/ProductionQueueView.tsx`
 
-**1. Update `src/hooks/useStationData.ts`**
-- Add `customer_name: string | null` to the `StationItem` interface
-- **Bender query**: Update the select to include `customers(name)` via the projects join: change `cut_plans!inner(id, name, project_name, project_id, company_id)` to `cut_plans!inner(id, name, project_name, project_id, company_id, projects(customers(name)))`
-- Map `customer_name` from `cut_plans.projects?.customers?.name`
-- **Cutter query**: Update the `cut_plans` select from `"id, name, project_name, project_id, machine_id"` to `"id, name, project_name, project_id, machine_id, projects(customers(name))"` and map `customer_name` from `plan.projects?.customers?.name`
+**Change `handleDeleteCustomer` (lines 108-128):**
+- Keep the logic that deletes child projects, barlists, and plans (already handled by `handleDeleteProject`)
+- **Remove** the lines that delete contacts and the customer record (lines 114-121)
+- After cleaning up production items, just invalidate queries and show success toast
+- This way, the customer record stays intact (with its orders/quotes), but the production queue items are removed
 
-**2. Update `src/components/shopfloor/ProductionCard.tsx`**
-- Below the existing "Mark / DWG" heading area (around line 96-107), add the customer name display:
-  - Show `item.customer_name` as a small label above or below the mark number (e.g., `text-xs text-muted-foreground`)
-  - Only render when `item.customer_name` is present
-
-### Files
-- `src/hooks/useStationData.ts` — add customer_name to interface + both queries
-- `src/components/shopfloor/ProductionCard.tsx` — render customer name on card
+### Summary of edit
+- Lines 114-121: Remove `supabase.from("contacts").delete()` and `supabase.from("customers").delete()` calls
+- The customer folder disappears from the queue naturally because its projects/plans are gone
 
