@@ -1,169 +1,146 @@
 
 
-# Rebar ERP Automated Testing Suite -- IMPLEMENTED ✅
+# QA War Simulation Round 7 -- Deep Module Audit
 
-## Current State (Updated 2026-02-26)
+## Scope
 
-- **Testing infrastructure**: Vitest + jsdom + Deno test runner
-- **Test files**: 6 Vitest test files + 2 Deno test files = ~80 test cases
-- **MCP API tests**: 18/18 passing ✅ (all 12 MCP tools verified)
-- **Autopilot engine tests**: 3/3 passing ✅
-- **Bug found & fixed**: `vizzyContext.ts` used `in_transit` → fixed to `in-transit`
-- **No E2E framework**: Lovable project constraint; using static analysis + API tests instead
-
-## What We Can Actually Build
-
-Given Lovable's runtime constraints (no headless browser, no Playwright execution), the practical testing suite is:
-
-1. **Unit tests** (Vitest) -- hook logic, data transforms, validation functions
-2. **API integration tests** (Deno tests) -- MCP server endpoint verification against live DB
-3. **Component render tests** (Vitest + Testing Library) -- render checks, prop validation
-
-We will NOT generate Playwright specs that can't execute. Instead, we produce a practical, runnable suite.
+This round targets areas NOT covered in Rounds 1-6: XSS vulnerabilities, orphan cascade risks on delete operations, the `completed_pieces` absolute-write concurrency bug, and missing validation in critical flows.
 
 ---
 
-## Artifact A -- Test Plan
+## BUG R7-1 -- HIGH: XSS vulnerability in CampaignReviewPanel (unsanitized HTML rendering)
 
-### Module Coverage Map
+**File**: `src/components/email-marketing/CampaignReviewPanel.tsx` line 149
 
-| Module | Hook/Service | Unit Tests | API Tests (MCP) | Key Risks |
-|--------|-------------|------------|-----------------|-----------|
-| Dashboard | `useCEODashboard` | company_id scoping, metric computation | `get_dashboard_stats` | Cross-tenant aggregation |
-| Customers | MCP `list_customers` | -- | Filter, limit, empty set | Duplicate creation |
-| Leads/CRM | MCP `list_leads` | -- | Stage filter, limit | Invalid stage transitions |
-| Orders | `useOrders` | company_id gating, QB payload | `list_orders` status filter | Status string mismatch |
-| Deliveries | `useDeliveryActions` | Auto-complete logic | `list_deliveries` status filter | `in-transit` vs `in_transit` |
-| Production | `useCutPlans`, slot tracker | `buildSlots`, `recordStroke` | `list_production_tasks` phase filter | Concurrent `completed_pieces` |
-| Machines | MCP `list_machines` | -- | Status filter | Down machine + active job |
-| Time Entries | `useTimeClock` | Clock-in/out logic | `list_time_entries` | Overlapping entries, no company_id |
-| Social Posts | `useSocialPosts` | CRUD mutations | `list_social_posts` platform/status | No company_id column |
-
-### Critical Assertions Per Module
-
-- **Dashboard**: All 18+ queries include `.eq("company_id", companyId)` except `social_posts` and `time_clock_entries` (known schema limitation)
-- **Orders**: `sendToQuickBooks` payload includes `companyId`; order query has `enabled: !!companyId`
-- **Deliveries**: Status values use `in-transit` (hyphenated); `completed_with_issues` recognized in filters and statusColors
-- **Production**: Slot tracker partial bar detection; stroke count uses `Math.max` across all slots
-- **Realtime**: All 21 channels use dynamic names scoped by `companyId`, `userId`, or instance ID
-
----
-
-## Artifact B -- Test Specs to Create
-
-### 1. MCP Server API Tests (Deno)
-
-**File**: `supabase/functions/mcp-server/mcp_api_test.ts`
-
-Tests each MCP tool endpoint against the live test DB:
-- `get_dashboard_stats` returns valid counts (all >= 0)
-- `list_customers` with limit=5 returns <= 5 rows
-- `list_leads` with `stage=won` returns only won leads
-- `list_orders` with `status=active` returns only active orders
-- `list_deliveries` with `status=in-transit` returns results (not 0 -- validates hyphen fix)
-- `list_production_tasks` with `phase=queued` returns only queued items
-- `list_machines` with `status=idle` returns only idle machines
-- `list_time_entries` returns entries ordered by clock_in desc
-- `list_social_posts` with `platform=instagram` returns only instagram posts
-- Invalid/missing params return graceful errors, not crashes
-
-### 2. CEO Dashboard Scoping Tests (Vitest)
-
-**File**: `src/hooks/__tests__/useCEODashboard.test.ts`
-
-Unit tests that verify the hook's query-building logic:
-- Test that all query builders include `company_id` filter (static analysis of the source)
-- Test metric computation (production progress = completedPieces/totalPieces)
-- Test QC metric aggregation logic
-- Test alert generation thresholds
-
-### 3. Orders Hook Tests (Vitest)
-
-**File**: `src/hooks/__tests__/useOrders.test.ts`
-
-- `sendToQuickBooks` includes `companyId` in payload (mock supabase.functions.invoke)
-- Order query is disabled when `companyId` is null
-- Order interface types match expected shape
-
-### 4. Delivery Status Consistency Tests (Vitest)
-
-**File**: `src/hooks/__tests__/deliveryStatus.test.ts`
-
-- Status string constants use `in-transit` not `in_transit`
-- `completed_with_issues` is a valid status
-- Auto-complete logic: all stops terminal -> delivery marked complete
-- Auto-complete logic: any failed stop -> `completed_with_issues`
-
-### 5. Realtime Channel Scoping Tests (Vitest)
-
-**File**: `src/hooks/__tests__/realtimeScoping.test.ts`
-
-Static analysis test that reads source files and asserts:
-- No realtime `.channel("static-string")` calls without dynamic scoping
-- All 21 channels use template literals with `companyId`, `userId`, or unique ID
-
-### 6. Slot Tracker Tests (already exists, extend)
-
-**File**: `src/test/slotTracker.test.ts` -- already comprehensive, no changes needed
-
----
-
-## Artifact C -- Bug & Regression Schemas
-
-### Bug Record Schema
-```json
-{
-  "bug_id": "string (hash of module+title+endpoint)",
-  "title": "string",
-  "module": "dashboard|orders|deliveries|production|machines|timeclock|social|crm",
-  "severity": "S0|S1|S2|S3",
-  "priority": "P0|P1|P2|P3",
-  "type": "UI|API|Data|Permissions|Performance|Reliability",
-  "steps_to_repro": ["string"],
-  "expected": "string",
-  "actual": "string",
-  "suspected_root_cause": "string",
-  "first_seen_run_id": "string",
-  "last_seen_run_id": "string",
-  "status": "new|known|regression|fixed"
-}
+```typescript
+dangerouslySetInnerHTML={{ __html: campaign.body_html || "<p>No content yet</p>" }}
 ```
 
-### Regression Ledger Schema
-```json
-{
-  "test_id": "MOD-001-dashboard_stats",
-  "module": "string",
-  "scenario_name": "string",
-  "last_10_runs": [{"pass": true, "timestamp": "ISO8601"}],
-  "flakiness_score": 0.0,
-  "linked_bugs": ["bug_id"],
-  "last_passed": "ISO8601",
-  "last_failed": "ISO8601|null"
-}
+`campaign.body_html` is rendered without DOMPurify sanitization. Every other `dangerouslySetInnerHTML` usage in the codebase (`InboxEmailThread`, `EmailViewer`, `InboxEmailViewer`) correctly uses `DOMPurify.sanitize()`. This one does not. If an AI-generated campaign or a user-edited campaign contains malicious script tags, they will execute in the reviewer's browser.
+
+**Fix**: Import DOMPurify and wrap the HTML:
+```typescript
+import DOMPurify from "dompurify";
+// ...
+dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(campaign.body_html || "<p>No content yet</p>") }}
 ```
 
----
-
-## Artifact D -- CI & Execution Notes
-
-- **Run unit tests**: `npm run test` (Vitest, already configured)
-- **Run MCP API tests**: `npx supabase functions test mcp-server` (Deno test runner)
-- **Environment**: Tests use test environment DB (isolated from production)
-- **Gating**: All S0/S1 failures block publish; S2/S3 are warnings
-- **Smoke subset**: MCP `get_dashboard_stats` + `list_orders` + `list_deliveries` (3 calls, <5s)
+**Severity**: HIGH -- stored XSS in an admin-facing component.
 
 ---
 
-## Implementation Steps
+## BUG R7-2 -- MEDIUM: Customer delete in `Customers.tsx` does not cascade to child records
 
-1. Create `src/hooks/__tests__/useCEODashboard.test.ts` -- static analysis of company_id scoping + metric math
-2. Create `src/hooks/__tests__/useOrders.test.ts` -- QB payload verification + query gating
-3. Create `src/hooks/__tests__/deliveryStatus.test.ts` -- status string consistency + auto-complete logic
-4. Create `src/hooks/__tests__/realtimeScoping.test.ts` -- verify all 21 channels are dynamically scoped
-5. Create `supabase/functions/mcp-server/mcp_api_test.ts` -- API integration tests for all 12 MCP tools
-6. Create `src/test/schemas/bugRecord.schema.json` and `regressionLedger.schema.json`
-7. Run all tests to establish baseline
+**File**: `src/pages/Customers.tsx` lines 207-211
 
-This gives approximately 60-80 test cases across 6 files, covering the 9 modules with both unit and API verification layers.
+```typescript
+const { error } = await supabase.from("customers").delete().eq("id", id);
+```
+
+The `ProductionQueueView.tsx` version correctly deletes `contacts` before deleting the customer (line 116-117). But `Customers.tsx` does not. If the database has foreign key constraints with `RESTRICT` (not `CASCADE`), deleting a customer with contacts/orders/leads will fail silently or throw an unhandled error. If constraints are `CASCADE`, it works but inconsistently across UI paths.
+
+**Fix**: Before deleting a customer, delete or check for dependent `contacts`, `orders`, `leads`, and `projects`. Or add a pre-delete check that warns the user if the customer has related records.
+
+**Severity**: MEDIUM -- data integrity risk on delete.
+
+---
+
+## BUG R7-3 -- MEDIUM: `completed_pieces` still uses absolute write (concurrency risk)
+
+**File**: `src/components/shopfloor/CutterStationView.tsx` lines 246-252 and 327-332
+
+Two locations write `completed_pieces` as an absolute value:
+
+1. **Stroke handler** (line 248): `update({ completed_pieces: newCompleted })`
+2. **Complete run** (line 330): `update({ completed_pieces: newCompleted })`
+
+If two operators work on the same cut plan item (e.g., after machine reassignment), the second operator's write overwrites the first's progress. The `completedAtRunStart` guard (line 43) mitigates this for a single session but does NOT protect against cross-session writes.
+
+**Fix**: Create a database RPC function:
+```sql
+CREATE OR REPLACE FUNCTION increment_completed_pieces(
+  p_item_id UUID,
+  p_increment INT
+) RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_new INT;
+BEGIN
+  UPDATE cut_plan_items
+  SET completed_pieces = LEAST(completed_pieces + p_increment, total_pieces)
+  WHERE id = p_item_id
+  RETURNING completed_pieces INTO v_new;
+  RETURN v_new;
+END;
+$$;
+```
+
+Then replace absolute writes with `supabase.rpc("increment_completed_pieces", { p_item_id: currentItem.id, p_increment: piecesThisStroke })`.
+
+**Severity**: MEDIUM -- data corruption under concurrent use.
+
+---
+
+## BUG R7-4 -- LOW: `AccountingCustomers.tsx` delete also lacks child cascade
+
+**File**: `src/components/accounting/AccountingCustomers.tsx` line 64
+
+Same pattern as R7-2. Deletes customer without removing dependent contacts first. Additionally, it attempts to sync QuickBooks deletion after local delete -- if the local delete succeeds but QB sync fails, data becomes inconsistent (customer gone locally but still in QB).
+
+**Fix**: Delete children first, then customer, then QB sync. Wrap in a try-catch that rolls back (re-creates) if QB sync is critical.
+
+**Severity**: LOW -- accounting module delete is less frequently used.
+
+---
+
+## Implementation Plan
+
+### Step 1: Fix R7-1 (XSS) -- Highest priority
+- Import `DOMPurify` in `CampaignReviewPanel.tsx`
+- Wrap `campaign.body_html` in `DOMPurify.sanitize()`
+
+### Step 2: Fix R7-3 (Concurrency) -- Requires schema change
+- Create `increment_completed_pieces` RPC via database migration
+- Update `CutterStationView.tsx` stroke handler (line 248) and complete handler (line 330) to use RPC
+- Keep `completedAtRunStart` as a UI-level guard but use atomic increment for DB writes
+
+### Step 3: Fix R7-2 (Customer delete cascade)
+- Add pre-delete child record cleanup in `Customers.tsx` (match `ProductionQueueView.tsx` pattern)
+- Add user confirmation showing count of related records that will be affected
+
+### Step 4: Fix R7-4 (Accounting customer delete)
+- Add child record cleanup before customer delete in `AccountingCustomers.tsx`
+
+---
+
+## Technical Details
+
+### Files to modify:
+1. `src/components/email-marketing/CampaignReviewPanel.tsx` -- add DOMPurify import + sanitize call
+2. `src/components/shopfloor/CutterStationView.tsx` -- replace absolute writes with RPC calls
+3. `src/pages/Customers.tsx` -- add child record deletion before customer delete
+4. `src/components/accounting/AccountingCustomers.tsx` -- add child record deletion before customer delete
+
+### Database migration:
+- Create `increment_completed_pieces` RPC function
+
+### Do NOT touch:
+- `InboxEmailThread.tsx`, `EmailViewer.tsx`, `InboxEmailViewer.tsx` (already sanitized)
+- `ProductionQueueView.tsx` (already handles cascade correctly)
+- `StopIssueDialog.tsx`, `PODCaptureDialog.tsx` (delivery logic unchanged)
+- Any realtime channel scoping (completed in Round 6)
+
+---
+
+## Updated Technical Debt Score: 3.2/10
+
+| Category | Score | Delta |
+|----------|-------|-------|
+| Security (XSS) | 8/10 | -1 (CampaignReviewPanel gap) |
+| Multi-tenant isolation | 9/10 | unchanged |
+| Data integrity | 8/10 | -1 (delete cascades + absolute writes) |
+| Concurrency safety | 5/10 | unchanged until RPC created |
+| Code quality | 8/10 | unchanged |
 
