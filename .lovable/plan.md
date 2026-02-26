@@ -1,16 +1,18 @@
 
 
-## Plan: Keep Only Packing Slips Sub-Tab in Documents
+## Plan: Move Packing Slips to Top of Quick-Access Strip
 
-Remove the "Invoices" and "Quotations" sub-tabs from the Documents section, keeping only "Packing Slips" as the sole document type tab.
+### Change in `src/pages/AccountingWorkspace.tsx` (lines 339-343)
 
-### Changes in `src/components/accounting/AccountingDocuments.tsx`
+Reorder the quick-access tabs array to place "Packing Slips" first (linking to the `documents` tab with `packing-slip` docType), followed by Invoices, Quotations, Bills, Customers:
 
-1. **Remove "Invoices" and "Quotations" from `docTabs` array** (lines 209-213) — keep only the `packing-slip` entry.
+```
+{ label: "Packing Slips", tab: "documents", count: qb.invoices.length, docType: "packing-slip" },
+{ label: "Invoices", tab: "invoices", count: qb.invoices.length },
+{ label: "Quotations", tab: "documents", count: quotationCount || qb.estimates.length, docType: "quotation" },
+{ label: "Bills", tab: "bills", count: qb.bills.length },
+{ label: "Customers", tab: "customers", count: qb.customers.length },
+```
 
-2. **Remove the "Add New Quotation" button** (lines 261-267) — only the "Add Packing Slip" button remains, and it can always show since packing-slip is the only tab.
-
-3. **Simplify the tab bar rendering** — since there's only one tab, either render it as a single static header or keep the single button. The tab switcher loop still works with one item.
-
-4. **Keep all quotation/invoice preview and conversion logic intact** — these are still used from other entry points (Invoices tab, Dashboard). Only the sub-tab navigation is removed.
+This adds a dedicated "Packing Slips" button at position 1 in the strip that navigates to Documents → Packing Slips sub-tab.
 
