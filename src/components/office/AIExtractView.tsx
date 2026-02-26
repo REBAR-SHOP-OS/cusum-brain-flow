@@ -114,6 +114,7 @@ export function AIExtractView() {
   });
   const [optimizationResult, setOptimizationResult] = useState<OptimizationSummary | null>(null);
   const [selectedOptMode, setSelectedOptMode] = useState<OptimizerConfig["mode"] | null>(null);
+  const [allModeResults, setAllModeResults] = useState<Record<string, OptimizationSummary>>({});
 
   // Inline editing state
   const [editingRows, setEditingRows] = useState<Record<string, Record<string, any>>>({});
@@ -421,12 +422,17 @@ export function AIExtractView() {
           shapeType: r.shape_code_mapped || r.shape_type || undefined,
         }));
 
-      setOptimizationResult(null);
-      setSelectedOptMode(null);
+      // Pre-compute all three modes for comparison
+      const modes: OptimizerConfig["mode"][] = ["standard", "optimized", "best-fit"];
+      const modeResults: Record<string, OptimizationSummary> = {};
+      for (const mode of modes) {
+        modeResults[mode] = runOptimization(cutItems, { ...optimizerConfig, mode });
+      }
+      setAllModeResults(modeResults);
 
-      // Pre-run best-fit as default
-      const result = runOptimization(cutItems, optimizerConfig);
-      setOptimizationResult(result);
+      // Auto-select best-fit
+      setOptimizationResult(modeResults["best-fit"]);
+      setSelectedOptMode("best-fit");
 
       await refreshSessions();
       toast({ title: "Optimization ready", description: "Select your preferred cutting plan below." });
@@ -621,7 +627,7 @@ export function AIExtractView() {
       `}</style>
 
       <ScrollArea className="h-full">
-        <div className="p-6 space-y-6 w-full max-w-full overflow-hidden">
+        <div className="p-6 space-y-6 w-full max-w-full overflow-x-hidden">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-y-2">
           <div className="flex items-center gap-3">
@@ -1268,6 +1274,7 @@ export function AIExtractView() {
                   { mode: "best-fit" as const, label: "Best Fit (BFD)", desc: "Tightest fit, least waste" },
                 ]).map(({ mode, label, desc }) => {
                   const isSelected = selectedOptMode === mode;
+                  const modeResult = allModeResults[mode];
                   return (
                     <button
                       key={mode}
@@ -1283,23 +1290,23 @@ export function AIExtractView() {
                         <span className="text-sm font-bold text-foreground">{label}</span>
                       </div>
                       <p className="text-[10px] text-muted-foreground mb-3">{desc}</p>
-                      {isSelected && optimizationResult && (
+                      {modeResult && (
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Stock Bars:</span>
-                            <span className="font-bold text-foreground">{optimizationResult.totalStockBars}</span>
+                            <span className="font-bold text-foreground">{modeResult.totalStockBars}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Efficiency:</span>
-                            <span className="font-bold text-foreground">{optimizationResult.overallEfficiency.toFixed(1)}%</span>
+                            <span className="font-bold text-foreground">{modeResult.overallEfficiency.toFixed(1)}%</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Waste:</span>
-                            <span className="font-bold text-foreground">{optimizationResult.totalWasteKg.toFixed(1)} kg</span>
+                            <span className="font-bold text-foreground">{modeResult.totalWasteKg.toFixed(1)} kg</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Stopper Moves:</span>
-                            <span className="font-bold text-foreground">{optimizationResult.totalStopperMoves}</span>
+                            <span className="font-bold text-foreground">{modeResult.totalStopperMoves}</span>
                           </div>
                         </div>
                       )}
@@ -1438,7 +1445,7 @@ export function AIExtractView() {
                   </div>
                 </div>
               )}
-              <div className="h-[55vh] overflow-auto">
+              <div className="h-[55vh] overflow-auto max-w-full">
                 <div className="min-w-[1400px]">
                   <Table>
                     <TableHeader>
