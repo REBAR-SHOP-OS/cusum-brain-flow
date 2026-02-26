@@ -8204,6 +8204,110 @@ export type Database = {
         }
         Relationships: []
       }
+      qa_war_bugs: {
+        Row: {
+          actual: string
+          bug_id: string
+          company_id: string
+          created_at: string
+          expected: string
+          fix_proposal: string | null
+          id: string
+          module: string
+          priority: string
+          run_id: string
+          scenario_category: string
+          severity: string
+          status: string
+          steps_to_repro: Json
+          suspected_root_cause: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          actual: string
+          bug_id: string
+          company_id: string
+          created_at?: string
+          expected: string
+          fix_proposal?: string | null
+          id?: string
+          module: string
+          priority: string
+          run_id: string
+          scenario_category: string
+          severity: string
+          status?: string
+          steps_to_repro?: Json
+          suspected_root_cause?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          actual?: string
+          bug_id?: string
+          company_id?: string
+          created_at?: string
+          expected?: string
+          fix_proposal?: string | null
+          id?: string
+          module?: string
+          priority?: string
+          run_id?: string
+          scenario_category?: string
+          severity?: string
+          status?: string
+          steps_to_repro?: Json
+          suspected_root_cause?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qa_war_bugs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "qa_war_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qa_war_runs: {
+        Row: {
+          bugs_found: number
+          company_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          started_at: string
+          status: string
+          summary: Json | null
+          total_scenarios: number
+        }
+        Insert: {
+          bugs_found?: number
+          company_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          started_at?: string
+          status?: string
+          summary?: Json | null
+          total_scenarios?: number
+        }
+        Update: {
+          bugs_found?: number
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          started_at?: string
+          status?: string
+          summary?: Json | null
+          total_scenarios?: number
+        }
+        Relationships: []
+      }
       qb_accounts: {
         Row: {
           account_sub_type: string | null
