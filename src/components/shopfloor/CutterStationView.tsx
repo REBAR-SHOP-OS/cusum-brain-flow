@@ -382,7 +382,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const { error: itemErr } = await supabase
         .rpc("increment_completed_pieces", {
           p_item_id: currentItem.id,
-          p_increment: 0, // strokes already persisted; this triggers phase advance check
+          p_increment: totalOutput, // ensures full count persists even if stroke-level calls failed
         });
       if (itemErr) throw itemErr;
 
@@ -699,6 +699,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             onBarsChange={setOperatorBars}
             isRunning={machineIsRunning}
             canWrite={canWrite}
+            isDone={isDone}
             darkMode
             lockedBars={machineIsRunning ? slotTracker.slots.length : undefined}
             strokesDone={slotTracker.slots.length > 0 ? Math.max(...slotTracker.slots.map(s => s.cutsDone)) : 0}
