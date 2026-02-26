@@ -18,6 +18,7 @@ const STATUS_LABEL: Record<string, string> = {
   synced: "Synced",
   archived: "Archived",
   disconnected: "Disconnected",
+  error: "Error",
 };
 
 interface Props {
