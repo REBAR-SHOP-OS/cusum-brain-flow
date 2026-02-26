@@ -84,7 +84,7 @@ export default function DriverDashboard() {
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("id, full_name")
         .eq("user_id", user!.id)
         .maybeSingle();
       return data;
@@ -95,14 +95,15 @@ export default function DriverDashboard() {
 
   // Fetch deliveries assigned to this driver
   const { data: deliveries = [], isLoading } = useQuery({
-    queryKey: ["driver-deliveries", companyId, myProfile?.full_name],
-    enabled: !!companyId && !!myProfile?.full_name,
+    queryKey: ["driver-deliveries", companyId, myProfile?.id],
+    enabled: !!companyId && !!myProfile?.id,
     queryFn: async () => {
+      // Try driver_profile_id first (new column), fall back to driver_name
       const { data, error } = await supabase
         .from("deliveries")
         .select("*")
         .eq("company_id", companyId!)
-        .eq("driver_name", myProfile!.full_name!)
+        .or(`driver_profile_id.eq.${myProfile!.id},driver_name.eq.${myProfile!.full_name}`)
         .order("scheduled_date", { ascending: true });
       if (error) throw error;
       return data as Delivery[];
@@ -132,7 +133,7 @@ export default function DriverDashboard() {
 
   const refreshStops = () => {
     queryClient.invalidateQueries({ queryKey: ["driver-stops", selectedDelivery?.id, companyId] });
-    queryClient.invalidateQueries({ queryKey: ["driver-deliveries", companyId, myProfile?.full_name] });
+    queryClient.invalidateQueries({ queryKey: ["driver-deliveries", companyId, myProfile?.id] });
   };
 
   // Realtime
@@ -141,17 +142,25 @@ export default function DriverDashboard() {
     const channel = supabase
       .channel("driver-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "deliveries" }, () =>
-        queryClient.invalidateQueries({ queryKey: ["driver-deliveries", companyId, myProfile?.full_name] })
+        queryClient.invalidateQueries({ queryKey: ["driver-deliveries", companyId, myProfile?.id] })
       )
       .on("postgres_changes", { event: "*", schema: "public", table: "delivery_stops" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["driver-deliveries", companyId, myProfile?.full_name] });
+        queryClient.invalidateQueries({ queryKey: ["driver-deliveries", companyId, myProfile?.id] });
         if (selectedDelivery) {
           queryClient.invalidateQueries({ queryKey: ["driver-stops", selectedDelivery.id, companyId] });
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [companyId, selectedDelivery?.id, myProfile?.full_name, queryClient]);
+  }, [companyId, selectedDelivery?.id, myProfile?.id, queryClient]);
+
+  const handleStartDelivery = async (deliveryId: string) => {
+    await supabase
+      .from("deliveries")
+      .update({ status: "in-transit" })
+      .eq("id", deliveryId);
+    refreshStops();
+  };
 
   const handleMarkArrived = async (stopId: string) => {
     await supabase
@@ -197,6 +206,19 @@ export default function DriverDashboard() {
             </span>
           )}
         </div>
+
+        {/* Start Delivery button (only when pending) */}
+        {(selectedDelivery.status === "pending" || selectedDelivery.status === "scheduled") && (
+          <div className="px-4 py-3 border-b border-border">
+            <Button
+              className="w-full gap-2"
+              onClick={() => handleStartDelivery(selectedDelivery.id)}
+            >
+              <Truck className="w-4 h-4" />
+              Start Delivery
+            </Button>
+          </div>
+        )}
 
         {/* Stops list */}
         <ScrollArea className="flex-1">

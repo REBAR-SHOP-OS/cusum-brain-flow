@@ -49,7 +49,19 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     }
   }, [items.length, currentIndex]);
 
+  // Reset run state when switching to a different item (Bug #12)
   const currentItem = items[currentIndex] || null;
+  const [prevItemId, setPrevItemId] = useState<string | null>(null);
+  useEffect(() => {
+    if (currentItem && prevItemId !== currentItem.id) {
+      // Only reset if we actually changed items (not first render matching)
+      if (prevItemId !== null) {
+        setCompletedAtRunStart(null);
+        setOperatorBars(null);
+      }
+      setPrevItemId(currentItem.id);
+    }
+  }, [currentItem?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
   const cutPlanId = currentItem?.cut_plan_id || null;
   const barCode = currentItem?.bar_code;
