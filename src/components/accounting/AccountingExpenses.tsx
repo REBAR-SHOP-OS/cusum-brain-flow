@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, Receipt, Search, Plus } from "lucide-react";
+import { Loader2, RefreshCw, Receipt, Search, Plus, Eye } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CreateExpenseDialog } from "./CreateExpenseDialog";
@@ -31,6 +32,7 @@ export function AccountingExpenses({ data }: Props) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<QBPurchase | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -100,6 +102,7 @@ export function AccountingExpenses({ data }: Props) {
                 <th className="py-2 pr-4">Type</th>
                 <th className="py-2 pr-4">Ref #</th>
                 <th className="py-2 text-right">Amount</th>
+                <th className="py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -111,12 +114,41 @@ export function AccountingExpenses({ data }: Props) {
                   <td className="py-2 pr-4"><Badge variant="outline" className="text-xs">{p.PaymentType || "—"}</Badge></td>
                   <td className="py-2 pr-4 text-muted-foreground">{p.DocNumber || "—"}</td>
                   <td className="py-2 text-right font-semibold">{fmt(p.TotalAmt || 0)}</td>
+                  <td className="py-2">
+                    <Button size="sm" variant="ghost" className="gap-1" onClick={() => setSelectedExpense(p)}>
+                      <Eye className="w-4 h-4" /> View
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {/* Expense Detail Sheet */}
+      <Sheet open={!!selectedExpense} onOpenChange={(o) => { if (!o) setSelectedExpense(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Expense Details</SheetTitle>
+            <SheetDescription>Full expense/purchase information</SheetDescription>
+          </SheetHeader>
+          {selectedExpense && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-sm text-muted-foreground">Payee</p><p className="font-medium">{selectedExpense.EntityRef?.name || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{selectedExpense.TxnDate || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Account</p><p className="font-medium">{selectedExpense.AccountRef?.name || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Type</p><p className="font-medium">{selectedExpense.PaymentType || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Ref #</p><p className="font-medium">{selectedExpense.DocNumber || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Amount</p><p className="font-semibold text-lg">{fmt(selectedExpense.TotalAmt || 0)}</p></div>
+              </div>
+              {selectedExpense.PrivateNote && (
+                <div><p className="text-sm text-muted-foreground">Note</p><p className="font-medium">{selectedExpense.PrivateNote}</p></div>
+              )}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

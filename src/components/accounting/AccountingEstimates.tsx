@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileCheck, Search, Send, FileText, ArrowUpDown, Download, Loader2, Plus } from "lucide-react";
+import { FileCheck, Search, Send, FileText, ArrowUpDown, Download, Loader2, Plus, Eye } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { CustomerSelectDialog } from "./CustomerSelectDialog";
@@ -36,6 +37,7 @@ export function AccountingEstimates({ data }: Props) {
   const [converting, setConverting] = useState<string | null>(null);
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false);
   const [txnCustomer, setTxnCustomer] = useState<{ qbId: string; name: string } | null>(null);
+  const [selectedEstimate, setSelectedEstimate] = useState<any | null>(null);
 
   // Pull estimates from the accounting mirror data if available
   const estimates = useMemo(() => {
@@ -211,6 +213,9 @@ export function AccountingEstimates({ data }: Props) {
                           <Button size="sm" variant="ghost" className="h-9 gap-1">
                             <Send className="w-4 h-4" /> Send
                           </Button>
+                          <Button size="sm" variant="ghost" className="h-9 gap-1" onClick={() => setSelectedEstimate(est)}>
+                            <Eye className="w-4 h-4" /> View
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -242,6 +247,26 @@ export function AccountingEstimates({ data }: Props) {
           onCreated={() => { setTxnCustomer(null); data.loadAll(); }}
         />
       )}
+      {/* Estimate Detail Sheet */}
+      <Sheet open={!!selectedEstimate} onOpenChange={(o) => { if (!o) setSelectedEstimate(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Estimate #{selectedEstimate?.DocNumber}</SheetTitle>
+            <SheetDescription>Full estimate details</SheetDescription>
+          </SheetHeader>
+          {selectedEstimate && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-sm text-muted-foreground">Customer</p><p className="font-medium">{selectedEstimate.CustomerRef?.name || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{selectedEstimate.TxnDate ? new Date(selectedEstimate.TxnDate).toLocaleDateString() : "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Expiry</p><p className="font-medium">{selectedEstimate.ExpirationDate ? new Date(selectedEstimate.ExpirationDate).toLocaleDateString() : "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Amount</p><p className="font-semibold text-lg">{fmt(selectedEstimate.TotalAmt)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Status</p><Badge className={`${statusColors[selectedEstimate.TxnStatus || "Pending"] || "bg-muted text-muted-foreground"} border-0`}>{selectedEstimate.TxnStatus || "Pending"}</Badge></div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

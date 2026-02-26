@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Receipt, Search, Building2, Plus } from "lucide-react";
+import { Receipt, Search, Building2, Plus, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +23,7 @@ export function AccountingBills({ data }: Props) {
   const [search, setSearch] = useState("");
   const [subTab, setSubTab] = useState("bills");
   const [selectedVendor, setSelectedVendor] = useState<any | null>(null);
+  const [selectedBill, setSelectedBill] = useState<any | null>(null);
 
   const filteredBills = bills.filter(
     (b) =>
@@ -83,6 +84,7 @@ export function AccountingBills({ data }: Props) {
                       <TableHead className="text-base text-right">Total</TableHead>
                       <TableHead className="text-base text-right">Balance</TableHead>
                       <TableHead className="text-base">Status</TableHead>
+                      <TableHead className="text-base">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -98,13 +100,18 @@ export function AccountingBills({ data }: Props) {
                           <TableCell className="text-right font-semibold">{fmt(b.TotalAmt)}</TableCell>
                           <TableCell className="text-right font-semibold">{fmt(b.Balance)}</TableCell>
                           <TableCell>
-                            <Badge className={`border-0 text-sm ${
+                          <Badge className={`border-0 text-sm ${
                               isPaid ? "bg-success/10 text-success" :
                               isOverdue ? "bg-destructive/10 text-destructive" :
                               "bg-primary/10 text-primary"
                             }`}>
                               {isPaid ? "Paid" : isOverdue ? "Overdue" : "Open"}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="ghost" className="gap-1" onClick={() => setSelectedBill(b)}>
+                              <Eye className="w-4 h-4" /> View
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );
@@ -168,6 +175,28 @@ export function AccountingBills({ data }: Props) {
             <SheetDescription>View vendor details and transactions</SheetDescription>
           </SheetHeader>
           {selectedVendor && <VendorDetail vendor={selectedVendor} />}
+        </SheetContent>
+      </Sheet>
+
+      {/* Bill Detail Sheet */}
+      <Sheet open={!!selectedBill} onOpenChange={(o) => { if (!o) setSelectedBill(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Bill #{selectedBill?.DocNumber}</SheetTitle>
+            <SheetDescription>Full bill details</SheetDescription>
+          </SheetHeader>
+          {selectedBill && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-sm text-muted-foreground">Vendor</p><p className="font-medium">{selectedBill.VendorRef?.name || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{selectedBill.TxnDate ? new Date(selectedBill.TxnDate).toLocaleDateString() : "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Due Date</p><p className="font-medium">{selectedBill.DueDate ? new Date(selectedBill.DueDate).toLocaleDateString() : "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Total</p><p className="font-semibold text-lg">{fmt(selectedBill.TotalAmt)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Balance</p><p className="font-semibold text-lg">{fmt(selectedBill.Balance)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Status</p><Badge className={`border-0 ${selectedBill.Balance === 0 ? "bg-success/10 text-success" : new Date(selectedBill.DueDate) < new Date() ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}`}>{selectedBill.Balance === 0 ? "Paid" : new Date(selectedBill.DueDate) < new Date() ? "Overdue" : "Open"}</Badge></div>
+              </div>
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </div>

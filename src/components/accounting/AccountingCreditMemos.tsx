@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { RotateCcw, Search, ArrowUpDown, Download } from "lucide-react";
+import { RotateCcw, Search, ArrowUpDown, Download, Eye } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -21,6 +22,7 @@ export function AccountingCreditMemos({ data }: Props) {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("TxnDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [selectedCM, setSelectedCM] = useState<any | null>(null);
 
   const creditMemos = useMemo(() => {
     const raw = (data as any).creditMemos || [];
@@ -144,8 +146,9 @@ export function AccountingCreditMemos({ data }: Props) {
                   <SortHead label="Amount" field="TotalAmt" className="text-base text-right" />
                   <SortHead label="Remaining" field="RemainingCredit" className="text-base text-right" />
                   <TableHead className="text-base">Status</TableHead>
-                </TableRow>
-              </TableHeader>
+                  <TableHead className="text-base">Actions</TableHead>
+                 </TableRow>
+               </TableHeader>
               <TableBody>
                 {filtered.map((cm) => {
                   const remaining = cm.RemainingCredit ?? cm.Balance ?? 0;
@@ -162,6 +165,11 @@ export function AccountingCreditMemos({ data }: Props) {
                           {isFullyApplied ? "Applied" : "Open"}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" className="gap-1" onClick={() => setSelectedCM(cm)}>
+                          <Eye className="w-4 h-4" /> View
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -170,6 +178,26 @@ export function AccountingCreditMemos({ data }: Props) {
           )}
         </CardContent>
       </Card>
+      {/* Credit Memo Detail Sheet */}
+      <Sheet open={!!selectedCM} onOpenChange={(o) => { if (!o) setSelectedCM(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Credit Memo #{selectedCM?.DocNumber}</SheetTitle>
+            <SheetDescription>Full credit memo details</SheetDescription>
+          </SheetHeader>
+          {selectedCM && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-sm text-muted-foreground">Customer</p><p className="font-medium">{selectedCM.CustomerRef?.name || "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Date</p><p className="font-medium">{selectedCM.TxnDate ? new Date(selectedCM.TxnDate).toLocaleDateString() : "—"}</p></div>
+                <div><p className="text-sm text-muted-foreground">Amount</p><p className="font-semibold text-lg">{fmt(selectedCM.TotalAmt)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Remaining</p><p className="font-semibold text-lg">{fmt(selectedCM.RemainingCredit ?? selectedCM.Balance ?? 0)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Status</p><Badge className={`border-0 ${(selectedCM.RemainingCredit ?? selectedCM.Balance ?? 0) === 0 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>{(selectedCM.RemainingCredit ?? selectedCM.Balance ?? 0) === 0 ? "Applied" : "Open"}</Badge></div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
