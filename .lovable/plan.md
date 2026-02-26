@@ -1,35 +1,16 @@
 
 
-## Changes Overview
+## Plan: Keep Only Packing Slips Sub-Tab in Documents
 
-This plan adds drag-and-drop upload zones to all four main tabs, reorders the Documents sub-tabs to put Packing Slips first, adds action buttons, and wires the Quotation → Invoice → Packing Slip flow.
+Remove the "Invoices" and "Quotations" sub-tabs from the Documents section, keeping only "Packing Slips" as the sole document type tab.
 
-### 1. Add DocumentUploadZone to Invoices tab
-In `AccountingInvoices.tsx`, import `DocumentUploadZone` and add it below the search bar (before the stats cards). Target type: `"invoice"`.
+### Changes in `src/components/accounting/AccountingDocuments.tsx`
 
-### 2. Add DocumentUploadZone to Customers tab
-In `AccountingCustomers.tsx`, import `DocumentUploadZone` and add it below the search bar. Target type: `"customer"`.
+1. **Remove "Invoices" and "Quotations" from `docTabs` array** (lines 209-213) — keep only the `packing-slip` entry.
 
-### 3. Bills tab already has DocumentUploadZone
-Already present in `AccountingBills.tsx` — no change needed.
+2. **Remove the "Add New Quotation" button** (lines 261-267) — only the "Add Packing Slip" button remains, and it can always show since packing-slip is the only tab.
 
-### 4. Reorder Documents sub-tabs: Packing Slips first
-In `AccountingDocuments.tsx`, reorder the `docTabs` array to: `packing-slip`, `invoice`, `quotation`. Set default `activeDoc` to `"packing-slip"`.
+3. **Simplify the tab bar rendering** — since there's only one tab, either render it as a single static header or keep the single button. The tab switcher loop still works with one item.
 
-### 5. Add "Print Packing Slip" button to Invoices table actions
-In `AccountingInvoices.tsx`, add a `Package` icon button per invoice row that opens the `PackingSlipTemplate` overlay directly from the Invoices tab. Import `PackingSlipTemplate` and add the same `getPackingSlipData` helper.
-
-### 6. Add "Add Packing Slip" and "Add New Quotation" buttons
-- In `AccountingDocuments.tsx`, add a `+ Add Packing Slip` button (visible when on `packing-slip` tab) and `+ Add New Quotation` button (visible when on `quotation` tab) next to the doc type tab buttons.
-- The "Add New Quotation" button will open the `CustomerSelectDialog` → `CreateTransactionDialog` with type `"Estimate"`.
-- The "Add Packing Slip" button will open a similar flow selecting an invoice to generate a packing slip from.
-
-### 7. Wire Quotation → Invoice → Packing Slip flow
-In the quotation list (within `AccountingDocuments.tsx`), for quotations with status "Sales Order", add a `→ Create Invoice` action button that calls QuickBooks to convert the estimate to an invoice. This uses the existing `qb-sync-engine` edge function. After invoice creation, offer a "Print Packing Slip" action.
-
-### Technical Details
-- `PackingSlipTemplate` is already built and reusable
-- `DocumentUploadZone` is a self-contained component accepting `targetType` and `onImport` props
-- `CustomerSelectDialog` + `CreateTransactionDialog` pattern already exists in `AccountingInvoices.tsx`
-- The packing slip print from invoices reuses `getPackingSlipData()` logic from `AccountingDocuments.tsx`
+4. **Keep all quotation/invoice preview and conversion logic intact** — these are still used from other entry points (Invoices tab, Dashboard). Only the sub-tab navigation is removed.
 
