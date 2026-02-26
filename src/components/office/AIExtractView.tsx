@@ -7,7 +7,9 @@ import {
   CheckCircle2, AlertCircle, Sparkles, X, ArrowRight,
   Shield, TriangleAlert, Clock, ChevronRight, History, XCircle,
   FolderOpen, Plus, GitBranch, Pencil, Save, RotateCcw, Trash2,
+  Zap, Ruler, Scissors,
 } from "lucide-react";
+import { runOptimization, type CutItem, type OptimizationSummary, type OptimizerConfig } from "@/lib/cutOptimizer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +57,7 @@ const PIPELINE_STEPS = [
   { key: "extracted", label: "Extracted", icon: FileText },
   { key: "mapping", label: "Mapped", icon: Globe },
   { key: "validated", label: "Validated", icon: Shield },
+  { key: "optimizing", label: "Optimized", icon: Zap },
   { key: "approved", label: "Approved", icon: CheckCircle2 },
 ] as const;
 
@@ -101,6 +104,16 @@ export function AIExtractView() {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [deleteProjectConfirm, setDeleteProjectConfirm] = useState<{ id: string; name: string } | null>(null);
+
+  // Optimization state
+  const [optimizerConfig, setOptimizerConfig] = useState<OptimizerConfig>({
+    stockLengthMm: 12000,
+    kerfMm: 5,
+    minRemnantMm: 300,
+    mode: "best-fit",
+  });
+  const [optimizationResult, setOptimizationResult] = useState<OptimizationSummary | null>(null);
+  const [selectedOptMode, setSelectedOptMode] = useState<OptimizerConfig["mode"] | null>(null);
 
   // Inline editing state
   const [editingRows, setEditingRows] = useState<Record<string, Record<string, any>>>({});
@@ -384,6 +397,63 @@ export function AIExtractView() {
       setProcessing(false);
       setProcessingStep("");
     }
+  };
+
+  const handleStartOptimize = async () => {
+    if (!activeSessionId) return;
+    setProcessing(true);
+    setProcessingStep("Starting optimization...");
+    try {
+      await supabase
+        .from("extract_sessions")
+        .update({ status: "optimizing" } as any)
+        .eq("id", activeSessionId);
+      
+      // Run all three modes for comparison
+      const cutItems: CutItem[] = rows
+        .filter(r => r.bar_size_mapped || r.bar_size)
+        .map((r, i) => ({
+          id: r.id,
+          mark: r.mark || `Item ${i + 1}`,
+          barSize: (r.bar_size_mapped || r.bar_size || "20M"),
+          lengthMm: r.total_length_mm || 0,
+          quantity: r.quantity || 1,
+          shapeType: r.shape_code_mapped || r.shape_type || undefined,
+        }));
+
+      setOptimizationResult(null);
+      setSelectedOptMode(null);
+
+      // Pre-run best-fit as default
+      const result = runOptimization(cutItems, optimizerConfig);
+      setOptimizationResult(result);
+
+      await refreshSessions();
+      toast({ title: "Optimization ready", description: "Select your preferred cutting plan below." });
+    } catch (err: any) {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setProcessing(false);
+      setProcessingStep("");
+    }
+  };
+
+  const runOptimizationForMode = (mode: OptimizerConfig["mode"]) => {
+    const cutItems: CutItem[] = rows
+      .filter(r => r.bar_size_mapped || r.bar_size)
+      .map((r, i) => ({
+        id: r.id,
+        mark: r.mark || `Item ${i + 1}`,
+        barSize: (r.bar_size_mapped || r.bar_size || "20M"),
+        lengthMm: r.total_length_mm || 0,
+        quantity: r.quantity || 1,
+        shapeType: r.shape_code_mapped || r.shape_type || undefined,
+      }));
+    const config = { ...optimizerConfig, mode };
+    const result = runOptimization(cutItems, config);
+    setOptimizationResult(result);
+    setSelectedOptMode(mode);
+    setOptimizerConfig(config);
   };
 
   const handleReject = async () => {
@@ -1044,7 +1114,12 @@ export function AIExtractView() {
                 <Shield className="w-4 h-4" /> Validate
               </Button>
             )}
-            {currentStepIndex >= 4 && blockerCount === 0 && (
+            {currentStepIndex === 4 && blockerCount === 0 && (
+              <Button onClick={handleStartOptimize} className="gap-1.5">
+                <Zap className="w-4 h-4" /> Optimize
+              </Button>
+            )}
+            {currentStepIndex >= 5 && (
               <Button onClick={handleApprove} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700">
                 <CheckCircle2 className="w-4 h-4" /> Approve & Create WO
               </Button>
@@ -1134,6 +1209,114 @@ export function AIExtractView() {
               <Clock className="w-3.5 h-3.5" /> Refresh Status
             </Button>
           </div>
+        )}
+
+        {/* Optimization Panel */}
+        {activeSession?.status === "optimizing" && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-500" />
+                <h3 className="text-sm font-bold tracking-widest text-foreground uppercase">Cut Optimization</h3>
+              </div>
+
+              {/* Config row */}
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Stock Length</label>
+                  <Select
+                    value={String(optimizerConfig.stockLengthMm)}
+                    onValueChange={(v) => {
+                      setOptimizerConfig(prev => ({ ...prev, stockLengthMm: Number(v) }));
+                    }}
+                  >
+                    <SelectTrigger className="w-32 h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="6000">6M (6,000mm)</SelectItem>
+                      <SelectItem value="12000">12M (12,000mm)</SelectItem>
+                      <SelectItem value="18000">18M (18,000mm)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Kerf (mm)</label>
+                  <Input
+                    type="number"
+                    className="w-20 h-9 text-xs"
+                    value={optimizerConfig.kerfMm}
+                    onChange={(e) => setOptimizerConfig(prev => ({ ...prev, kerfMm: Number(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Min Remnant (mm)</label>
+                  <Input
+                    type="number"
+                    className="w-24 h-9 text-xs"
+                    value={optimizerConfig.minRemnantMm}
+                    onChange={(e) => setOptimizerConfig(prev => ({ ...prev, minRemnantMm: Number(e.target.value) || 0 }))}
+                  />
+                </div>
+              </div>
+
+              {/* Mode cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {([
+                  { mode: "standard" as const, label: "Standard", desc: "Sequential, fewer stopper moves" },
+                  { mode: "optimized" as const, label: "Optimized (FFD)", desc: "First Fit Decreasing bin-pack" },
+                  { mode: "best-fit" as const, label: "Best Fit (BFD)", desc: "Tightest fit, least waste" },
+                ]).map(({ mode, label, desc }) => {
+                  const isSelected = selectedOptMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => runOptimizationForMode(mode)}
+                      className={`p-4 rounded-lg border text-left transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                          : "border-border bg-card hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Scissors className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-bold text-foreground">{label}</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mb-3">{desc}</p>
+                      {isSelected && optimizationResult && (
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Stock Bars:</span>
+                            <span className="font-bold text-foreground">{optimizationResult.totalStockBars}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Efficiency:</span>
+                            <span className="font-bold text-foreground">{optimizationResult.overallEfficiency.toFixed(1)}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Waste:</span>
+                            <span className="font-bold text-foreground">{optimizationResult.totalWasteKg.toFixed(1)} kg</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Stopper Moves:</span>
+                            <span className="font-bold text-foreground">{optimizationResult.totalStopperMoves}</span>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {optimizationResult && selectedOptMode && (
+                <div className="flex items-center gap-3 pt-2">
+                  <Badge className="bg-primary/10 text-primary border-primary/20 text-xs py-1 px-3">
+                    {optimizationResult.totalCuts} cuts · {optimizationResult.totalStockBars} bars · {optimizationResult.overallEfficiency.toFixed(1)}% efficiency
+                  </Badge>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {activeSession?.status === "approved" && (
@@ -1393,6 +1576,7 @@ function StatusBadge({ status }: { status: string }) {
     extracted: { label: "EXTRACTED", className: "bg-blue-500/20 text-blue-500" },
     mapping: { label: "MAPPED", className: "bg-purple-500/20 text-purple-500" },
     validated: { label: "VALIDATED", className: "bg-emerald-500/20 text-emerald-500" },
+    optimizing: { label: "OPTIMIZED", className: "bg-amber-500/20 text-amber-500" },
     approved: { label: "APPROVED", className: "bg-emerald-600/20 text-emerald-400" },
     rejected: { label: "REJECTED", className: "bg-destructive/20 text-destructive" },
   };
