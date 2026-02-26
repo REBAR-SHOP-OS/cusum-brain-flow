@@ -15,6 +15,7 @@ const primaryNav = [
 ];
 
 const moreItems = [
+  { name: "Inbox", href: "/inbox-manager", icon: Inbox, roles: ["admin", "office"] },
   { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "shop_supervisor"] },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
