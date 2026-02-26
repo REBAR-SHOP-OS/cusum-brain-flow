@@ -1,30 +1,60 @@
 
 
-## QA War Engine — Already Built and Ready
+## Add Selection & Bulk Delete to Tags & Export Session List
 
-The entire QA War Engine you described is **already implemented** in this project. Here is what exists:
+### What changes
+Add checkboxes to each session row in the Tags & Export session list, a "Select All" checkbox, and a bulk delete bar that appears when items are selected.
 
-### Edge Function: `supabase/functions/qa-war-engine/index.ts`
-- Runs 20 batches of 25 scenarios each (500 total)
-- Uses Gemini 2.5 Pro to generate structured bug reports against the live database schema
-- Distribution matches your spec: normal flows, edge cases, concurrency, permission abuse, integration failures, corrupt data, extreme stress
-- Deduplicates bugs using a hash of module + title
-- Detects regressions (bugs previously marked "fixed" that reappear)
-- Computes a technical debt score
-- Produces summary with breakdowns by severity, module, type, and category
-- Admin-only access enforced via `user_roles` check
+### File: `src/components/office/TagsExportView.tsx`
 
-### Frontend: `src/pages/QaWar.tsx` (route: `/qa-war`)
-- "Launch QA War" button triggers the 500-scenario simulation
-- Run history with status badges and bug counts
-- Summary dashboard: total bugs, critical count (S0+S1), debt score, top risk modules
-- Filterable bug registry table (severity, module, category)
-- Hover-to-reveal root cause and fix proposal per bug
-- JSON export of filtered results
+1. **Add state** for `selectedIds: Set<string>` and `deleting: boolean`
+2. **Add imports**: `Checkbox` from ui, `Trash2` from lucide, `toast` from sonner, `supabase` client
+3. **Session list** (lines 133-160): Add a `Checkbox` to each session row, and a "Select All / Deselect All" + "Delete Selected" toolbar above the list
+4. **Delete handler**: Delete from `extract_sessions` table by IDs, then call `refresh()` and show toast
+5. **Bulk action bar**: Fixed bottom bar (using `PipelineBulkBar` pattern with `AnimatePresence`) showing count + Delete + Clear buttons
 
-### Database: `qa_war_runs` + `qa_war_bugs` tables
-- Persists all runs and bugs with company_id scoping
+### Implementation detail
 
-### No changes needed
-Navigate to `/qa-war` and click **Launch QA War** to execute the full 500-scenario stress simulation. It takes approximately 3 minutes to complete all 20 batches.
+**Above the session list (after the subtitle text):**
+```tsx
+<div className="flex items-center gap-2">
+  <Checkbox
+    checked={selectedIds.size === availableSessions.length && availableSessions.length > 0}
+    onCheckedChange={(checked) => {
+      if (checked) setSelectedIds(new Set(availableSessions.map(s => s.id)));
+      else setSelectedIds(new Set());
+    }}
+  />
+  <span className="text-xs text-muted-foreground">Select All</span>
+  {selectedIds.size > 0 && (
+    <Button variant="destructive" size="sm" onClick={handleBulkDelete} disabled={deleting}>
+      <Trash2 className="w-3.5 h-3.5 mr-1" />
+      Delete {selectedIds.size}
+    </Button>
+  )}
+</div>
+```
+
+**Each session row** gets a `Checkbox` on the left that toggles selection without navigating into the session.
+
+**Delete handler:**
+```tsx
+const handleBulkDelete = async () => {
+  setDeleting(true);
+  const { error } = await supabase
+    .from("extract_sessions")
+    .delete()
+    .in("id", Array.from(selectedIds));
+  if (error) toast.error(error.message);
+  else {
+    toast.success(`Deleted ${selectedIds.size} session(s)`);
+    setSelectedIds(new Set());
+    refresh();
+  }
+  setDeleting(false);
+};
+```
+
+### No DB changes needed
+Uses existing `extract_sessions` table with existing RLS policies.
 
