@@ -61,6 +61,35 @@ export default function LoadingStation() {
   const checklistItems: CompletedBundleItem[] =
     allPlanItems.length > 0 ? allPlanItems : selectedBundle?.items ?? [];
 
+  // Auto-fetch invoice number from extract session when bundle is selected
+  useEffect(() => {
+    if (!selectedBundle?.cutPlanId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("cut_plans")
+        .select("project_id")
+        .eq("id", selectedBundle.cutPlanId)
+        .single();
+      if (!data?.project_id) return;
+      const { data: bl } = await supabase
+        .from("barlists")
+        .select("extract_session_id")
+        .eq("project_id", data.project_id)
+        .not("extract_session_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (!bl?.extract_session_id) return;
+      const { data: es } = await supabase
+        .from("extract_sessions")
+        .select("invoice_number")
+        .eq("id", bl.extract_session_id)
+        .not("invoice_number", "is", null)
+        .single();
+      if (es?.invoice_number) setInvoiceNumber(es.invoice_number);
+    })();
+  }, [selectedBundle?.cutPlanId]);
+
   // Initialize checklist rows when bundle is selected
   useEffect(() => {
     if (selectedBundle && checklistItems.length > 0) {
