@@ -1,49 +1,55 @@
 
 
-# Clear Stale AI Queue and Rescan
+# Add Quick-Access Navigation Tabs with Counts to Accounting Header
 
-## Problem
-The `penny_collection_queue` table has 35 stale items with outdated data. The existing tools don't expose a direct write path to delete rows from the client side.
+## What the user wants
+Based on the screenshot, the user wants a horizontal strip of tab-style buttons below the accounting header bar — similar to the reference UI showing "Invoices (1838)", "Packing Slips (1838)", "Quotations (2586)", "Estimations (0)". These act as quick shortcuts to navigate between key sections with item counts.
 
-## Solution
+## Implementation
 
-**Step 1: Add a `purge` option to `penny-auto-actions` edge function**
+Add a secondary navigation strip below the existing header bar in `AccountingWorkspace.tsx` (after line 331, the closing `</div>` of the header). This strip will show quick-access buttons for the most-used sections with live counts from the `qb` data hook.
 
-Modify `supabase/functions/penny-auto-actions/index.ts` to accept an optional `{ purge: true }` flag in the request body. When set, it deletes all existing queue items before scanning.
+### Tabs to include (matching the screenshot context + existing sections):
+| Tab Label | Navigation target | Count source |
+|---|---|---|
+| Invoices | `invoices` | `qb.invoices.length` |
+| Estimates | `estimates` | `qb.estimates.length` |
+| Bills | `bills` | `qb.bills.length` |
+| Customers | `customers` | `qb.customers.length` |
 
-| File | Change |
-|---|---|
-| `supabase/functions/penny-auto-actions/index.ts` | After auth (line 19), parse request body for `purge` flag. If true, `DELETE FROM penny_collection_queue WHERE company_id = companyId` before proceeding with the scan. |
+### File change
 
-**Step 2: Add a "Clear & Rescan" button to the UI**
+**`src/pages/AccountingWorkspace.tsx`** — Insert a quick-nav strip between the header div (line 331) and the main content div (line 334):
 
-Update `usePennyQueue.ts` `triggerAutoActions` to accept an optional `purge` parameter, passed to the edge function body.
-
-Update `AccountingActionQueue.tsx` to add a "Clear & Rescan" option (or modify the existing "Scan Now" button to include a clear option).
-
-| File | Change |
-|---|---|
-| `src/hooks/usePennyQueue.ts` | Update `triggerAutoActions` to accept `{ purge?: boolean }` and pass it in the function invoke body |
-| `src/components/accounting/AccountingActionQueue.tsx` | Add a "Clear & Rescan" button that calls `triggerAutoActions` with `purge: true` |
-
-**Step 3: Invoke immediately to clear stale data**
-
-After deploying, call the edge function with `{ purge: true }` to clear all 35 stale items and regenerate fresh ones from current QuickBooks data.
-
-## Deduplication
-The existing function already deduplicates by `invoice_id` and `customer_name` (lines 108-118), so no duplicates will be created during the rescan.
-
-## Technical Details
-
-The edge function change adds ~5 lines after line 19:
-
-```typescript
-const body = await req.json().catch(() => ({}));
-const purge = body?.purge === true;
-
-if (purge) {
-  await supabase.from("penny_collection_queue").delete().eq("company_id", companyId);
-  console.log("[penny-auto-actions] Purged all queue items for company", companyId);
-}
+```tsx
+{/* Quick-access tabs */}
+<div className="flex items-center gap-2 px-4 py-2 border-b border-border shrink-0 overflow-x-auto">
+  {[
+    { label: "Invoices", tab: "invoices", count: qb.invoices.length },
+    { label: "Estimates", tab: "estimates", count: qb.estimates.length },
+    { label: "Bills", tab: "bills", count: qb.bills.length },
+    { label: "Customers", tab: "customers", count: qb.customers.length },
+  ].map(item => (
+    <Button
+      key={item.tab}
+      variant={activeTab === item.tab ? "default" : "outline"}
+      size="sm"
+      className="h-8 text-xs gap-1.5 shrink-0"
+      onClick={() => setActiveTab(item.tab)}
+    >
+      {item.label}
+      <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+        {item.count}
+      </Badge>
+    </Button>
+  ))}
+</div>
 ```
+
+### Technical details
+- Uses existing `qb` data from `useQuickBooksData` — no new queries needed
+- `overflow-x-auto` on the container ensures horizontal scrolling works on narrow screens
+- `shrink-0` on buttons prevents them from collapsing
+- Active tab gets `variant="default"` styling, others get `variant="outline"`
+- One file change only, ~20 lines added
 
