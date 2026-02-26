@@ -2,28 +2,35 @@
 
 ## Problem
 
-The packing slip's "Customer" field shows the project/scope name (e.g., "Masonary Wall") instead of the actual customer name. This happens in two places:
-
-1. **`useDeliveryActions.ts` line 131**: `customer_name: bundle.projectName` — persists the wrong value to `packing_slips` table
-2. **`PickupStation.tsx` lines 98, 115**: `customerName={selectedBundle.projectName}` — passes the wrong value to the slip preview
-
-**Root cause**: `bundle.projectName` comes from `cut_plans.project_name` which is the project/scope name. The actual customer name lives in `projects.customer_id → customers.name`.
+Invoice #, Invoice Date, and Scope all show "—" on the packing slip because `useDeliveryActions.ts` never writes these three fields to the `packing_slips` table when creating the record (lines 126-136). The columns exist in the DB and the Deliveries page reads them, but they're simply never populated.
 
 ## Fix
 
-### 1. `src/hooks/useCompletedBundles.ts`
-- Expand the query to join through `cut_plans → projects → customers`:
-  ```
-  cut_plans!inner(id, name, project_name, company_id, project_id,
-    projects(customer_id, customers(name)))
-  ```
-- Add a `customerName` field to `CompletedBundle` resolved from `customers.name`
-- Keep `projectName` as-is (it's used correctly elsewhere as the project label)
+### 1. `src/hooks/useDeliveryActions.ts` — accept and persist invoice/scope data
 
-### 2. `src/hooks/useDeliveryActions.ts` (line 131)
-- Change `customer_name: bundle.projectName` → `customer_name: bundle.customerName || bundle.projectName`
-- This uses the real customer name when available, falls back to project name
+- Change `createDeliveryFromBundle` signature to accept `invoiceNumber` plus an optional `scope` parameter
+- Before inserting the packing slip, fetch `invoice_date` from the extract session (same chain as invoice number: `cut_plans → barlists → extract_sessions`)
+- Also fetch the `scope` from the extract session (or fall back to `bundle.planName`)
+- Add `invoice_number`, `invoice_date`, and `scope` to the packing slip insert
 
-### 3. `src/pages/PickupStation.tsx` (lines 98, 115)
-- Change `customerName={selectedBundle.projectName}` → `customerName={selectedBundle.customerName || selectedBundle.projectName}`
+### 2. `src/pages/LoadingStation.tsx` — pass scope along
+
+- The `invoiceNumber` is already resolved and passed. No change needed there.
+- Fetch `invoice_date` and `scope` from the same extract session query that already fetches invoice number, and pass them through to `createDeliveryFromBundle`.
+
+### 3. `src/hooks/useCompletedBundles.ts` — add scope to bundle
+
+- Fetch `extract_sessions.scope` and `extract_sessions.invoice_date` alongside invoice_number so they're available on the bundle object (or fetch them in the delivery action).
+
+**Simpler approach**: Since `useDeliveryActions` already receives the `invoiceNumber` string, just also pass `scope` (from `bundle.planName` or extract session) and fetch `invoice_date` inside `useDeliveryActions` from the extract session before inserting.
+
+### Changes summary
+
+**`src/hooks/useDeliveryActions.ts`**:
+- Fetch `invoice_date` from extract session via the same `cut_plans → barlists → extract_sessions` chain
+- Fetch `scope` from extract session (field name to confirm, likely `scope` or from `cut_plans.project_name`)
+- Add `invoice_number: invoiceNumber`, `invoice_date`, and `scope` to the packing slip insert object
+
+**`src/pages/LoadingStation.tsx`**:
+- No structural change needed — `invoiceNumber` is already passed. The delivery action will self-resolve the other fields.
 
