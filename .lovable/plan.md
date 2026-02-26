@@ -1,60 +1,28 @@
 
 
-## Add Selection & Bulk Delete to Tags & Export Session List
+## Fix Brain Overlay — Remove Black Square, Add Smooth Fade
 
-### What changes
-Add checkboxes to each session row in the Tags & Export session list, a "Select All" checkbox, and a bulk delete bar that appears when items are selected.
+The brain processing overlay currently shows a harsh dark rectangle because the PNG image has a solid black/dark background baked in. The fix involves making the overlay blend seamlessly with the page.
 
-### File: `src/components/office/TagsExportView.tsx`
+### Changes to `src/components/office/AIExtractView.tsx`
 
-1. **Add state** for `selectedIds: Set<string>` and `deleting: boolean`
-2. **Add imports**: `Checkbox` from ui, `Trash2` from lucide, `toast` from sonner, `supabase` client
-3. **Session list** (lines 133-160): Add a `Checkbox` to each session row, and a "Select All / Deselect All" + "Delete Selected" toolbar above the list
-4. **Delete handler**: Delete from `extract_sessions` table by IDs, then call `refresh()` and show toast
-5. **Bulk action bar**: Fixed bottom bar (using `PipelineBulkBar` pattern with `AnimatePresence`) showing count + Delete + Clear buttons
+**1. Remove the harsh black square from the brain image** (lines 516-524):
+- Add `mix-blend-mode: screen` to the brain image — this makes the black background transparent, leaving only the glowing cyan brain visible
+- Increase opacity so the brain itself is more visible
+- Add a smooth CSS fade-in animation when the overlay appears
 
-### Implementation detail
+**2. Improve the backdrop** (line 504):
+- Keep the backdrop blur but make it subtler so content behind peeks through nicely
 
-**Above the session list (after the subtitle text):**
-```tsx
-<div className="flex items-center gap-2">
-  <Checkbox
-    checked={selectedIds.size === availableSessions.length && availableSessions.length > 0}
-    onCheckedChange={(checked) => {
-      if (checked) setSelectedIds(new Set(availableSessions.map(s => s.id)));
-      else setSelectedIds(new Set());
-    }}
-  />
-  <span className="text-xs text-muted-foreground">Select All</span>
-  {selectedIds.size > 0 && (
-    <Button variant="destructive" size="sm" onClick={handleBulkDelete} disabled={deleting}>
-      <Trash2 className="w-3.5 h-3.5 mr-1" />
-      Delete {selectedIds.size}
-    </Button>
-  )}
-</div>
-```
+**3. Add fade-in animation to the entire overlay** (line 502):
+- Wrap in `animate-fade-in` class for a smooth entrance
 
-**Each session row** gets a `Checkbox` on the left that toggles selection without navigating into the session.
+### Specific edits:
 
-**Delete handler:**
-```tsx
-const handleBulkDelete = async () => {
-  setDeleting(true);
-  const { error } = await supabase
-    .from("extract_sessions")
-    .delete()
-    .in("id", Array.from(selectedIds));
-  if (error) toast.error(error.message);
-  else {
-    toast.success(`Deleted ${selectedIds.size} session(s)`);
-    setSelectedIds(new Set());
-    refresh();
-  }
-  setDeleting(false);
-};
-```
+- **Line 502**: Add `animate-fade-in` to the overlay container
+- **Lines 516-524**: Add `style={{ mixBlendMode: "screen" }}` and bump opacity from `opacity-30` to `opacity-70` so the brain glows through without the black box
+- **Lines 544-547**: Adjust the float animation to use higher opacity range since blend mode handles transparency
 
-### No DB changes needed
-Uses existing `extract_sessions` table with existing RLS policies.
+### Technical detail
+`mix-blend-mode: screen` mathematically removes black pixels (they become transparent) while preserving bright/light pixels (the cyan brain circuit lines). This is the standard technique for removing dark backgrounds from glowing images without needing alpha transparency.
 
