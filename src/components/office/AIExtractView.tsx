@@ -1207,115 +1207,6 @@ export function AIExtractView() {
           </div>
         )}
 
-        {/* Optimization Panel — rendered above the table for visibility */}
-        {(activeSession?.status === "optimizing" || isOptimizing) && (
-          <Card ref={optimizationPanelRef} className="border-amber-500/30 bg-amber-500/5">
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-amber-500" />
-                <h3 className="text-sm font-bold tracking-widest text-foreground uppercase">Cut Optimization</h3>
-              </div>
-
-              {/* Config row */}
-              <div className="flex flex-wrap items-end gap-4">
-                <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Stock Length</label>
-                  <Select
-                    value={String(optimizerConfig.stockLengthMm)}
-                    onValueChange={(v) => {
-                      setOptimizerConfig(prev => ({ ...prev, stockLengthMm: Number(v) }));
-                    }}
-                  >
-                    <SelectTrigger className="w-32 h-9 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="6000">6M (6,000mm)</SelectItem>
-                      <SelectItem value="12000">12M (12,000mm)</SelectItem>
-                      <SelectItem value="18000">18M (18,000mm)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Kerf (mm)</label>
-                  <Input
-                    type="number"
-                    className="w-20 h-9 text-xs"
-                    value={optimizerConfig.kerfMm}
-                    onChange={(e) => setOptimizerConfig(prev => ({ ...prev, kerfMm: Number(e.target.value) || 0 }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Min Remnant (mm)</label>
-                  <Input
-                    type="number"
-                    className="w-24 h-9 text-xs"
-                    value={optimizerConfig.minRemnantMm}
-                    onChange={(e) => setOptimizerConfig(prev => ({ ...prev, minRemnantMm: Number(e.target.value) || 0 }))}
-                  />
-                </div>
-              </div>
-
-              {/* Mode cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {([
-                  { mode: "standard" as const, label: "Standard", desc: "Sequential, fewer stopper moves" },
-                  { mode: "optimized" as const, label: "Optimized (FFD)", desc: "First Fit Decreasing bin-pack" },
-                  { mode: "best-fit" as const, label: "Best Fit (BFD)", desc: "Tightest fit, least waste" },
-                ]).map(({ mode, label, desc }) => {
-                  const isSelected = selectedOptMode === mode;
-                  const modeResult = allModeResults[mode];
-                  return (
-                    <button
-                      key={mode}
-                      onClick={() => runOptimizationForMode(mode)}
-                      className={`p-4 rounded-lg border text-left transition-all ${
-                        isSelected
-                          ? "border-primary bg-primary/10 ring-2 ring-primary/30"
-                          : "border-border bg-card hover:bg-muted/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <Scissors className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-bold text-foreground">{label}</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mb-3">{desc}</p>
-                      {modeResult && (
-                        <div className="space-y-1 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Stock Bars:</span>
-                            <span className="font-bold text-foreground">{modeResult.totalStockBars}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Efficiency:</span>
-                            <span className="font-bold text-foreground">{modeResult.overallEfficiency.toFixed(1)}%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Waste:</span>
-                            <span className="font-bold text-foreground">{modeResult.totalWasteKg.toFixed(1)} kg</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Stopper Moves:</span>
-                            <span className="font-bold text-foreground">{modeResult.totalStopperMoves}</span>
-                          </div>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {optimizationResult && selectedOptMode && (
-                <div className="flex items-center gap-3 pt-2">
-                  <Badge className="bg-primary/10 text-primary border-primary/20 text-xs py-1 px-3">
-                    {optimizationResult.totalCuts} cuts · {optimizationResult.totalStockBars} bars · {optimizationResult.overallEfficiency.toFixed(1)}% efficiency
-                  </Badge>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
         {activeSession && activeSession.status === "extracting" && !processing && (
           <div className="relative flex flex-col items-center justify-center py-24 gap-6 overflow-hidden rounded-xl">
             {/* Pulsing glow rings */}
@@ -1362,7 +1253,7 @@ export function AIExtractView() {
           </div>
         )}
 
-        {/* (Optimization panel moved above the table) */}
+        
 
         {activeSession?.status === "approved" && (
           <div className="flex items-center gap-2 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
@@ -1573,6 +1464,115 @@ export function AIExtractView() {
                   </Table>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Optimization Panel — rendered below the table so users see data first */}
+        {(activeSession?.status === "optimizing" || isOptimizing) && (
+          <Card ref={optimizationPanelRef} className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-500" />
+                <h3 className="text-sm font-bold tracking-widest text-foreground uppercase">Cut Optimization</h3>
+              </div>
+
+              {/* Config row */}
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Stock Length</label>
+                  <Select
+                    value={String(optimizerConfig.stockLengthMm)}
+                    onValueChange={(v) => {
+                      setOptimizerConfig(prev => ({ ...prev, stockLengthMm: Number(v) }));
+                    }}
+                  >
+                    <SelectTrigger className="w-32 h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="6000">6M (6,000mm)</SelectItem>
+                      <SelectItem value="12000">12M (12,000mm)</SelectItem>
+                      <SelectItem value="18000">18M (18,000mm)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Kerf (mm)</label>
+                  <Input
+                    type="number"
+                    className="w-20 h-9 text-xs"
+                    value={optimizerConfig.kerfMm}
+                    onChange={(e) => setOptimizerConfig(prev => ({ ...prev, kerfMm: Number(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Min Remnant (mm)</label>
+                  <Input
+                    type="number"
+                    className="w-24 h-9 text-xs"
+                    value={optimizerConfig.minRemnantMm}
+                    onChange={(e) => setOptimizerConfig(prev => ({ ...prev, minRemnantMm: Number(e.target.value) || 0 }))}
+                  />
+                </div>
+              </div>
+
+              {/* Mode cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {([
+                  { mode: "standard" as const, label: "Standard", desc: "Sequential, fewer stopper moves" },
+                  { mode: "optimized" as const, label: "Optimized (FFD)", desc: "First Fit Decreasing bin-pack" },
+                  { mode: "best-fit" as const, label: "Best Fit (BFD)", desc: "Tightest fit, least waste" },
+                ]).map(({ mode, label, desc }) => {
+                  const isSelected = selectedOptMode === mode;
+                  const modeResult = allModeResults[mode];
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => runOptimizationForMode(mode)}
+                      className={`p-4 rounded-lg border text-left transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                          : "border-border bg-card hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Scissors className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-bold text-foreground">{label}</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mb-3">{desc}</p>
+                      {modeResult && (
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Stock Bars:</span>
+                            <span className="font-bold text-foreground">{modeResult.totalStockBars}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Efficiency:</span>
+                            <span className="font-bold text-foreground">{modeResult.overallEfficiency.toFixed(1)}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Waste:</span>
+                            <span className="font-bold text-foreground">{modeResult.totalWasteKg.toFixed(1)} kg</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Stopper Moves:</span>
+                            <span className="font-bold text-foreground">{modeResult.totalStopperMoves}</span>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {optimizationResult && selectedOptMode && (
+                <div className="flex items-center gap-3 pt-2">
+                  <Badge className="bg-primary/10 text-primary border-primary/20 text-xs py-1 px-3">
+                    {optimizationResult.totalCuts} cuts · {optimizationResult.totalStockBars} bars · {optimizationResult.overallEfficiency.toFixed(1)}% efficiency
+                  </Badge>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
