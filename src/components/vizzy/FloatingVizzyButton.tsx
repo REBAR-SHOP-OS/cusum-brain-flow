@@ -7,12 +7,14 @@ import { getUserPrimaryAgent } from "@/lib/userAgentMap";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import assistantHelper from "@/assets/helpers/assistant-helper.png";
 import { VizzyVoiceChat } from "./VizzyVoiceChat";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
 const BTN_SIZE = 56;
 const TOOLTIP_KEY = "vizzy-btn-tooltip-shown";
 
 export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
   function FloatingVizzyButton(_props, ref) {
+    const { isSuperAdmin } = useSuperAdmin();
     const isMobile = useIsMobile();
     const navigate = useNavigate();
     const location = useLocation();
@@ -67,6 +69,8 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       e.stopPropagation();
       setShowVoiceChat(true);
     }, []);
+
+    if (!isSuperAdmin) return null;
 
     return (
       <>
