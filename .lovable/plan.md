@@ -1,59 +1,30 @@
 
 
-## Plan: Fix Signature Pad Not Responding
+## Plan: Fix Driver Dashboard Empty State + Improve Signature Reliability
 
-### Root Cause
-Two issues prevent the signature canvas from working:
+### Issues Found
+1. **Driver Dashboard shows 0 deliveries** — Query on line 111 uses `.or(driver_profile_id.eq...,driver_name.eq...)` which excludes unassigned deliveries (where both are null). Same bug we fixed on the Deliveries page.
+2. **No way to claim unassigned deliveries** — No self-assign UI on Driver Dashboard detail view.
+3. **SignatureModal canvas** — `resetAll` clears canvas synchronously but ref may not be mounted yet in Radix portal. Adding `setTimeout` and `minHeight` for reliability.
 
-1. **SignatureModal timing bug** — The canvas setup `useEffect` (line 42-52) runs when `open` changes, but the canvas is inside a Radix Dialog portal + TabsContent. The ref is `null` when the effect fires because the portal hasn't mounted yet. The drawing handlers silently fail since `canvasRef.current?.getContext("2d")` returns `null`.
+### Changes
 
-2. **SignaturePad (shop floor)** — Same potential timing issue: the `useEffect` that sets `strokeStyle`, `lineWidth`, etc. runs on mount, but if the canvas isn't sized yet, drawing may produce invisible strokes.
+**`src/pages/DriverDashboard.tsx`**
 
-### Fix 1: `src/components/delivery/SignatureModal.tsx`
-- Add a small delay or use a `ref` callback to ensure the canvas is ready before configuring it
-- Use `requestAnimationFrame` or a `setTimeout(0)` inside the canvas setup effect to wait for the Dialog portal to render
-- Alternative (better): Replace the `useEffect` canvas setup with inline setup in `startDraw` — configure stroke properties right before drawing begins, guaranteeing the canvas exists
+1. **Add `driver_profile_id` to Delivery interface** (line 33-41)
 
-**Concrete change:** Move canvas context configuration (`strokeStyle`, `lineWidth`, etc.) into the `startDraw` function so it's set at draw-time, not in an effect:
-```typescript
-const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
-  e.preventDefault();
-  const ctx = canvasRef.current?.getContext("2d");
-  if (!ctx) return;
-  // Configure here instead of useEffect
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 2.5;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  const p = getPos(e);
-  ctx.beginPath();
-  ctx.moveTo(p.x, p.y);
-  setIsDrawing(true);
-};
-```
-Remove the canvas setup `useEffect` (lines 42-52).
+2. **Fix query filter** (line 111) — Add `driver_name.is.null` to the `.or()` clause:
+   ```
+   .or(`driver_profile_id.eq.${myProfile!.id},driver_name.eq.${myProfile!.full_name},driver_name.is.null`)
+   ```
 
-### Fix 2: `src/components/shopfloor/SignaturePad.tsx`
-- Same pattern: move context configuration into `startDrawing` instead of relying on `useEffect`
-```typescript
-const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-  e.preventDefault();
-  const ctx = getCtx();
-  if (!ctx) return;
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  const pos = getPos(e);
-  ctx.beginPath();
-  ctx.moveTo(pos.x, pos.y);
-  setIsDrawing(true);
-};
-```
-Remove the setup `useEffect` (lines 22-27).
+3. **Add "Claim This Delivery" button** (lines 222-233) — Before the Start Delivery button, show a claim button when delivery is unassigned. On click, update `driver_name` and `driver_profile_id` on the delivery. Only show Start Delivery when driver is assigned.
 
-### Technical Details
-- The Radix Dialog renders content in a portal. React effects run synchronously after render, but the portal's DOM nodes may not be in the document yet
-- `canvasRef.current` is `null` inside the effect → context config is skipped → strokes have default 1px width and may appear invisible or the `beginPath`/`lineTo` calls silently no-op
-- Moving config to the event handler guarantees the canvas exists (since the user is interacting with it)
+4. **Update empty state text** — "No deliveries available" instead of "No deliveries assigned"
+
+**`src/components/delivery/SignatureModal.tsx`**
+
+5. **Fix `resetAll` timing** (lines 29-39) — Add `setTimeout(50)` for canvas clear to wait for portal mount. Reset `isDrawing` state.
+
+6. **Add `minHeight` and `display: block`** to canvas container (lines 144-165) — Ensures canvas has visible dimensions even before interaction.
 
