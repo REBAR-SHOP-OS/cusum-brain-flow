@@ -262,6 +262,34 @@ export function useIntegrations() {
         return statusData.status;
       }
 
+      // rebar.shop (WordPress/WooCommerce)
+      if (integrationId === "rebar-shop") {
+        const { data, error: wpError } = await supabase.functions.invoke("wp-test");
+        if (wpError) throw new Error(wpError.message);
+
+        const status = data?.ok ? "connected" as const : "error" as const;
+        const errorMsg = data?.ok ? undefined : (data?.read?.error || data?.write?.error || "Connection test failed");
+
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "rebar-shop"
+              ? {
+                  ...i,
+                  status,
+                  error: errorMsg,
+                  lastSync: status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+
+        if (status === "connected") {
+          toast({ title: "rebar.shop connected", description: "WordPress read/write verified" });
+        } else {
+          toast({ title: "Connection error", description: errorMsg, variant: "destructive" });
+        }
+        return status;
+      }
 
       toast({ title: "No test available", description: "This integration doesn't have a test endpoint" });
       return "available";
@@ -430,6 +458,27 @@ export function useIntegrations() {
       // Silently skip
     }
 
+    // Check rebar.shop (WordPress/WooCommerce)
+    try {
+      const { data: wpData } = await supabase.functions.invoke("wp-test");
+      if (wpData) {
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "rebar-shop"
+              ? {
+                  ...i,
+                  status: wpData.ok ? "connected" as const : "error" as const,
+                  error: wpData.ok ? undefined : (wpData.read?.error || wpData.write?.error),
+                  lastSync: wpData.ok ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+      }
+    } catch (err) {
+      // Silently skip
+    }
+
     // Check Stripe
     try {
       const { data: stripeStatus } = await supabase.functions.invoke("stripe-payment", {
@@ -489,6 +538,25 @@ export function useIntegrations() {
   const startOAuth = useCallback(async (integrationId: string) => {
     try {
       const redirectUri = "https://erp.rebar.shop/integrations/callback";
+
+      // rebar.shop — credentials already stored, just verify connection
+      if (integrationId === "rebar-shop") {
+        const { data, error } = await supabase.functions.invoke("wp-test");
+        if (error) throw new Error(error.message);
+        if (data?.ok) {
+          setIntegrations((prev) =>
+            prev.map((i) =>
+              i.id === "rebar-shop"
+                ? { ...i, status: "connected" as const, error: undefined, lastSync: new Date().toLocaleTimeString() }
+                : i
+            )
+          );
+          toast({ title: "rebar.shop connected", description: "WordPress read/write verified" });
+        } else {
+          throw new Error(data?.read?.error || data?.write?.error || "WP connection test failed");
+        }
+        return;
+      }
 
       // Stripe — key is already stored as a secret, just verify it works
       if (integrationId === "stripe") {

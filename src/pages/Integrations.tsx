@@ -28,7 +28,7 @@ export default function Integrations() {
     "gmail", "google-calendar", "google-drive", "youtube",
     "google-analytics", "google-search-console", "quickbooks",
     "facebook", "instagram", "linkedin", "tiktok", "ringcentral",
-    "stripe",
+    "stripe", "rebar-shop",
   ];
 
   // Listen for OAuth success messages from popup
