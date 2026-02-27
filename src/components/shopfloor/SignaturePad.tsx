@@ -21,15 +21,6 @@ export function SignaturePad({ onSignatureChange, className, width = 400, height
     return canvas.getContext("2d");
   }, []);
 
-  useEffect(() => {
-    const ctx = getCtx();
-    if (!ctx) return;
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-  }, [getCtx]);
-
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -54,6 +45,10 @@ export function SignaturePad({ onSignatureChange, className, width = 400, height
     e.preventDefault();
     const ctx = getCtx();
     if (!ctx) return;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     const pos = getPos(e);
     ctx.beginPath();
     ctx.moveTo(pos.x, pos.y);
