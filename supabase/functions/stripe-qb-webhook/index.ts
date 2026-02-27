@@ -154,7 +154,7 @@ function buildPaymentPayload(
       },
     ],
     DepositToAccountRef: { name: depositAccountName },
-    PaymentMethodRef: { name: "Credit Card" },
+    PaymentMethodRef: { name: "STRIPE" },
     TxnDate: new Date().toISOString().substring(0, 10),
   };
 }
