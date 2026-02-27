@@ -1,45 +1,36 @@
 
 
-## Disable "Record Stroke" When Project Is Paused
+## Reorder Optimization Panel Below Data Table
 
 ### Problem
-When a project is paused mid-run, the "Record Stroke" button in the Cutter Station View remains active. The `useStationData` hook filters out paused projects on refetch, but items already loaded in `CutterStationView` remain interactive until they disappear from the list.
+In the AI Extract workflow, the "Cut Optimization" panel (with Standard / Optimized FFD / Best Fit strategy cards) renders **above** the extracted data table. Users must select an optimization strategy before seeing the line items it will apply to. The natural flow should be: see your data first, then choose how to optimize it.
 
-### Approach
-Since items from paused projects will eventually be filtered out by the data hook, the safest approach is to **detect the paused state in real-time** and disable all write actions while the project is paused. This requires:
+### Current Layout Order
+1. Header / Pipeline steps
+2. Action bar (Map, Validate, Optimize, Approve buttons)
+3. **Optimization Panel** (strategy cards + config)
+4. "Extracting" spinner (when applicable)
+5. Approved/Rejected banners
+6. Errors panel
+7. Summary stats (Line Items, Total Pieces, Bar Sizes, Shape Types)
+8. Data table (extracted rows)
 
-1. Carrying the project status through the data layer
-2. Checking it in the station views and disabling write actions
+### Proposed Layout Order
+1. Header / Pipeline steps
+2. Action bar
+3. "Extracting" spinner
+4. Approved/Rejected banners
+5. Errors panel
+6. Summary stats
+7. Data table (extracted rows)
+8. **Optimization Panel** (moved here -- below the table)
 
 ### Changes
 
-**1. `src/hooks/useStationData.ts` -- Expose project status on each item**
-- Add `project_status: string | null` to the `StationItem` interface
-- In both the bender and cutter query paths, map `projects.status` into the returned items as `project_status`
+**File: `src/components/office/AIExtractView.tsx`**
 
-**2. `src/components/shopfloor/CutterStationView.tsx` -- Disable actions when paused**
-- Derive `isProjectPaused` from `currentItem.project_status === 'paused'`
-- Compute `effectiveCanWrite = canWrite && !isProjectPaused`
-- Pass `effectiveCanWrite` instead of `canWrite` to `SlotTracker` and `CutEngine`
-- Show a "PROJECT PAUSED" banner above the slot tracker when paused, so the operator understands why buttons are disabled
+- Move the optimization panel JSX block (lines 1210-1317) to after the data table block (after line ~1570, the closing of the results table Card)
+- Remove the comment on line 1365 (`{/* (Optimization panel moved above the table) */}`) since it's no longer relevant
+- Keep the `optimizationPanelRef` and auto-scroll behavior intact so clicking "Optimize" still scrolls to the panel
 
-**3. `src/components/shopfloor/BenderStationView.tsx` -- Same treatment**
-- Derive `isProjectPaused` from the current item's `project_status`
-- Disable write actions when paused
-- Show a paused banner
-
-### What This Disables When Paused
-- "Record Stroke" button (via `canWrite={false}` on SlotTracker)
-- "Complete Run" button
-- "Confirm Removed" button (bar removal)
-- "LOCK and START" button (via CutEngine)
-- Bender station actions
-
-### Visual Indicator
-A warning banner will appear at the top of the operator instructions panel:
-```
-WARNING: PROJECT PAUSED -- Recording disabled. Contact supervisor.
-```
-
-### No Database Changes
-All changes are frontend-only. The existing `projects.status` column and `useStationData` join already provide the data -- we just need to surface it to the UI.
+This is a pure JSX reorder -- no logic, state, or handler changes needed.
