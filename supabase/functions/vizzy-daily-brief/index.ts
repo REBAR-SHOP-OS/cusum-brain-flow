@@ -50,26 +50,12 @@ serve(async (req) => {
       );
     }
 
-    // Check if user has admin role
-    const { data: adminRole } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
-
-    const isAdmin = !!adminRole;
-
     const context = await buildFullVizzyContext(supabase, user.id, {
       includeFinancials: true,
     });
 
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-
-    const financialBullet = isAdmin
-      ? "2. Financial health (AR/AP, overdue items)"
-      : "2. Inventory or stock highlights";
 
     // Gemini chosen: large context input (full business snapshot) is its strength
     const result = await callAI({
@@ -78,16 +64,28 @@ serve(async (req) => {
       messages: [
         {
           role: "system",
-          content: `You are JARVIS, the CEO's AI assistant. Generate a concise daily briefing.
-Use the live data below. Return exactly 5 bullet points covering:
-1. Most urgent item requiring attention
-${financialBullet}
-3. Production status (bottlenecks, completions)
-4. Hot leads or CRM updates
-5. Team presence / notable events
+          content: `You are JARVIS — Executive Intelligence Briefing System for the CEO of Rebar.shop.
+Generate an EXECUTIVE INTELLIGENCE BRIEF, not a summary. Analyze the live data below.
 
-Format: Start with "${greeting}, boss." then 5 bullet points using markdown. Keep each bullet to 1-2 sentences max. Be direct and actionable. If there are saved memories/reminders, mention the most relevant one.
+FORMAT: Start with "${greeting}, boss." then deliver findings RANKED BY SEVERITY (not by category).
+Each finding must include:
+- 🔴/🟡/🟢 Risk indicator
+- What's happening (the fact)
+- Why it matters (business impact)
+- Recommended action (specific next step)
 
+REQUIRED ANALYSIS AREAS (include only if noteworthy — skip if nothing to flag):
+1. Revenue & Cash Flow: AR/AP trends, overdue concentration, cash flow risk signals
+2. Production Risk: Bottlenecks, stalled items, idle machines during active queue
+3. Delivery Health: On-time rate, delays, at-risk deliveries
+4. High-Value Customer Changes: Payment behavior shifts, complaint patterns
+5. Pipeline & Leads: Hot leads needing action, stalled opportunities
+6. System Health: Automation failures, sync issues, anomalies
+7. Team: Notable presence/absence, capacity concerns
+
+CLOSE with ONE strategic recommendation — the single most important thing the CEO should act on today, with reasoning.
+
+Keep each finding to 1-2 sentences. Be direct, analytical, and actionable. Never pad with "everything looks fine" — only flag what matters.
 Always respond in English for the daily briefing.`,
         },
         {
