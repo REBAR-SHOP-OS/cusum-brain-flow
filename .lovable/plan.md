@@ -1,52 +1,27 @@
 
 
-## Filter Delivery Jobs Out of Pickup Station
+## Populate Missing "Type" and "DW#" Columns in Packing Slips
 
 ### Problem
-The Pickup Station page shows ALL completed bundles (cut plans with phase = 'complete'), including ones that are assigned to a delivery route. Only bundles NOT linked to a delivery should appear under "Cleared -- Ready for Pickup."
-
-### Root Cause
-Both `PickupStation` and `LoadingStation` use the same `useCompletedBundles()` hook with no filtering. There is no `fulfillment_method` column in the schema, but the `deliveries` table has a `cut_plan_id` foreign key -- if a cut plan has a matching delivery record, it's a delivery job, not a pickup.
-
-### Approach
-Rather than adding a new database column, use the existing `deliveries.cut_plan_id` relationship to exclude delivery-assigned bundles from the Pickup Station.
+The packing slip "Type" column is always empty, and "DW#" is missing from the stored data. The `asa_shape_code` field is saved in `items_json` but never rendered. The `drawing_ref` field exists on `CompletedBundleItem` but is not included when building `items_json`.
 
 ### Changes
 
-**1. `src/hooks/useCompletedBundles.ts` -- Add optional filter parameter**
-- Add an optional `exclude` parameter: `'delivery' | 'pickup' | undefined`
-- When `exclude = 'delivery'`: after fetching completed bundles, also query `deliveries` table for all `cut_plan_id` values, then filter out bundles whose `cutPlanId` appears in that set
-- This keeps the hook reusable for both pages
+**1. `src/pages/LoadingStation.tsx` (~line 123-130) — Include `drawing_ref` in items_json**
+- Add `drawing_ref: item.drawing_ref` to the `itemsJson` mapping so it gets persisted to the packing slip
 
-Alternatively (simpler): add a `pickupOnly` boolean parameter. When true, fetch delivery `cut_plan_id`s and exclude those bundles.
+**2. `src/components/delivery/PackingSlipPreview.tsx` — Render Type column + add field to interface**
+- Add `asa_shape_code?: string` to the `ChecklistItem` interface
+- Render `item.asa_shape_code || ""` in the Type `<td>` (line ~170, the empty `<td>`)
+- Do the same in the email HTML builder (`buildSlipHtml`) — replace the empty Type `<td>` with `${it.asa_shape_code || ""}`
 
-**2. `src/pages/PickupStation.tsx` -- Pass the filter**
-- Change `useCompletedBundles()` to `useCompletedBundles({ pickupOnly: true })` so only non-delivery bundles appear
+**3. `src/pages/DeliveryTerminal.tsx` (~line 14-20) — Add field to interface**
+- Add `asa_shape_code?: string` to the local `ChecklistItem` interface (data already flows from `items_json`)
 
-**3. No changes to `LoadingStation.tsx`**
-- The Loading Station continues to show all completed bundles (or could be updated separately if needed)
+**4. `src/components/accounting/documents/PackingSlipTemplate.tsx` — No changes needed**
+- Already has a `type` field that renders; this is a separate template used from accounting
 
-### Implementation Detail
+### Scope
+- 3 files modified, no database or schema changes
+- Existing deliveries missing `drawing_ref` will show blank DW# (data wasn't stored); new deliveries will be complete
 
-In `useCompletedBundles`, when `pickupOnly` is true:
-
-```typescript
-// After fetching cut_plan_items, also fetch delivery-linked plan IDs
-const { data: deliveryPlans } = await supabase
-  .from("deliveries")
-  .select("cut_plan_id")
-  .eq("company_id", companyId!)
-  .not("cut_plan_id", "is", null);
-
-const deliveryPlanIds = new Set(
-  (deliveryPlans ?? []).map(d => d.cut_plan_id)
-);
-
-// Filter out bundles linked to deliveries
-return bundles.filter(b => !deliveryPlanIds.has(b.cutPlanId));
-```
-
-### No Database Changes
-- No new columns or migrations needed
-- Uses existing `deliveries.cut_plan_id` relationship
-- Single additional lightweight query when `pickupOnly` is true
