@@ -1,48 +1,28 @@
 
 
-## Fix Customer Invoice Count Showing 0
+## Match Delivery Terminal Print to PackingSlipTemplate Branding
 
-The screenshot shows CON-FRAME LTD with "0" in the Invoices column, but the database has **17 invoices** for this customer (all fully paid with balance = 0). The RPC function `get_qb_customer_balances` only counts invoices where `balance > 0`, so fully-paid customers appear to have zero invoices.
+The current print output is a plain checklist. It needs to match the professional branded layout of `PackingSlipTemplate.tsx` — with logo, company header, bordered info grids, a proper items table, signature lines, and footer.
 
 ### Changes
 
-**1. Database: Update `get_qb_customer_balances` RPC**
+**`src/pages/DeliveryTerminal.tsx`**
 
-Replace the function to return both total invoice count and open (unpaid) invoice count:
+1. **Fetch additional packing slip fields** — expand the `select` query to include `slip_number`, `invoice_number`, `invoice_date`, `ship_to`, `scope`, `delivery_date` and store them in state.
 
-```sql
-CREATE OR REPLACE FUNCTION public.get_qb_customer_balances(p_company_id uuid)
-RETURNS TABLE(
-  customer_qb_id text,
-  open_balance numeric,
-  open_invoice_count bigint,
-  total_invoice_count bigint
-)
-LANGUAGE sql STABLE SECURITY INVOKER
-SET search_path = public
-AS $$
-  SELECT
-    t.customer_qb_id,
-    COALESCE(SUM(CASE WHEN t.balance > 0 THEN t.balance ELSE 0 END), 0) AS open_balance,
-    COUNT(*) FILTER (WHERE t.balance > 0) AS open_invoice_count,
-    COUNT(*) AS total_invoice_count
-  FROM public.qb_transactions t
-  WHERE t.company_id = p_company_id
-    AND t.entity_type = 'Invoice'
-    AND t.is_deleted = false
-  GROUP BY t.customer_qb_id;
-$$;
-```
+2. **Replace the print-only header** (lines 162–166) with the full branded layout matching `PackingSlipTemplate`:
+   - Import `brandLogo` from `@/assets/brand-logo.png`
+   - Company header: logo + "Rebar.Shop Inc" + address on the left, "Packing Slip" title on the right
+   - Info grid row 1 (4 cols, bordered): Customer, Ship To, Delivery #, Delivery Date
+   - Info grid row 2 (3 cols, bordered): Invoice #, Invoice Date, Scope
+   - Items table with columns: DW#, Mark, Quantity, Size, Type, Cut Length — replacing the current checkbox grid
+   - Total quantity row in the table footer
+   - Dual signature lines: "Delivered By" and "Received By"
+   - Footer: phone, email, website, tax number
 
-Key change: removes the `AND t.balance > 0` WHERE filter so all invoices are counted, then uses `FILTER (WHERE t.balance > 0)` for the open-specific columns.
+3. **Hide the on-screen checklist from print** — add `print:hidden` to the existing interactive checklist `<div>` so it doesn't double-render on paper.
 
-**2. `src/components/accounting/AccountingCustomers.tsx`**
+4. **Derive table data from `items_json`** — map each `ChecklistItem` to the table row format: `drawing_ref` → DW#, `mark_number` → Mark, `total_pieces` → Quantity, `bar_code` → Size, `cut_length_mm` → Cut Length (converted to meters).
 
-- Update the `balanceMap` query to also store `totalInvoiceCount` from the new RPC column
-- Change the "Invoices" column to display `totalInvoiceCount` (all invoices) instead of `openInvoiceCount` (only unpaid)
-- The "Open Balance" column continues to use the existing `openBalance` field
-
-### Technical Detail
-
-The current RPC has `AND t.balance > 0` in the WHERE clause, which excludes all paid invoices from the result set entirely. CON-FRAME has 17 invoices but all are paid (balance = 0), so the RPC returns no rows for that customer, resulting in the fallback value of 0. The fix moves the balance filter into a `FILTER` clause on the aggregate functions.
+No changes to `PackingSlipTemplate.tsx`, `index.css`, or any other files.
 
