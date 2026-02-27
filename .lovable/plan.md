@@ -1,33 +1,54 @@
 
 
-## Fix: Auto-create local customer when clicking a QB-only customer
+## Remove Delivery and Driver Features
 
-When you click a customer like CON-FRAME in the Accounting Customers list, the system looks up the local `customers` table by `quickbooks_id`. If no local record exists, it shows the empty "QB-Only Customer" message instead of the customer details.
+This plan removes all delivery/driver pages, components, hooks, navigation entries, and route definitions from the application.
 
-### Root Cause
+### Files to Delete (11 files)
+- `src/pages/Deliveries.tsx`
+- `src/pages/DriverDashboard.tsx`
+- `src/pages/DriverDropoff.tsx`
+- `src/components/delivery/DeliveryPackingSlip.tsx`
+- `src/components/delivery/DeliveryTerminal.tsx`
+- `src/components/delivery/PODCaptureDialog.tsx`
+- `src/components/delivery/PackingSlipTypeSelector.tsx`
+- `src/components/delivery/PhotoPackingSlip.tsx`
+- `src/components/delivery/SignatureModal.tsx`
+- `src/components/delivery/StopIssueDialog.tsx`
+- `src/components/customer-portal/CustomerDeliveryTracker.tsx`
+- `src/hooks/useDeliveryActions.ts`
+- `src/lib/deliveryTransitions.ts`
+- `src/hooks/__tests__/deliveryStatus.test.ts`
+- `src/components/pipeline/gates/DeliveryGateModal.tsx`
 
-The `AccountingCustomers.tsx` component queries `customers` table by `quickbooks_id` (line 116-121). QB data is available (from `qb_customers` mirror), but no corresponding row exists in `customers`. The detail sheet has no way to create one.
+### Files to Edit
 
-### Solution
+1. **`src/App.tsx`** — Remove imports for `Deliveries`, `DriverDashboard`, `DriverDropoff` and their 3 route definitions (`/deliveries`, `/driver`, `/driver/dropoff/:stopId`)
 
-Replace the "QB-Only Customer" placeholder (lines 252-259) with a **"Sync This Customer"** button that auto-creates a local `customers` record using the QB data already available in the component (`customers` array from `useQuickBooksData`).
+2. **`src/components/layout/AppSidebar.tsx`** — Remove "Deliveries" and "Driver" entries from the Logistics section and the operations nav
 
-**Changes to `src/components/accounting/AccountingCustomers.tsx`:**
+3. **`src/components/layout/Sidebar.tsx`** — Remove "Deliveries" from `operationsNav`
 
-1. Find the selected QB customer object from the `customers` array using `selectedQbId`
-2. Add a mutation that inserts a new row into the `customers` table with:
-   - `name` = `DisplayName`
-   - `company_name` = `CompanyName`
-   - `quickbooks_id` = QB `Id`
-   - `company_id` = current `companyId`
-   - `status` = "active"
-   - `customer_type` = "commercial"
-3. Replace the static "QB-Only Customer" message with a card showing the customer name and a "Sync to Local Database" button
-4. After sync, invalidate the `local_customer_by_qb` query so the `CustomerDetail` component loads automatically
+4. **`src/components/layout/MobileNav.tsx`** — Remove "Deliveries" entry
 
-### Technical Details
+5. **`src/components/layout/MobileNavV2.tsx`** — Remove "Driver" from bottom nav and "Deliveries" from the more menu
 
-- The QB customer data (`DisplayName`, `CompanyName`, `Id`, `Active`) is already loaded in the `customers` prop from `useQuickBooksData`
-- The `companyId` is already available via `useCompanyId()`
-- No new database tables or edge functions needed — just an insert into the existing `customers` table
+6. **`src/components/layout/CommandBar.tsx`** — Remove "Deliveries" command entry
+
+7. **`src/pages/ShopFloor.tsx`** — Remove the "DELIVERY" hub card from the grid (keep Loading Station and Pickup Station as they serve production/dispatch purposes independent of delivery tracking)
+
+8. **`src/pages/Pipeline.tsx`** — Remove `DeliveryGateModal` import and its two JSX instances
+
+9. **`src/pages/CustomerPortal.tsx`** — Remove the deliveries tab, `CustomerDeliveryTracker` import, and the deliveries summary card
+
+10. **`src/pages/LoadingStation.tsx`** — Remove `useDeliveryActions` import and the "Create Delivery" button/logic; the loading checklist verification still works standalone for production QC
+
+11. **`src/pages/PickupStation.tsx`** — Remove `DeliveryPackingSlip` and `PhotoPackingSlip` imports; replace with inline or simplified packing slip display
+
+12. **`src/pages/LiveChat.tsx`** — Remove `update_delivery_status` from the tool labels map
+
+### Notes
+- Database tables (`deliveries`, `delivery_stops`, `packing_slips`) are left untouched — no data is deleted
+- The Loading Station and Pickup Station pages remain functional for production verification purposes; only delivery-creation actions are removed from them
+- Edge functions like `stripe-qb-webhook` are unaffected
 
