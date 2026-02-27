@@ -1,36 +1,24 @@
 
 
-## Reorder Optimization Panel Below Data Table
+## Remove `font-semibold` from Badge Component
 
-### Problem
-In the AI Extract workflow, the "Cut Optimization" panel (with Standard / Optimized FFD / Best Fit strategy cards) renders **above** the extracted data table. Users must select an optimization strategy before seeing the line items it will apply to. The natural flow should be: see your data first, then choose how to optimize it.
+### Change
+**File: `src/components/ui/badge.tsx`** (line 7)
 
-### Current Layout Order
-1. Header / Pipeline steps
-2. Action bar (Map, Validate, Optimize, Approve buttons)
-3. **Optimization Panel** (strategy cards + config)
-4. "Extracting" spinner (when applicable)
-5. Approved/Rejected banners
-6. Errors panel
-7. Summary stats (Line Items, Total Pieces, Bar Sizes, Shape Types)
-8. Data table (extracted rows)
+Remove the `font-semibold` class from the base `cva` string, changing badge text from semi-bold to normal weight.
 
-### Proposed Layout Order
-1. Header / Pipeline steps
-2. Action bar
-3. "Extracting" spinner
-4. Approved/Rejected banners
-5. Errors panel
-6. Summary stats
-7. Data table (extracted rows)
-8. **Optimization Panel** (moved here -- below the table)
+### Before
+```
+"inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors ..."
+```
 
-### Changes
+### After
+```
+"inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs transition-colors ..."
+```
 
-**File: `src/components/office/AIExtractView.tsx`**
+### Scope
+- Only `src/components/ui/badge.tsx` is modified
+- Single class removal, no other properties touched
+- Affects all Badge instances application-wide (as intended)
 
-- Move the optimization panel JSX block (lines 1210-1317) to after the data table block (after line ~1570, the closing of the results table Card)
-- Remove the comment on line 1365 (`{/* (Optimization panel moved above the table) */}`) since it's no longer relevant
-- Keep the `optimizationPanelRef` and auto-scroll behavior intact so clicking "Optimize" still scrolls to the panel
-
-This is a pure JSX reorder -- no logic, state, or handler changes needed.
