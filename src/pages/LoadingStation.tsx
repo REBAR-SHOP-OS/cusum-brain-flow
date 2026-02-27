@@ -16,10 +16,13 @@ import {
   Loader2,
   Package,
   ImageIcon,
+  Truck,
+  Eye,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { toast } from "sonner";
 
 export default function LoadingStation() {
   const navigate = useNavigate();
@@ -67,6 +70,89 @@ export default function LoadingStation() {
 
   const totalItems = checklistItems.length;
   const progressPct = totalItems > 0 ? Math.round((loadedCount / totalItems) * 100) : 0;
+  const allLoaded = totalItems > 0 && loadedCount === totalItems;
+
+  // Guard: check if a delivery already exists for this cut plan
+  const { data: existingDelivery } = useQuery({
+    queryKey: ["delivery-for-plan", selectedBundle?.cutPlanId],
+    enabled: !!selectedBundle?.cutPlanId && !!companyId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("deliveries")
+        .select("id")
+        .eq("cut_plan_id", selectedBundle!.cutPlanId)
+        .eq("company_id", companyId!)
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  // Create delivery mutation
+  const createDelivery = useMutation({
+    mutationFn: async () => {
+      if (!companyId || !selectedBundle) throw new Error("Missing context");
+
+      const deliveryNumber = `DEL-${Date.now()}`;
+      const slipNumber = `PS-${Date.now()}`;
+
+      // 1. Insert delivery
+      const { data: delivery, error: delErr } = await supabase
+        .from("deliveries")
+        .insert({
+          delivery_number: deliveryNumber,
+          status: "staged",
+          company_id: companyId,
+          cut_plan_id: selectedBundle.cutPlanId,
+        })
+        .select("id")
+        .single();
+      if (delErr) throw delErr;
+
+      // 2. Insert delivery stop
+      const { error: stopErr } = await supabase
+        .from("delivery_stops")
+        .insert({
+          delivery_id: delivery.id,
+          company_id: companyId,
+          stop_sequence: 1,
+        });
+      if (stopErr) throw stopErr;
+
+      // 3. Build items_json from checklist items
+      const itemsJson = checklistItems.map((item) => ({
+        id: item.id,
+        mark_number: item.mark_number,
+        bar_code: item.bar_code,
+        cut_length_mm: item.cut_length_mm,
+        total_pieces: item.total_pieces,
+        asa_shape_code: item.asa_shape_code,
+      }));
+
+      // 4. Insert packing slip
+      const { error: slipErr } = await supabase
+        .from("packing_slips")
+        .insert({
+          delivery_id: delivery.id,
+          company_id: companyId,
+          cut_plan_id: selectedBundle.cutPlanId,
+          customer_name: selectedBundle.customerName || selectedBundle.projectName,
+          items_json: itemsJson as any,
+          slip_number: slipNumber,
+          status: "pending",
+        });
+      if (slipErr) throw slipErr;
+
+      return delivery.id;
+    },
+    onSuccess: () => {
+      toast.success("Delivery created successfully");
+      navigate("/shopfloor/delivery-ops");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to create delivery");
+    },
+  });
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -138,6 +224,33 @@ export default function LoadingStation() {
               </div>
               <Progress value={progressPct} className="h-3" />
             </div>
+            {allLoaded && (
+              <div className="mt-3">
+                {existingDelivery ? (
+                  <Button
+                    className="w-full gap-2"
+                    variant="outline"
+                    onClick={() => navigate("/shopfloor/delivery-ops")}
+                  >
+                    <Eye className="w-4 h-4" />
+                    VIEW DELIVERY
+                  </Button>
+                ) : (
+                  <Button
+                    className="w-full gap-2"
+                    onClick={() => createDelivery.mutate()}
+                    disabled={createDelivery.isPending}
+                  >
+                    {createDelivery.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Truck className="w-4 h-4" />
+                    )}
+                    CREATE DELIVERY
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Items Checklist */}
