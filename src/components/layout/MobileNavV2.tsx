@@ -10,7 +10,7 @@ import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
 const primaryNav = [
   { name: "Home", href: "/home", icon: Home },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
-  { name: "Driver", href: "/driver", icon: Truck },
+  { name: "Calls", href: "/phonecalls", icon: Phone },
   { name: "More", href: "#more", icon: Menu },
 ];
 
@@ -21,7 +21,7 @@ const moreItems = [
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
   { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"] },
   { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"] },
-  { name: "Deliveries", href: "/deliveries", icon: Truck },
+  
   { name: "Calls", href: "/phonecalls", icon: Phone },
   { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
   { name: "Time Clock", href: "/timeclock", icon: Clock },

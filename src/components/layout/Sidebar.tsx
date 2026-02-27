@@ -20,7 +20,6 @@ const crmNav = [
 
 const operationsNav = [
   { name: "Shop Floor", href: "/shop-floor", icon: Factory },
-  { name: "Deliveries", href: "/deliveries", icon: Truck },
 ];
 
 const systemNav = [

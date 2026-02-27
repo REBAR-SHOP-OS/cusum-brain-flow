@@ -31,7 +31,7 @@ import StationDashboard from "./pages/StationDashboard";
 import StationView from "./pages/StationView";
 import PickupStation from "./pages/PickupStation";
 import PoolView from "./pages/PoolView";
-import Deliveries from "./pages/Deliveries";
+
 import InventoryCountPage from "./pages/InventoryCountPage";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
@@ -72,8 +72,6 @@ import AutopilotDashboard from "./pages/AutopilotDashboard";
 import PipelineIntelligence from "./pages/PipelineIntelligence";
 import SupportInbox from "./pages/SupportInbox";
 import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
-import DriverDashboard from "./pages/DriverDashboard";
-import DriverDropoff from "./pages/DriverDropoff";
 import Estimation from "./pages/Estimation";
 import QuoteEngine from "./pages/QuoteEngine";
 import AutomationsHub from "./pages/AutomationsHub";
@@ -162,9 +160,6 @@ const App = () => (
                     <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
                     <Route path="/shopfloor/inventory" element={<P><InventoryCountPage /></P>} />
                     
-                    <Route path="/deliveries" element={<P><Deliveries /></P>} />
-                    <Route path="/driver" element={<P><DriverDashboard /></P>} />
-                    <Route path="/driver/dropoff/:stopId" element={<P><DriverDropoff /></P>} />
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
                     <Route path="/transcribe" element={<P><Transcribe /></P>} />
                     <Route path="/transcribe/watch" element={<ProtectedRoute><TranscribeWatch /></ProtectedRoute>} />

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
 import { CustomerOrderList } from "@/components/customer-portal/CustomerOrderList";
-import { CustomerDeliveryTracker } from "@/components/customer-portal/CustomerDeliveryTracker";
 import { CustomerInvoiceList } from "@/components/customer-portal/CustomerInvoiceList";
 import { CustomerDocuments } from "@/components/customer-portal/CustomerDocuments";
 import { Navigate } from "react-router-dom";
@@ -10,11 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Package, Truck, LogOut, Loader2, ShieldX, FileText, FileCheck } from "lucide-react";
+import { Package, LogOut, Loader2, ShieldX, FileText, FileCheck } from "lucide-react";
 
 export default function CustomerPortal() {
   const { user, loading: authLoading, signOut } = useAuth();
-  const { orders, deliveries, invoices, packingSlips, isLoading, hasAccess } = useCustomerPortalData();
+  const { orders, invoices, packingSlips, isLoading, hasAccess } = useCustomerPortalData();
   const [tab, setTab] = useState("orders");
 
   if (authLoading) {
@@ -75,7 +74,7 @@ export default function CustomerPortal() {
       </header>
 
       {/* Summary Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 sm:px-6 pt-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4 sm:px-6 pt-4">
         <Card className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setTab("orders")}>
           <CardContent className="pt-3 pb-2">
             <p className="text-[10px] text-muted-foreground uppercase">Active Orders</p>
@@ -88,12 +87,6 @@ export default function CustomerPortal() {
             <p className="text-xl font-bold text-destructive">
               ${outstandingBalance.toLocaleString()}
             </p>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setTab("deliveries")}>
-          <CardContent className="pt-3 pb-2">
-            <p className="text-[10px] text-muted-foreground uppercase">Deliveries</p>
-            <p className="text-xl font-bold">{deliveries.length}</p>
           </CardContent>
         </Card>
         <Card className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setTab("documents")}>
@@ -116,10 +109,6 @@ export default function CustomerPortal() {
               <FileText className="w-4 h-4" />
               Invoices ({invoices.length})
             </TabsTrigger>
-            <TabsTrigger value="deliveries" className="gap-1.5">
-              <Truck className="w-4 h-4" />
-              Deliveries ({deliveries.length})
-            </TabsTrigger>
             <TabsTrigger value="documents" className="gap-1.5">
               <FileCheck className="w-4 h-4" />
               Documents ({packingSlips.length})
@@ -133,9 +122,6 @@ export default function CustomerPortal() {
           </TabsContent>
           <TabsContent value="invoices" className="mt-0">
             <CustomerInvoiceList invoices={invoices} />
-          </TabsContent>
-          <TabsContent value="deliveries" className="mt-0">
-            <CustomerDeliveryTracker deliveries={deliveries} />
           </TabsContent>
           <TabsContent value="documents" className="mt-0">
             <CustomerDocuments packingSlips={packingSlips} />

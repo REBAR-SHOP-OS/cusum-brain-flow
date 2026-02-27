@@ -15,7 +15,7 @@ const moreItems = [
   { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Shop Floor", href: "/shop-floor", icon: Factory },
-  { name: "Deliveries", href: "/deliveries", icon: Truck },
+  
   { name: "Brain", href: "/brain", icon: Brain },
   { name: "Integrations", href: "/integrations", icon: Plug },
   { name: "Admin", href: "/admin", icon: Shield },

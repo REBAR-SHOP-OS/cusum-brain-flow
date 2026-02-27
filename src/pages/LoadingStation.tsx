@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCompletedBundles, type CompletedBundle, type CompletedBundleItem } from "@/hooks/useCompletedBundles";
 import { useLoadingChecklist } from "@/hooks/useLoadingChecklist";
-import { useDeliveryActions } from "@/hooks/useDeliveryActions";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,14 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
   Camera,
   CheckCircle2,
   Loader2,
   Package,
-  Truck,
   ImageIcon,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -28,8 +25,6 @@ export default function LoadingStation() {
   const navigate = useNavigate();
   const { bundles, isLoading: bundlesLoading } = useCompletedBundles();
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
-  const [invoiceNumber, setInvoiceNumber] = useState("");
-  const { createDeliveryFromBundle, creating } = useDeliveryActions();
   const { companyId } = useCompanyId();
 
   const {
@@ -61,35 +56,6 @@ export default function LoadingStation() {
   const checklistItems: CompletedBundleItem[] =
     allPlanItems.length > 0 ? allPlanItems : selectedBundle?.items ?? [];
 
-  // Auto-fetch invoice number from extract session when bundle is selected
-  useEffect(() => {
-    if (!selectedBundle?.cutPlanId) return;
-    (async () => {
-      const { data } = await supabase
-        .from("cut_plans")
-        .select("project_id")
-        .eq("id", selectedBundle.cutPlanId)
-        .single();
-      if (!data?.project_id) return;
-      const { data: bl } = await supabase
-        .from("barlists")
-        .select("extract_session_id")
-        .eq("project_id", data.project_id)
-        .not("extract_session_id", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      if (!bl?.extract_session_id) return;
-      const { data: es } = await supabase
-        .from("extract_sessions")
-        .select("invoice_number")
-        .eq("id", bl.extract_session_id)
-        .not("invoice_number", "is", null)
-        .single();
-      if (es?.invoice_number) setInvoiceNumber(es.invoice_number);
-    })();
-  }, [selectedBundle?.cutPlanId]);
-
   // Initialize checklist rows when bundle is selected
   useEffect(() => {
     if (selectedBundle && checklistItems.length > 0) {
@@ -100,18 +66,7 @@ export default function LoadingStation() {
   }, [selectedBundle?.cutPlanId, allPlanItems.length]);
 
   const totalItems = checklistItems.length;
-  const allLoaded = totalItems > 0 && loadedCount >= totalItems && photoCount >= totalItems;
-  const canCreate = allLoaded && invoiceNumber.trim().length > 0;
   const progressPct = totalItems > 0 ? Math.round((loadedCount / totalItems) * 100) : 0;
-
-  const handleCreateDelivery = async () => {
-    if (creating || !selectedBundle || !invoiceNumber.trim()) return;
-    const result = await createDeliveryFromBundle(selectedBundle, invoiceNumber.trim());
-    if (result) {
-      navigate("/deliveries");
-    }
-  };
-
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -220,30 +175,6 @@ export default function LoadingStation() {
               )}
             </div>
           </ScrollArea>
-
-          {/* Bottom Action */}
-          <div className="px-4 sm:px-6 py-4 border-t border-border bg-card space-y-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Invoice Number</label>
-              <Input
-                placeholder="e.g. 2348"
-                value={invoiceNumber}
-                onChange={(e) => setInvoiceNumber(e.target.value)}
-              />
-            </div>
-            <Button
-              className="w-full gap-2"
-              disabled={!canCreate || creating}
-              onClick={handleCreateDelivery}
-            >
-              {creating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Truck className="w-4 h-4" />
-              )}
-              {canCreate ? "Create Delivery" : !allLoaded ? `${totalItems - Math.min(loadedCount, photoCount)} items remaining` : "Enter invoice number"}
-            </Button>
-          </div>
         </>
       )}
     </div>
