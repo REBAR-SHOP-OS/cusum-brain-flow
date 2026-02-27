@@ -251,6 +251,11 @@ export function AIExtractView() {
     try {
       // Resolve project
       let projectId = selectedProjectId;
+      if (createNewProject && !newProjectName.trim()) {
+        toast({ title: "Project name required", description: "Please enter a project name before extracting.", variant: "destructive" });
+        setProcessing(false);
+        return;
+      }
       if (createNewProject && newProjectName) {
         setProcessingStep("Creating project...");
         const project = await createProject({
@@ -872,9 +877,8 @@ export function AIExtractView() {
                                   {erpContacts.filter(c => c.type === "customer").map((c) => (
                                     <CommandItem key={`cust-${c.id}`} value={c.name} onSelect={() => {
                                       setCreateNewProject(true);
-                                      setNewProjectName(c.name);
+                                      setNewProjectName("");
                                       setCustomer(c.name);
-                                      if (!manifestName) setManifestName(c.name);
                                       setSelectedBarlistId("");
                                     }}>
                                       + {c.name}
