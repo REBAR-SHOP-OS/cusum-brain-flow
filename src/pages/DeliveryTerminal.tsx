@@ -17,6 +17,7 @@ interface ChecklistItem {
   total_pieces?: number;
   bar_code?: string;
   cut_length_mm?: number;
+  asa_shape_code?: string;
   checked?: boolean;
 }
 
