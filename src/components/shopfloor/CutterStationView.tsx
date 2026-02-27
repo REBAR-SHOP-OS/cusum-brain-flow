@@ -15,7 +15,7 @@ import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useInventoryData } from "@/hooks/useInventoryData";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { useSlotTracker } from "@/hooks/useSlotTracker";
-import { Scissors, Layers, Ruler, Hash, CheckCircle2 } from "lucide-react";
+import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
@@ -32,6 +32,10 @@ interface CutterStationViewProps {
 const REMNANT_THRESHOLD_MM = 300;
 
 export function CutterStationView({ machine, items, canWrite, initialIndex = 0, onBack }: CutterStationViewProps) {
+  // ── Project paused detection ──
+  const currentItemForPause = items[0] || null;
+  const isProjectPaused = items.some(i => i.project_status === 'paused');
+  const effectiveCanWrite = canWrite && !isProjectPaused;
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -519,6 +523,20 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         {/* Left panel — Operator Instructions */}
         <div className="flex-1 flex flex-col p-6 gap-5 overflow-y-auto bg-muted/20">
 
+          {/* ── PROJECT PAUSED BANNER ── */}
+          {isProjectPaused && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-destructive tracking-wider uppercase">
+                  PROJECT PAUSED
+                </p>
+                <p className="text-xs text-destructive/80">
+                  Recording disabled. Contact supervisor.
+                </p>
+              </div>
+            </div>
+          )}
           {/* Project / Plan context */}
           {(currentItem.project_name || currentItem.plan_name) && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -564,7 +582,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
                   onRecordStroke={handleRecordStroke}
                   onRemoveBar={handleRemoveBar}
                   onCompleteRun={handleCompleteRun}
-                  canWrite={canWrite}
+                  canWrite={effectiveCanWrite}
                 />
               )}
 
@@ -698,7 +716,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             onStockLengthChange={setSelectedStockLength}
             onBarsChange={setOperatorBars}
             isRunning={machineIsRunning}
-            canWrite={canWrite}
+            canWrite={effectiveCanWrite}
             isDone={isDone}
             darkMode
             lockedBars={machineIsRunning ? slotTracker.slots.length : undefined}

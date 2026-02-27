@@ -13,7 +13,7 @@ import { useInventoryData } from "@/hooks/useInventoryData";
 import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { recordCompletion } from "@/lib/foremanLearningService";
-import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
@@ -28,6 +28,9 @@ interface BenderStationViewProps {
 }
 
 export function BenderStationView({ machine, items, canWrite, initialIndex = 0, onBack }: BenderStationViewProps) {
+  // ── Project paused detection ──
+  const isProjectPaused = items.some(i => i.project_status === 'paused');
+  const effectiveCanWrite = canWrite && !isProjectPaused;
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -206,6 +209,21 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
           <ForemanPanel foreman={foreman} />
         </div>
 
+        {/* ── PROJECT PAUSED BANNER ── */}
+        {isProjectPaused && (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 flex items-center gap-3 mb-4">
+            <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-destructive tracking-wider uppercase">
+                PROJECT PAUSED
+              </p>
+              <p className="text-xs text-destructive/80">
+                Recording disabled. Contact supervisor.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Shape code badge */}
         {(currentItem.phase === "bending" || (currentItem.bend_completed_pieces ?? 0) > 0) && (
           <div className="flex justify-start mb-4">
@@ -286,7 +304,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
         <Button
           size="lg"
           className="flex-1 ml-4 h-14 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg rounded-lg"
-          disabled={!canWrite || submitting || isMarkComplete}
+          disabled={!effectiveCanWrite || submitting || isMarkComplete}
           onClick={handleDone}
         >
           {submitting ? (
