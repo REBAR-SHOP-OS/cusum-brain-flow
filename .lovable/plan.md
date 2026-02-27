@@ -1,48 +1,31 @@
 
 
-## Fix: Vizzy's Prompt Doesn't Acknowledge Her Data Access
+## Connect rebar.shop WordPress/WooCommerce Integration
 
-**Problem**: Vizzy's system prompt (in `supabase/functions/_shared/agents/operations.ts`, lines 133-261) describes her as an "Ops Commander" but never tells her she has access to executive KPIs, financial data, production metrics, pipeline data, employee performance data, or delivery stats. The executive context IS being injected (we fixed that), but the model doesn't know it should USE that data because the prompt doesn't mention it.
+**Problem**: The rebar.shop card shows "available" (disconnected) even though all WP credentials (`WP_BASE_URL`, `WP_USERNAME`, `WP_APP_PASSWORD`, `WC_CONSUMER_KEY`, `WC_CONSUMER_SECRET`) are already stored as secrets. There's no status check handler for the `rebar-shop` integration in `useIntegrations.ts`.
 
-She says "I don't have access to a real-time dashboard" because her prompt focuses on RingCentral/email/QB and never mentions the `executiveKPIs` object that's now in her context.
+### Changes
 
-### Change
+**1. `src/hooks/useIntegrations.ts`**
 
-**`supabase/functions/_shared/agents/operations.ts` (lines 133-145)** — Add a data access declaration block after the opening identity paragraph, before the ABSOLUTE RULES:
+- Add `rebar-shop` to the `oauthIntegrations` array (so clicking Connect triggers the ConnectDialog flow instead of the field-entry setup dialog) — actually, better approach: add a status check for `rebar-shop` that calls the existing `wp-test` edge function.
 
-Insert after line 133 (the identity line), before the ABSOLUTE RULES:
-
-```
-## 📊 FULL DATA ACCESS — YOU HAVE EVERYTHING
-You have REAL-TIME access to the following data injected into your context. USE IT. NEVER say you don't have access.
-- **Financial KPIs**: Total AR, overdue AR, total AP, weekly revenue — from executiveKPIs.financial
-- **Sales Pipeline**: Active leads, hot leads, pipeline value — from executiveKPIs.pipeline
-- **Production Metrics**: Active items, completed/total pieces, progress % — from executiveKPIs.production
-- **Delivery Performance**: Weekly total, completed, success rate — from executiveKPIs.delivery
-- **Support**: Open ticket count — from executiveKPIs.support
-- **Customer Data**: Total customers, individual customer records
-- **Employee Data**: Profiles, roles, time clock entries, agent usage per person
-- **Agent Activity**: Which agents are being used, session counts, by whom
-- **Email Inbox**: Full inbound email history with subjects, senders, previews
-- **Knowledge Base**: All company knowledge entries
-- **Recent Events**: Activity log across all departments
-
-When asked about ANY of these topics, look in your context data and provide specific numbers. NEVER claim you lack data access.
-When asked about employee performance, cross-reference: their agent usage, time clock entries, orders/leads associated, and activity events.
+- In `checkIntegrationStatus` (~line 265), add a handler for `rebar-shop`:
+```typescript
+if (integrationId === "rebar-shop") {
+  const { data, error } = await supabase.functions.invoke("wp-test");
+  if (error) throw new Error(error.message);
+  const status = data?.ok ? "connected" : "error";
+  // update state + toast
+  return status;
+}
 ```
 
-**Also update line 239-243** — Replace the generic "How You Work" section to reinforce data usage:
+- In `checkAllStatuses` (~line 455), add a rebar-shop check block that calls `wp-test` and updates the integration status.
 
-```
-## How You Work:
-- You have FULL executive dashboard data in your context. Read it. Cite specific numbers.
-- When asked about performance, revenue, production, or any KPI — extract from executiveKPIs in your context.
-- When asked about an employee — cross-reference profiles, time_clock, agent usage, and activity events.
-- Be proactive — if you see something urgent in the data, mention it even if not asked.
-- Be concise but thorough. No fluff.
-- Always suggest the next logical action.
-```
+- In `startOAuth` or equivalent, add a handler for `rebar-shop` that runs the same wp-test check (since clicking "Connect" when credentials already exist should just verify the connection).
 
-### Deployment
-Redeploy `ai-agent` edge function.
+**2. `src/hooks/useIntegrations.ts`** — Add `rebar-shop` to the list that gets the ConnectDialog treatment, OR better: since credentials are already stored, make the "Connect" button directly test the connection via `wp-test` edge function.
+
+Add `"rebar-shop"` to the `oauthIntegrations` array so clicking it opens ConnectDialog, and add a handler in `startOAuth` for `rebar-shop` that invokes `wp-test` to verify the connection. If `ok: true`, set status to "connected" and save to `integration_connections` table.
 
