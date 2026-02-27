@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, Printer, Pencil, Save, Plus, Trash2, Loader2, Copy, ExternalLink, CreditCard } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import brandLogo from "@/assets/brand-logo.png";
 import { Badge } from "@/components/ui/badge";
@@ -129,8 +130,17 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
   const amountDue = total - paid;
 
   // Linked payments
+  interface LinkedPaymentDetail {
+    date: string;
+    amount: number;
+    paymentMethod: string;
+    paymentId: string;
+    memo: string;
+    depositTo: string;
+    refNumber: string;
+  }
   const linkedPayments = useMemo(() => {
-    const results: { date: string; amount: number }[] = [];
+    const results: LinkedPaymentDetail[] = [];
     for (const pmt of payments) {
       const raw = pmt as unknown as Record<string, unknown>;
       const lines = raw.Line as Array<Record<string, unknown>> | undefined;
@@ -140,13 +150,23 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
         if (!linkedTxns) continue;
         for (const txn of linkedTxns) {
           if (txn.TxnType === "Invoice" && txn.TxnId === invoice.Id) {
-            results.push({ date: (raw.TxnDate as string) || "", amount: (line.Amount as number) || 0 });
+            results.push({
+              date: (raw.TxnDate as string) || "",
+              amount: (line.Amount as number) || 0,
+              paymentMethod: ((raw.PaymentMethodRef as Record<string, unknown>)?.name as string) || "",
+              paymentId: (raw.Id as string) || "",
+              memo: (raw.PrivateNote as string) || "",
+              depositTo: ((raw.DepositToAccountRef as Record<string, unknown>)?.name as string) || "",
+              refNumber: (raw.PaymentRefNum as string) || "",
+            });
           }
         }
       }
     }
     return results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [payments, invoice.Id]);
+
+  const [selectedPaymentDetail, setSelectedPaymentDetail] = useState<LinkedPaymentDetail | null>(null);
 
   const paymentStatus = invoice.Balance === 0 ? "PAID" : linkedPayments.length > 0 ? "PARTIAL" : "OPEN";
 
@@ -353,13 +373,19 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
                     <thead>
                       <tr className="border-b border-gray-300">
                         <th className="text-left py-1 font-semibold text-gray-500">Date</th>
+                        <th className="text-left py-1 font-semibold text-gray-500">Method</th>
                         <th className="text-right py-1 font-semibold text-gray-500">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
                       {linkedPayments.map((p, i) => (
-                        <tr key={i} className="border-b border-gray-100">
+                        <tr
+                          key={i}
+                          className="border-b border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => setSelectedPaymentDetail(p)}
+                        >
                           <td className="py-1 text-gray-700">{p.date ? new Date(p.date).toLocaleDateString() : "—"}</td>
+                          <td className="py-1 text-gray-600">{p.paymentMethod || "—"}</td>
                           <td className="py-1 text-right tabular-nums font-medium text-green-700">{fmt(p.amount)}</td>
                         </tr>
                       ))}
@@ -610,6 +636,50 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
           <p>761487149RT0001</p>
         </div>
       </div>
+
+      {/* Payment Detail Dialog */}
+      <Dialog open={!!selectedPaymentDetail} onOpenChange={(open) => !open && setSelectedPaymentDetail(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4" /> Payment Detail
+            </DialogTitle>
+            <DialogDescription>
+              Payment #{selectedPaymentDetail?.paymentId || "—"}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPaymentDetail && (
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Date</span>
+                <span className="font-medium">{selectedPaymentDetail.date ? new Date(selectedPaymentDetail.date).toLocaleDateString() : "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Amount</span>
+                <span className="font-semibold text-green-700">{fmt(selectedPaymentDetail.amount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Method</span>
+                <span>{selectedPaymentDetail.paymentMethod || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ref #</span>
+                <span>{selectedPaymentDetail.refNumber || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Deposit To</span>
+                <span>{selectedPaymentDetail.depositTo || "—"}</span>
+              </div>
+              {selectedPaymentDetail.memo && (
+                <div className="pt-2 border-t">
+                  <p className="text-muted-foreground text-xs mb-1">Memo</p>
+                  <p className="text-sm">{selectedPaymentDetail.memo}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
