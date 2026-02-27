@@ -50,7 +50,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
         // Bender: show ALL bend items that are cut_done or bending (regardless of machine assignment)
       let benderQuery = supabase
           .from("cut_plan_items")
-          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(customers(name)))")
+          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(status, customers(name)))")
           .eq("bend_type", "bend")
           .eq("cut_plans.company_id", companyId!)
           .or("phase.eq.cut_done,phase.eq.bending");
@@ -63,22 +63,27 @@ export function useStationData(machineId: string | null, machineType?: string, p
 
         if (itemsError) throw itemsError;
 
-        return (items || []).map((item: Record<string, unknown>) => ({
-          ...item,
-          bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
-          phase: (item.phase as string) || "queued",
-          bend_dimensions: item.bend_dimensions as Record<string, number> | null,
-          plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
-          project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
-          project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
-          customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
-        })) as StationItem[];
+        return (items || [])
+          .filter((item: Record<string, unknown>) => {
+            const proj = (item.cut_plans as any)?.projects;
+            return !proj || proj.status !== 'paused';
+          })
+          .map((item: Record<string, unknown>) => ({
+            ...item,
+            bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
+            phase: (item.phase as string) || "queued",
+            bend_dimensions: item.bend_dimensions as Record<string, number> | null,
+            plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
+            project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
+            project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
+            customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
+          })) as StationItem[];
       }
 
       // Cutter / default: plans assigned to this machine or unassigned, scoped by company
       let cutterQuery = supabase
         .from("cut_plans")
-        .select("id, name, project_name, project_id, machine_id, projects(customers(name))")
+        .select("id, name, project_name, project_id, machine_id, projects(status, customers(name))")
         .eq("company_id", companyId!)
         .eq("machine_id", machineId)
         .in("status", ["draft", "queued", "running"]);
@@ -92,8 +97,12 @@ export function useStationData(machineId: string | null, machineType?: string, p
       if (plansError) throw plansError;
       if (!plans?.length) return [];
 
-      const planIds = plans.map((p: any) => p.id);
-      const planMap = new Map(plans.map((p: any) => [p.id, p]));
+      // Filter out plans linked to paused projects (keep unlinked plans)
+      const activePlans = plans.filter((p: any) => !p.projects || p.projects.status !== 'paused');
+      if (!activePlans.length) return [];
+
+      const planIds = activePlans.map((p: any) => p.id);
+      const planMap = new Map(activePlans.map((p: any) => [p.id, p]));
 
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
