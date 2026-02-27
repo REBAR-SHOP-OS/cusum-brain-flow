@@ -1,54 +1,40 @@
 
 
-## Remove Delivery and Driver Features
+## Build New Delivery Ops & Delivery Terminal Pages
 
-This plan removes all delivery/driver pages, components, hooks, navigation entries, and route definitions from the application.
+Based on the reference screenshots, two new pages need to be created:
 
-### Files to Delete (11 files)
-- `src/pages/Deliveries.tsx`
-- `src/pages/DriverDashboard.tsx`
-- `src/pages/DriverDropoff.tsx`
-- `src/components/delivery/DeliveryPackingSlip.tsx`
-- `src/components/delivery/DeliveryTerminal.tsx`
-- `src/components/delivery/PODCaptureDialog.tsx`
-- `src/components/delivery/PackingSlipTypeSelector.tsx`
-- `src/components/delivery/PhotoPackingSlip.tsx`
-- `src/components/delivery/SignatureModal.tsx`
-- `src/components/delivery/StopIssueDialog.tsx`
-- `src/components/customer-portal/CustomerDeliveryTracker.tsx`
-- `src/hooks/useDeliveryActions.ts`
-- `src/lib/deliveryTransitions.ts`
-- `src/hooks/__tests__/deliveryStatus.test.ts`
-- `src/components/pipeline/gates/DeliveryGateModal.tsx`
+### Page 1: Delivery Ops (`/shopfloor/delivery-ops`)
+A dark-themed card list showing deliveries ready for dispatch. Each card displays:
+- Customer/project name (bold, e.g. "CAGES")
+- Bundle count + purpose ("3 bundles for site drop")
+- Status badge ("STAGED AT SHOP")
+- Click navigates to the delivery terminal for that delivery's stop
+
+Data source: `deliveries` table joined with `delivery_stops` and `packing_slips`.
+
+### Page 2: Delivery Terminal (`/shopfloor/delivery/:stopId`)
+A full-page mobile-optimized jobsite terminal showing:
+- Header: Customer name + "JOBSITE DELIVERY TERMINAL" subtitle
+- Back button, download/print actions
+- Unloading site label + "LAUNCH NAV" button (opens Google Maps)
+- Side-by-side capture boxes: "SITE DROP PHOTO" (camera capture) + "CUSTOMER SIGN-OFF" (tap-to-sign canvas)
+- Unloading checklist: 2-column grid of items from `packing_slips.items_json` with checkboxes (DW#, mark, qty info)
+
+POD data (photo path, signature) persisted to `delivery_stops` columns (`pod_photo_url`, `pod_signature`).
+
+### Files to Create
+1. **`src/pages/DeliveryOps.tsx`** — Card grid of active deliveries with status badges
+2. **`src/pages/DeliveryTerminal.tsx`** — Full-page drop-off terminal with photo capture, signature pad, and unloading checklist
+3. **`src/components/delivery/SignaturePad.tsx`** — Canvas-based signature component (tap to sign, clear, save as PNG)
 
 ### Files to Edit
+1. **`src/App.tsx`** — Add routes: `/shopfloor/delivery-ops` and `/shopfloor/delivery/:stopId`
+2. **`src/pages/ShopFloor.tsx`** — Add "DELIVERY OPS" hub card back to the grid
 
-1. **`src/App.tsx`** — Remove imports for `Deliveries`, `DriverDashboard`, `DriverDropoff` and their 3 route definitions (`/deliveries`, `/driver`, `/driver/dropoff/:stopId`)
-
-2. **`src/components/layout/AppSidebar.tsx`** — Remove "Deliveries" and "Driver" entries from the Logistics section and the operations nav
-
-3. **`src/components/layout/Sidebar.tsx`** — Remove "Deliveries" from `operationsNav`
-
-4. **`src/components/layout/MobileNav.tsx`** — Remove "Deliveries" entry
-
-5. **`src/components/layout/MobileNavV2.tsx`** — Remove "Driver" from bottom nav and "Deliveries" from the more menu
-
-6. **`src/components/layout/CommandBar.tsx`** — Remove "Deliveries" command entry
-
-7. **`src/pages/ShopFloor.tsx`** — Remove the "DELIVERY" hub card from the grid (keep Loading Station and Pickup Station as they serve production/dispatch purposes independent of delivery tracking)
-
-8. **`src/pages/Pipeline.tsx`** — Remove `DeliveryGateModal` import and its two JSX instances
-
-9. **`src/pages/CustomerPortal.tsx`** — Remove the deliveries tab, `CustomerDeliveryTracker` import, and the deliveries summary card
-
-10. **`src/pages/LoadingStation.tsx`** — Remove `useDeliveryActions` import and the "Create Delivery" button/logic; the loading checklist verification still works standalone for production QC
-
-11. **`src/pages/PickupStation.tsx`** — Remove `DeliveryPackingSlip` and `PhotoPackingSlip` imports; replace with inline or simplified packing slip display
-
-12. **`src/pages/LiveChat.tsx`** — Remove `update_delivery_status` from the tool labels map
-
-### Notes
-- Database tables (`deliveries`, `delivery_stops`, `packing_slips`) are left untouched — no data is deleted
-- The Loading Station and Pickup Station pages remain functional for production verification purposes; only delivery-creation actions are removed from them
-- Edge functions like `stripe-qb-webhook` are unaffected
+### Implementation Details
+- **DeliveryOps**: Query `deliveries` with status in ('pending','scheduled','staged','in-transit'), join `delivery_stops` for stop count, join `packing_slips` for item counts. Show card per delivery with customer name, bundle summary, status.
+- **DeliveryTerminal**: Fetch stop by ID, load packing slip items from `packing_slips.items_json` via `delivery_id`. Photo capture uses `<input type="file" capture="environment">`, uploaded to `clearance-photos` bucket under `pod/` prefix. Signature uses HTML5 canvas. Both paths written to `delivery_stops.pod_photo_url` and `delivery_stops.pod_signature`.
+- **SignaturePad**: Standalone canvas component with touch/mouse drawing, "Clear" button, and `onSave(dataUrl)` callback that uploads the PNG to storage.
+- Style matches the reference: dark background, white card for the terminal content, uppercase tracking-wide headers, dashed border capture zones.
 
