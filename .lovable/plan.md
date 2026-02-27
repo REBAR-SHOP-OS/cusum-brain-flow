@@ -1,23 +1,28 @@
 
 
-## Analysis: No Code Change Needed
+## Plan: Add Click-to-View for Signed Delivery Cards
 
-### Build Status
-The build output shows **successful completion** (`✓ built in 28.21s`). The `[plugin:vite:reporter]` message about `useCompanyId.ts` being both dynamically and statically imported is a **warning**, not an error. It does not prevent the build from succeeding or the app from running.
+The signed delivery cards in `PackingSlipsView.tsx` (lines 271-290) are static — no `onClick`, no detail view. We need to make them expandable so clicking a card reveals the signature image and site drop photo.
 
-### Signature Button Issue
-The file `src/components/features/deliveries/DeliveryConfirmationModal.tsx` **does not exist** in this codebase. I searched exhaustively — there is no component with that name or a matching pattern (`isSignaturePadOpen`, `Delivery Confirmation`, etc.).
+### Changes (single file: `src/components/office/PackingSlipsView.tsx`)
 
-The actual signature capture components are:
+1. **Add state** for the selected signed delivery (`selectedSignedStop`)
 
-1. **`PODCaptureDialog.tsx`** — `SignaturePad` is always visible inline (not behind a button). No "Sign" button exists to disable. Submit requires both photo AND signature — already correct.
+2. **Make each card clickable** with `onClick` and cursor-pointer styling
 
-2. **`DeliveryTerminal.tsx`** — `SignaturePad` is always visible inline. "Complete Delivery" requires checklist + photo + signature — all independent, no ordering dependency.
+3. **Add a detail dialog/panel** that shows:
+   - Delivery number, address, customer name
+   - The POD signature image (resolved from storage path via `createSignedUrl`)
+   - The site drop photo (resolved from storage path via `createSignedUrl`)
+   - Driver name and date from the joined `deliveries` data
+   - A close button
 
-3. **`DriverDropoff.tsx`** — "Tap to Sign" buttons are plain `<button>` elements, always enabled regardless of photo state.
+4. **Resolve storage URLs** on demand when a card is clicked — the `pod_signature` and `pod_photo_url` fields store storage paths, so we need `supabase.storage.from("clearance-photos").createSignedUrl(path, 3600)` to get viewable URLs
 
-**None of these components have a "Sign" button that is disabled based on photo state.** The described bug pattern (`disabled={!photo || isConfirming}`) does not exist anywhere in the codebase.
+### Technical details
 
-### Recommendation
-No code changes are needed. The component referenced in the bug report does not exist, and all existing signature flows already allow signing independently of photo capture. If you're experiencing a specific UI issue, please navigate to the exact screen and share a screenshot — I can then trace the exact component involved.
+- The `delivery_stops` query already joins `deliveries(id, delivery_number, scheduled_date, driver_name)` and `customers(name)` — all needed metadata is available
+- Storage paths follow pattern `{companyId}/signatures/{orderId}-{timestamp}.png` for signatures and similar for photos
+- Use a Radix Dialog for the detail view, consistent with the rest of the app
+- No database or schema changes needed
 
