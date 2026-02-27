@@ -49,7 +49,7 @@ export function StripeQBSyncPanel() {
   }
 
   // Recent sync records
-  const { data: syncRecords, isLoading } = useQuery({
+  const { data: syncRecords, isFetching } = useQuery({
     queryKey: ["stripe_qb_sync_map", companyId],
     queryFn: async () => {
       if (!companyId) return [];
@@ -156,7 +156,7 @@ export function StripeQBSyncPanel() {
             size="sm"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["stripe_qb_sync_map"] })}
           >
-            <RefreshCw className={`w-3 h-3 mr-1 ${isLoading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3 h-3 mr-1 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
