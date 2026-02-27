@@ -118,8 +118,8 @@ export function DeliveryPackingSlip({
             <tr className="border-b-2 border-gray-900">
               <th className="text-left py-2 font-bold w-24">DW#</th>
               <th className="text-left py-2 font-bold w-24">Mark</th>
-              <th className="text-right py-2 font-bold w-20">Quantity</th>
-              <th className="text-left py-2 font-bold w-20">Size</th>
+              <th className="text-right py-2 pr-4 font-bold w-20">Quantity</th>
+              <th className="text-left py-2 pl-4 font-bold w-20">Size</th>
               <th className="text-left py-2 font-bold w-20">Type</th>
               <th className="text-right py-2 font-bold w-28">Cut Length</th>
             </tr>
@@ -129,8 +129,8 @@ export function DeliveryPackingSlip({
               <tr key={idx} className="border-b border-gray-200">
                 <td className="py-3 text-gray-700">{item.drawing_ref || "—"}</td>
                 <td className="py-3 text-gray-700">{item.mark_number || "—"}</td>
-                <td className="py-3 text-right tabular-nums font-medium">{item.total_pieces}</td>
-                <td className="py-3 text-gray-600">{item.bar_code}</td>
+                <td className="py-3 pr-4 text-right tabular-nums font-medium">{item.total_pieces}</td>
+                <td className="py-3 pl-4 text-gray-600">{item.bar_code}</td>
                 <td className="py-3 text-gray-600">{item.asa_shape_code ? "Bent" : "Straight"}</td>
                 <td className="py-3 text-right tabular-nums">{(item.cut_length_mm / 1000).toFixed(2)} m</td>
               </tr>
