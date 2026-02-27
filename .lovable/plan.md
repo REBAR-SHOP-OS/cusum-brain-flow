@@ -1,30 +1,31 @@
 
 
-## Plan: Fix Driver Dashboard Empty State + Improve Signature Reliability
+## Plan: Fix Build Failure + Wire Signature Improvements
 
-### Issues Found
-1. **Driver Dashboard shows 0 deliveries** — Query on line 111 uses `.or(driver_profile_id.eq...,driver_name.eq...)` which excludes unassigned deliveries (where both are null). Same bug we fixed on the Deliveries page.
-2. **No way to claim unassigned deliveries** — No self-assign UI on Driver Dashboard detail view.
-3. **SignatureModal canvas** — `resetAll` clears canvas synchronously but ref may not be mounted yet in Radix portal. Adding `setTimeout` and `minHeight` for reliability.
+### Build Failure
+The production build fails due to `vite-plugin-image-optimizer` crashing on large/already-optimized PNGs. The plugin tries to re-optimize images that are already small, producing larger outputs and eventually crashes.
 
-### Changes
+**Fix in `vite.config.ts`:** Increase the skip threshold or disable PNG optimization to prevent the crash.
 
-**`src/pages/DriverDashboard.tsx`**
+### Signature Issue
+The file `DeliveryConfirmationModal.tsx` referenced in the bug report does not exist in the codebase. The actual signature capture components are:
 
-1. **Add `driver_profile_id` to Delivery interface** (line 33-41)
+1. **`PODCaptureDialog.tsx`** (used on `/deliveries` and `/driver-dashboard`) — The `SignaturePad` is always visible and not gated behind a photo. The submit button requires either a signature OR a photo (`!signatureData && !photoFile`). No disabled "Sign" button exists here.
 
-2. **Fix query filter** (line 111) — Add `driver_name.is.null` to the `.or()` clause:
-   ```
-   .or(`driver_profile_id.eq.${myProfile!.id},driver_name.eq.${myProfile!.full_name},driver_name.is.null`)
-   ```
+2. **`DriverDropoff.tsx`** (used on `/driver/dropoff/:stopId`) — The "Tap to Sign" buttons are plain `<button>` elements, always enabled. The `canSubmit` for "Complete Drop-Off" requires signature + photo + all items checked — this is correct behavior for the final submit.
 
-3. **Add "Claim This Delivery" button** (lines 222-233) — Before the Start Delivery button, show a claim button when delivery is unassigned. On click, update `driver_name` and `driver_profile_id` on the delivery. Only show Start Delivery when driver is assigned.
+### What Needs Fixing
 
-4. **Update empty state text** — "No deliveries available" instead of "No deliveries assigned"
+**`PODCaptureDialog.tsx`** — The submit button condition `disabled={saving || (!signatureData && !photoFile)}` allows submitting with ONLY a photo and no signature, which is too loose. For proper POD, both should be captured but independently (no ordering dependency).
 
-**`src/components/delivery/SignatureModal.tsx`**
+**Changes:**
+1. **`vite.config.ts`** — Disable or raise thresholds for the image optimizer plugin to fix the production build crash.
 
-5. **Fix `resetAll` timing** (lines 29-39) — Add `setTimeout(50)` for canvas clear to wait for portal mount. Reset `isDrawing` state.
+2. **`PODCaptureDialog.tsx`** — Keep signature and photo sections both always enabled (already the case). Update submit button to require BOTH signature and photo for a complete POD: `disabled={saving || !signatureData || !photoFile}`. Add visual checkmarks showing which items are complete.
 
-6. **Add `minHeight` and `display: block`** to canvas container (lines 144-165) — Ensures canvas has visible dimensions even before interaction.
+3. **`DriverDropoff.tsx`** — No changes needed; signature buttons are already independently enabled.
+
+### Technical Details
+- The `vite-plugin-image-optimizer` crash occurs because already-optimized PNGs produce larger re-optimized outputs. The plugin logs `+186%[3` then crashes.
+- The `PODCaptureDialog` `SignaturePad` component is embedded inline (not behind a button), so there is no "disabled Sign button" to fix — the component itself is the fix described in the stack overflow hint but adapted to our codebase structure.
 
