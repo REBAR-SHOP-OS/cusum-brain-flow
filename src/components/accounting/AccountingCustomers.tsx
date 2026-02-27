@@ -45,12 +45,13 @@ export function AccountingCustomers({ data }: Props) {
         p_company_id: companyId!,
       });
       if (error) throw error;
-      const map = new Map<string, { openBalance: number; invoiceCount: number }>();
+      const map = new Map<string, { openBalance: number; invoiceCount: number; totalInvoiceCount: number }>();
       for (const r of rows ?? []) {
         if (r.customer_qb_id) {
           map.set(String(r.customer_qb_id), {
             openBalance: Number(r.open_balance),
             invoiceCount: Number(r.open_invoice_count),
+            totalInvoiceCount: Number((r as any).total_invoice_count),
           });
         }
       }
@@ -168,8 +169,8 @@ export function AccountingCustomers({ data }: Props) {
     return {
       ...c,
       openBalance: bal?.openBalance ?? 0,
-      overdue: 0, // overdue requires due-date logic not in the RPC; kept for UI compat
-      invoiceCount: bal?.invoiceCount ?? 0,
+      overdue: 0,
+      invoiceCount: bal?.totalInvoiceCount ?? 0,
     };
   });
 
