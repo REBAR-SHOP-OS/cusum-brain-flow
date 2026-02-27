@@ -59,6 +59,38 @@ export function AccountingCustomers({ data }: Props) {
     staleTime: 1000 * 60 * 2,
   });
 
+  // Find selected QB customer object
+  const selectedQbCustomer = selectedQbId ? customers.find((c) => c.Id === selectedQbId) : null;
+
+  // Sync mutation — creates a local customer from QB data
+  const syncMutation = useMutation({
+    mutationFn: async (qbCustomer: { Id: string; DisplayName: string; CompanyName?: string; Active?: boolean }) => {
+      if (!companyId) throw new Error("No company ID");
+      const { data, error } = await supabase
+        .from("customers")
+        .insert({
+          name: qbCustomer.DisplayName,
+          company_name: qbCustomer.CompanyName || null,
+          quickbooks_id: qbCustomer.Id,
+          company_id: companyId,
+          status: "active",
+          customer_type: "commercial",
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["local_customer_by_qb", selectedQbId] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      toast({ title: "Customer synced to local database" });
+    },
+    onError: (error) => {
+      toast({ title: "Error syncing customer", description: error.message, variant: "destructive" });
+    },
+  });
+
   // Delete mutation — also soft-deletes from qb_customers mirror
   const deleteMutation = useMutation({
     mutationFn: async ({ id, quickbooks_id }: { id: string; quickbooks_id: string | null }) => {
@@ -249,13 +281,28 @@ export function AccountingCustomers({ data }: Props) {
               })}
             />
           )}
-          {selectedQbId && !localLoading && !localCustomer && (
-            <div className="p-8 text-center space-y-3">
-              <p className="text-lg font-semibold">QB-Only Customer</p>
-              <p className="text-muted-foreground">
-                This customer exists in QuickBooks but hasn't been synced to your local database yet.
-                Run a sync to view full details.
+          {selectedQbId && !localLoading && !localCustomer && selectedQbCustomer && (
+            <div className="p-8 text-center space-y-4">
+              <Users className="w-12 h-12 mx-auto text-muted-foreground" />
+              <p className="text-lg font-semibold">{selectedQbCustomer.DisplayName}</p>
+              {selectedQbCustomer.CompanyName && (
+                <p className="text-muted-foreground">{selectedQbCustomer.CompanyName}</p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                This customer exists in QuickBooks but hasn't been synced locally yet.
               </p>
+              <Button
+                onClick={() => syncMutation.mutate(selectedQbCustomer)}
+                disabled={syncMutation.isPending}
+                className="gap-2"
+              >
+                {syncMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4" />
+                )}
+                Sync to Local Database
+              </Button>
             </div>
           )}
         </SheetContent>
