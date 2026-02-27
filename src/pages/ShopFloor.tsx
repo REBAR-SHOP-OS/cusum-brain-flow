@@ -2,10 +2,10 @@ import { Link } from "react-router-dom";
 import { 
   Factory, 
   ShieldCheck, 
-   
   PackageCheck,
   ArrowLeft,
-  ClipboardList
+  ClipboardList,
+  Truck
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
@@ -54,6 +54,12 @@ const hubCards: HubCard[] = [
     subtitle: "COUNTS & ADJUSTMENTS",
     icon: <ClipboardList className="w-7 h-7" />,
     to: "/shopfloor/inventory",
+  },
+  {
+    label: "DELIVERY OPS",
+    subtitle: "DISPATCH & DROP-OFF",
+    icon: <Truck className="w-7 h-7" />,
+    to: "/shopfloor/delivery-ops",
   },
 ];
 
