@@ -1,24 +1,26 @@
 
 
-## Fix: Refresh button not working in Stripe → QB Sync Panel
+## Fix: Stripe payments must use "STRIPE" payment method in QuickBooks
 
-**Root Cause**: The Refresh button uses `isLoading` for the spinner, but `isLoading` is only `true` on the initial load (when there's no cached data). After the first load, `invalidateQueries` triggers a background refetch which sets `isFetching` to `true`, not `isLoading`. So the button appears to do nothing.
+The screenshot shows QuickBooks' Receive Payment screen with "STRIPE" selected as the payment method. Currently, the `stripe-qb-webhook` edge function hardcodes `PaymentMethodRef: { name: "Credit Card" }` when creating payments in QuickBooks, which is incorrect.
 
 ### Changes
 
-**`src/components/integrations/StripeQBSyncPanel.tsx`**
+**`supabase/functions/stripe-qb-webhook/index.ts`** (line 157)
 
-1. Destructure `isFetching` instead of (or in addition to) `isLoading` from the sync records query
-2. Use `isFetching` for the spinner animation on the Refresh icon
-3. Switch from `invalidateQueries` to `refetchQueries` for more explicit behavior
+Change the payment method from "Credit Card" to "STRIPE" so Stripe payments are recorded with the correct payment method in QuickBooks, matching the user's QB configuration:
 
-Change the query destructuring (~line 53):
 ```typescript
-const { data: syncRecords, isFetching } = useQuery({
+// Before
+PaymentMethodRef: { name: "Credit Card" },
+
+// After
+PaymentMethodRef: { name: "STRIPE" },
 ```
 
-Change the Refresh button (~line 155) to use `isFetching` for the spinner:
-```typescript
-<RefreshCw className={`w-3 h-3 mr-1 ${isFetching ? "animate-spin" : ""}`} />
-```
+This ensures that when a Stripe webhook fires and creates a Payment in QuickBooks, it will select "STRIPE" from the payment method list — exactly as shown in the screenshot.
+
+### Technical Note
+
+The `PaymentMethodRef: { name: "STRIPE" }` approach works because QuickBooks matches payment methods by name. The user has already created a "STRIPE" payment method in their QuickBooks account (visible in the dropdown). If the name doesn't match an existing method, QuickBooks auto-creates one.
 
