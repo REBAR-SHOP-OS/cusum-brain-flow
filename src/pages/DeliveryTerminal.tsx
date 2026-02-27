@@ -152,7 +152,7 @@ export default function DeliveryTerminal() {
             <p className="text-[9px] tracking-[0.25em] text-primary/70 uppercase">Jobsite Delivery Terminal</p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.print()}>
           <Download className="w-4 h-4" />
         </Button>
       </header>
