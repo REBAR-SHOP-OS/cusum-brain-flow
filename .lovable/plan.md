@@ -1,43 +1,45 @@
 
 
-## Make Payment History Rows Clickable with Detail Dialog
+## Disable "Record Stroke" When Project Is Paused
 
 ### Problem
-In the Invoice Editor's "Payment History" section, payment rows are plain text showing only Date and Amount. Users cannot click on them to see additional details like Payment Method, reference number, or memo.
+When a project is paused mid-run, the "Record Stroke" button in the Cutter Station View remains active. The `useStationData` hook filters out paused projects on refetch, but items already loaded in `CutterStationView` remain interactive until they disappear from the list.
+
+### Approach
+Since items from paused projects will eventually be filtered out by the data hook, the safest approach is to **detect the paused state in real-time** and disable all write actions while the project is paused. This requires:
+
+1. Carrying the project status through the data layer
+2. Checking it in the station views and disabling write actions
 
 ### Changes
 
-**File: `src/components/accounting/InvoiceEditor.tsx`**
+**1. `src/hooks/useStationData.ts` -- Expose project status on each item**
+- Add `project_status: string | null` to the `StationItem` interface
+- In both the bender and cutter query paths, map `projects.status` into the returned items as `project_status`
 
-1. **Enrich `linkedPayments` data** (lines 132-149): Expand the extracted fields to include:
-   - `paymentMethod` (from `PaymentMethodRef.name`)
-   - `paymentId` (the QB Payment ID)
-   - `memo` (from `PrivateNote`)
-   - `depositTo` (from `DepositToAccountRef.name`)
-   - `refNumber` (from `PaymentRefNum`)
+**2. `src/components/shopfloor/CutterStationView.tsx` -- Disable actions when paused**
+- Derive `isProjectPaused` from `currentItem.project_status === 'paused'`
+- Compute `effectiveCanWrite = canWrite && !isProjectPaused`
+- Pass `effectiveCanWrite` instead of `canWrite` to `SlotTracker` and `CutEngine`
+- Show a "PROJECT PAUSED" banner above the slot tracker when paused, so the operator understands why buttons are disabled
 
-2. **Add a `selectedPaymentDetail` state** to track which payment row the user clicked.
+**3. `src/components/shopfloor/BenderStationView.tsx` -- Same treatment**
+- Derive `isProjectPaused` from the current item's `project_status`
+- Disable write actions when paused
+- Show a paused banner
 
-3. **Make payment rows interactive**: Add `cursor-pointer hover:bg-gray-100` styling and an `onClick` handler to each `<tr>` in the Payment History table that sets the selected payment detail.
+### What This Disables When Paused
+- "Record Stroke" button (via `canWrite={false}` on SlotTracker)
+- "Complete Run" button
+- "Confirm Removed" button (bar removal)
+- "LOCK and START" button (via CutEngine)
+- Bender station actions
 
-4. **Add a Payment Detail Dialog**: Render a small Dialog (using the existing `@radix-ui/react-dialog` component) that shows:
-   - Date
-   - Amount
-   - Payment Method
-   - Reference Number
-   - Deposit Account
-   - Memo
-   - A close button
+### Visual Indicator
+A warning banner will appear at the top of the operator instructions panel:
+```
+WARNING: PROJECT PAUSED -- Recording disabled. Contact supervisor.
+```
 
-5. **Add Payment Method column to table**: Add a third "Method" column to the Payment History table header and rows, showing the payment method name inline (e.g., "Check", "Credit Card", "STRIPE") so it's visible at a glance without clicking.
-
-### Technical Details
-
-The `payments` prop (type `QBPayment[]`) already contains the full QB payment objects with `PaymentMethodRef`, `PaymentRefNum`, `PrivateNote`, and `DepositToAccountRef` fields. The `linkedPayments` memo just needs to extract more fields from these objects.
-
-The dialog will use the existing `Dialog`/`DialogContent` components already imported elsewhere in the project (`@/components/ui/dialog`).
-
-### No other files are modified
-- No database changes
-- No new dependencies
-- Only `InvoiceEditor.tsx` is touched
+### No Database Changes
+All changes are frontend-only. The existing `projects.status` column and `useStationData` join already provide the data -- we just need to surface it to the UI.
