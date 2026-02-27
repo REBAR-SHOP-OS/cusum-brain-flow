@@ -30,8 +30,12 @@ export function SignatureModal({ open, onOpenChange, onSave, title }: SignatureM
     setTypedName("");
     setUploadPreview(null);
     setHasDrawn(false);
-    const ctx = canvasRef.current?.getContext("2d");
-    if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    setIsDrawing(false);
+    // Delay canvas clear to wait for Radix portal mount
+    setTimeout(() => {
+      const ctx = canvasRef.current?.getContext("2d");
+      if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    }, 50);
   }, []);
 
   useEffect(() => {
@@ -142,13 +146,13 @@ export function SignatureModal({ open, onOpenChange, onSave, title }: SignatureM
           </TabsList>
 
           <TabsContent value="draw" className="mt-3">
-            <div className="relative rounded-lg border-2 border-dashed border-border bg-white overflow-hidden">
+            <div className="relative rounded-lg border-2 border-dashed border-border bg-white overflow-hidden" style={{ minHeight: 120 }}>
               <canvas
                 ref={canvasRef}
                 width={560}
                 height={160}
                 className="w-full cursor-crosshair touch-none"
-                style={{ aspectRatio: "560/160" }}
+                style={{ aspectRatio: "560/160", display: "block", minHeight: 120 }}
                 onMouseDown={startDraw}
                 onMouseMove={doDraw}
                 onMouseUp={endDraw}

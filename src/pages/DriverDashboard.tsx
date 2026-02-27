@@ -34,6 +34,7 @@ interface Delivery {
   id: string;
   delivery_number: string;
   driver_name: string | null;
+  driver_profile_id: string | null;
   vehicle: string | null;
   scheduled_date: string | null;
   status: string | null;
@@ -108,7 +109,7 @@ export default function DriverDashboard() {
         .from("deliveries")
         .select("*")
         .eq("company_id", companyId!)
-        .or(`driver_profile_id.eq.${myProfile!.id},driver_name.eq.${myProfile!.full_name}`)
+        .or(`driver_profile_id.eq.${myProfile!.id},driver_name.eq.${myProfile!.full_name},driver_name.is.null`)
         .order("scheduled_date", { ascending: true });
       if (error) throw error;
       return data as Delivery[];
@@ -219,16 +220,36 @@ export default function DriverDashboard() {
           )}
         </div>
 
-        {/* Start Delivery button (only when pending) */}
+        {/* Claim / Start Delivery */}
         {(selectedDelivery.status === "pending" || selectedDelivery.status === "scheduled") && (
-          <div className="px-4 py-3 border-b border-border">
-            <Button
-              className="w-full gap-2"
-              onClick={() => handleStartDelivery(selectedDelivery.id)}
-            >
-              <Truck className="w-4 h-4" />
-              Start Delivery
-            </Button>
+          <div className="px-4 py-3 border-b border-border space-y-2">
+            {!selectedDelivery.driver_name && !selectedDelivery.driver_profile_id && (
+              <Button
+                variant="secondary"
+                className="w-full gap-2"
+                onClick={async () => {
+                  await supabase
+                    .from("deliveries")
+                    .update({ driver_name: myProfile!.full_name, driver_profile_id: myProfile!.id })
+                    .eq("id", selectedDelivery.id);
+                  setSelectedDelivery(prev => prev ? { ...prev, driver_name: myProfile!.full_name, driver_profile_id: myProfile!.id } : null);
+                  refreshStops();
+                  toast.success("Delivery claimed");
+                }}
+              >
+                <User className="w-4 h-4" />
+                Claim This Delivery
+              </Button>
+            )}
+            {(selectedDelivery.driver_name || selectedDelivery.driver_profile_id) && (
+              <Button
+                className="w-full gap-2"
+                onClick={() => handleStartDelivery(selectedDelivery.id)}
+              >
+                <Truck className="w-4 h-4" />
+                Start Delivery
+              </Button>
+            )}
           </div>
         )}
 
@@ -464,8 +485,8 @@ export default function DriverDashboard() {
           {!isLoading && deliveries.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Package className="w-12 h-12 mb-3 opacity-40" />
-              <p className="text-sm font-medium">No deliveries assigned</p>
-              <p className="text-xs mt-1">Deliveries assigned to you will appear here</p>
+              <p className="text-sm font-medium">No deliveries available</p>
+              <p className="text-xs mt-1">Assigned and unassigned deliveries will appear here</p>
             </div>
           )}
         </div>
