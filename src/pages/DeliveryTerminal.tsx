@@ -142,7 +142,7 @@ export default function DeliveryTerminal() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header bar */}
-      <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 bg-card/90 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 bg-card/90 backdrop-blur border-b border-border print:hidden">
         <div className="flex items-center gap-3">
           <Link to="/shopfloor/delivery-ops" className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -157,7 +157,13 @@ export default function DeliveryTerminal() {
         </Button>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-5 space-y-5">
+      <div className="driver-dropoff-print max-w-2xl mx-auto px-4 py-5 space-y-5">
+        {/* Print-only header */}
+        <div className="hidden print-only">
+          <h1 className="text-xl font-black tracking-wider uppercase">{customerName}</h1>
+          <p className="text-xs tracking-widest uppercase">Packing Slip — Delivery Terminal</p>
+          <hr className="my-2" />
+        </div>
         {completed && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -180,7 +186,7 @@ export default function DeliveryTerminal() {
         )}
 
         {/* Photo & Signature side by side */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 print:hidden">
           {/* Site Drop Photo */}
           <div className="flex flex-col gap-1.5">
             <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold">Site Drop Photo</p>
@@ -250,9 +256,9 @@ export default function DeliveryTerminal() {
         {/* Submit */}
         {!completed && (
           <Button
+            className="w-full h-12 text-sm font-bold tracking-wider uppercase print:hidden"
             onClick={handleSubmit}
             disabled={saving || (!photoFile && !signatureData)}
-            className="w-full h-12 text-sm font-bold tracking-wider uppercase"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Confirm Delivery
