@@ -748,9 +748,36 @@ Deno.serve(async (req) => {
       toolLoopIterations++;
     }
 
-    // Fallback for empty reply
+    // Recovery: if reply is empty after tool loop, force a text-only AI call
+    if (!reply) {
+      console.warn("⚠️ Empty reply after tool loop — attempting recovery call without tools");
+      try {
+        const recoveryMessages = [
+          ...messages,
+          ...accumulatedTurns,
+          { role: "user" as const, content: "Please provide your complete analysis and response as text now. Synthesize all the data you've processed into a clear, actionable briefing." }
+        ];
+        
+        const recoveryResult = await callAI({
+          provider: modelConfig.provider,
+          model: modelConfig.model,
+          messages: recoveryMessages,
+          maxTokens: modelConfig.maxTokens,
+          temperature: modelConfig.temperature,
+          // No tools — forces text response
+          fallback: { provider: "gemini", model: "gemini-2.5-pro" },
+        });
+        
+        reply = recoveryResult.content || "";
+        if (reply) console.log("✅ Recovery call succeeded — got text response");
+      } catch (recoveryErr) {
+        console.error("❌ Recovery call failed:", recoveryErr);
+      }
+    }
+
+    // Final fallback for empty reply
     if (!reply && !createdNotifications.length) {
-      reply = "[STOP] I processed the data but couldn't generate a text response. Please check the notifications/tasks created.";
+      reply = "I processed the data but couldn't generate a text response. Please try again or rephrase your question.";
     }
 
     // QA Reviewer Layer — validate high-risk agent outputs
