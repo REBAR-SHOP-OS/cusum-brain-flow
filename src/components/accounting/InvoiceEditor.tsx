@@ -44,7 +44,7 @@ function rawField(invoice: QBInvoice, key: string): unknown {
 function formatAddr(addr: Record<string, unknown> | undefined): string {
   if (!addr) return "";
   return [addr.Line1, addr.Line2, addr.Line3, addr.Line4, addr.City, addr.CountrySubDivisionCode, addr.PostalCode]
-    .filter(Boolean)
+    .filter(v => v && v !== false && String(v) !== "false")
     .join("\n");
 }
 
