@@ -39,7 +39,7 @@ const navCommands: NavCommand[] = [
   { label: "Station Dashboard", icon: Factory, href: "/shopfloor/station", group: "Operations" },
   { label: "Office Portal", icon: LayoutGrid, href: "/office", roles: ["admin", "office"], group: "Operations" },
   { label: "Inventory", icon: Package, href: "/office", roles: ["admin", "office"], group: "Operations" },
-  { label: "Deliveries", icon: Truck, href: "/deliveries", group: "Operations" },
+  
   { label: "Brain / Knowledge", icon: Brain, href: "/brain", group: "System" },
   { label: "Phone Calls", icon: Phone, href: "/phonecalls", group: "System" },
   { label: "Admin Panel", icon: Shield, href: "/admin", roles: ["admin"], group: "System" },

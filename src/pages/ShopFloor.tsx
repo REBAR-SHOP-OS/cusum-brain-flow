@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { 
   Factory, 
   ShieldCheck, 
-  Send, 
+   
   PackageCheck,
   ArrowLeft,
   ClipboardList
@@ -42,12 +42,6 @@ const hubCards: HubCard[] = [
     subtitle: "LOAD & EVIDENCE",
     icon: <PackageCheck className="w-7 h-7" />,
     to: "/shopfloor/loading",
-  },
-  {
-    label: "DELIVERY",
-    subtitle: "DISPATCH & LOADING",
-    icon: <Send className="w-7 h-7" />,
-    to: "/deliveries",
   },
   {
     label: "PICKUP ST.",

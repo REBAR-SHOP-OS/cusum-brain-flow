@@ -26,7 +26,7 @@ import { Card } from "@/components/ui/card";
 
 const TOOL_LABELS: Record<string, string> = {
   update_machine_status: "Update Machine Status",
-  update_delivery_status: "Update Delivery Status",
+  
   update_lead_status: "Update Lead Status",
   update_cut_plan_status: "Update Cut Plan Status",
   create_event: "Log Activity Event",

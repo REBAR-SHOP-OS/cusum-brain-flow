@@ -31,7 +31,7 @@ import { logPipelineTransition } from "@/lib/logPipelineTransition";
 import { QualificationGateModal } from "@/components/pipeline/gates/QualificationGateModal";
 import { PricingGateModal } from "@/components/pipeline/gates/PricingGateModal";
 import { LossGateModal } from "@/components/pipeline/gates/LossGateModal";
-import { DeliveryGateModal } from "@/components/pipeline/gates/DeliveryGateModal";
+
 import { MobilePipelineView } from "@/components/pipeline/MobilePipelineView";
 import { KeyboardShortcutHelp } from "@/components/pipeline/KeyboardShortcutHelp";
 
@@ -826,30 +826,11 @@ export default function Pipeline() {
             gateStep={currentGateIndex}
             gateTotalSteps={activeGates.length}
           />
-          <DeliveryGateModal
-            open={currentGate === "delivery"}
-            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
-            leadId={pendingTransition.leadId}
-            companyId={pendingCompanyId}
-            customerId={pendingCustomerId}
-            onComplete={handleGateComplete}
-            gateStep={currentGateIndex}
-            gateTotalSteps={activeGates.length}
-            expectedValue={pendingLead?.expected_value ?? null}
-          />
           <LossGateModal
             open={currentGate === "loss"}
             onOpenChange={(open) => { if (!open) handleGateCancel(); }}
             leadId={pendingTransition.leadId}
             companyId={pendingCompanyId}
-            onComplete={handleGateComplete}
-          />
-          <DeliveryGateModal
-            open={currentGate === "delivery"}
-            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
-            leadId={pendingTransition.leadId}
-            companyId={pendingCompanyId}
-            customerId={pendingCustomerId}
             onComplete={handleGateComplete}
           />
         </>
