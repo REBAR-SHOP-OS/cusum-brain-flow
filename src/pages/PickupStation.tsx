@@ -28,7 +28,7 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
-  const { bundles } = useCompletedBundles();
+  const { bundles } = useCompletedBundles({ pickupOnly: true });
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());

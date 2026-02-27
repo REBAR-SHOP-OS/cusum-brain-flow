@@ -23,13 +23,14 @@ export interface CompletedBundleItem {
   asa_shape_code: string | null;
 }
 
-export function useCompletedBundles() {
+export function useCompletedBundles(options?: { pickupOnly?: boolean }) {
+  const pickupOnly = options?.pickupOnly ?? false;
   const { user } = useAuth();
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["completed-bundles", companyId],
+    queryKey: ["completed-bundles", companyId, pickupOnly],
     enabled: !!user && !!companyId,
     queryFn: async () => {
       const { data: items, error: err } = await supabase
@@ -78,6 +79,19 @@ export function useCompletedBundles() {
           totalPieces: data.items.reduce((sum, i) => sum + i.total_pieces, 0),
         });
       }
+      if (pickupOnly) {
+        const { data: deliveryPlans } = await supabase
+          .from("deliveries")
+          .select("cut_plan_id")
+          .eq("company_id", companyId!)
+          .not("cut_plan_id", "is", null);
+
+        const deliveryPlanIds = new Set(
+          (deliveryPlans ?? []).map((d) => d.cut_plan_id)
+        );
+        return bundles.filter((b) => !deliveryPlanIds.has(b.cutPlanId));
+      }
+
       return bundles;
     },
   });
