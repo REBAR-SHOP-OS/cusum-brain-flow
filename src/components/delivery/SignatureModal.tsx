@@ -38,19 +38,6 @@ export function SignatureModal({ open, onOpenChange, onSave, title }: SignatureM
     if (open) resetAll();
   }, [open, resetAll]);
 
-  // Canvas setup
-  useEffect(() => {
-    if (!open || tab !== "draw") return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-  }, [open, tab]);
-
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -68,6 +55,10 @@ export function SignatureModal({ open, onOpenChange, onSave, title }: SignatureM
     e.preventDefault();
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     const p = getPos(e);
     ctx.beginPath();
     ctx.moveTo(p.x, p.y);
