@@ -1,51 +1,18 @@
 
 
-## Fix: Vizzy [STOP] Empty Response Bug
+## Fix: Vizzy (assistant agent) Has No Business Data
 
-The `[STOP] I processed the data but couldn't generate a text response` error occurs because:
+**Root Cause**: In `supabase/functions/ai-agent/index.ts` line 383, executive context is only fetched for `data`, `empire`, and `commander` agents. The `assistant` agent (Vizzy) gets basic context only — no financials, no production KPIs, no pipeline data. That's why she says "I do not have access to a real-time dashboard."
 
-1. The AI model (gemini-2.5-flash) processes the massive context and returns **tool_calls without text content** → `reply = ""`
-2. After tool execution, follow-up calls may also return empty content
-3. The fallback at line 752 triggers, showing the [STOP] message
+### Change
 
-### Root Cause
-The model is overwhelmed by the large context or only returns tool calls. There's no recovery mechanism to force a text response.
-
-### Changes
-
-**1. `supabase/functions/ai-agent/index.ts` (lines 750-754)** — Add a recovery call when reply is empty
-
-After the tool loop ends with an empty reply, make one final AI call **without tools** (forcing text output) with a simplified prompt asking the model to synthesize its findings into a response:
+**`supabase/functions/ai-agent/index.ts` (line 383)** — Add `assistant` to the executive context condition:
 
 ```
-if (!reply) {
-  // Recovery: force text generation without tools
-  const recoveryMessages = [
-    ...messages,
-    ...accumulatedTurns,
-    { role: "user", content: "Please provide your complete analysis and response as text now. Synthesize all the data you've processed into a clear briefing." }
-  ];
-  
-  const recoveryResult = await callAI({
-    provider: modelConfig.provider,
-    model: modelConfig.model,
-    messages: recoveryMessages,
-    maxTokens: modelConfig.maxTokens,
-    temperature: modelConfig.temperature,
-    // No tools — forces text response
-    fallback: { provider: "gemini", model: "gemini-2.5-pro" },
-  });
-  
-  reply = recoveryResult.content || "";
-}
+if (agent === "data" || agent === "empire" || agent === "commander" || agent === "assistant") {
 ```
 
-This removes the `[STOP]` dead-end entirely. If the recovery also fails, the existing fallback message remains as a last resort.
+This single-line change gives Vizzy the full executive context (financials, production, pipeline, deliveries, team presence) that she needs for daily briefings and strategic analysis.
 
-**2. Redeploy `ai-agent` edge function**
-
-### Technical Details
-- The recovery call uses **no `tools` parameter**, which forces the model to respond with text content instead of tool calls
-- The fallback escalates to `gemini-2.5-pro` (larger model, better at synthesizing large context)
-- The accumulated tool results are preserved in the conversation, so the recovery call has all the data the model already fetched
+**Redeploy `ai-agent` edge function.**
 
