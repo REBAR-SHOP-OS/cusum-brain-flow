@@ -11,6 +11,7 @@ interface ChecklistItem {
   total_pieces?: number;
   bar_code?: string;
   cut_length_mm?: number;
+  asa_shape_code?: string;
 }
 
 interface SlipMeta {
@@ -52,7 +53,7 @@ export function PackingSlipPreview({ slipMeta, customerName, siteAddress, items,
         <td style="padding:6px 8px;color:#374151;">${it.mark_number || ""}</td>
         <td style="padding:6px 24px 6px 8px;text-align:right;font-weight:700;">${it.total_pieces || 0}</td>
         <td style="padding:6px 8px 6px 24px;color:#374151;">${it.bar_code || ""}</td>
-        <td style="padding:6px 8px;color:#374151;"></td>
+        <td style="padding:6px 8px;color:#374151;">${it.asa_shape_code || ""}</td>
         <td style="padding:6px 8px;color:#374151;">${formatCutLength(it.cut_length_mm)}</td>
       </tr>
     `).join("");
@@ -196,7 +197,7 @@ export function PackingSlipPreview({ slipMeta, customerName, siteAddress, items,
                 <td className="py-2 px-2 text-gray-700">{item.mark_number || ""}</td>
                 <td className="py-2 pr-6 text-right font-bold tabular-nums">{item.total_pieces || 0}</td>
                 <td className="py-2 pl-6 text-gray-700">{item.bar_code || ""}</td>
-                <td className="py-2 px-2 text-gray-700"></td>
+                <td className="py-2 px-2 text-gray-700">{item.asa_shape_code || ""}</td>
                 <td className="py-2 px-2 text-gray-700">{formatCutLength(item.cut_length_mm)}</td>
               </tr>
             ))}

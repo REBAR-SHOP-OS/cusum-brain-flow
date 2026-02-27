@@ -123,6 +123,7 @@ export default function LoadingStation() {
       const itemsJson = checklistItems.map((item) => ({
         id: item.id,
         mark_number: item.mark_number,
+        drawing_ref: item.drawing_ref,
         bar_code: item.bar_code,
         cut_length_mm: item.cut_length_mm,
         total_pieces: item.total_pieces,
