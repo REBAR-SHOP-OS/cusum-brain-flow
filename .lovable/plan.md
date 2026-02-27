@@ -1,37 +1,54 @@
 
 
-## Plan: Fix Deliveries Page Bugs & Add Driver Assignment
+## Plan: Interactive Packing Slip Signatures
 
-### Issues Found
+### Overview
+Upgrade the DriverDropoff packing slip to support rich signature capture with draw/type/upload modes, timestamps, auto-completion logic, and print/PDF actions.
 
-1. **"Today" tab shows 0 deliveries** — The delivery has `scheduled_date = 2026-02-26 00:00:00+00` (timestamp with time zone). The code does `d.scheduled_date?.split("T")[0]` to get the date, but Supabase returns timestamps that may not have a `T` separator. More critically, `today` is derived from `new Date().toISOString().split("T")[0]` which works, but the DB value returned via the Supabase JS client should have the `T`. This needs investigation — the delivery IS scheduled for today but shows under 0. The real issue: line 222-224 categorises "today" as `dateOnly <= today` but only from `pendingDeliveries`. Since the delivery IS pending and scheduled for today, this should work. Let me verify the actual returned format matches.
+### New Component: `src/components/delivery/SignatureModal.tsx`
+A reusable modal with 3 tabs:
+- **Draw** — Reuses existing `SignaturePad` canvas (mobile-friendly, full-width)
+- **Type** — Text input rendered in a cursive font preview (e.g., `font-family: 'Brush Script MT', cursive`)
+- **Upload** — File input accepting PNG/JPG with image preview
 
-   **Actually** — the Supabase JS client returns ISO strings with `T`, so `split("T")` works. The delivery date `2026-02-26` equals `today` (`2026-02-26`), so `dateOnly <= today` is true. The delivery should appear in "Today". But the screenshot shows the user has **Driver Mode ON** — that's the filter. With Driver Mode on, `filteredDeliveries` is empty because `driver_name` is null, so all tabs show 0.
+Returns a base64 data URL on save regardless of mode. Props: `open`, `onOpenChange`, `onSave(dataUrl: string)`, `title: string`.
 
-2. **Driver Mode filters out all deliveries** — `filteredDeliveries` (line 203) requires `d.driver_name === myProfile.full_name`, but `driver_name` is null. Also only checks `driver_name`, not `driver_profile_id`.
+### Changes to `src/pages/DriverDropoff.tsx`
 
-3. **No UI to assign a driver** to a delivery — there's no way to set `driver_name` or `driver_profile_id`.
+1. **Replace inline SignaturePads** with clickable signature areas:
+   - Empty state: dashed border box with "Tap to Sign" + pen icon
+   - Signed state: rendered signature image + green check + timestamp
+   - Clicking opens `SignatureModal`
 
-### Changes
+2. **Store timestamps** alongside signature data:
+   - `driverSignedAt: Date | null`
+   - `customerSignedAt: Date | null`
+   - Display formatted timestamp below each signature
 
-**`src/pages/Deliveries.tsx`**
+3. **Auto-completion logic**: When both signatures + photo + all items checked → auto-enable submit (already partly exists via `canSubmit`)
 
-1. **Fix Driver Mode filter** — Also match `driver_profile_id` (like DriverDashboard does), and when Driver Mode is on, still show unassigned deliveries (so the user can self-assign):
-   ```typescript
-   const filteredDeliveries = driverMode && myProfile
-     ? deliveries.filter(d => 
-         d.driver_name === myProfile.full_name || 
-         d.driver_profile_id === myProfile.id ||
-         !d.driver_name  // Show unassigned so driver can claim
-       )
-     : deliveries;
-   ```
+4. **Add action buttons** below the document:
+   - **Print** — `window.print()` with print-specific CSS
+   - **Download PDF** — Use `html2canvas` (already installed) to capture the slip div and trigger download
+   - **Send to Customer** — Placeholder button (toast "Coming soon" for now, since email integration is separate)
 
-2. **Add driver self-assign button** — In the detail panel, when Driver Mode is on and no driver is assigned, show a "Claim Delivery" button that sets `driver_name` and `driver_profile_id` on the delivery.
+5. **Persist signature metadata** on submit:
+   - Driver signature path → `delivery_stops.notes` (existing pattern: `driver_signature:path`)
+   - Customer signature path → `delivery_stops.pod_signature` (existing)
+   - Both timestamps persisted in notes field as JSON: `{"driver_sig":"path","driver_signed_at":"ISO","customer_signed_at":"ISO"}`
 
-3. **Add "Assign Driver" dropdown** — In the detail panel header (non-driver-mode), add a simple button to assign `driver_name` to the current user (or type a name). This ensures deliveries can get a driver assigned.
+### Changes to `src/components/shopfloor/SignaturePad.tsx`
+- Already fixed stroke color to `#000000` — no further changes needed
 
-4. **Update Delivery interface** — Add `driver_profile_id` to the `Delivery` interface since the column exists in the DB.
+### Print CSS
+Add `@media print` rules to `src/index.css`:
+- Hide header nav, bottom CTA bar, action buttons
+- Show only the packing slip document at full width
+- Render signature images inline (already base64)
 
-5. **Fix myProfile query** — Currently only fetches `full_name`. Also fetch `id` so we can match `driver_profile_id` and set it on claim.
+### Technical Notes
+- `html2canvas` is already in dependencies — will use it for PDF generation via canvas → blob → download
+- No DB schema changes needed — reusing existing `pod_signature`, `pod_photo_url`, `notes` columns
+- The `SignatureModal` component will be ~120 lines, using existing Dialog + Tabs UI primitives
+- Type-signature renders text on a hidden canvas to produce consistent data URL output
 
