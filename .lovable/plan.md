@@ -1,48 +1,51 @@
 
 
-## Plan: Upgrade Vizzy to Executive Intelligence Mode
+## Fix: Vizzy [STOP] Empty Response Bug
 
-Three files to modify. No schema changes. Two edge functions to redeploy.
+The `[STOP] I processed the data but couldn't generate a text response` error occurs because:
 
-### 1. `src/lib/vizzyContext.ts` — Upgrade the client-side system prompt (voice/Vizzy sessions)
+1. The AI model (gemini-2.5-flash) processes the massive context and returns **tool_calls without text content** → `reply = ""`
+2. After tool execution, follow-up calls may also return empty content
+3. The fallback at line 752 triggers, showing the [STOP] message
 
-Replace the opening personality block (lines 66-73) with the Executive Intelligence identity:
-- COO+CFO hybrid, not a passive assistant
-- Response format mandate: What happened → Why it matters → Risk level → Recommended action → Confidence
-- CEO behavioral intelligence section (Sattar's risk tolerance, communication style adaptation)
-- Proactive intelligence rules (anomaly detection, pattern recognition, cross-system correlation)
-- Advanced reasoning rules (challenge assumptions, flag inconsistencies, separate noise from signal)
-- Explainability requirement (data sources, reasoning logic, risk assessment, alternative interpretation)
+### Root Cause
+The model is overwhelmed by the large context or only returns tool calls. There's no recovery mechanism to force a text response.
 
-Replace the closing INSTRUCTIONS block (lines 199-204) with upgraded analytical directives:
-- Build mental models: CLV, payment delay risk, delivery delay prediction, production bottleneck detection, revenue velocity
-- Prioritize by financial impact → legal risk → customer retention → operational slowdown
-- Never give shallow summaries; always analyze root cause
-- Security & governance: log analysis steps, never auto-execute financial changes
+### Changes
 
-### 2. `supabase/functions/admin-chat/index.ts` — Upgrade the chat system prompt (lines 1154-1245)
+**1. `supabase/functions/ai-agent/index.ts` (lines 750-754)** — Add a recovery call when reply is empty
 
-Inject the same Executive Intelligence standards into the JARVIS chat prompt:
-- Add "INTELLIGENCE STANDARD" section after capabilities
-- Add "ANALYTICAL MODELS" section (CLV, payment delay risk, bottleneck detection)
-- Add "RESPONSE FORMAT" mandate (every substantive answer must include what/why/risk/action/confidence)
-- Add "PROACTIVE INTELLIGENCE MODE" with specific thresholds and priority ranking
-- Add "EXPLAINABILITY REQUIREMENT"
-- Upgrade "RULES" section with: challenge assumptions, flag cross-system inconsistencies, detect duplicates/automation errors
+After the tool loop ends with an empty reply, make one final AI call **without tools** (forcing text output) with a simplified prompt asking the model to synthesize its findings into a response:
 
-### 3. `supabase/functions/vizzy-daily-brief/index.ts` — Upgrade daily brief from summary to executive intelligence brief (lines 78-97)
+```
+if (!reply) {
+  // Recovery: force text generation without tools
+  const recoveryMessages = [
+    ...messages,
+    ...accumulatedTurns,
+    { role: "user", content: "Please provide your complete analysis and response as text now. Synthesize all the data you've processed into a clear briefing." }
+  ];
+  
+  const recoveryResult = await callAI({
+    provider: modelConfig.provider,
+    model: modelConfig.model,
+    messages: recoveryMessages,
+    maxTokens: modelConfig.maxTokens,
+    temperature: modelConfig.temperature,
+    // No tools — forces text response
+    fallback: { provider: "gemini", model: "gemini-2.5-pro" },
+  });
+  
+  reply = recoveryResult.content || "";
+}
+```
 
-Replace the 5-bullet-point format with the executive brief format:
-- Revenue trend vs prior period
-- Cash flow forecast risk signals
-- Production risk signals and bottleneck detection
-- Delivery performance health
-- High-value customer changes
-- Automation failures or system anomalies
-- Top strategic recommendation with reasoning
-- Ranked by severity, not category
-- Each item must include risk level and recommended action
+This removes the `[STOP]` dead-end entirely. If the recovery also fails, the existing fallback message remains as a last resort.
 
-### Deployment
-- Redeploy `admin-chat` and `vizzy-daily-brief` edge functions
+**2. Redeploy `ai-agent` edge function**
+
+### Technical Details
+- The recovery call uses **no `tools` parameter**, which forces the model to respond with text content instead of tool calls
+- The fallback escalates to `gemini-2.5-pro` (larger model, better at synthesizing large context)
+- The accumulated tool results are preserved in the conversation, so the recovery call has all the data the model already fetched
 
