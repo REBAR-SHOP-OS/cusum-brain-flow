@@ -14,6 +14,9 @@ import {
   ChevronRight, ChevronLeft, FolderOpen, ShieldCheck, Truck,
   Upload, Loader2, FileSignature,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 // ─── Types ─────────────────────────────────────────────────
@@ -57,6 +60,9 @@ interface LoadingPhoto {
 export function PackingSlipsView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProject, setSelectedProject] = useState<ProjectGroup | null>(null);
+  const [selectedStop, setSelectedStop] = useState<any | null>(null);
+  const [podUrls, setPodUrls] = useState<{ signature?: string; photo?: string }>({});
+  const [podLoading, setPodLoading] = useState(false);
   const { user } = useAuth();
   const { companyId } = useCompanyId();
   const { toast } = useToast();
@@ -129,7 +135,36 @@ export function PackingSlipsView() {
     p.items.some((i) => (i.mark_number || "").toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // ── If a project is selected, show detail view ──
+  // ── Resolve signed URLs when a stop is selected ──
+  const handleStopClick = async (stop: any) => {
+    setSelectedStop(stop);
+    setPodUrls({});
+    setPodLoading(true);
+    try {
+      const resolved: { signature?: string; photo?: string } = {};
+      for (const [key, rawPath] of [["signature", stop.pod_signature], ["photo", stop.pod_photo_url]] as const) {
+        if (!rawPath) continue;
+        // If it's already a full signed URL, use directly
+        if (rawPath.includes("token=") || rawPath.startsWith("data:")) {
+          resolved[key] = rawPath;
+          continue;
+        }
+        let storagePath = rawPath;
+        const marker = "/object/public/clearance-photos/";
+        const idx = rawPath.indexOf(marker);
+        if (idx !== -1) storagePath = rawPath.substring(idx + marker.length);
+        const { data } = await supabase.storage.from("clearance-photos").createSignedUrl(storagePath, 3600);
+        if (data?.signedUrl) resolved[key] = data.signedUrl;
+      }
+      setPodUrls(resolved);
+    } catch (err) {
+      console.error("Failed to resolve POD URLs", err);
+    } finally {
+      setPodLoading(false);
+    }
+  };
+
+
   if (selectedProject) {
     return (
       <ProjectDetailView
@@ -266,30 +301,123 @@ export function PackingSlipsView() {
                     <p className="text-xs text-muted-foreground/60 mt-1">POD signatures will appear here when deliveries are completed</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                    {signedDeliveries.map((stop: any) => (
-                      <Card key={stop.id} className="border-border">
-                        <CardContent className="p-5 space-y-3">
-                          <div className="flex items-center gap-2">
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                      {signedDeliveries.map((stop: any) => (
+                        <Card
+                          key={stop.id}
+                          className="border-border cursor-pointer hover:shadow-lg hover:border-primary/30 transition-all"
+                          onClick={() => handleStopClick(stop)}
+                        >
+                          <CardContent className="p-5 space-y-3">
+                            <div className="flex items-center gap-2">
+                              <FileSignature className="w-5 h-5 text-primary" />
+                              <h3 className="text-sm font-black uppercase text-foreground">
+                                {stop.deliveries?.delivery_number || "Delivery"}
+                              </h3>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{stop.address || "No address"}</p>
+                            <p className="text-xs text-muted-foreground">Customer: {stop.customers?.name || "—"}</p>
+                            <div className="flex gap-2">
+                              {stop.pod_signature && (
+                                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded uppercase font-semibold">Signed</span>
+                              )}
+                              {stop.pod_photo_url && (
+                                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded uppercase font-semibold">Photo</span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-end pt-2 border-t border-border/30">
+                              <span className="flex items-center gap-1 text-[11px] font-semibold text-primary uppercase tracking-widest">
+                                View Details <ChevronRight className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+
+                    <Dialog open={!!selectedStop} onOpenChange={(open: boolean) => { if (!open) setSelectedStop(null); }}>
+                      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase">
                             <FileSignature className="w-5 h-5 text-primary" />
-                            <h3 className="text-sm font-black uppercase text-foreground">
-                              {stop.deliveries?.delivery_number || "Delivery"}
-                            </h3>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{stop.address || "No address"}</p>
-                          <p className="text-xs text-muted-foreground">Customer: {stop.customers?.name || "—"}</p>
-                          <div className="flex gap-2">
-                            {stop.pod_signature && (
-                              <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded uppercase font-semibold">Signed</span>
+                            {selectedStop?.deliveries?.delivery_number || "Delivery"}
+                          </DialogTitle>
+                          <DialogDescription>
+                            Proof of delivery details
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        {selectedStop && (
+                          <div className="space-y-5">
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-0.5">Address</p>
+                                <p className="font-medium text-foreground">{selectedStop.address || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-0.5">Customer</p>
+                                <p className="font-medium text-foreground">{selectedStop.customers?.name || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-0.5">Driver</p>
+                                <p className="font-medium text-foreground">{selectedStop.deliveries?.driver_name || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-0.5">Date</p>
+                                <p className="font-medium text-foreground">
+                                  {selectedStop.deliveries?.scheduled_date
+                                    ? new Date(selectedStop.deliveries.scheduled_date).toLocaleDateString()
+                                    : "—"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {selectedStop.pod_signature && (
+                              <div className="space-y-2">
+                                <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-semibold">POD Signature</p>
+                                {podLoading ? (
+                                  <div className="h-40 rounded-lg bg-muted flex items-center justify-center">
+                                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                                  </div>
+                                ) : podUrls.signature ? (
+                                  <div className="border border-border rounded-lg p-3 bg-background">
+                                    <img src={podUrls.signature} alt="POD Signature" className="max-h-48 w-auto mx-auto object-contain" />
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground italic">Unable to load signature</p>
+                                )}
+                              </div>
                             )}
-                            {stop.pod_photo_url && (
-                              <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded uppercase font-semibold">Photo</span>
+
+                            {selectedStop.pod_photo_url && (
+                              <div className="space-y-2">
+                                <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-semibold">Site Drop Photo</p>
+                                {podLoading ? (
+                                  <div className="h-48 rounded-lg bg-muted flex items-center justify-center">
+                                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                                  </div>
+                                ) : podUrls.photo ? (
+                                  <div className="border border-border rounded-lg overflow-hidden">
+                                    <img src={podUrls.photo} alt="Site drop photo" className="max-h-72 w-full object-contain bg-muted" />
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground italic">Unable to load photo</p>
+                                )}
+                              </div>
+                            )}
+
+                            {selectedStop.notes && (
+                              <div className="space-y-1">
+                                <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-semibold">Notes</p>
+                                <p className="text-sm text-foreground">{selectedStop.notes}</p>
+                              </div>
                             )}
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                  </>
                 )}
               </div>
             </TabsContent>
