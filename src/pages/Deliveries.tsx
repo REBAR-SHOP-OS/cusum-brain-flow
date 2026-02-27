@@ -757,9 +757,11 @@ function DeliveryCard({ delivery, isSelected, onClick, onRequestDelete, deleting
               : delivery.delivery_number}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
-            <Badge className={statusColors[status]}>
-              {status}
-            </Badge>
+            {status !== "pending" && (
+              <Badge className={statusColors[status]}>
+                {status}
+              </Badge>
+            )}
             <Button
               variant="outline"
               size="icon"
