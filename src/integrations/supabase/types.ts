@@ -12897,6 +12897,7 @@ export type Database = {
           customer_qb_id: string
           open_balance: number
           open_invoice_count: number
+          total_invoice_count: number
         }[]
       }
       get_table_stats: {
