@@ -199,7 +199,7 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
 
           <Button
             onClick={handleSubmit}
-            disabled={saving || (!signatureData && !photoFile)}
+            disabled={saving || !signatureData || !photoFile}
             className="w-full gap-2"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
