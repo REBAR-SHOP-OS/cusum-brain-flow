@@ -5,10 +5,11 @@ import { useCompanyId } from "@/hooks/useCompanyId";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SignaturePad } from "@/components/delivery/SignaturePad";
-import { ArrowLeft, Navigation, Camera, Download, Loader2, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Navigation, Camera, Download, Loader2, CheckCircle2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import brandLogo from "@/assets/brand-logo.png";
+import { PackingSlipPreview } from "@/components/delivery/PackingSlipPreview";
 
 interface ChecklistItem {
   drawing_ref?: string;
@@ -42,6 +43,7 @@ export default function DeliveryTerminal() {
   const [deliveryId, setDeliveryId] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
   const [slipMeta, setSlipMeta] = useState<SlipMeta>({});
+  const [showPreview, setShowPreview] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -276,7 +278,13 @@ export default function DeliveryTerminal() {
                 <p className="text-xs text-gray-500">Delivered By (Signature)</p>
               </div>
               <div>
-                <div className="border-b border-gray-400 mb-1 h-10"></div>
+                {signatureData ? (
+                  <div className="mb-1 h-10 flex items-end">
+                    <img src={signatureData} alt="Customer signature" className="max-h-[40px] max-w-[200px] object-contain" />
+                  </div>
+                ) : (
+                  <div className="border-b border-gray-400 mb-1 h-10"></div>
+                )}
                 <p className="text-xs text-gray-500">Received By (Signature)</p>
               </div>
             </div>
@@ -291,9 +299,20 @@ export default function DeliveryTerminal() {
 
         {/* ========== SCREEN-ONLY content below ========== */}
         {completed && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 print:hidden">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-bold tracking-wider text-emerald-400 uppercase">Delivery Confirmed</span>
+          <div className="space-y-2 print:hidden">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-bold tracking-wider text-emerald-400 uppercase">Delivery Confirmed</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2 text-xs uppercase tracking-wider"
+              onClick={() => setShowPreview(true)}
+            >
+              <FileText className="w-4 h-4" />
+              Preview Packing Slip
+            </Button>
           </div>
         )}
 
@@ -391,6 +410,17 @@ export default function DeliveryTerminal() {
           </Button>
         )}
       </div>
+
+      {showPreview && (
+        <PackingSlipPreview
+          slipMeta={slipMeta}
+          customerName={customerName}
+          siteAddress={siteAddress}
+          items={items}
+          signatureData={signatureData}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   );
 }
