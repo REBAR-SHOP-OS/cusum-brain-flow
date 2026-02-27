@@ -8,6 +8,7 @@ import { SignaturePad } from "@/components/delivery/SignaturePad";
 import { ArrowLeft, Navigation, Camera, Download, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import brandLogo from "@/assets/brand-logo.png";
 
 interface ChecklistItem {
   drawing_ref?: string;
@@ -16,6 +17,15 @@ interface ChecklistItem {
   bar_code?: string;
   cut_length_mm?: number;
   checked?: boolean;
+}
+
+interface SlipMeta {
+  slipNumber?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  shipTo?: string;
+  scope?: string;
+  deliveryDate?: string;
 }
 
 export default function DeliveryTerminal() {
@@ -31,6 +41,7 @@ export default function DeliveryTerminal() {
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [deliveryId, setDeliveryId] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [slipMeta, setSlipMeta] = useState<SlipMeta>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -50,13 +61,21 @@ export default function DeliveryTerminal() {
 
       const { data: slips } = await supabase
         .from("packing_slips")
-        .select("customer_name, items_json, site_address")
+        .select("customer_name, items_json, site_address, slip_number, invoice_number, invoice_date, ship_to, scope, delivery_date")
         .eq("delivery_id", stop.delivery_id)
         .eq("company_id", companyId);
 
       const slip = slips?.[0];
       setCustomerName(slip?.customer_name || "Customer");
       setSiteAddress(slip?.site_address || stop.address || "");
+      setSlipMeta({
+        slipNumber: slip?.slip_number || undefined,
+        invoiceNumber: slip?.invoice_number || undefined,
+        invoiceDate: slip?.invoice_date || undefined,
+        shipTo: slip?.ship_to || undefined,
+        scope: slip?.scope || undefined,
+        deliveryDate: slip?.delivery_date || undefined,
+      });
 
       const allItems: ChecklistItem[] = [];
       slips?.forEach((s) => {
@@ -103,7 +122,6 @@ export default function DeliveryTerminal() {
         if (!error) photoPath = path;
       }
 
-      // Save signature as base64 in pod_signature column
       const updates: Record<string, any> = {
         status: "delivered",
         pod_signature: signatureData,
@@ -129,6 +147,13 @@ export default function DeliveryTerminal() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const totalQty = items.reduce((sum, it) => sum + (it.total_pieces || 0), 0);
+
+  const formatCutLength = (mm?: number) => {
+    if (!mm) return "";
+    return `${(mm / 1000).toFixed(mm % 1000 === 0 ? 0 : 1)} m`;
   };
 
   if (loading) {
@@ -158,14 +183,115 @@ export default function DeliveryTerminal() {
       </header>
 
       <div className="driver-dropoff-print max-w-2xl mx-auto px-4 py-5 space-y-5">
-        {/* Print-only header */}
+        {/* ========== PRINT-ONLY: Branded Packing Slip ========== */}
         <div className="hidden print-only">
-          <h1 className="text-xl font-black tracking-wider uppercase">{customerName}</h1>
-          <p className="text-xs tracking-widest uppercase">Packing Slip — Delivery Terminal</p>
-          <hr className="my-2" />
+          <div className="bg-white text-black flex flex-col">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-center gap-3">
+                <img src={brandLogo} alt="Rebar.Shop" className="w-12 h-12 rounded-full object-contain" />
+                <div>
+                  <h1 className="text-lg font-bold text-gray-900">Rebar.Shop Inc</h1>
+                  <p className="text-xs text-gray-500">9 Cedar Ave, Thornhill L3T 3W1, Canada</p>
+                </div>
+              </div>
+              <h2 className="text-2xl font-black text-gray-900">Packing Slip</h2>
+            </div>
+
+            {/* Info grid row 1 */}
+            <div className="grid grid-cols-4 border border-gray-400 text-sm mb-0">
+              <div className="p-2 border-r border-gray-400">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Customer</p>
+                <p className="font-semibold">{customerName}</p>
+              </div>
+              <div className="p-2 border-r border-gray-400">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Ship To</p>
+                <p className="font-semibold">{slipMeta.shipTo || siteAddress || "—"}</p>
+              </div>
+              <div className="p-2 border-r border-gray-400">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Delivery #</p>
+                <p className="font-semibold">{slipMeta.slipNumber || "—"}</p>
+              </div>
+              <div className="p-2">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Delivery Date</p>
+                <p className="font-semibold">{slipMeta.deliveryDate || "—"}</p>
+              </div>
+            </div>
+
+            {/* Info grid row 2 */}
+            <div className="grid grid-cols-3 border border-t-0 border-gray-400 text-sm mb-6">
+              <div className="p-2 border-r border-gray-400">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Invoice #</p>
+                <p className="font-semibold">{slipMeta.invoiceNumber || "—"}</p>
+              </div>
+              <div className="p-2 border-r border-gray-400">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Invoice Date</p>
+                <p className="font-semibold">{slipMeta.invoiceDate || "—"}</p>
+              </div>
+              <div className="p-2">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Scope</p>
+                <p className="font-semibold">{slipMeta.scope || "—"}</p>
+              </div>
+            </div>
+
+            {/* Items table */}
+            <table className="w-full text-sm mb-6 border-collapse">
+              <thead>
+                <tr className="border-b-2 border-gray-900 bg-gray-50">
+                  <th className="text-left py-2 px-2 font-bold w-16">DW#</th>
+                  <th className="text-left py-2 px-2 font-bold w-20">Mark</th>
+                  <th className="text-right py-2 pr-6 font-bold w-20">Quantity</th>
+                  <th className="text-left py-2 pl-6 font-bold w-20">Size</th>
+                  <th className="text-left py-2 px-2 font-bold">Type</th>
+                  <th className="text-left py-2 px-2 font-bold w-28">Cut Length</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, idx) => (
+                  <tr key={idx} className="border-b border-gray-200">
+                    <td className="py-2 px-2 text-gray-600">{item.drawing_ref || ""}</td>
+                    <td className="py-2 px-2 text-gray-700">{item.mark_number || ""}</td>
+                    <td className="py-2 pr-6 text-right font-bold tabular-nums">{item.total_pieces || 0}</td>
+                    <td className="py-2 pl-6 text-gray-700">{item.bar_code || ""}</td>
+                    <td className="py-2 px-2 text-gray-700"></td>
+                    <td className="py-2 px-2 text-gray-700">{formatCutLength(item.cut_length_mm)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-900">
+                  <td className="py-2 px-2" colSpan={2}>
+                    <span className="font-bold">Total</span>
+                  </td>
+                  <td className="py-2 pr-6 text-right font-bold tabular-nums">{totalQty}</td>
+                  <td colSpan={3}></td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Signature section */}
+            <div className="grid grid-cols-2 gap-12 mt-8 mb-8">
+              <div>
+                <div className="border-b border-gray-400 mb-1 h-10"></div>
+                <p className="text-xs text-gray-500">Delivered By (Signature)</p>
+              </div>
+              <div>
+                <div className="border-b border-gray-400 mb-1 h-10"></div>
+                <p className="text-xs text-gray-500">Received By (Signature)</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="mt-auto pt-4 border-t border-gray-200 text-center text-[10px] text-gray-400 space-y-0.5">
+              <p>☎ 6472609403 · ✉ accounting@rebar.shop · http://www.rebar.shop</p>
+              <p>761487149RT0001</p>
+            </div>
+          </div>
         </div>
+
+        {/* ========== SCREEN-ONLY content below ========== */}
         {completed && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 print:hidden">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span className="text-xs font-bold tracking-wider text-emerald-400 uppercase">Delivery Confirmed</span>
           </div>
@@ -173,7 +299,7 @@ export default function DeliveryTerminal() {
 
         {/* Unloading Site */}
         {siteAddress && (
-          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-card/50">
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-card/50 print:hidden">
             <div>
               <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-0.5">Unloading Site</p>
               <p className="text-sm text-foreground font-medium">{siteAddress}</p>
@@ -221,9 +347,9 @@ export default function DeliveryTerminal() {
           </div>
         </div>
 
-        {/* Unloading Checklist */}
+        {/* Unloading Checklist — screen only */}
         {items.length > 0 && (
-          <div>
+          <div className="print:hidden">
             <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-2">
               Unloading Checklist ({items.filter((i) => i.checked).length}/{items.length})
             </p>
