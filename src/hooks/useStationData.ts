@@ -28,6 +28,7 @@ export interface StationItem {
   project_name: string | null;
   project_id: string | null;
   customer_name: string | null;
+  project_status: string | null;
 }
 
 export interface BarSizeGroup {
@@ -77,6 +78,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
             project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
             project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
             customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
+            project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
           })) as StationItem[];
       }
 
@@ -124,6 +126,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
             project_name: plan?.project_name || null,
             project_id: plan?.project_id || null,
             customer_name: (plan?.projects as any)?.customers?.name || null,
+            project_status: (plan?.projects as any)?.status || null,
           } as StationItem;
         });
     },
