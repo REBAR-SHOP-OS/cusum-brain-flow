@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
-import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router-dom";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle, Mic } from "lucide-react";
 import { VizzyVoiceChat } from "@/components/vizzy/VizzyVoiceChat";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ const TOOL_LABELS: Record<string, string> = {
 export default function LiveChat() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isSuperAdmin } = useSuperAdmin();
   const agent = getUserPrimaryAgent(user?.email);
   const agentKey = getUserPrimaryAgentKey(user?.email);
   const avatarImg = agent?.image || assistantHelper;
@@ -223,6 +225,8 @@ export default function LiveChat() {
       </div>
     ));
   };
+
+  if (!isSuperAdmin) return <Navigate to="/home" replace />;
 
   return (
     <TooltipProvider delayDuration={300}>

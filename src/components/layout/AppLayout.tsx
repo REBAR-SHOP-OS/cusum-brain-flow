@@ -12,6 +12,7 @@ import { ChatPanelProvider } from "@/contexts/ChatPanelContext";
 import { DockChatProvider } from "@/contexts/DockChatContext";
 import { DockChatBar } from "@/components/chat/DockChatBar";
 import { useAuth } from "@/lib/auth";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -23,6 +24,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const { user } = useAuth();
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
+  const { isSuperAdmin } = useSuperAdmin();
 
   return (
     <RoleGuard>
@@ -64,7 +66,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <MobileNavV2 />
 
             {/* Floating Vizzy avatar — always visible for super admin */}
-            <FloatingVizzyButton />
+            {isSuperAdmin && <FloatingVizzyButton />}
 
             {/* Screenshot Feedback button — internal @rebar.shop users only */}
             {isInternal && <ScreenshotFeedbackButton />}

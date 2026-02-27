@@ -61,7 +61,7 @@ serve(async (req) => {
     const isAdmin = !!adminRole;
 
     const context = await buildFullVizzyContext(supabase, user.id, {
-      includeFinancials: isAdmin,
+      includeFinancials: true,
     });
 
     const hour = new Date().getHours();
