@@ -1,31 +1,24 @@
 
 
-## Connect rebar.shop WordPress/WooCommerce Integration
+## Fix: Refresh button not working in Stripe → QB Sync Panel
 
-**Problem**: The rebar.shop card shows "available" (disconnected) even though all WP credentials (`WP_BASE_URL`, `WP_USERNAME`, `WP_APP_PASSWORD`, `WC_CONSUMER_KEY`, `WC_CONSUMER_SECRET`) are already stored as secrets. There's no status check handler for the `rebar-shop` integration in `useIntegrations.ts`.
+**Root Cause**: The Refresh button uses `isLoading` for the spinner, but `isLoading` is only `true` on the initial load (when there's no cached data). After the first load, `invalidateQueries` triggers a background refetch which sets `isFetching` to `true`, not `isLoading`. So the button appears to do nothing.
 
 ### Changes
 
-**1. `src/hooks/useIntegrations.ts`**
+**`src/components/integrations/StripeQBSyncPanel.tsx`**
 
-- Add `rebar-shop` to the `oauthIntegrations` array (so clicking Connect triggers the ConnectDialog flow instead of the field-entry setup dialog) — actually, better approach: add a status check for `rebar-shop` that calls the existing `wp-test` edge function.
+1. Destructure `isFetching` instead of (or in addition to) `isLoading` from the sync records query
+2. Use `isFetching` for the spinner animation on the Refresh icon
+3. Switch from `invalidateQueries` to `refetchQueries` for more explicit behavior
 
-- In `checkIntegrationStatus` (~line 265), add a handler for `rebar-shop`:
+Change the query destructuring (~line 53):
 ```typescript
-if (integrationId === "rebar-shop") {
-  const { data, error } = await supabase.functions.invoke("wp-test");
-  if (error) throw new Error(error.message);
-  const status = data?.ok ? "connected" : "error";
-  // update state + toast
-  return status;
-}
+const { data: syncRecords, isFetching } = useQuery({
 ```
 
-- In `checkAllStatuses` (~line 455), add a rebar-shop check block that calls `wp-test` and updates the integration status.
-
-- In `startOAuth` or equivalent, add a handler for `rebar-shop` that runs the same wp-test check (since clicking "Connect" when credentials already exist should just verify the connection).
-
-**2. `src/hooks/useIntegrations.ts`** — Add `rebar-shop` to the list that gets the ConnectDialog treatment, OR better: since credentials are already stored, make the "Connect" button directly test the connection via `wp-test` edge function.
-
-Add `"rebar-shop"` to the `oauthIntegrations` array so clicking it opens ConnectDialog, and add a handler in `startOAuth` for `rebar-shop` that invokes `wp-test` to verify the connection. If `ok: true`, set status to "connected" and save to `integration_connections` table.
+Change the Refresh button (~line 155) to use `isFetching` for the spinner:
+```typescript
+<RefreshCw className={`w-3 h-3 mr-1 ${isFetching ? "animate-spin" : ""}`} />
+```
 
