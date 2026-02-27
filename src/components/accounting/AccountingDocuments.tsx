@@ -164,12 +164,14 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
     invoiceNumber: inv.DocNumber,
     invoiceDate: new Date(inv.TxnDate).toLocaleDateString(),
     customerName: inv.CustomerRef?.name || "Unknown",
+    deliveryNumber: "",
+    deliveryDate: "",
+    scope: "",
     items: [{
-      date: new Date(inv.TxnDate).toLocaleDateString(),
-      description: "Rebar Fabrication & Supply",
-      quantity: `${inv.TotalAmt > 0 ? "1.00" : "0"} Units`,
+      quantity: inv.TotalAmt > 0 ? 1 : 0,
+      size: "—",
+      type: "Rebar Fabrication & Supply",
     }],
-    inclusions: [],
   });
 
   const getQuotationData = (est: typeof data.estimates[0]) => {
