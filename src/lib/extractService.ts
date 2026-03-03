@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getSignedFileUrl } from "@/lib/storageUtils";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -113,7 +114,6 @@ export async function uploadExtractFile(params: {
 
   if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
 
-  const { getSignedFileUrl } = await import("@/lib/storageUtils");
   const fileUrl = await getSignedFileUrl(storagePath);
 
   const { data, error } = await supabase

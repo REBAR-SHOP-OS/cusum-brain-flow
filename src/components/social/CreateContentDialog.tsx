@@ -11,6 +11,7 @@ import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useSocialPosts } from "@/hooks/useSocialPosts";
 import { supabase } from "@/integrations/supabase/client";
+import { getSignedFileUrl } from "@/lib/storageUtils";
 
 interface CreateContentDialogProps {
   open: boolean;
@@ -87,7 +88,6 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
         continue;
       }
 
-      const { getSignedFileUrl } = await import("@/lib/storageUtils");
       const signedUrl = await getSignedFileUrl(filePath);
       setUploadedMedia((prev) => [...prev, { name: file.name, url: signedUrl, type: file.type }]);
     }
