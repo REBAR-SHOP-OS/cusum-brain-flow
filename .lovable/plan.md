@@ -1,36 +1,21 @@
 
 
-# Fix: Broken Shape Schematic Images
+# Fix: Auto-update Work Order Status When Cut Plan Is Queued
+
+## Problem
+When a cut plan is queued to a machine (via `QueueToMachineDialog`), the associated work order status remains `pending` ("READY" + "Start" button). The cut plan items are already on the cutter, but the WO doesn't reflect that — it looks like nothing has started.
 
 ## Root Cause
-The `custom_shape_schematics` table stores image URLs pointing to a previous project's **public** storage bucket (`uavzziigfnqpfdkczbdo.supabase.co/storage/v1/object/public/shape-schematics/...`).
-
-The `useShapeSchematics` hook in `src/hooks/useShapeSchematics.ts` extracts the storage path from these URLs and tries to generate **signed URLs** from the current project's `shape-schematics` bucket — where the files don't exist. Result: broken images.
+`QueueToMachineDialog.handleQueue()` updates `cut_plans.status → queued` and creates `machine_runs`, but never touches the `work_orders` table. There's no trigger or logic linking cut plan status changes back to the parent work order.
 
 ## Fix
 
-### `src/hooks/useShapeSchematics.ts`
-The URLs are already **public** URLs (note `/object/public/` in the path). They work as-is — no signed URL generation needed.
+### `src/components/cutter/QueueToMachineDialog.tsx`
+After updating the cut plan status to `queued` (line 78), add logic to update linked work orders to `in_progress`:
 
-**Change**: Skip signed URL generation when the URL domain doesn't match the current project. Since these are public URLs from another host, just use them directly.
+1. Query distinct `work_order_id` values from the plan's `cut_plan_items`
+2. For each non-null work order ID, update `work_orders.status` to `in_progress` and set `actual_start` if not already set
+3. Invalidate the `work-orders` query cache
 
-Specifically, in the `fetchSchematics` function, only attempt signed URL creation if the URL contains the current project's Supabase domain. Otherwise, use the original `image_url` as-is:
-
-```ts
-const CURRENT_HOST = new URL(import.meta.env.VITE_SUPABASE_URL).host;
-
-// In the map:
-const path = extractStoragePath(s.image_url);
-const isCurrentProject = s.image_url.includes(CURRENT_HOST);
-
-if (path && isCurrentProject) {
-  // Generate signed URL for current project's private bucket
-  const { data: signedData } = await supabase.storage...
-} else {
-  // External/public URL — use as-is
-  return s;
-}
-```
-
-Single file change, no migration needed.
+This is a ~10-line addition after the existing `cut_plans.update` call. No migration needed.
 
