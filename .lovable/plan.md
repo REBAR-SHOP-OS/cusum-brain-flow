@@ -1,53 +1,65 @@
 
 
-# Fix MCP Server ERP API Output
+# Fix Build Error + ERP API Data Integrity
 
-## Root Cause
+## 1. Build Error (blocking)
 
-The MCP server edge function (`supabase/functions/mcp-server/index.ts`) has three problems:
+The PWA workbox `maximumFileSizeToCacheInBytes` is set to `5 * 1024 * 1024` (5,242,880 bytes) but the main bundle is 5,368,048 bytes — just over. Increase to 6 MiB.
 
-1. **`list_production_tasks`** (line 119): Queries `cut_plan_items` table — NOT `production_tasks`. Also missing `order_id` in SELECT.
-2. **`list_orders`** (line 173): SELECT doesn't include `order_kind`, `delivery_method`, or `due_date`.
-3. **`list_deliveries`** (line 199): SELECT doesn't include `order_id`.
-
-Additionally, the PostgREST schema cache likely needs a reload (`NOTIFY pgrst, 'reload schema'`) and a data backfill must run on the production database.
-
-## Build Error
-
-The build logs show successful transformation of 4814 modules — the output is truncated, not errored. The actual build likely succeeds. I'll confirm by checking the UI files for type errors.
-
-## Changes
-
-### 1. Patch `supabase/functions/mcp-server/index.ts`
-
-**`list_orders`** (line 173): Add `order_kind, delivery_method, due_date` to SELECT:
+**File**: `vite.config.ts` line 64
 ```
-"id, order_number, customer_id, status, total_amount, order_kind, delivery_method, due_date, notes, created_at"
+maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
 ```
 
-**`list_deliveries`** (line 199): Add `order_id` to SELECT:
+## 2. MCP `list_production_tasks` — query `production_tasks` directly
+
+Currently queries `cut_plan_items` which has no `order_id`. The `production_tasks` table already has `order_id` (added in migration). Replace the query to read from `production_tasks` with `order_id, cut_plan_id, cut_plan_item_id` in SELECT.
+
+**File**: `supabase/functions/mcp-server/index.ts` lines 106-130
+
+New query:
 ```
-"id, delivery_number, order_id, driver_name, vehicle, scheduled_date, status, notes, created_at"
+.from("production_tasks")
+.select("id, order_id, cut_plan_id, task_type, bar_code, cut_length_mm, qty_required, qty_completed, status, mark_number, drawing_ref, asa_shape_code, priority, created_at")
+```
+Filter by `status` instead of `phase`.
+
+## 3. Backfill production_tasks.order_id (existing orphaned rows)
+
+The `manage-extract` code already sets `order_id` (line 603), so new tasks are fine. For legacy rows missing `order_id`, run a backfill joining through `cut_plan_items` → `cut_plans` → `work_orders` → `orders`:
+
+```sql
+UPDATE production_tasks pt
+SET order_id = o.id
+FROM cut_plan_items cpi
+JOIN cut_plans cp ON cpi.cut_plan_id = cp.id
+JOIN work_orders wo ON wo.id = cpi.work_order_id
+JOIN orders o ON o.work_order_id = wo.id
+WHERE pt.cut_plan_item_id = cpi.id
+  AND pt.order_id IS NULL;
 ```
 
-**`list_production_tasks`** (line 119-121): Change table from `cut_plan_items` to also query `production_tasks`, and add `order_id` + `phase` to SELECT. The tool currently reads `cut_plan_items` — we should either:
-- Option A: Keep reading `cut_plan_items` but add `order_id` (via cut_plans → orders join or direct column)
-- Option B: Add a second query for `production_tasks` with `order_id`
+## 4. Backfill deliveries.order_id
 
-Since `cut_plan_items` has `phase` and production data, and `production_tasks` has `order_id`, the cleanest fix is to add `order_id` to the `cut_plan_items` SELECT (the column exists via the migration) AND also select from `production_tasks`. I'll keep the existing `cut_plan_items` query but add `order_id` to the select list, plus add the `cut_plans!inner(order_id)` join.
+```sql
+UPDATE deliveries d
+SET order_id = o.id
+FROM orders o
+WHERE o.status IN ('delivery_staged','ready','delivered')
+  AND d.order_id IS NULL
+  AND d.company_id = o.company_id;
+```
 
-### 2. Database: Reload PostgREST schema cache
+## 5. Status backfill: pending → extract_new
 
-Run migration with `NOTIFY pgrst, 'reload schema';` to ensure the API layer sees new columns.
+Re-run (idempotent):
+```sql
+UPDATE orders SET status = 'extract_new' WHERE status = 'pending';
+UPDATE deliveries SET status = 'staged' WHERE status = 'planned';
+```
 
-### 3. Data backfill (production)
-
-Run idempotent UPDATE on production database:
-- `orders` with `status = 'pending'` → `'extract_new'`
-- `deliveries` with `status = 'planned'` → `'staged'`
-
-### Files Changed
-- `supabase/functions/mcp-server/index.ts` — 3 SELECT patches
-- New migration — `NOTIFY pgrst, 'reload schema'`
-- Data backfill via insert tool on production
+## Files Changed
+- `vite.config.ts` — increase workbox limit to 6 MiB
+- `supabase/functions/mcp-server/index.ts` — rewrite `list_production_tasks` to query `production_tasks` table directly
+- Data backfills via insert tool (3 operations)
 
