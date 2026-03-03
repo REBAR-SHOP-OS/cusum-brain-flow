@@ -108,18 +108,18 @@ function WorkOrderRow({ wo, onUpdateStatus, onStatusChanged }: {
           <>
             <Button variant="outline" size="sm"
               className="h-7 text-[10px] gap-1 px-2.5 font-bold border-warning/40 text-warning hover:bg-warning/10"
-              onClick={async () => { const ok = await onUpdateStatus(wo.id, "on_hold"); if (ok) onStatusChanged(wo.work_order_number, "Paused"); }}>
+              onClick={async () => { const ok = await onUpdateStatus(wo.id, "on_hold"); if (ok) onStatusChanged(wo.work_order_number, "Paused"); else onStatusChanged(wo.work_order_number, "Failed to pause — check permissions"); }}>
               <Pause className="w-3 h-3" /> Pause
             </Button>
             <Button variant="outline" size="sm"
               className="h-7 text-[10px] gap-1 px-2.5 font-bold border-success/40 text-success hover:bg-success/10"
-              onClick={async () => { const ok = await onUpdateStatus(wo.id, "completed"); if (ok) onStatusChanged(wo.work_order_number, "Completed"); }}>
+              onClick={async () => { const ok = await onUpdateStatus(wo.id, "completed"); if (ok) onStatusChanged(wo.work_order_number, "Completed"); else onStatusChanged(wo.work_order_number, "Failed to complete — check permissions"); }}>
               <CheckCircle2 className="w-3 h-3" /> Complete
             </Button>
           </>
         ) : wo.status !== "completed" ? (
           <Button size="sm" className="h-7 text-[10px] gap-1 px-2.5 font-bold"
-            onClick={async () => { const ok = await onUpdateStatus(wo.id, "in_progress"); if (ok) onStatusChanged(wo.work_order_number, "Started"); }}>
+            onClick={async () => { const ok = await onUpdateStatus(wo.id, "in_progress"); if (ok) onStatusChanged(wo.work_order_number, "Started"); else onStatusChanged(wo.work_order_number, "Failed to start — check permissions"); }}>
             <Play className="w-3 h-3" /> Start
           </Button>
         ) : null}

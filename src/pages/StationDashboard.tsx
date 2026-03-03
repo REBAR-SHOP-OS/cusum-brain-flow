@@ -34,7 +34,11 @@ export default function StationDashboard() {
     const channel = supabase
       .channel("work-orders-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "work_orders" },
-        () => queryClient.invalidateQueries({ queryKey: ["work-orders"] }))
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+          queryClient.invalidateQueries({ queryKey: ["production-queues"] });
+          queryClient.invalidateQueries({ queryKey: ["cut-plans"] });
+        })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
