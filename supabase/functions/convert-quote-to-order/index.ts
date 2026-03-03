@@ -112,7 +112,8 @@ serve(async (req) => {
           quote_id: quoteId,
           company_id: companyId,
           total_amount: quote.total_amount || 0,
-          status: "pending",
+          status: "approved",
+          order_kind: "commercial",
           order_date: new Date().toISOString().slice(0, 10),
           notes: `Converted from quote ${quote.quote_number}`,
         })

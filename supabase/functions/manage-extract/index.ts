@@ -522,7 +522,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
       customer_id: customerId,
       company_id: session.company_id,
       notes: `Auto-created from extract session: ${session.name}`,
-      status: "pending",
+      status: "extract_new",
+      order_kind: "extract",
     })
     .select("id")
     .single();
@@ -599,6 +600,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
       const tasks = savedItems.map((item: any) => ({
         company_id: session.company_id,
         project_id: projectId,
+        order_id: order.id,
         work_order_id: item.work_order_id || workOrder.id,
         barlist_id: barlistId,
         cut_plan_id: cutPlan.id,
