@@ -79,7 +79,7 @@ export default function LoadingStation() {
     queryFn: async () => {
       const { data } = await supabase
         .from("deliveries")
-        .select("id")
+        .select("id, packing_slips!inner(id)")
         .eq("cut_plan_id", selectedBundle!.cutPlanId)
         .eq("company_id", companyId!)
         .limit(1)
@@ -109,40 +109,48 @@ export default function LoadingStation() {
         .single();
       if (delErr) throw delErr;
 
-      // 2. Insert delivery stop
-      const { error: stopErr } = await supabase
-        .from("delivery_stops")
-        .insert({
-          delivery_id: delivery.id,
-          company_id: companyId,
-          stop_sequence: 1,
-        });
-      if (stopErr) throw stopErr;
+      try {
+        // 2. Insert delivery stop
+        const { error: stopErr } = await supabase
+          .from("delivery_stops")
+          .insert({
+            delivery_id: delivery.id,
+            company_id: companyId,
+            stop_sequence: 1,
+          });
+        if (stopErr) throw stopErr;
 
-      // 3. Build items_json from checklist items
-      const itemsJson = checklistItems.map((item) => ({
-        id: item.id,
-        mark_number: item.mark_number,
-        drawing_ref: item.drawing_ref,
-        bar_code: item.bar_code,
-        cut_length_mm: item.cut_length_mm,
-        total_pieces: item.total_pieces,
-        asa_shape_code: item.asa_shape_code,
-      }));
+        // 3. Build items_json from checklist items
+        const itemsJson = checklistItems.map((item) => ({
+          id: item.id,
+          mark_number: item.mark_number,
+          drawing_ref: item.drawing_ref,
+          bar_code: item.bar_code,
+          cut_length_mm: item.cut_length_mm,
+          total_pieces: item.total_pieces,
+          asa_shape_code: item.asa_shape_code,
+        }));
 
-      // 4. Insert packing slip
-      const { error: slipErr } = await supabase
-        .from("packing_slips")
-        .insert({
-          delivery_id: delivery.id,
-          company_id: companyId,
-          cut_plan_id: selectedBundle.cutPlanId,
-          customer_name: selectedBundle.customerName || selectedBundle.projectName,
-          items_json: itemsJson as any,
-          slip_number: slipNumber,
-          status: "draft",
-        });
-      if (slipErr) throw slipErr;
+        // 4. Insert packing slip
+        const { error: slipErr } = await supabase
+          .from("packing_slips")
+          .insert({
+            delivery_id: delivery.id,
+            company_id: companyId,
+            cut_plan_id: selectedBundle.cutPlanId,
+            customer_name: selectedBundle.customerName || selectedBundle.projectName,
+            items_json: itemsJson as any,
+            slip_number: slipNumber,
+            status: "draft",
+          });
+        if (slipErr) throw slipErr;
+      } catch (innerErr) {
+        // Cleanup: set to pending (trigger blocks delete of non-pending), then delete
+        await supabase.from("delivery_stops").delete().eq("delivery_id", delivery.id);
+        await supabase.from("deliveries").update({ status: "pending" }).eq("id", delivery.id);
+        await supabase.from("deliveries").delete().eq("id", delivery.id);
+        throw innerErr;
+      }
 
       return delivery.id;
     },
