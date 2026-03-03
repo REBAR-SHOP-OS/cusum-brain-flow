@@ -2369,6 +2369,7 @@ export type Database = {
           driver_profile_id: string | null
           id: string
           notes: string | null
+          order_id: string | null
           scheduled_date: string | null
           status: string | null
           updated_at: string
@@ -2383,6 +2384,7 @@ export type Database = {
           driver_profile_id?: string | null
           id?: string
           notes?: string | null
+          order_id?: string | null
           scheduled_date?: string | null
           status?: string | null
           updated_at?: string
@@ -2397,6 +2399,7 @@ export type Database = {
           driver_profile_id?: string | null
           id?: string
           notes?: string | null
+          order_id?: string | null
           scheduled_date?: string | null
           status?: string | null
           updated_at?: string
@@ -2422,6 +2425,13 @@ export type Database = {
             columns: ["driver_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -6663,6 +6673,7 @@ export type Database = {
           customer_id: string | null
           customer_revision_count: number
           delivery_method: string
+          due_date: string | null
           expected_value: number | null
           id: string
           lead_id: string | null
@@ -6694,6 +6705,7 @@ export type Database = {
           customer_id?: string | null
           customer_revision_count?: number
           delivery_method?: string
+          due_date?: string | null
           expected_value?: number | null
           id?: string
           lead_id?: string | null
@@ -6725,6 +6737,7 @@ export type Database = {
           customer_id?: string | null
           customer_revision_count?: number
           delivery_method?: string
+          due_date?: string | null
           expected_value?: number | null
           id?: string
           lead_id?: string | null
@@ -7529,6 +7542,7 @@ export type Database = {
           locked_to_machine_id: string | null
           mark_number: string | null
           notes: string | null
+          order_id: string | null
           priority: number
           project_id: string | null
           qty_completed: number
@@ -7556,6 +7570,7 @@ export type Database = {
           locked_to_machine_id?: string | null
           mark_number?: string | null
           notes?: string | null
+          order_id?: string | null
           priority?: number
           project_id?: string | null
           qty_completed?: number
@@ -7583,6 +7598,7 @@ export type Database = {
           locked_to_machine_id?: string | null
           mark_number?: string | null
           notes?: string | null
+          order_id?: string | null
           priority?: number
           project_id?: string | null
           qty_completed?: number
@@ -7627,6 +7643,13 @@ export type Database = {
             columns: ["locked_to_machine_id"]
             isOneToOne: false
             referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_tasks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
           {
@@ -10604,6 +10627,7 @@ export type Database = {
           likes: number | null
           page_name: string | null
           platform: string
+          qa_status: string
           reach: number | null
           saves: number | null
           scheduled_date: string | null
@@ -10626,6 +10650,7 @@ export type Database = {
           likes?: number | null
           page_name?: string | null
           platform: string
+          qa_status?: string
           reach?: number | null
           saves?: number | null
           scheduled_date?: string | null
@@ -10648,6 +10673,7 @@ export type Database = {
           likes?: number | null
           page_name?: string | null
           platform?: string
+          qa_status?: string
           reach?: number | null
           saves?: number | null
           scheduled_date?: string | null

@@ -6,6 +6,7 @@ export interface SocialPost {
   id: string;
   platform: "facebook" | "instagram" | "linkedin" | "twitter" | "tiktok" | "youtube";
   status: "published" | "scheduled" | "draft" | "declined" | "pending_approval";
+  qa_status: "needs_review" | "approved" | "scheduled" | "published";
   title: string;
   content: string;
   image_url: string | null;
