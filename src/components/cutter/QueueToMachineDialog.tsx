@@ -9,6 +9,7 @@ import { useCompanyId } from "@/hooks/useCompanyId";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface QueueToMachineDialogProps {
   open: boolean;
@@ -24,6 +25,7 @@ export function QueueToMachineDialog({
 }: QueueToMachineDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [machineId, setMachineId] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -76,6 +78,23 @@ export function QueueToMachineDialog({
 
       // Update plan status to queued
       await supabase.from("cut_plans").update({ status: "queued", machine_id: machineId }).eq("id", plan.id);
+
+      // Auto-update linked work orders to in_progress
+      const woIds = [...new Set(items.map(i => i.work_order_id).filter(Boolean))] as string[];
+      if (woIds.length > 0) {
+        await supabase
+          .from("work_orders")
+          .update({ status: "in_progress", actual_start: new Date().toISOString() })
+          .in("id", woIds)
+          .is("actual_start", null);
+        // Also update ones that already have actual_start (just status)
+        await supabase
+          .from("work_orders")
+          .update({ status: "in_progress" })
+          .in("id", woIds)
+          .not("actual_start", "is", null);
+        queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+      }
 
       toast({ title: "Plan queued", description: `${items.length} items queued to ${selectedMachine?.name}` });
       onQueued();
