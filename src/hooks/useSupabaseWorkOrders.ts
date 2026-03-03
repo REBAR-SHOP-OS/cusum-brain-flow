@@ -56,7 +56,7 @@ async function fetchWorkOrders(): Promise<SupabaseWorkOrder[]> {
 
     const idsWithItems = new Set((itemCounts || []).map((r: any) => r.work_order_id));
     return mapped.filter(wo =>
-      idsWithItems.has(wo.id) || wo.status === "in_progress" || wo.status === "completed"
+      idsWithItems.has(wo.id) || wo.status === "in_progress" || wo.status === "completed" || wo.status === "on_hold"
     );
   }
   return mapped;
@@ -87,7 +87,10 @@ export function useSupabaseWorkOrders() {
       .update(updates)
       .eq("id", workOrderId);
 
-    if (err) return false;
+    if (err) {
+      console.error("Failed to update work order status:", err.message);
+      return false;
+    }
 
     // Invalidate all related caches so sibling components refresh
     await Promise.all([
