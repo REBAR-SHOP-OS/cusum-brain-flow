@@ -140,7 +140,7 @@ export default function LoadingStation() {
           customer_name: selectedBundle.customerName || selectedBundle.projectName,
           items_json: itemsJson as any,
           slip_number: slipNumber,
-          status: "pending",
+          status: "draft",
         });
       if (slipErr) throw slipErr;
 
