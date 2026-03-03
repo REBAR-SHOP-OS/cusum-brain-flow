@@ -118,7 +118,7 @@ mcpServer.tool("list_production_tasks", {
     let q = db
       .from("cut_plan_items")
       .select(
-        "id, bar_code, cut_length_mm, total_pieces, completed_pieces, phase, bend_type, mark_number, drawing_ref, notes, needs_fix"
+        "id, bar_code, cut_length_mm, total_pieces, completed_pieces, phase, bend_type, mark_number, drawing_ref, notes, needs_fix, cut_plan_id, cut_plans!inner(id, project_name, status)"
       )
       .order("cut_plan_id", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
@@ -170,7 +170,7 @@ mcpServer.tool("list_orders", {
     const db = getDb();
     let q = db
       .from("orders")
-      .select("id, order_number, customer_id, status, total_amount, notes, created_at")
+      .select("id, order_number, customer_id, status, total_amount, order_kind, delivery_method, due_date, notes, created_at")
       .order("created_at", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
     if (status) q = q.eq("status", status);
@@ -196,7 +196,7 @@ mcpServer.tool("list_deliveries", {
     const db = getDb();
     let q = db
       .from("deliveries")
-      .select("id, delivery_number, driver_name, vehicle, scheduled_date, status, notes, created_at")
+      .select("id, delivery_number, order_id, driver_name, vehicle, scheduled_date, status, notes, created_at")
       .order("scheduled_date", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
     if (status) q = q.eq("status", status);
