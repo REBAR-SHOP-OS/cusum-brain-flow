@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useSupabaseWorkOrders } from "@/hooks/useSupabaseWorkOrders";
 import { useProductionQueues } from "@/hooks/useProductionQueues";
@@ -14,6 +14,8 @@ import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle } from "lucid
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useTabletPin } from "@/hooks/useTabletPin";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
 
 export default function StationDashboard() {
@@ -25,6 +27,18 @@ export default function StationDashboard() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { pinnedMachineId } = useTabletPin();
+  const queryClient = useQueryClient();
+
+  // Realtime subscription for work_orders table
+  useEffect(() => {
+    const channel = supabase
+      .channel("work-orders-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "work_orders" },
+        () => queryClient.invalidateQueries({ queryKey: ["work-orders"] }))
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   // Auto-redirect if a machine is pinned to this device
   if (pinnedMachineId && !isLoading) {
