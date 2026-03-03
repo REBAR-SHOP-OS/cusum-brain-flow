@@ -13024,6 +13024,10 @@ export type Database = {
         Args: { p_company_id: string; p_customer_id: string }
         Returns: undefined
       }
+      recompute_order_completion: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
       score_lead: { Args: { p_lead_id: string }; Returns: undefined }
       verify_admin_pin: { Args: { _pin: string }; Returns: boolean }
     }
