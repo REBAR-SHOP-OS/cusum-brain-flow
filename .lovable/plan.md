@@ -1,41 +1,36 @@
 
 
-# Fix: Populate Packing Slip Header Fields
+# Fix: Broken Shape Schematic Images
 
-## Problem
-The packing slip shows "—" for Ship To, Delivery Date, Invoice #, Invoice Date, and Scope because the `LoadingStation.tsx` creation code only sets `customer_name`, `items_json`, `slip_number`, and `status`. It never queries the project/customer data to fill in the remaining fields.
+## Root Cause
+The `custom_shape_schematics` table stores image URLs pointing to a previous project's **public** storage bucket (`uavzziigfnqpfdkczbdo.supabase.co/storage/v1/object/public/shape-schematics/...`).
 
-## Data Available
-The relationship chain `cut_plans → projects → customers` provides:
-- **Ship To**: `customers.shipping_street1`, `shipping_city`, `shipping_province`, `shipping_postal_code`
-- **Scope**: `projects.name` (project name as scope)
-- **Site Address**: `projects.site_address`
+The `useShapeSchematics` hook in `src/hooks/useShapeSchematics.ts` extracts the storage path from these URLs and tries to generate **signed URLs** from the current project's `shape-schematics` bucket — where the files don't exist. Result: broken images.
 
-Invoice # and Invoice Date are not available at delivery creation time (they come later from accounting), so those will remain blank — that's correct behavior.
+## Fix
 
-## Changes
+### `src/hooks/useShapeSchematics.ts`
+The URLs are already **public** URLs (note `/object/public/` in the path). They work as-is — no signed URL generation needed.
 
-### `src/pages/LoadingStation.tsx`
-In the `createDelivery` mutation, before inserting the packing slip:
+**Change**: Skip signed URL generation when the URL domain doesn't match the current project. Since these are public URLs from another host, just use them directly.
 
-1. **Query project + customer data** from `cut_plans` using the `cutPlanId`:
-   ```ts
-   const { data: planData } = await supabase
-     .from("cut_plans")
-     .select("project_name, projects(name, site_address, customers(shipping_street1, shipping_city, shipping_province, shipping_postal_code))")
-     .eq("id", selectedBundle.cutPlanId)
-     .single();
-   ```
+Specifically, in the `fetchSchematics` function, only attempt signed URL creation if the URL contains the current project's Supabase domain. Otherwise, use the original `image_url` as-is:
 
-2. **Build ship_to** from customer shipping address fields (joined with commas, filtering blanks).
+```ts
+const CURRENT_HOST = new URL(import.meta.env.VITE_SUPABASE_URL).host;
 
-3. **Set scope** to `projects.name`.
+// In the map:
+const path = extractStoragePath(s.image_url);
+const isCurrentProject = s.image_url.includes(CURRENT_HOST);
 
-4. **Set site_address** to `projects.site_address`.
-
-5. **Set delivery_date** to today's date (`new Date().toISOString().slice(0, 10)`).
-
-6. **Update the packing slip insert** to include `ship_to`, `scope`, `site_address`, and `delivery_date`.
+if (path && isCurrentProject) {
+  // Generate signed URL for current project's private bucket
+  const { data: signedData } = await supabase.storage...
+} else {
+  // External/public URL — use as-is
+  return s;
+}
+```
 
 Single file change, no migration needed.
 
