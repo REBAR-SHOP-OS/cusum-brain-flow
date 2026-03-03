@@ -6662,13 +6662,19 @@ export type Database = {
           customer_approved_at: string | null
           customer_id: string | null
           customer_revision_count: number
+          delivery_method: string
+          expected_value: number | null
           id: string
           lead_id: string | null
           notes: string | null
           order_date: string | null
+          order_kind: string
           order_number: string
+          owner_id: string | null
           pending_change_order: boolean
+          priority: string
           production_locked: boolean
+          production_override: boolean
           qc_evidence_uploaded: boolean
           qc_final_approved: boolean
           qc_internal_approved_at: string | null
@@ -6687,13 +6693,19 @@ export type Database = {
           customer_approved_at?: string | null
           customer_id?: string | null
           customer_revision_count?: number
+          delivery_method?: string
+          expected_value?: number | null
           id?: string
           lead_id?: string | null
           notes?: string | null
           order_date?: string | null
+          order_kind?: string
           order_number: string
+          owner_id?: string | null
           pending_change_order?: boolean
+          priority?: string
           production_locked?: boolean
+          production_override?: boolean
           qc_evidence_uploaded?: boolean
           qc_final_approved?: boolean
           qc_internal_approved_at?: string | null
@@ -6712,13 +6724,19 @@ export type Database = {
           customer_approved_at?: string | null
           customer_id?: string | null
           customer_revision_count?: number
+          delivery_method?: string
+          expected_value?: number | null
           id?: string
           lead_id?: string | null
           notes?: string | null
           order_date?: string | null
+          order_kind?: string
           order_number?: string
+          owner_id?: string | null
           pending_change_order?: boolean
+          priority?: string
           production_locked?: boolean
+          production_override?: boolean
           qc_evidence_uploaded?: boolean
           qc_final_approved?: boolean
           qc_internal_approved_at?: string | null
@@ -6743,6 +6761,20 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
           },
           {
