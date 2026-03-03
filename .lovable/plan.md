@@ -1,24 +1,25 @@
 
 
-# Fix: "new row violates row-level security policy for table deliveries"
+# Fix: Work Order Queue UI Not Updating After "Start"
 
 ## Root Cause
 
-The RLS INSERT policy on the `deliveries` table only allows users with `admin`, `office`, or `field` roles. Workshop users operating the Loading Station have the `workshop` role, which is excluded from the policy — so the insert is rejected.
+`useSupabaseWorkOrders` uses manual `useState` + a raw `fetch` function, while the rest of the app uses TanStack React Query. The `updateStatus` callback is wrapped in `useCallback([data])` but captures a potentially stale `fetch` reference (not in the dependency array). More critically, after calling `updateStatus`, no other React Query caches are invalidated — so sibling components (ActiveProductionHub, ShopFloorProductionQueue) don't refresh either.
 
 ## Fix
 
-Update the existing INSERT policy to include the `workshop` role, since workshop staff need to create deliveries from the Loading Station when loading is complete.
+**File: `src/hooks/useSupabaseWorkOrders.ts`** — Convert to React Query:
 
-```sql
-DROP POLICY "Office staff insert deliveries" ON public.deliveries;
-CREATE POLICY "Staff insert deliveries" ON public.deliveries
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    company_id = get_user_company_id(auth.uid())
-    AND has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::app_role[])
-  );
-```
+1. Replace manual `useState`/`useEffect` fetch with `useQuery({ queryKey: ["work-orders"], queryFn: ... })`.
+2. Replace `updateStatus` with a function that does the supabase update, then calls `queryClient.invalidateQueries({ queryKey: ["work-orders"] })`.
+3. Also invalidate `["cut-plans"]` and `["station-data"]` in the same callback so sibling components refresh.
+4. Remove the `useCallback` wrapper entirely — React Query handles caching.
 
-Single migration, no code changes needed.
+The return shape stays the same (`{ data, loading, error, updateStatus }`) so no changes needed in `StationDashboard.tsx` or `WorkOrderQueueSection.tsx`.
+
+**File: `src/pages/StationDashboard.tsx`** — Add a realtime subscription for `work_orders` table that invalidates `["work-orders"]` query key (consistent with the pattern used in `useProjects.ts`).
+
+## Files Changed
+- `src/hooks/useSupabaseWorkOrders.ts` — rewrite to React Query
+- `src/pages/StationDashboard.tsx` — add realtime channel for work_orders
 
