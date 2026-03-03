@@ -331,6 +331,395 @@ mcpServer.tool("list_team_members", {
   },
 });
 
+// ── Tool: list_invoices ──────────────────────────────────────
+
+mcpServer.tool("list_invoices", {
+  description:
+    "List invoices from QuickBooks. Optional filter: overdue_only (boolean, filters balance > 0 and DueDate < today). Returns up to 50.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      overdue_only: { type: "boolean", description: "Only return overdue invoices" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ overdue_only, limit }: Record<string, unknown>) => {
+    const db = getDb();
+    let q = db
+      .from("accounting_mirror")
+      .select("quickbooks_id, balance, data, last_synced_at, customer_id")
+      .eq("entity_type", "Invoice")
+      .order("last_synced_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (overdue_only) {
+      q = q.gt("balance", 0);
+    }
+    const { data, error } = await q;
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    if (overdue_only && Array.isArray(data)) {
+      const today = new Date().toISOString().split("T")[0];
+      const filtered = data.filter((r: any) => {
+        const due = (r.data as any)?.DueDate;
+        return due && due < today;
+      });
+      return { content: [{ type: "text", text: JSON.stringify(filtered, null, 2) }] };
+    }
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: list_bills ────────────────────────────────────────
+
+mcpServer.tool("list_bills", {
+  description:
+    "List bills (vendor invoices) from QuickBooks. Optional filter: overdue_only. Returns up to 50.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      overdue_only: { type: "boolean", description: "Only return overdue bills" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ overdue_only, limit }: Record<string, unknown>) => {
+    const db = getDb();
+    let q = db
+      .from("accounting_mirror")
+      .select("quickbooks_id, balance, data, last_synced_at")
+      .eq("entity_type", "Bill")
+      .order("last_synced_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (overdue_only) {
+      q = q.gt("balance", 0);
+    }
+    const { data, error } = await q;
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    if (overdue_only && Array.isArray(data)) {
+      const today = new Date().toISOString().split("T")[0];
+      const filtered = data.filter((r: any) => {
+        const due = (r.data as any)?.DueDate;
+        return due && due < today;
+      });
+      return { content: [{ type: "text", text: JSON.stringify(filtered, null, 2) }] };
+    }
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: get_financial_summary ─────────────────────────────
+
+mcpServer.tool("get_financial_summary", {
+  description:
+    "Get a bird's-eye financial snapshot: total AR, total AP, overdue invoice count, overdue bill count.",
+  inputSchema: { type: "object", properties: {} },
+  handler: async () => {
+    const db = getDb();
+    const [invoices, bills] = await Promise.all([
+      db.from("accounting_mirror").select("balance, data").eq("entity_type", "Invoice"),
+      db.from("accounting_mirror").select("balance, data").eq("entity_type", "Bill"),
+    ]);
+    const today = new Date().toISOString().split("T")[0];
+    const totalAR = (invoices.data || []).reduce((s: number, r: any) => s + (r.balance || 0), 0);
+    const totalAP = (bills.data || []).reduce((s: number, r: any) => s + (r.balance || 0), 0);
+    const overdueInvoices = (invoices.data || []).filter(
+      (r: any) => r.balance > 0 && (r.data as any)?.DueDate < today
+    ).length;
+    const overdueBills = (bills.data || []).filter(
+      (r: any) => r.balance > 0 && (r.data as any)?.DueDate < today
+    ).length;
+    const summary = { total_ar: totalAR, total_ap: totalAP, overdue_invoices: overdueInvoices, overdue_bills: overdueBills };
+    return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
+  },
+});
+
+// ── Tool: list_communications ───────────────────────────────
+
+mcpServer.tool("list_communications", {
+  description:
+    "List communications (emails, calls). Filters: direction (inbound/outbound), status, ai_category. Returns up to 50.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      direction: { type: "string", description: "Filter: inbound or outbound" },
+      status: { type: "string", description: "Filter by status" },
+      ai_category: { type: "string", description: "Filter by AI category" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ direction, status, ai_category, limit }: Record<string, unknown>) => {
+    const db = getDb();
+    let q = db
+      .from("communications")
+      .select("id, subject, from_address, to_address, body_preview, ai_urgency, ai_action_required, ai_category, direction, status, received_at")
+      .order("received_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (direction) q = q.eq("direction", direction);
+    if (status) q = q.eq("status", status);
+    if (ai_category) q = q.eq("ai_category", ai_category);
+    const { data, error } = await q;
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: list_activity_events ──────────────────────────────
+
+mcpServer.tool("list_activity_events", {
+  description:
+    "List recent activity events. Filters: event_type, entity_type. Returns up to 50 events.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      event_type: { type: "string", description: "Filter by event_type" },
+      entity_type: { type: "string", description: "Filter by entity_type" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ event_type, entity_type, limit }: Record<string, unknown>) => {
+    const db = getDb();
+    let q = db
+      .from("activity_events")
+      .select("id, entity_type, entity_id, event_type, description, actor_id, actor_type, source, created_at")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (event_type) q = q.eq("event_type", event_type);
+    if (entity_type) q = q.eq("entity_type", entity_type);
+    const { data, error } = await q;
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: list_profiles ─────────────────────────────────────
+
+mcpServer.tool("list_profiles", {
+  description:
+    "List employee profiles. Returns full_name, title, department, email, phone, is_active, employee_type. Up to 50.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ limit }: Record<string, unknown>) => {
+    const db = getDb();
+    const { data, error } = await db
+      .from("profiles")
+      .select("id, full_name, title, department, email, phone, is_active, employee_type")
+      .order("full_name")
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: list_knowledge ────────────────────────────────────
+
+mcpServer.tool("list_knowledge", {
+  description:
+    "List knowledge base articles. Optional filter: category. Returns title, category, content. Up to 50.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      category: { type: "string", description: "Filter by category" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ category, limit }: Record<string, unknown>) => {
+    const db = getDb();
+    let q = db
+      .from("knowledge")
+      .select("id, title, category, content, created_at")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (category) q = q.eq("category", category);
+    const { data, error } = await q;
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: list_cut_plans ────────────────────────────────────
+
+mcpServer.tool("list_cut_plans", {
+  description:
+    "List cut plans. Optional filter: status. Returns up to 50.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      status: { type: "string", description: "Filter by status" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ status, limit }: Record<string, unknown>) => {
+    const db = getDb();
+    let q = db
+      .from("cut_plans")
+      .select("id, name, status, order_id, company_id, created_at")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (status) q = q.eq("status", status);
+    const { data, error } = await q;
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: list_packing_slips ────────────────────────────────
+
+mcpServer.tool("list_packing_slips", {
+  description:
+    "List packing slips. Returns delivery_id, items_json, created_at. Up to 50.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ limit }: Record<string, unknown>) => {
+    const db = getDb();
+    const { data, error } = await db
+      .from("packing_slips")
+      .select("id, delivery_id, items_json, created_at")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: update_lead (write) ───────────────────────────────
+
+mcpServer.tool("update_lead", {
+  description:
+    "Update a lead's stage, priority, expected_value, or notes by ID. Provide the lead id and fields to update.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Lead ID (required)" },
+      stage: { type: "string", description: "New stage" },
+      priority: { type: "string", description: "New priority" },
+      expected_value: { type: "number", description: "New expected value" },
+      notes: { type: "string", description: "New notes" },
+    },
+    required: ["id"],
+  },
+  handler: async ({ id, stage, priority, expected_value, notes }: Record<string, unknown>) => {
+    const db = getDb();
+    const updates: Record<string, unknown> = {};
+    if (stage !== undefined) updates.stage = stage;
+    if (priority !== undefined) updates.priority = priority;
+    if (expected_value !== undefined) updates.expected_value = expected_value;
+    if (notes !== undefined) updates.notes = notes;
+    if (Object.keys(updates).length === 0) {
+      return { content: [{ type: "text", text: "No fields to update" }] };
+    }
+    const { data, error } = await db.from("leads").update(updates).eq("id", id).select().maybeSingle();
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: update_order_status (write) ───────────────────────
+
+mcpServer.tool("update_order_status", {
+  description: "Update an order's status by ID.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Order ID (required)" },
+      status: { type: "string", description: "New status (required)" },
+    },
+    required: ["id", "status"],
+  },
+  handler: async ({ id, status }: Record<string, unknown>) => {
+    const db = getDb();
+    const { data, error } = await db.from("orders").update({ status }).eq("id", id).select().maybeSingle();
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: update_delivery_status (write) ────────────────────
+
+mcpServer.tool("update_delivery_status", {
+  description: "Update a delivery's status by ID.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Delivery ID (required)" },
+      status: { type: "string", description: "New status (required)" },
+    },
+    required: ["id", "status"],
+  },
+  handler: async ({ id, status }: Record<string, unknown>) => {
+    const db = getDb();
+    const { data, error } = await db.from("deliveries").update({ status }).eq("id", id).select().maybeSingle();
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: create_activity_event (write) ─────────────────────
+
+mcpServer.tool("create_activity_event", {
+  description:
+    "Log an activity event (e.g. actions taken by ChatGPT). Required: company_id, entity_type, entity_id, event_type. Optional: description, source, actor_type.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      company_id: { type: "string", description: "Company ID (required)" },
+      entity_type: { type: "string", description: "Entity type (required)" },
+      entity_id: { type: "string", description: "Entity ID (required)" },
+      event_type: { type: "string", description: "Event type (required)" },
+      description: { type: "string", description: "Event description" },
+      source: { type: "string", description: "Source (default: chatgpt)" },
+      actor_type: { type: "string", description: "Actor type (default: ai)" },
+    },
+    required: ["company_id", "entity_type", "entity_id", "event_type"],
+  },
+  handler: async ({ company_id, entity_type, entity_id, event_type, description, source, actor_type }: Record<string, unknown>) => {
+    const db = getDb();
+    const { data, error } = await db.from("activity_events").insert({
+      company_id,
+      entity_type,
+      entity_id,
+      event_type,
+      description: description || null,
+      source: source || "chatgpt",
+      actor_type: actor_type || "ai",
+    }).select().maybeSingle();
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: send_team_message (write) ─────────────────────────
+
+mcpServer.tool("send_team_message", {
+  description:
+    "Send a message to a team hub channel. Required: channel_id, sender_profile_id, text.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      channel_id: { type: "string", description: "Channel ID (required)" },
+      sender_profile_id: { type: "string", description: "Sender profile ID (required)" },
+      text: { type: "string", description: "Message text (required)" },
+    },
+    required: ["channel_id", "sender_profile_id", "text"],
+  },
+  handler: async ({ channel_id, sender_profile_id, text }: Record<string, unknown>) => {
+    const db = getDb();
+    const { data, error } = await db.from("team_messages").insert({
+      channel_id,
+      sender_profile_id,
+      original_text: text,
+      original_language: "en",
+    }).select().maybeSingle();
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
 // ── HTTP Transport ──────────────────────────────────────────
 
 const transport = new StreamableHttpTransport();
