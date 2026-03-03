@@ -19,10 +19,12 @@ function extractStoragePath(url: string): string | null {
 }
 
 const SIGNED_URL_EXPIRY = 3600; // 1 hour
+const CURRENT_HOST = new URL(import.meta.env.VITE_SUPABASE_URL).host;
 
 /**
  * Fetches all custom shape schematics and provides a lookup by shape code.
- * Uses signed URLs since the shape-schematics bucket is private.
+ * Uses signed URLs only for files in the current project's private bucket.
+ * External/public URLs are used as-is.
  */
 export function useShapeSchematics() {
   const [schematics, setSchematics] = useState<ShapeSchematic[]>([]);
@@ -36,16 +38,18 @@ export function useShapeSchematics() {
         .order("shape_code");
 
       if (!error && data) {
-        // Generate signed URLs for each schematic (bucket is private)
         const withSignedUrls = await Promise.all(
           data.map(async (s) => {
             const path = extractStoragePath(s.image_url);
-            if (path) {
+            const isCurrentProject = s.image_url.includes(CURRENT_HOST);
+
+            if (path && isCurrentProject) {
               const { data: signedData } = await supabase.storage
                 .from("shape-schematics")
                 .createSignedUrl(path, SIGNED_URL_EXPIRY);
               return { ...s, image_url: signedData?.signedUrl || s.image_url };
             }
+            // External/public URL — use as-is
             return s;
           })
         );
