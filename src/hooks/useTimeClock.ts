@@ -65,14 +65,19 @@ export function useTimeClock() {
 
   const clockIn = async () => {
     if (!myProfile) { toast.error("No profile found"); return; }
-    if (activeEntry) { toast.error("Already clocked in"); return; }
+    if (activeEntry) { toast.error("Already clocked in — only one open shift allowed"); return; }
 
     const { error } = await supabase
       .from("time_clock_entries")
       .insert({ profile_id: myProfile.id } as any);
 
-    if (error) toast.error("Failed to clock in");
-    else { toast.success("Clocked in!"); fetchEntries(); }
+    if (error) {
+      const msg = error.message?.includes("one open shift") ? "You already have an open shift" : "Failed to clock in";
+      toast.error(msg);
+    } else {
+      toast.success("Clocked in!");
+      fetchEntries();
+    }
   };
 
   const clockOut = async () => {

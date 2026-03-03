@@ -15,7 +15,7 @@ export function DispatchControl() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deliveries")
-        .select("id, status, driver_name, vehicle, scheduled_date, created_at")
+        .select("id, status, driver_name, vehicle, scheduled_date, created_at, order_id")
         .eq("company_id", companyId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -91,6 +91,35 @@ export function DispatchControl() {
           </CardContent>
         </Card>
       )}
+
+      {/* Missing schedule info */}
+      {(() => {
+        const incomplete = deliveries.filter(
+          (d: any) => !["delivered", "cancelled"].includes(d.status) && (!d.driver_name || !d.vehicle || !d.scheduled_date)
+        );
+        if (incomplete.length === 0) return null;
+        return (
+          <Card className="border-amber-300">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" /> Missing Schedule Info
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              {incomplete.slice(0, 5).map((d: any) => (
+                <div key={d.id} className="text-sm flex gap-2">
+                  <span className="text-muted-foreground truncate">{d.id.slice(0, 8)}</span>
+                  <div className="flex gap-1">
+                    {!d.driver_name && <Badge variant="outline" className="text-[10px] text-destructive">no driver</Badge>}
+                    {!d.vehicle && <Badge variant="outline" className="text-[10px] text-destructive">no vehicle</Badge>}
+                    {!d.scheduled_date && <Badge variant="outline" className="text-[10px] text-destructive">no date</Badge>}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {deliveries.length === 0 && (
         <p className="text-center text-muted-foreground text-sm py-6">No deliveries</p>
