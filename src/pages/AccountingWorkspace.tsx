@@ -18,7 +18,7 @@ import { useAuth } from "@/lib/auth";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
-import { PayrollAuditView } from "@/components/office/PayrollAuditView";
+const PayrollAuditView = lazy(() => import("@/components/office/PayrollAuditView").then(m => ({ default: m.PayrollAuditView })));
 
 /* ── Lazy-loaded tab components ── */
 const AccountingDashboard = lazy(() => import("@/components/accounting/AccountingDashboard").then(m => ({ default: m.AccountingDashboard })));
