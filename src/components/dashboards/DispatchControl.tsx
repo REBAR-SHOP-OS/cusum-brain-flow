@@ -23,7 +23,7 @@ export function DispatchControl() {
     },
   });
 
-  const staged = useMemo(() => deliveries.filter((d: any) => d.status === "planned").length, [deliveries]);
+  const staged = useMemo(() => deliveries.filter((d: any) => d.status === "staged").length, [deliveries]);
   
   const today = new Date().toISOString().slice(0, 10);
   const scheduledToday = useMemo(

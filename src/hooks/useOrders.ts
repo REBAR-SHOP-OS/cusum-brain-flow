@@ -50,6 +50,7 @@ export interface Order {
   delivery_method: string;
   expected_value: number | null;
   production_override: boolean;
+  due_date: string | null;
   // joined
   customers?: { id: string; name: string; quickbooks_id: string | null; company_name: string | null } | null;
   quotes?: { id: string; quote_number: string } | null;
