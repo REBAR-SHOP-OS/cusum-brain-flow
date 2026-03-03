@@ -105,24 +105,24 @@ mcpServer.tool("list_customers", {
 
 mcpServer.tool("list_production_tasks", {
   description:
-    "List cut plan items (production tasks). Optional filter: phase (queued, cutting, cut_done, bending, clearance, complete). Returns up to 50 items.",
+    "List production tasks. Optional filter: status (queued, cutting, cut_done, bending, clearance, complete). Returns order_id, cut_plan_id, and up to 50 items.",
   inputSchema: {
     type: "object",
     properties: {
-      phase: { type: "string", description: "Filter by phase" },
+      status: { type: "string", description: "Filter by task status" },
       limit: { type: "number", description: "Max rows (default 50)" },
     },
   },
-  handler: async ({ phase, limit }: Record<string, unknown>) => {
+  handler: async ({ status, limit }: Record<string, unknown>) => {
     const db = getDb();
     let q = db
-      .from("cut_plan_items")
+      .from("production_tasks")
       .select(
-        "id, bar_code, cut_length_mm, total_pieces, completed_pieces, phase, bend_type, mark_number, drawing_ref, notes, needs_fix, cut_plan_id, cut_plans!inner(id, project_name, status)"
+        "id, order_id, cut_plan_id, cut_plan_item_id, task_type, bar_code, cut_length_mm, qty_required, qty_completed, status, mark_number, drawing_ref, asa_shape_code, priority, created_at"
       )
-      .order("cut_plan_id", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
-    if (phase) q = q.eq("phase", phase);
+    if (status) q = q.eq("status", status);
     const { data, error } = await q;
     if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };

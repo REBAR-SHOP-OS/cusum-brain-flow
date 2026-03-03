@@ -162,14 +162,14 @@ Deno.test("MCP-008: list_deliveries returns expected fields", async () => {
 
 // ── list_production_tasks ────────────────────────────────────
 
-Deno.test("MCP-009: list_production_tasks phase filter works", async () => {
+Deno.test("MCP-009: list_production_tasks status filter works", async () => {
   if (!MCP_API_KEY) return;
-  const { body } = await callTool("list_production_tasks", { phase: "queued", limit: 10 });
+  const { body } = await callTool("list_production_tasks", { status: "queued", limit: 10 });
   const data = extractData(body);
   assertExists(data);
   if (Array.isArray(data)) {
     for (const task of data) {
-      assertEquals(task.phase, "queued");
+      assertEquals(task.status, "queued");
     }
   }
 });
