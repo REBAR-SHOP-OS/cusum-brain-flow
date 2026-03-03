@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getCompanyId } from "@/hooks/useCompanyId";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -152,7 +153,6 @@ export async function logBarlistEvent(
   description?: string,
   metadata?: Record<string, unknown>
 ) {
-  const { getCompanyId } = await import("@/hooks/useCompanyId");
   const companyId = await getCompanyId();
   await supabase.from("activity_events").insert({
     entity_type: "barlist",
