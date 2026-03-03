@@ -120,7 +120,26 @@ export default function LoadingStation() {
           });
         if (stopErr) throw stopErr;
 
-        // 3. Build items_json from checklist items
+        // 3. Query project + customer data for packing slip header
+        const { data: planData } = await supabase
+          .from("cut_plans")
+          .select("project_name, projects(name, site_address, customers(shipping_street1, shipping_city, shipping_province, shipping_postal_code))")
+          .eq("id", selectedBundle.cutPlanId)
+          .single();
+
+        const project = (planData as any)?.projects;
+        const customer = project?.customers;
+        const shipTo = [
+          customer?.shipping_street1,
+          customer?.shipping_city,
+          customer?.shipping_province,
+          customer?.shipping_postal_code,
+        ].filter(Boolean).join(", ") || null;
+        const scope = project?.name || null;
+        const siteAddress = project?.site_address || null;
+        const deliveryDate = new Date().toISOString().slice(0, 10);
+
+        // 4. Build items_json from checklist items
         const itemsJson = checklistItems.map((item) => ({
           id: item.id,
           mark_number: item.mark_number,
@@ -131,7 +150,7 @@ export default function LoadingStation() {
           asa_shape_code: item.asa_shape_code,
         }));
 
-        // 4. Insert packing slip
+        // 5. Insert packing slip with header fields
         const { error: slipErr } = await supabase
           .from("packing_slips")
           .insert({
@@ -142,6 +161,10 @@ export default function LoadingStation() {
             items_json: itemsJson as any,
             slip_number: slipNumber,
             status: "draft",
+            ship_to: shipTo,
+            scope: scope,
+            site_address: siteAddress,
+            delivery_date: deliveryDate,
           });
         if (slipErr) throw slipErr;
       } catch (innerErr) {
