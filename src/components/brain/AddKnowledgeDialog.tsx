@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { getSignedFileUrl } from "@/lib/storageUtils";
 
 interface AddKnowledgeDialogProps {
   open: boolean;
@@ -82,7 +83,6 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
           continue;
         }
 
-        const { getSignedFileUrl } = await import("@/lib/storageUtils");
         const publicUrl = await getSignedFileUrl(filePath);
         newFiles.push({ name: file.name, url: publicUrl, path: filePath });
       }

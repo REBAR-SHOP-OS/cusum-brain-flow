@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
+import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 
 /* ── Lazy-loaded tab components ── */
 const AccountingDashboard = lazy(() => import("@/components/accounting/AccountingDashboard").then(m => ({ default: m.AccountingDashboard })));
@@ -35,7 +36,7 @@ const AccountingAgedReceivables = lazy(() => import("@/components/accounting/Acc
 const AccountingAgedPayables = lazy(() => import("@/components/accounting/AccountingAgedPayables").then(m => ({ default: m.AccountingAgedPayables })));
 const AccountingQBReport = lazy(() => import("@/components/accounting/AccountingQBReport").then(m => ({ default: m.AccountingQBReport })));
 const AccountingAgent = lazy(() => import("@/components/accounting/AccountingAgent").then(m => ({ default: m.AccountingAgent })));
-const PayrollAuditView = lazy(() => import("@/components/office/PayrollAuditView").then(m => ({ default: m.PayrollAuditView })));
+
 const AccountingOrders = lazy(() => import("@/components/accounting/AccountingOrders").then(m => ({ default: m.AccountingOrders })));
 const AccountingActionQueue = lazy(() => import("@/components/accounting/AccountingActionQueue").then(m => ({ default: m.AccountingActionQueue })));
 const AccountingVendorPayments = lazy(() => import("@/components/accounting/AccountingVendorPayments").then(m => ({ default: m.AccountingVendorPayments })));

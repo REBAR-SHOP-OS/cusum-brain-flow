@@ -14,6 +14,7 @@ import { SlashCommandMenu, SlashCommand } from "./SlashCommandMenu";
 import { MentionMenu } from "./MentionMenu";
 import { QuickTemplates } from "./QuickTemplates";
 import { FormattingToolbar } from "./FormattingToolbar";
+import { getSignedFileUrl } from "@/lib/storageUtils";
 
 export interface UploadedFile {
   name: string;
@@ -189,7 +190,6 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
           continue;
         }
 
-        const { getSignedFileUrl } = await import("@/lib/storageUtils");
         const signedUrl = await getSignedFileUrl(filePath);
         newFiles.push({ name: file.name, size: file.size, type: file.type || "application/octet-stream", url: signedUrl, path: filePath });
       }

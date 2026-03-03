@@ -1,4 +1,4 @@
-import { useState, useRef, lazy, Suspense } from "react";
+import { useState, useRef } from "react";
 import {
   Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut,
   Camera, Settings as SettingsIcon, Users, Loader2, GraduationCap,
@@ -23,9 +23,8 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "@/assets/brand-logo.png";
-
-const BrainPage = lazy(() => import("@/pages/Brain"));
-const IntegrationsPage = lazy(() => import("@/pages/Integrations"));
+import BrainPage from "@/pages/Brain";
+import IntegrationsPage from "@/pages/Integrations";
 
 type SettingsTab = "settings" | "brain" | "integrations";
 
@@ -294,17 +293,9 @@ export default function Settings() {
           </div>
         )}
 
-        {activeTab === "brain" && (
-          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
-            <BrainPage />
-          </Suspense>
-        )}
+        {activeTab === "brain" && <BrainPage />}
 
-        {activeTab === "integrations" && (
-          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
-            <IntegrationsPage />
-          </Suspense>
-        )}
+        {activeTab === "integrations" && <IntegrationsPage />}
       </div>
     </div>
   );
