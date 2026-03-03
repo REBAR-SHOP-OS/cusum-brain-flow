@@ -7,15 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Plus, Trash2, Send, AlertTriangle, ChevronLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Order, OrderItem } from "@/hooks/useOrders";
-import { useOrders, ALLOWED_TRANSITIONS } from "@/hooks/useOrders";
+import { useOrders, ALLOWED_TRANSITIONS, PRIORITY_OPTIONS, DELIVERY_METHOD_OPTIONS } from "@/hooks/useOrders";
 import { ShopDrawingStepper } from "./ShopDrawingStepper";
 import { QCChecklist } from "./QCChecklist";
 import { ProductionLockBanner } from "./ProductionLockBanner";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-
-const STATUSES = ["pending", "confirmed", "in_production", "invoiced", "partially_paid", "paid", "closed", "cancelled"];
 
 interface Props {
   order: Order;
@@ -73,7 +71,6 @@ export function OrderDetail({ order, onBack }: Props) {
     } else {
       updates[field] = checked;
     }
-    // Auto-unlock production when all gates pass
     if (field === "qc_internal_approved_at" && checked && order.shop_drawing_status === "approved" && !order.pending_change_order) {
       updates.production_locked = false;
     }
@@ -89,7 +86,8 @@ export function OrderDetail({ order, onBack }: Props) {
   };
 
   const hasQBId = !!order.customers?.quickbooks_id;
-  const isInvoiced = order.status === "invoiced" || order.status === "paid" || order.status === "partially_paid";
+  const isInvoiced = ["invoiced", "paid", "partially_paid"].includes(order.status || "");
+  const isCommercial = order.order_kind === "commercial";
   const itemsTotal = items.reduce((s, i) => s + (i.quantity * i.unit_price), 0);
 
   const qcGates = [
@@ -107,7 +105,12 @@ export function OrderDetail({ order, onBack }: Props) {
           <ChevronLeft className="w-4 h-4 mr-1" /> Back
         </Button>
         <div className="flex-1">
-          <h2 className="text-lg font-bold">{order.order_number}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold">{order.order_number}</h2>
+            <Badge variant="outline" className={`text-[10px] ${order.order_kind === "extract" ? "bg-amber-500/10 text-amber-600 border-amber-300" : "bg-emerald-500/10 text-emerald-600 border-emerald-300"}`}>
+              {order.order_kind === "extract" ? "Extract" : "Commercial"}
+            </Badge>
+          </div>
           <p className="text-sm text-muted-foreground">
             {order.customers?.name || "Unknown customer"}
             {order.quotes && <span className="ml-2">← Quote {order.quotes.quote_number}</span>}
@@ -117,7 +120,7 @@ export function OrderDetail({ order, onBack }: Props) {
           value={order.status || "pending"}
           onValueChange={(v) => updateOrderStatus.mutate({ id: order.id, status: v, currentStatus: order.status || "pending" })}
         >
-          <SelectTrigger className="w-[160px] h-9">
+          <SelectTrigger className="w-[170px] h-9">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -133,6 +136,44 @@ export function OrderDetail({ order, onBack }: Props) {
         </Select>
       </div>
 
+      {/* Lifecycle fields: priority, delivery method */}
+      <Card>
+        <CardContent className="p-4 grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Priority</label>
+            <Select
+              value={order.priority || "medium"}
+              onValueChange={(v) => updateOrderFields.mutate({ id: order.id, priority: v } as any)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORITY_OPTIONS.map((p) => (
+                  <SelectItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Delivery Method</label>
+            <Select
+              value={order.delivery_method || "delivery"}
+              onValueChange={(v) => updateOrderFields.mutate({ id: order.id, delivery_method: v } as any)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DELIVERY_METHOD_OPTIONS.map((m) => (
+                  <SelectItem key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* QB warning */}
       {!hasQBId && (
         <Card className="border-amber-300 bg-amber-500/5">
@@ -143,40 +184,39 @@ export function OrderDetail({ order, onBack }: Props) {
         </Card>
       )}
 
-      {/* Production Lock & Shop Drawing Status */}
-      <Card>
-        <CardContent className="p-4 space-y-4">
-          <ProductionLockBanner
-            productionLocked={order.production_locked}
-            pendingChangeOrder={order.pending_change_order}
-            shopDrawingStatus={order.shop_drawing_status}
-            qcInternalApproved={!!order.qc_internal_approved_at}
-            revisionCount={order.customer_revision_count}
-            billableRequired={order.billable_revision_required}
-          />
-          <ShopDrawingStepper
-            status={order.shop_drawing_status}
-            onStatusChange={handleShopDrawingChange}
-          />
-          <div className="flex gap-2 pt-2 border-t border-border">
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs"
-              onClick={handleRevisionIncrement}
-            >
-              + Add Revision
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Production Lock & Shop Drawing Status — only show for commercial orders in production stages */}
+      {isCommercial && (
+        <Card>
+          <CardContent className="p-4 space-y-4">
+            <ProductionLockBanner
+              productionLocked={order.production_locked}
+              pendingChangeOrder={order.pending_change_order}
+              shopDrawingStatus={order.shop_drawing_status}
+              qcInternalApproved={!!order.qc_internal_approved_at}
+              revisionCount={order.customer_revision_count}
+              billableRequired={order.billable_revision_required}
+            />
+            <ShopDrawingStepper
+              status={order.shop_drawing_status}
+              onStatusChange={handleShopDrawingChange}
+            />
+            <div className="flex gap-2 pt-2 border-t border-border">
+              <Button size="sm" variant="outline" className="text-xs" onClick={handleRevisionIncrement}>
+                + Add Revision
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* QC Checklist */}
-      <Card>
-        <CardContent className="p-4">
-          <QCChecklist gates={qcGates} onToggle={handleQCToggle} />
-        </CardContent>
-      </Card>
+      {/* QC Checklist — only for commercial */}
+      {isCommercial && (
+        <Card>
+          <CardContent className="p-4">
+            <QCChecklist gates={qcGates} onToggle={handleQCToggle} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Line items */}
       <Card>
@@ -240,7 +280,7 @@ export function OrderDetail({ order, onBack }: Props) {
 
       {/* Actions */}
       <div className="flex gap-2 justify-end">
-        {!isInvoiced && (
+        {!isInvoiced && isCommercial && (
           <Button
             onClick={handleSendToQB}
             disabled={sending || !hasQBId || items.length === 0 || itemsTotal === 0}
