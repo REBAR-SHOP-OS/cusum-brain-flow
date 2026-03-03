@@ -1,43 +1,82 @@
 
 
-# Build Status and Remaining Work
+# Plan: Connect Extract → Production → Delivery (End-to-End)
 
-## Build Status
+## Current State Analysis
 
-The build **succeeded** — the output shows "✓ built in 27.96s". The truncated section contains only Vite warnings about mixed static/dynamic imports of `useCompanyId.ts`, which are non-blocking warnings, not errors.
+The infrastructure (columns, FKs, triggers) largely exists but has critical wiring gaps:
 
-## What's Already Done
+1. **`manage-extract/index.ts` line 525**: Creates orders with `status: "pending"` instead of `"extract_new"`
+2. **`manage-extract/index.ts` lines 599-619**: Creates production_tasks **without `order_id`** — the key missing link
+3. **No `recompute_order_completion` function**: Nothing auto-transitions orders to `ready`/`delivery_staged` when all tasks complete
+4. **`auto_create_delivery_on_staged` trigger (line 165)**: Creates delivery with `status: 'planned'` instead of `'staged'`
+5. **No delivery→order status mirroring**: Delivery status changes don't propagate back to order
+6. **UI gaps**: ShopControl doesn't group by order; DeliveryOps has no scheduling action
 
-All major pieces from the ERP overhaul are already implemented:
+## Implementation Steps
 
-- **Orders**: `order_kind`, `owner_id`, `priority`, `delivery_method`, `expected_value`, `production_override`, `due_date` columns exist. 16-stage status ladder with `ALLOWED_TRANSITIONS` is in `useOrders.ts`. Hard gate triggers (`block_quote_without_customer`, `block_approved_without_price`, `block_ready_without_production`) are deployed. `OrderList.tsx` has kind tabs, priority dots, status filters. `OrderDetail.tsx` has lifecycle fields and status dropdown.
-- **Deliveries**: `order_id` FK exists. `block_delivery_without_schedule` trigger enforces driver/vehicle/date.
-- **Production Tasks**: `order_id` FK and dedup unique index (`idx_prod_tasks_dedup`) exist.
-- **Time Clock**: `block_multiple_open_shifts` trigger exists. Stale shift cleanup was run.
-- **Social Posts**: `qa_status` column exists. `block_social_publish_without_qa` trigger enforces approval + 20-char minimum.
-- **Dashboards**: All 6 CEO dashboards (Extract Workbench, Production Control, Shop Control, Dispatch Control, Cash Control, Payroll Control) are built and integrated.
+### Step 1: Database Migration — Add `recompute_order_completion` + fix triggers
 
-## What's Missing (Minor Gaps)
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  production_tasks UPDATE/INSERT                              │
+│       ↓ (trigger)                                            │
+│  recompute_order_completion(order_id)                        │
+│       ↓                                                      │
+│  all tasks complete? → order.status = 'delivery_staged'      │
+│       │                  (if delivery_method='delivery')      │
+│       │                  or 'ready' (if pickup)              │
+│       ↓ (existing trigger)                                   │
+│  auto_create_delivery_on_staged → delivery(status='staged')  │
+└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  deliveries UPDATE                                           │
+│       ↓ (new trigger)                                        │
+│  mirror_delivery_to_order()                                  │
+│       delivery.scheduled → order.status='scheduled'          │
+│       delivery.in_transit → order.status='in_transit'        │  
+│       delivery.delivered  → order.status='delivered'         │
+└──────────────────────────────────────────────────────────────┘
+```
 
-1. **Order interface missing `due_date`** — The `Order` interface in `useOrders.ts` doesn't include `due_date` even though the column exists in the database. This is a one-line fix.
+SQL migration will:
+- Create `recompute_order_completion(uuid)` function
+- Create trigger `trg_recompute_on_task_change` on `production_tasks` AFTER INSERT/UPDATE
+- Fix `auto_create_delivery_on_staged` to use `status='staged'` not `'planned'`
+- Create `mirror_delivery_to_order()` trigger on `deliveries` AFTER UPDATE
+- Add `production_tasks.phase` column (default `'queued'`) if not present
 
-2. **Data reclassification may not have run on all orders** — The cleanup scripts were run as migrations but the user reports "orders mostly pending". A fresh data cleanup pass should be run via the insert tool to re-triage any remaining `pending` orders.
+### Step 2: Fix `manage-extract/index.ts`
 
-3. **Delivery status `planned` mismatch** — `DispatchControl.tsx` line 26 filters by `d.status === "planned"` for staged count, but the delivery statuses should be `staged/scheduled/in_transit/delivered/canceled`. The filter should use `"staged"` instead.
+Two surgical fixes:
+- **Line 525**: Change `status: "pending"` → `status: "extract_new"`, add `order_kind: "extract"`
+- **Lines 599-619**: Add `order_id: order.id` to each production task
 
-## Plan
+### Step 3: Fix `convert-quote-to-order/index.ts`
 
-### Step 1: Fix `Order` interface (1 line)
-Add `due_date: string | null;` to the `Order` interface in `useOrders.ts`.
+- **Line 115**: Change `status: "pending"` → `status: "approved"`, add `order_kind: "commercial"`
 
-### Step 2: Fix DispatchControl staged filter
-Change line 26 in `DispatchControl.tsx` from filtering `"planned"` to `"staged"`.
+### Step 4: Update ShopControl dashboard
 
-### Step 3: Re-run data cleanup via insert tool
-Run idempotent UPDATE statements to reclassify any remaining `pending`/`confirmed` orders using the same logic:
-- `customer_id IS NULL` → `needs_customer` + `extract`
-- `total_amount = 0 OR NULL` → `needs_pricing` + `extract`  
-- `total_amount > 0` → `approved` + `commercial`
+- Query production_tasks with `order_id` join to orders (order_number, customer)
+- Group tasks by order with completion percentage
+- Add phase column display instead of just status
 
-Also run time clock stale shift auto-close and social posts QA cleanup for any new bad data.
+### Step 5: Update DeliveryOps page
+
+- Show `order_number` and `customer_name` from joined order data
+- Add scheduling action (set driver/vehicle/date → status='scheduled')
+- Show `due_date` from linked order
+
+### Step 6: Data backfill
+
+- Run idempotent UPDATE to set `order_id` on orphaned production_tasks by matching through `work_orders.order_id`
+- Fix any deliveries with `status='planned'` → `'staged'`
+
+### Files Changed
+- `supabase/migrations/new.sql` — recompute function, triggers, phase column
+- `supabase/functions/manage-extract/index.ts` — add order_id to tasks, fix status
+- `supabase/functions/convert-quote-to-order/index.ts` — fix status
+- `src/components/dashboards/ShopControl.tsx` — order grouping + completion %
+- `src/pages/DeliveryOps.tsx` — scheduling action + order info
 
