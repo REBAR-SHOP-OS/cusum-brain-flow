@@ -2,6 +2,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { CEODashboardView } from "@/components/office/CEODashboardView";
 import { DailyBriefingCard } from "@/components/ceo/DailyBriefingCard";
 import { DailyAssignments } from "@/components/ceo/DailyAssignments";
+import { CEODashboards } from "@/components/dashboards/CEODashboards";
 import { FixRequestQueue } from "@/components/ceo/FixRequestQueue";
 import { BusinessHeartbeat } from "@/components/ceo/BusinessHeartbeat";
 
@@ -35,6 +36,7 @@ export default function CEOPortal() {
         
         <FixRequestQueue />
         <DailyAssignments />
+        <CEODashboards />
         <CEODashboardView />
 
         {/* System Status – temporary decommission monitoring */}
