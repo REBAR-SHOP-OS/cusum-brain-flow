@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
-import { ArrowLeft, Truck, Package, Loader2, Calendar, User, Car } from "lucide-react";
+import { ArrowLeft, Truck, Package, Loader2, Calendar, User, Car, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,8 +48,10 @@ export default function DeliveryOps() {
   const [cards, setCards] = useState<DeliveryCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [scheduleTarget, setScheduleTarget] = useState<DeliveryCard | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeliveryCard | null>(null);
   const [schedForm, setSchedForm] = useState({ driver_name: "", vehicle: "", scheduled_date: "" });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
     if (!companyId) return;
@@ -167,6 +170,26 @@ export default function DeliveryOps() {
     setSaving(false);
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const id = deleteTarget.id;
+    // Delete children first
+    await supabase.from("packing_slips").delete().eq("delivery_id", id);
+    await supabase.from("delivery_stops").delete().eq("delivery_id", id);
+    // Set to pending to bypass trigger, then delete
+    await supabase.from("deliveries").update({ status: "pending" }).eq("id", id);
+    const { error } = await supabase.from("deliveries").delete().eq("id", id);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Delivery deleted");
+      fetchData();
+    }
+    setDeleteTarget(null);
+    setDeleting(false);
+  };
+
   return (
     <div className="relative flex flex-col min-h-screen bg-background overflow-hidden">
       <div className="absolute inset-0 pointer-events-none z-0">
@@ -203,9 +226,21 @@ export default function DeliveryOps() {
                     <span className={cn("px-2.5 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase", STATUS_COLORS[card.status] || STATUS_COLORS.pending)}>
                       {STATUS_LABELS[card.status] || card.status.toUpperCase()}
                     </span>
-                    {card.order_number && (
-                      <span className="text-[10px] text-muted-foreground font-mono">{card.order_number}</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {card.order_number && (
+                        <span className="text-[10px] text-muted-foreground font-mono">{card.order_number}</span>
+                      )}
+                      <button
+                        className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDeleteTarget(card);
+                        }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <h3 className="text-lg font-black tracking-wide text-foreground uppercase leading-tight">
@@ -294,6 +329,28 @@ export default function DeliveryOps() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Delivery</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {deleteTarget?.delivery_number}? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
