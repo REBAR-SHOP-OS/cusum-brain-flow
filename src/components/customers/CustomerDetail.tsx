@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
   Pencil,
   Trash2,
@@ -56,6 +57,7 @@ import {
   X,
   Users,
   FolderKanban,
+  ChevronRight,
 } from "lucide-react";
 import { format, differenceInDays, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, subDays, subMonths, subYears } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -189,18 +191,49 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
     },
   });
 
-  // ── All contacts for this customer ──
+  // ── All contacts for this customer (including child customer records) ──
   const { data: allContacts = [] } = useQuery({
-    queryKey: ["customer_contacts", customer.id],
+    queryKey: ["customer_contacts_all", customer.id],
     queryFn: async () => {
+      // 1. Find all related customer IDs via v_customer_company_map
+      const { data: mapRows } = await supabase
+        .from("v_customer_company_map" as any)
+        .select("legacy_customer_id")
+        .eq("company_customer_id", customer.id);
+
+      const allIds = [customer.id, ...(mapRows || []).map((r: any) => r.legacy_customer_id).filter((id: string) => id !== customer.id)];
+
+      // 2. Fetch contacts from all related IDs
       const { data, error } = await supabase
         .from("contacts")
         .select("*")
-        .eq("customer_id", customer.id)
+        .in("customer_id", allIds)
         .order("is_primary", { ascending: false })
         .order("first_name");
       if (error) throw error;
-      return data ?? [];
+
+      // 3. Filter out auto-generated contacts where name matches company name
+      const companyName = (customer.company_name || customer.name || "").toLowerCase().trim();
+      return (data ?? []).filter((c) => {
+        const contactName = [c.first_name, c.last_name].filter(Boolean).join(" ").toLowerCase().trim();
+        return contactName !== companyName && contactName.length > 0;
+      });
+    },
+  });
+
+  // ── State for nested contact detail sheet ──
+  const [nestedCustomerId, setNestedCustomerId] = useState<string | null>(null);
+  const { data: nestedCustomer } = useQuery({
+    queryKey: ["nested_customer", nestedCustomerId],
+    enabled: !!nestedCustomerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", nestedCustomerId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as Customer | null;
     },
   });
 
@@ -943,7 +976,11 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
             ) : (
               <div className="space-y-3">
                 {allContacts.map((c) => (
-                  <Card key={c.id}>
+                  <Card
+                    key={c.id}
+                    className="cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => c.customer_id && setNestedCustomerId(c.customer_id)}
+                  >
                     <CardContent className="p-4 flex items-start gap-4">
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
                         {(c.first_name?.[0] || "").toUpperCase()}{(c.last_name?.[0] || "").toUpperCase()}
@@ -967,6 +1004,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                           )}
                         </div>
                       </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground mt-3 shrink-0" />
                     </CardContent>
                   </Card>
                 ))}
@@ -1072,6 +1110,23 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           onClose={() => setPreviewInvoice(null)}
         />
       )}
+      {/* ── Nested Contact Detail Sheet ── */}
+      <Sheet open={!!nestedCustomer} onOpenChange={(open) => { if (!open) setNestedCustomerId(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-4xl p-0">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{nestedCustomer?.name ?? "Contact Detail"}</SheetTitle>
+            <SheetDescription>Contact details and history</SheetDescription>
+          </SheetHeader>
+          {nestedCustomer && (
+            <CustomerDetail
+              customer={nestedCustomer}
+              onEdit={() => {}}
+              onDelete={() => {}}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
+
       {/* ── Delete Button (bottom-right) ── */}
       <div className="absolute bottom-4 right-4">
         <AlertDialog>
