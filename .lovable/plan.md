@@ -1,44 +1,58 @@
 
 
-# Fix: Contact Dropdown Not Showing (Data Query Issue)
+# Fix: Shape Schematic Images Not Displaying
 
 ## Root Cause
 
-The contacts query in `CustomerDetail.tsx` uses `v_customer_company_map` to find related customer IDs. But this view maps each comma-name child (e.g., "Kingdom Construction Limited, Ben McCabe") to **itself**, not to the parent company record. So:
+The upload dialog (`AiVisionUploadDialog.tsx`) correctly saves a **relative storage path** (e.g., `TYPE_T17_1234.png`) to the `image_url` column in `custom_shape_schematics`.
 
-1. Query asks: "What legacy IDs map to company_customer_id = Kingdom Construction Limited?"
-2. Answer: Only the parent itself (`a7aec8da`)
-3. Contacts query finds 2 contacts under that ID — both named "Kingdom Construction Limited" (auto-generated)
-4. Name filter removes them (they match the company name)
-5. Result: **0 contacts → dropdown hidden**
+However, `useShapeSchematics.ts` has a flawed URL resolution strategy:
 
-Meanwhile, the real contacts (Ben McCabe, Canberk Turkmen) are linked to the comma-name child customer IDs (`e02ae804`, `3aff2a4a`) which the query never finds.
+```text
+image_url = "TYPE_T17_1234.png"  (relative path, not a URL)
+
+extractStoragePath("TYPE_T17_1234.png")
+  → doesn't contain "/object/public/shape-schematics/" marker
+  → doesn't start with "http"
+  → returns "TYPE_T17_1234.png" ✓ (correct path)
+
+isCurrentProject = "TYPE_T17_1234.png".includes("rzqonxnow...")
+  → false ✗ (BUG! It's a relative path, not a URL)
+
+Result: signed URL is NEVER generated → raw path "TYPE_T17_1234.png" used as img src → broken image
+```
+
+The condition `isCurrentProject` is always `false` for relative paths because they don't contain any host. So the hook returns the raw storage path as the image URL, which is not a valid URL.
 
 ## Fix
 
-In the `allContacts` query (~line 195-222), **also find child customers by name pattern** (customers whose `name` starts with the company name + comma). This captures all comma-name variants.
+In `useShapeSchematics.ts`, change the signed URL logic: if we have a valid storage path **and** the URL is NOT an external URL (doesn't start with `http`), always generate a signed URL. Only skip signing for external full URLs.
 
 ```typescript
-// Current (broken): only uses v_customer_company_map
-const allIds = [customer.id, ...(mapRows || []).map(...)];
+// Before (broken):
+if (path && isCurrentProject) {
+  // generate signed URL
+}
+// External/public URL — use as-is
 
-// Fixed: also find comma-name children
-const companyPrefix = (customer.company_name || customer.name || "").split(",")[0].trim();
-const { data: commaChildren } = await supabase
-  .from("customers")
-  .select("id")
-  .ilike("name", `${companyPrefix},%`);
-
-const allIds = [
-  customer.id,
-  ...(mapRows || []).map((r) => r.legacy_customer_id),
-  ...(commaChildren || []).map((r) => r.id),
-].filter((id, i, arr) => arr.indexOf(id) === i); // dedupe
+// After (fixed):
+if (path) {
+  // It's a storage path (either extracted from URL or already relative)
+  // Always generate signed URL for storage paths
+  const { data: signedData } = await supabase.storage
+    .from("shape-schematics")
+    .createSignedUrl(path, SIGNED_URL_EXPIRY);
+  return { ...s, image_url: signedData?.signedUrl || s.image_url };
+}
+// Full external URL with no extractable path — use as-is
+return s;
 ```
+
+This works because `extractStoragePath` returns `null` for external URLs that don't match the bucket pattern, so those pass through untouched. For everything else (relative paths or URLs containing the bucket marker), we generate a signed URL.
 
 ## File Changed
 
 | File | Change |
 |------|--------|
-| `src/components/customers/CustomerDetail.tsx` | Fix contacts query to include comma-name child customer IDs |
+| `src/hooks/useShapeSchematics.ts` | Remove broken `isCurrentProject` check; always sign when we have a valid storage path |
 
