@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
   LayoutGrid, Brain, Settings, Shield, Plug, DollarSign, Activity,
-  Terminal, Lock, BarChart3, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap,
+  Terminal, Lock, BarChart3, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -44,6 +44,7 @@ export function AppSidebar() {
   if (email === "ai@rebar.shop") {
     const aiNav: NavItem[] = [
       { name: "Dashboard", href: "/home", icon: Home },
+      { name: "Kiosk", href: "/timeclock?kiosk=1", icon: Maximize },
       { name: "Shop Floor", href: "/shop-floor", icon: Factory },
     ];
     return (
