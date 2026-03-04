@@ -1,21 +1,47 @@
 
 
-# Fix: Auto-update Work Order Status When Cut Plan Is Queued
+# Fix: "You already have an open shift" — Stale Shifts From Previous Days
 
 ## Problem
-When a cut plan is queued to a machine (via `QueueToMachineDialog`), the associated work order status remains `pending` ("READY" + "Start" button). The cut plan items are already on the cutter, but the WO doesn't reflect that — it looks like nothing has started.
+The DB trigger `block_multiple_open_shifts` checks **all** open shifts (no date filter), but `useTimeClock` only fetches **today's** entries. So if a user forgot to clock out yesterday, the UI shows "Not Clocked In" (no open shift found today), but when they click Clock In, the DB trigger blocks it because yesterday's shift is still open.
 
 ## Root Cause
-`QueueToMachineDialog.handleQueue()` updates `cut_plans.status → queued` and creates `machine_runs`, but never touches the `work_orders` table. There's no trigger or logic linking cut plan status changes back to the parent work order.
+`fetchEntries` filters `.gte("clock_in", todayStart.toISOString())` — any open shift from a previous day is invisible to the hook, so `activeEntry` is `null`, but the DB correctly rejects the new insert.
 
 ## Fix
 
-### `src/components/cutter/QueueToMachineDialog.tsx`
-After updating the cut plan status to `queued` (line 78), add logic to update linked work orders to `in_progress`:
+### `src/hooks/useTimeClock.ts`
+Two changes:
 
-1. Query distinct `work_order_id` values from the plan's `cut_plan_items`
-2. For each non-null work order ID, update `work_orders.status` to `in_progress` and set `actual_start` if not already set
-3. Invalidate the `work-orders` query cache
+1. **`clockIn` — auto-close stale shifts before inserting**: Before attempting to insert a new clock-in, query for any open shift (`clock_out IS NULL`) for the current profile regardless of date. If one exists, auto-close it with `clock_out = now()` and a note `[auto-closed: stale shift]`, then proceed with the new clock-in.
 
-This is a ~10-line addition after the existing `cut_plans.update` call. No migration needed.
+2. **`activeEntry` — also check for any open shift across all dates**: Change the active entry detection to also fetch any open shift (not just today's), so the UI correctly shows "Clocked In" even if the shift started yesterday.
+
+Specifically:
+
+```ts
+// In clockIn, before insert:
+const { data: staleShifts } = await supabase
+  .from("time_clock_entries")
+  .select("id, clock_in")
+  .eq("profile_id", myProfile.id)
+  .is("clock_out", null);
+
+if (staleShifts && staleShifts.length > 0) {
+  // Auto-close all stale open shifts
+  await supabase
+    .from("time_clock_entries")
+    .update({ 
+      clock_out: new Date().toISOString(),
+      notes: "[auto-closed: stale shift from previous session]"
+    })
+    .eq("profile_id", myProfile.id)
+    .is("clock_out", null);
+}
+// Then proceed with insert
+```
+
+Also in `fetchEntries`, add a separate query for any open shift (no date filter) for the current user, and merge it into `entries` so `activeEntry` picks it up correctly.
+
+Single file change, no migration needed.
 
