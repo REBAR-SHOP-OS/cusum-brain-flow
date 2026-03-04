@@ -1,53 +1,71 @@
 
-هدف شما کاملا روشن است: وقتی کاربر روی Clock Out می‌زند باید واقعا در دیتابیس ثبت شود و همان لحظه دکمه به Clock In برگردد؛ و برعکس.
 
-Do I know what the issue is? بله.
+# Root Fix: Clock In/Out Reliability for All Users
 
-مسئله ریشه‌ای که پیدا شد:
-1) در حال حاضر برای بعضی کاربرها چندین Open Shift قدیمی همزمان وجود دارد (داده‌های تاریخی قبل از Trigger جدید).  
-2) کد `clockOut` فقط یک رکورد را با `id = activeEntry.id` می‌بندد. اگر کاربر 2+ Open Shift داشته باشد، بعد از Clock Out هنوز یک رکورد باز می‌ماند، پس UI دوباره Clock Out نشان می‌دهد.  
-3) در مسیر Face/Kiosk هم همین مشکل وجود دارد (فقط یک رکورد بسته می‌شود).  
-4) Auto clock-out ساعت 5 PM هم عملا اجرا نشده (لاگ ندارد و Job زمان‌بندی‌شده برای `auto-clockout` دیده نشد)، پس Open Shiftهای قدیمی باقی مانده‌اند.
+## Problem Analysis
 
-## برنامه اجرای اصلاح ریشه‌ای
+After reviewing the current code and database state:
+- Database is clean (only 1 legitimate open shift exists)
+- Code logic appears correct but may have subtle issues:
+  1. **`as any` type casts** on `.update()` and `.insert()` calls suppress TypeScript errors AND may hide runtime failures — the Supabase client might silently return errors that are not caught
+  2. **No optimistic UI update** — after clock out, the UI waits for `fetchEntries()` to complete a full round-trip before toggling the button, creating a perceived delay
+  3. **`fetchEntries` dependency on `myProfile`** — if `myProfile` resolves late (profiles loading), the callback recreates and may cause unnecessary re-fetches or missed updates
 
-### 1) اصلاح منطق Manual Clock Out (اصلی‌ترین fix)
-فایل: `src/hooks/useTimeClock.ts`
-- `clockOut` را از بستن «یک ردیف» به بستن «همه شیفت‌های باز همان پروفایل» تغییر می‌دهم:
-  - شرط: `.eq("profile_id", myProfile.id).is("clock_out", null)`
-  - `clock_out` یکسان با `new Date().toISOString()`
-  - برای رکوردهای اضافی، note ثبت شود تا audit مشخص باشد.
-- `activeEntry` را همیشه از جدیدترین شیفت باز انتخاب می‌کنم (مرتب‌سازی بر اساس `clock_in desc`) تا نمایش زمان و وضعیت deterministic شود.
-- دکمه Clock In/Out را هنگام درخواست pending موقتاً disable می‌کنم تا دوبار کلیک همزمان race condition نسازد.
+## Plan
 
-### 2) یکسان‌سازی رفتار در Face/Kiosk
-فایل: `src/pages/TimeClock.tsx`
-- در `handleConfirmPunch` وقتی قصد Clock Out دارد، مثل Manual Mode همه Open Shiftهای آن `profile_id` را می‌بندد (نه فقط اولین رکورد پیدا شده).
-- در حالت Clock In هم قبل از insert، اگر Open Shift قدیمی وجود داشت، ابتدا بسته شود تا trigger خطا ندهد.
-- نتیجه: چه دستی چه Face، رفتار یکسان و قابل اعتماد می‌شود.
+### 1. `src/hooks/useTimeClock.ts` — Bulletproof Clock In/Out
 
-### 3) پاکسازی داده‌های تاریخی خراب (یک‌بار برای همیشه)
-عملیات دیتابیس (data operation):
-- یک کوئری یک‌باره اجرا می‌کنم که برای هر پروفایل، اگر بیش از یک Open Shift دارد:
-  - جدیدترین Open Shift را نگه دارد
-  - بقیه Openها را با note مخصوص ببندد
-- این کار باعث می‌شود کاربران فوراً از حلقه‌ی Clock Out گیر کرده خارج شوند و Team Status هم واقعی شود.
+**Remove all `as any` casts** and use proper typing for Supabase operations. This ensures TypeScript catches any schema mismatches.
 
-### 4) تثبیت Auto Clock-Out ساعت 5 PM برای rebar.shop (به جز Kourosh)
-فایل: `supabase/functions/auto-clockout/index.ts` + تنظیم زمان‌بندی backend
-- تابع را idempotent نگه می‌دارم: فقط رکوردهای `clock_out is null` را ببندد.
-- فیلتر دامنه `@rebar.shop` با `lower(email)` و استثنا `kourosh@rebar.shop`.
-- زمان Clock Out را دقیق 5 PM Eastern محاسبه و ثبت کند.
-- Job زمان‌بندی واقعی برای روزهای کاری ایجاد/اصلاح می‌کنم و بعد با invocation تستی + لاگ صحت اجرا را تایید می‌کنم.
+**Add optimistic state updates**: Immediately clear `activeEntry` on clock out (and set it on clock in) BEFORE the database round-trip, then confirm with `fetchEntries()`. This makes the button toggle instantly.
 
-## جزئیات فنی (خلاصه)
-- منبع اصلی باگ: ناسازگاری بین «مدل داده تاریخی (چند open)» و «کد بستن یک رکورد».
-- اصل اصلاح: تمام مسیرهای punch باید atomic-ish و profile-based باشند، نه entry-based.
-- بدون تغییر UI ساختاری؛ فقط منطق ثبت حضور/خروج و پایداری state اصلاح می‌شود.
+**Add comprehensive error logging**: Log the actual Supabase response on failure so we can debug if issues persist.
 
-## تست پذیرش (End-to-End)
-1) کاربر Clock In بزند → رکورد جدید open ساخته شود → دکمه فوراً Clock Out شود.  
-2) کاربر Clock Out بزند → هیچ open برای همان profile نماند → دکمه فوراً Clock In شود.  
-3) سناریوی کاربر با چند Open Shift قدیمی → یک Clock Out همه را ببندد و UI درست برگردد.  
-4) Face/Kiosk همین رفتار را تکرار کند.  
-5) Auto 5 PM برای rebar.shop (به جز Kourosh) با لاگ و رکورد واقعی تایید شود.
+**Decouple `fetchEntries` from `myProfile`**: Use `user.id` to look up the profile inside the callback, removing the dependency that causes recreation.
+
+```ts
+// Clock Out — optimistic + close all
+const clockOut = async () => {
+  if (!myProfile) { toast.error("No profile found"); return; }
+  if (punching) return;
+  setPunching(true);
+
+  // Optimistic: clear active entry immediately
+  setEntries(prev => prev.map(e => 
+    e.clock_out ? e : { ...e, clock_out: new Date().toISOString() }
+  ));
+
+  try {
+    const { error, count } = await supabase
+      .from("time_clock_entries")
+      .update({ clock_out: new Date().toISOString() })
+      .eq("profile_id", myProfile.id)
+      .is("clock_out", null);
+
+    if (error) {
+      console.error("Clock out failed:", error);
+      toast.error("Failed to clock out");
+    } else {
+      toast.success("Clocked out!");
+    }
+    await fetchEntries(); // Confirm from DB
+  } finally {
+    setPunching(false);
+  }
+};
+```
+
+**Same pattern for `clockIn`**: Close stale shifts, insert new entry, optimistic update.
+
+### 2. `src/pages/TimeClock.tsx` — Face/Kiosk Alignment
+
+Ensure `handleConfirmPunch` uses the same robust pattern (no `as any`, optimistic updates, error logging).
+
+### 3. Data Verification
+
+Run a query to confirm no orphaned/stale shifts exist and verify the `block_multiple_open_shifts` trigger is functioning correctly.
+
+## Files Changed
+- `src/hooks/useTimeClock.ts` — Remove `as any`, add optimistic updates, improve error handling
+- `src/pages/TimeClock.tsx` — Align face/kiosk punch with same pattern
+
