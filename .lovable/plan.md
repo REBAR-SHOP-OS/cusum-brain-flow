@@ -1,47 +1,35 @@
 
 
-# Fix: "You already have an open shift" — Stale Shifts From Previous Days
+# Fix: Team Status Not Reflecting Open Shifts & Clock Out Working For All Users
 
 ## Problem
-The DB trigger `block_multiple_open_shifts` checks **all** open shifts (no date filter), but `useTimeClock` only fetches **today's** entries. So if a user forgot to clock out yesterday, the UI shows "Not Clocked In" (no open shift found today), but when they click Clock In, the DB trigger blocks it because yesterday's shift is still open.
+Two issues visible in the screenshot:
 
-## Root Cause
-`fetchEntries` filters `.gte("clock_in", todayStart.toISOString())` — any open shift from a previous day is invisible to the hook, so `activeEntry` is `null`, but the DB correctly rejects the new insert.
+1. **"Radin Lachini" shows as "Not clocked in" / "OFF" in Team Status** despite being actively clocked in (shown at the top with 311h). This is because `allEntries` only fetches **today's** entries, but the open shift started days ago.
+
+2. The Clock Out button works correctly for the logged-in user (uses `activeEntry` from merged data), but the **Team Status grid** uses `allEntries` which misses stale open shifts from other days — so other team members with old open shifts also appear incorrectly as "Off".
 
 ## Fix
 
 ### `src/hooks/useTimeClock.ts`
-Two changes:
+Update `fetchEntries` to also fetch **all open shifts across all dates for all profiles** (not just the current user), and merge them into `allEntries`:
 
-1. **`clockIn` — auto-close stale shifts before inserting**: Before attempting to insert a new clock-in, query for any open shift (`clock_out IS NULL`) for the current profile regardless of date. If one exists, auto-close it with `clock_out = now()` and a note `[auto-closed: stale shift]`, then proceed with the new clock-in.
-
-2. **`activeEntry` — also check for any open shift across all dates**: Change the active entry detection to also fetch any open shift (not just today's), so the UI correctly shows "Clocked In" even if the shift started yesterday.
-
-Specifically:
+1. After fetching today's entries, run a second query: all entries where `clock_out IS NULL` (no date filter, no profile filter)
+2. Merge those into `allEntries` (deduplicating by ID)
+3. This ensures the `statusMap` in `TimeClock.tsx` correctly detects open shifts from previous days for every team member
 
 ```ts
-// In clockIn, before insert:
-const { data: staleShifts } = await supabase
+// After fetching today's entries:
+const { data: allOpenShifts } = await supabase
   .from("time_clock_entries")
-  .select("id, clock_in")
-  .eq("profile_id", myProfile.id)
+  .select("*")
   .is("clock_out", null);
 
-if (staleShifts && staleShifts.length > 0) {
-  // Auto-close all stale open shifts
-  await supabase
-    .from("time_clock_entries")
-    .update({ 
-      clock_out: new Date().toISOString(),
-      notes: "[auto-closed: stale shift from previous session]"
-    })
-    .eq("profile_id", myProfile.id)
-    .is("clock_out", null);
-}
-// Then proceed with insert
+// Merge: today's entries + any open shift not already included
+const todayIds = new Set((data || []).map(e => e.id));
+const extraOpen = (allOpenShifts || []).filter(e => !todayIds.has(e.id));
+setAllEntries([...extraOpen, ...(data || [])] as TimeClockEntry[]);
 ```
 
-Also in `fetchEntries`, add a separate query for any open shift (no date filter) for the current user, and merge it into `entries` so `activeEntry` picks it up correctly.
-
-Single file change, no migration needed.
+Single file change, no migration needed. This ensures every team member's open shift is visible in Team Status regardless of when they clocked in.
 
