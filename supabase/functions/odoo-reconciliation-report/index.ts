@@ -1,5 +1,6 @@
 import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
 import { STAGE_MAP } from "../_shared/odoo-validation.ts";
+import { isEnabled } from "../_shared/featureFlags.ts";
 
 async function odooRpc(url: string, db: string, apiKey: string, model: string, method: string, args: unknown[]) {
   const res = await fetch(`${url}/jsonrpc`, {
@@ -31,7 +32,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   // ODOO_ENABLED feature flag guard
-  if (Deno.env.get("ODOO_ENABLED") !== "true") {
+  if (!isEnabled("ODOO_ENABLED")) {
+    console.warn("ODOO_ENABLED guard: flag resolved to false");
     return new Response(JSON.stringify({ error: "Odoo integration is disabled", disabled: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -573,7 +573,7 @@ export default function Pipeline() {
 
       // Handle disabled or error responses that come back as 200
       if (data?.disabled) {
-        toast({ title: "Odoo Sync Disabled", description: data.error || "Odoo integration is currently disabled.", variant: "destructive" });
+        toast({ title: "Odoo Sync Disabled", description: "The ODOO_ENABLED setting is not active or has an invalid value. Check backend secrets.", variant: "destructive" });
         return;
       }
       if (data?.error) {
