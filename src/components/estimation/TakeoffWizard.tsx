@@ -40,7 +40,7 @@ export default function TakeoffWizard({ open, onClose, onComplete }: TakeoffWiza
 
   useEffect(() => {
     if (!open) return;
-    supabase.from("customers").select("id, name").order("name").then(({ data }) => {
+    supabase.from("v_customers_clean" as any).select("customer_id, display_name").order("display_name").then(({ data }) => {
       setCustomers(data ?? []);
     });
   }, [open]);

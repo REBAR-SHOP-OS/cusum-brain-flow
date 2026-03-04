@@ -125,8 +125,8 @@ export function ProductionQueueView() {
     enabled: !!user && projectCustomerIds.length > 0,
     queryFn: async () => {
       if (projectCustomerIds.length === 0) return [];
-      const { data, error } = await supabase.from("customers").select("id, name").in("id", projectCustomerIds);
-      return (data || []) as Array<{ id: string; name: string }>;
+      const { data, error } = await supabase.from("v_customers_clean" as any).select("customer_id, display_name").in("customer_id", projectCustomerIds);
+      return ((data || []) as unknown) as Array<{ id: string; name: string }>;
     },
   });
   const customersReady = projectCustomerIds.length === 0 || (!customersLoading && !!customers);

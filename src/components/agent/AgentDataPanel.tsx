@@ -127,7 +127,7 @@ function CustomersPanel() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from("customers").select("*").order("updated_at", { ascending: false }).limit(15);
+      const { data } = await supabase.from("v_customers_clean" as any).select("*").order("created_at", { ascending: false }).limit(15);
       if (data) setCustomers(data);
     }
     load();

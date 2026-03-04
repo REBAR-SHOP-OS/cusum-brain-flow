@@ -149,7 +149,7 @@ export function AccountingCustomers({ data }: Props) {
       const { data: c, error } = await supabase
         .from("customers")
         .select("*")
-        .eq("quickbooks_id", selectedQbId!)
+        .eq("quickbooks_id", selectedQbId!)  // Write-path: keep on customers table
         .maybeSingle();
       if (error) throw error;
       return c;

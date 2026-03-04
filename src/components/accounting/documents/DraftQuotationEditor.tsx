@@ -76,10 +76,10 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         supabase.from("quotes").select("*").eq("id", quoteId).single(),
         companyId
           ? supabase
-              .from("customers")
-              .select("id, name, billing_street1, billing_city, billing_province, billing_postal_code")
+              .from("v_customers_clean" as any)
+              .select("customer_id, display_name, company_name")
               .eq("company_id", companyId)
-              .order("name")
+              .order("display_name")
           : Promise.resolve({ data: [], error: null }),
         companyId
           ? supabase
