@@ -225,31 +225,20 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const selectedContact = allContacts.find((c) => c.id === selectedContactId) ?? null;
 
-  // ── Leads/projects for selected contact's customer_id ──
-  const { data: contactLeads = [] } = useQuery({
-    queryKey: ["contact_leads", selectedContact?.customer_id],
-    enabled: !!selectedContact?.customer_id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("customer_id", selectedContact!.customer_id!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
 
   const primaryContact = allContacts.find((c) => c.is_primary) ?? allContacts[0] ?? null;
 
+  // ── Compute active customer ID based on contact selection ──
+  const activeCustomerId = selectedContact?.customer_id ?? customer.id;
+
   // ── All projects for this customer ──
   const { data: customerProjects = [] } = useQuery({
-    queryKey: ["customer_projects", customer.id],
+    queryKey: ["customer_projects", activeCustomerId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
         .select("*")
-        .eq("customer_id", customer.id)
+        .eq("customer_id", activeCustomerId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -258,12 +247,12 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
 
   // ── All leads/opportunities for this customer ──
   const { data: customerLeads = [] } = useQuery({
-    queryKey: ["customer_leads", customer.id],
+    queryKey: ["customer_leads", activeCustomerId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("leads")
         .select("id, title, stage, expected_value, probability, priority, source, created_at")
-        .eq("customer_id", customer.id)
+        .eq("customer_id", activeCustomerId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -474,6 +463,44 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                 <Badge variant="outline">{salesTerms}</Badge>
               )}
             </div>
+
+            {/* Contact selector */}
+            {allContacts.length > 0 && (
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+                <Select
+                  value={selectedContactId ?? "__all__"}
+                  onValueChange={(val) => setSelectedContactId(val === "__all__" ? null : val)}
+                >
+                  <SelectTrigger className="w-[220px] h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All — {customer.company_name || customer.name}</SelectItem>
+                    {allContacts.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {[c.first_name, c.last_name].filter(Boolean).join(" ")}
+                        {c.role ? ` — ${c.role}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedContact && (
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    {selectedContact.email && (
+                      <span className="flex items-center gap-1">
+                        <Mail className="w-3 h-3" /> {selectedContact.email}
+                      </span>
+                    )}
+                    {selectedContact.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> {selectedContact.phone}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex gap-2 shrink-0">
             <Button variant="outline" size="sm" onClick={onEdit}>
@@ -664,9 +691,6 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           </TabsTrigger>
           <TabsTrigger value="notes" className="gap-1">
             <StickyNote className="w-3 h-3" /> Notes
-          </TabsTrigger>
-          <TabsTrigger value="contacts" className="gap-1">
-            <Users className="w-3 h-3" /> Contacts{allContacts.length > 0 && ` (${allContacts.length})`}
           </TabsTrigger>
           <TabsTrigger value="projects" className="gap-1">
             <FolderKanban className="w-3 h-3" /> Projects{(customerProjects.length + customerLeads.length) > 0 && ` (${customerProjects.length + customerLeads.length})`}
@@ -969,95 +993,6 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                   <Pencil className="w-3 h-3 mr-1" /> {customer.notes ? "Edit notes" : "Add notes"}
                 </Button>
               </div>
-            )}
-          </TabsContent>
-
-          {/* ─── Contacts ─── */}
-          <TabsContent value="contacts" className="mt-0 px-6 py-4 space-y-4">
-            {allContacts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No contacts linked to this company.</p>
-            ) : (
-              <>
-                <Select
-                  value={selectedContactId ?? ""}
-                  onValueChange={(val) => setSelectedContactId(val)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a contact..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allContacts.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {[c.first_name, c.last_name].filter(Boolean).join(" ")}
-                        {c.role ? ` — ${c.role}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {selectedContact && (
-                  <div className="space-y-4">
-                    {/* Contact info card */}
-                    <Card>
-                      <CardContent className="p-4 flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
-                          {(selectedContact.first_name?.[0] || "").toUpperCase()}{(selectedContact.last_name?.[0] || "").toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-sm">{[selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(" ")}</p>
-                            {selectedContact.is_primary && <Badge variant="default" className="text-[10px]">Primary</Badge>}
-                          </div>
-                          {selectedContact.role && <p className="text-xs text-muted-foreground">{selectedContact.role}</p>}
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                            {selectedContact.email && (
-                              <span className="flex items-center gap-1">
-                                <Mail className="w-3 h-3" /> {selectedContact.email}
-                              </span>
-                            )}
-                            {selectedContact.phone && (
-                              <span className="flex items-center gap-1">
-                                <Phone className="w-3 h-3" /> {selectedContact.phone}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Projects / Leads for this contact */}
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-semibold uppercase text-muted-foreground">Projects / Leads</h3>
-                      {contactLeads.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No projects or leads for this contact.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {contactLeads.map((lead: any) => (
-                            <Card key={lead.id}>
-                              <CardContent className="p-4 space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium text-sm">{lead.project_name || lead.name || "Untitled"}</p>
-                                  <Badge variant="secondary" className="text-[10px]">{lead.status}</Badge>
-                                </div>
-                                {lead.estimated_value != null && (
-                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                    <DollarSign className="w-3 h-3" /> ${Number(lead.estimated_value).toLocaleString()}
-                                  </p>
-                                )}
-                                {lead.location && (
-                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                    <MapPin className="w-3 h-3" /> {lead.location}
-                                  </p>
-                                )}
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
             )}
           </TabsContent>
 
