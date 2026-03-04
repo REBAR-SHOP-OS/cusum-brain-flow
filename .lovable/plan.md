@@ -1,58 +1,62 @@
 
 
-# Replace Contact Cards with Dropdown + Filtered Projects
+# Fix Face ID Kiosk Errors & Add Name Registration on Failure
 
 ## Problem
 
-The Contacts tab currently shows contact cards that open a nested sheet. The user wants a **dropdown selector** of contacts instead, and when a contact is selected, it should display that person's projects/leads below the dropdown — all inline, no nested sheets.
+The Face ID Kiosk shows "Recognition Error" + "Recognition failed" instead of allowing the user to register. Two root issues:
+
+1. **Auth fragility**: `requireAuth` uses `getClaims()` which can fail intermittently. One of your other functions (`vizzy-erp-action`) already switched to `getUser()` with a comment noting `getClaims` is deprecated.
+
+2. **Error = dead end**: When the edge function errors (AI timeout, auth glitch, etc.), the UI shows "Recognition Error" with only a "Try Again" button. It should fall through to the FirstTimeRegistration flow so the person can enter their name and get registered.
 
 ## Plan
 
-### Changes to `src/components/customers/CustomerDetail.tsx`
+### 1. Fix `requireAuth` in `supabase/functions/_shared/auth.ts`
+Replace `getClaims(token)` with `getUser()` which is more reliable and not deprecated. This fixes intermittent auth failures.
 
-1. **Replace contact card list with a `Select` dropdown** in the Contacts tab
-   - Each option shows the contact name + role
-   - Selecting a contact sets `selectedContactId` state
+```typescript
+// Before (fragile):
+const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
 
-2. **Show selected contact's info + their projects below the dropdown**
-   - Display the selected contact's email, phone, role as a small info card
-   - Query leads from `leads` table filtered by the contact's `customer_id` (the child customer record)
-   - Render those leads/projects inline below the contact info
-
-3. **Remove the nested CustomerDetail sheet** — no longer needed since the projects show inline
-
-4. **Remove `ChevronRight` icon import** if no longer used elsewhere
-
-### UI Layout (Contacts tab)
-
-```text
-┌────────────────────────────────────┐
-│ [▼ Select a contact...           ] │  ← Select dropdown
-├────────────────────────────────────┤
-│ 👤 Ben McCabe                      │  ← Contact info card
-│    ben@kingdom.ca  ·  519-555-1234 │
-├────────────────────────────────────┤
-│ PROJECTS / LEADS                   │
-│ ┌────────────────────────────────┐ │
-│ │ Thamesford WWTP Upgrades      │ │  ← Leads for this contact's customer_id
-│ │ quotation_bids  · $120,000    │ │
-│ └────────────────────────────────┘ │
-│ ┌────────────────────────────────┐ │
-│ │ Lucan WWTP Expansion          │ │
-│ │ won  · $85,000                │ │
-│ └────────────────────────────────┘ │
-└────────────────────────────────────┘
+// After (reliable):
+const { data: { user }, error: userError } = await userClient.auth.getUser();
+if (userError || !user) throw 401;
+return { userId: user.id, ... };
 ```
 
-### State & Data Flow
+### 2. Fix Kiosk UI to show registration on error
+In `src/pages/TimeClock.tsx`, change the kiosk mode rendering so both `no_match` AND `error` states show the `FirstTimeRegistration` component instead of showing a dead-end error screen.
 
-- `selectedContactId` — tracks which contact is selected in the dropdown
-- When selected, use the contact's `customer_id` to query `leads` table: `.from("leads").select("*").eq("customer_id", contact.customer_id)`
-- Also query `projects` table with same `customer_id`
+```typescript
+// Before:
+{face.state === "no_match" ? (
+  <FirstTimeRegistration ... />
+) : (
+  <FaceRecognitionResult ... />
+)}
 
-### Files Changed
+// After:
+{(face.state === "no_match" || face.state === "error") ? (
+  <FirstTimeRegistration ... />
+) : (
+  <FaceRecognitionResult ... />
+)}
+```
+
+### 3. Add error-resilient fallback in edge function
+In `supabase/functions/face-recognize/index.ts`, if the AI call fails entirely, return `{ matched: false, reason: "..." }` instead of a 500 error. This way the client gets `no_match` state instead of `error`.
+
+```typescript
+// In the AI error catch block, instead of returning 500:
+return new Response(JSON.stringify({ matched: false, reason: "Recognition unavailable, please register manually" }), { ... });
+```
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/customers/CustomerDetail.tsx` | Replace contact cards with Select dropdown, show contact info + their leads/projects inline, remove nested sheet |
+| `supabase/functions/_shared/auth.ts` | Replace `getClaims` with `getUser()` |
+| `supabase/functions/face-recognize/index.ts` | Return `no_match` on AI failure instead of 500 |
+| `src/pages/TimeClock.tsx` | Show FirstTimeRegistration for both `no_match` and `error` states in kiosk mode |
 
