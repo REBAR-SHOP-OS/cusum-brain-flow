@@ -191,12 +191,17 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
                 });
               }
 
-              // Always update DB record
+              // Generate proper public URL
+              const { data: urlData } = supabase.storage
+                .from("estimation-files")
+                .getPublicUrl(storagePath);
+
+              // DB update — only reached if upload/skip succeeded (no throw above)
               const { error: dbErr } = await supabase
                 .from("lead_files")
                 .update({
                   storage_path: storagePath,
-                  file_url: storagePath,
+                  file_url: urlData.publicUrl || storagePath,
                 } as any)
                 .eq("odoo_id", p.odoo_id)
                 .is("storage_path", null);
