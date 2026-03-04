@@ -1,35 +1,28 @@
 
 
-# Fix: Team Status Not Reflecting Open Shifts & Clock Out Working For All Users
+# Auto Clock-Out at 5 PM for @rebar.shop Users (Except Kourosh Zand)
 
-## Problem
-Two issues visible in the screenshot:
+## What This Does
+Creates a scheduled backend function that runs every day at 5 PM (Eastern Time) and automatically clocks out all @rebar.shop employees who are still clocked in — except Kourosh Zand, who works flexible shop hours.
 
-1. **"Radin Lachini" shows as "Not clocked in" / "OFF" in Team Status** despite being actively clocked in (shown at the top with 311h). This is because `allEntries` only fetches **today's** entries, but the open shift started days ago.
+## Implementation
 
-2. The Clock Out button works correctly for the logged-in user (uses `activeEntry` from merged data), but the **Team Status grid** uses `allEntries` which misses stale open shifts from other days — so other team members with old open shifts also appear incorrectly as "Off".
+### 1. Edge Function: `supabase/functions/auto-clockout/index.ts`
+- Query all open shifts (`clock_out IS NULL`) joined with `profiles` table
+- Filter to profiles with `email LIKE '%@rebar.shop'` AND `email != 'kourosh@rebar.shop'`
+- Update matching entries: set `clock_out = 5:00 PM today (ET)` and `notes = '[auto-closed: 5 PM auto clock-out]'`
+- Return count of closed shifts
 
-## Fix
+### 2. Cron Job (SQL via insert tool)
+- Schedule `pg_cron` job to call the edge function at `0 21 * * 1-5` (9 PM UTC = 5 PM ET, weekdays only)
+- Uses `pg_net.http_post` to invoke the function
+- Extensions `pg_cron` and `pg_net` are already enabled
 
-### `src/hooks/useTimeClock.ts`
-Update `fetchEntries` to also fetch **all open shifts across all dates for all profiles** (not just the current user), and merge them into `allEntries`:
+### 3. No UI Changes Needed
+The existing `useTimeClock` hook already handles realtime updates — when shifts are closed by the backend, the UI will reflect the change automatically.
 
-1. After fetching today's entries, run a second query: all entries where `clock_out IS NULL` (no date filter, no profile filter)
-2. Merge those into `allEntries` (deduplicating by ID)
-3. This ensures the `statusMap` in `TimeClock.tsx` correctly detects open shifts from previous days for every team member
-
-```ts
-// After fetching today's entries:
-const { data: allOpenShifts } = await supabase
-  .from("time_clock_entries")
-  .select("*")
-  .is("clock_out", null);
-
-// Merge: today's entries + any open shift not already included
-const todayIds = new Set((data || []).map(e => e.id));
-const extraOpen = (allOpenShifts || []).filter(e => !todayIds.has(e.id));
-setAllEntries([...extraOpen, ...(data || [])] as TimeClockEntry[]);
-```
-
-Single file change, no migration needed. This ensures every team member's open shift is visible in Team Status regardless of when they clocked in.
+## Technical Details
+- Time zone: 5 PM Eastern = 9 PM UTC (adjusts for DST manually if needed, but cron uses fixed UTC)
+- Kourosh's email in profiles: `kourosh@rebar.shop`
+- The function uses `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS
 
