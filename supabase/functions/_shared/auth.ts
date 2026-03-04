@@ -39,10 +39,9 @@ export async function requireAuth(req: Request): Promise<AuthResult> {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const token = authHeader.replace("Bearer ", "");
-  const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+  const { data: { user }, error: userError } = await userClient.auth.getUser();
 
-  if (claimsError || !claimsData?.claims?.sub) {
+  if (userError || !user) {
     throw new Response(
       JSON.stringify({ error: "Invalid token" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -52,7 +51,7 @@ export async function requireAuth(req: Request): Promise<AuthResult> {
   const serviceClient = createClient(supabaseUrl, serviceKey);
 
   return {
-    userId: claimsData.claims.sub as string,
+    userId: user.id,
     userClient,
     serviceClient,
   };
@@ -74,10 +73,9 @@ export async function optionalAuth(req: Request): Promise<string | null> {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data, error } = await userClient.auth.getClaims(token);
-    if (error || !data?.claims?.sub) return null;
-    return data.claims.sub as string;
+    const { data: { user }, error } = await userClient.auth.getUser();
+    if (error || !user) return null;
+    return user.id;
   } catch {
     return null;
   }
