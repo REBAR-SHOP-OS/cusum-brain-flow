@@ -1,51 +1,41 @@
 
 
-# Fix Odoo Sync "undefined" Toast Message
+# Fix Contacts Tab & Make Contacts Clickable with Sub-Details
 
 ## Problem
 
-When clicking "Odoo Sync" in the Pipeline menu, the toast shows:
-> **Odoo Sync Complete**  
-> undefined created, undefined updated, 0 reconciled, undefined errors (undefined total, undefined mode)
+The Contacts tab for "Kingdom Construction Limited" shows 2 entries both named "Kingdom Construction Limited" because:
+1. The main customer record (`a7aec8da`) has auto-generated contacts with `first_name: "Kingdom"`, `last_name: "Construction Limited"` — bad data from the normalization trigger
+2. The **real people** (Ben McCabe, Canberk Turkmen) exist as contacts under **child customer records** (`e02ae804` = "Kingdom Construction Limited, Ben McCabe", `3aff2a4a` = "Kingdom Construction Limited, Canberk Turkmen")
+3. The current query only fetches contacts for the parent customer ID, missing the child records entirely
 
-This happens because the edge function returns a response **without** the expected fields in certain cases, but the client always assumes success and tries to read `data.created`, `data.updated`, etc.
+## Plan
 
-## Root Cause
+### 1. Fix the Contacts query to include child customer records
 
-Two scenarios cause this:
+Use `v_customer_company_map` to find all legacy customer IDs that map to this company, then fetch contacts from ALL of them. Filter out contacts where `first_name + last_name` matches the company name (bad auto-generated data).
 
-1. **ODOO_ENABLED is not "true"**: The function returns `{ error: "Odoo integration is disabled", disabled: true }` with status 200. Since it's not an HTTP error, `supabase.functions.invoke` doesn't throw — the client proceeds to the toast and reads `.created` (undefined), `.updated` (undefined), etc.
+```sql
+-- Find all child customer IDs that map to this company
+SELECT legacy_customer_id FROM v_customer_company_map 
+WHERE company_customer_id = '<parent_id>'
 
-2. **Auth failure returning 401**: Returns `{ error: "Unauthorized" }` — similar issue if the SDK doesn't throw on 401.
-
-## Fix
-
-Update `handleOdooSync` in `src/pages/Pipeline.tsx` to check for error/disabled responses before showing the success toast:
-
-```typescript
-const { data, error } = await supabase.functions.invoke("odoo-crm-sync", { body: { mode: "full" } });
-if (error) throw error;
-
-// Handle disabled or error responses that come back as 200
-if (data?.disabled) {
-  toast({ title: "Odoo Sync Disabled", description: data.error || "Odoo integration is currently disabled.", variant: "destructive" });
-  return;
-}
-if (data?.error) {
-  toast({ title: "Odoo Sync Failed", description: data.error, variant: "destructive" });
-  return;
-}
-
-// Safe display with fallbacks
-toast({
-  title: "Odoo Sync Complete",
-  description: `${data?.created ?? 0} created, ${data?.updated ?? 0} updated, ${data?.reconciled ?? 0} reconciled, ${data?.errors ?? 0} errors (${data?.total ?? 0} total, ${data?.mode ?? "unknown"} mode)`,
-});
+-- Then fetch contacts from all those IDs
+SELECT * FROM contacts WHERE customer_id IN (all_ids)
 ```
 
-## File Changed
+### 2. Make each contact clickable to show their own detail
+
+When a contact is clicked, look up their parent `customer_id` (the child customer record like "Kingdom Construction Limited, Ben McCabe") and open that customer's full `CustomerDetail` view in a nested sheet/dialog. This gives each person their own:
+- Transaction List
+- Customer Details  
+- Notes
+- Projects (leads linked to their specific customer_id)
+- Activity
+
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/Pipeline.tsx` | Add error/disabled response handling + null-safe fallbacks in toast description |
+| `src/components/customers/CustomerDetail.tsx` | Update contacts query to fetch from all related customer IDs via `v_customer_company_map`, filter out company-name duplicates, make contact cards clickable to open a nested CustomerDetail for the child customer record |
 
