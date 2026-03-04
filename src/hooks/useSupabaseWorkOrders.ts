@@ -71,8 +71,8 @@ export function useSupabaseWorkOrders() {
   });
 
   const updateStatus = useCallback(async (workOrderId: string, newStatus: string): Promise<boolean> => {
-    const current = queryClient.getQueryData<SupabaseWorkOrder[]>(["work-orders"]);
-    const wo = current?.find(w => w.id === workOrderId);
+    const previous = queryClient.getQueryData<SupabaseWorkOrder[]>(["work-orders"]);
+    const wo = previous?.find(w => w.id === workOrderId);
 
     const updates: Record<string, any> = { status: newStatus };
     if (newStatus === "in_progress" && !wo?.actual_start) {
@@ -82,13 +82,23 @@ export function useSupabaseWorkOrders() {
       updates.actual_end = new Date().toISOString();
     }
 
-    const { error: err } = await supabase
+    // Optimistic update — reflect change immediately in UI
+    if (previous) {
+      queryClient.setQueryData<SupabaseWorkOrder[]>(["work-orders"], prev =>
+        (prev || []).map(w => w.id === workOrderId ? { ...w, ...updates } : w)
+      );
+    }
+
+    const { data: returned, error: err } = await supabase
       .from("work_orders")
       .update(updates)
-      .eq("id", workOrderId);
+      .eq("id", workOrderId)
+      .select("id");
 
-    if (err) {
-      console.error("Failed to update work order status:", err.message);
+    if (err || !returned || returned.length === 0) {
+      // Rollback optimistic update
+      if (previous) queryClient.setQueryData(["work-orders"], previous);
+      console.error("Failed to update work order status:", err?.message || "No rows affected (RLS?)");
       return false;
     }
 
