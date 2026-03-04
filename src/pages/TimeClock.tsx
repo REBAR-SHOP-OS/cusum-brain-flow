@@ -165,6 +165,45 @@ export default function TimeClock() {
       }
     }
 
+    // Auto-enroll face photo if kiosk mode and < 3 enrollments
+    if (kioskMode && face.matchResult) {
+      try {
+        const { count } = await supabase
+          .from("face_enrollments")
+          .select("*", { count: "exact", head: true })
+          .eq("profile_id", profileId as any);
+
+        if ((count || 0) < 3) {
+          const base64 = face.captureFrame();
+          if (base64) {
+            // Look up user_id from profiles for storage path
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("user_id")
+              .eq("id", profileId as any)
+              .single();
+
+            const userId = profileData?.user_id || profileId;
+            const filePath = `${userId}/auto-${Date.now()}.jpg`;
+            const byteArray = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+
+            const { error: uploadErr } = await supabase.storage
+              .from("face-enrollments")
+              .upload(filePath, byteArray, { contentType: "image/jpeg" });
+
+            if (!uploadErr) {
+              await supabase
+                .from("face_enrollments")
+                .insert({ profile_id: profileId, photo_url: filePath } as any);
+              console.log("[TimeClock] Auto-enrolled face photo for", face.matchResult.name);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[TimeClock] Auto-enroll error:", err);
+      }
+    }
+
     face.reset();
     setAutoPunchCountdown(0);
 

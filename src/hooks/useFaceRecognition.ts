@@ -146,5 +146,6 @@ export function useFaceRecognition() {
     recognize,
     reset,
     cameraStream,
+    captureFrame,
   };
 }
