@@ -1,41 +1,58 @@
 
 
-# Fix Contacts Tab & Make Contacts Clickable with Sub-Details
+# Replace Contact Cards with Dropdown + Filtered Projects
 
 ## Problem
 
-The Contacts tab for "Kingdom Construction Limited" shows 2 entries both named "Kingdom Construction Limited" because:
-1. The main customer record (`a7aec8da`) has auto-generated contacts with `first_name: "Kingdom"`, `last_name: "Construction Limited"` — bad data from the normalization trigger
-2. The **real people** (Ben McCabe, Canberk Turkmen) exist as contacts under **child customer records** (`e02ae804` = "Kingdom Construction Limited, Ben McCabe", `3aff2a4a` = "Kingdom Construction Limited, Canberk Turkmen")
-3. The current query only fetches contacts for the parent customer ID, missing the child records entirely
+The Contacts tab currently shows contact cards that open a nested sheet. The user wants a **dropdown selector** of contacts instead, and when a contact is selected, it should display that person's projects/leads below the dropdown — all inline, no nested sheets.
 
 ## Plan
 
-### 1. Fix the Contacts query to include child customer records
+### Changes to `src/components/customers/CustomerDetail.tsx`
 
-Use `v_customer_company_map` to find all legacy customer IDs that map to this company, then fetch contacts from ALL of them. Filter out contacts where `first_name + last_name` matches the company name (bad auto-generated data).
+1. **Replace contact card list with a `Select` dropdown** in the Contacts tab
+   - Each option shows the contact name + role
+   - Selecting a contact sets `selectedContactId` state
 
-```sql
--- Find all child customer IDs that map to this company
-SELECT legacy_customer_id FROM v_customer_company_map 
-WHERE company_customer_id = '<parent_id>'
+2. **Show selected contact's info + their projects below the dropdown**
+   - Display the selected contact's email, phone, role as a small info card
+   - Query leads from `leads` table filtered by the contact's `customer_id` (the child customer record)
+   - Render those leads/projects inline below the contact info
 
--- Then fetch contacts from all those IDs
-SELECT * FROM contacts WHERE customer_id IN (all_ids)
+3. **Remove the nested CustomerDetail sheet** — no longer needed since the projects show inline
+
+4. **Remove `ChevronRight` icon import** if no longer used elsewhere
+
+### UI Layout (Contacts tab)
+
+```text
+┌────────────────────────────────────┐
+│ [▼ Select a contact...           ] │  ← Select dropdown
+├────────────────────────────────────┤
+│ 👤 Ben McCabe                      │  ← Contact info card
+│    ben@kingdom.ca  ·  519-555-1234 │
+├────────────────────────────────────┤
+│ PROJECTS / LEADS                   │
+│ ┌────────────────────────────────┐ │
+│ │ Thamesford WWTP Upgrades      │ │  ← Leads for this contact's customer_id
+│ │ quotation_bids  · $120,000    │ │
+│ └────────────────────────────────┘ │
+│ ┌────────────────────────────────┐ │
+│ │ Lucan WWTP Expansion          │ │
+│ │ won  · $85,000                │ │
+│ └────────────────────────────────┘ │
+└────────────────────────────────────┘
 ```
 
-### 2. Make each contact clickable to show their own detail
+### State & Data Flow
 
-When a contact is clicked, look up their parent `customer_id` (the child customer record like "Kingdom Construction Limited, Ben McCabe") and open that customer's full `CustomerDetail` view in a nested sheet/dialog. This gives each person their own:
-- Transaction List
-- Customer Details  
-- Notes
-- Projects (leads linked to their specific customer_id)
-- Activity
+- `selectedContactId` — tracks which contact is selected in the dropdown
+- When selected, use the contact's `customer_id` to query `leads` table: `.from("leads").select("*").eq("customer_id", contact.customer_id)`
+- Also query `projects` table with same `customer_id`
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/customers/CustomerDetail.tsx` | Update contacts query to fetch from all related customer IDs via `v_customer_company_map`, filter out company-name duplicates, make contact cards clickable to open a nested CustomerDetail for the child customer record |
+| `src/components/customers/CustomerDetail.tsx` | Replace contact cards with Select dropdown, show contact info + their leads/projects inline, remove nested sheet |
 
