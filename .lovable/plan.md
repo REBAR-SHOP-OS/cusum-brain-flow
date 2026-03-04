@@ -1,47 +1,45 @@
 
 
-# Fix: Odoo Dump Import — All Files "Failed to fetch"
+# Fix: Odoo Dump Import — Skip Already-Imported Files
 
-## Root Cause
+## Problem
+The import doesn't check if a file already exists in storage before uploading. If a previous import partially succeeded (file uploaded but DB not updated), re-running re-uploads everything.
 
-The `OdooDumpImportDialog` uses `zip.js` to read entries from the ZIP file. The `processQueue` function attempts to decompress multiple entries **concurrently** (`Promise.all` with BATCH=3) by calling `entry.getData(new BlobWriter())` inside the upload loop. However, `zip.js` does **not support concurrent reads** from the same `ZipReader` — only one entry can be decompressed at a time. This causes all concurrent `getData()` calls to fail with "Failed to fetch".
+## Changes
 
-Additionally, the `retryAsync` wrapper re-calls `getBlob()` on each retry, but a zip entry that already started (and failed) decompression may not be re-readable.
+### `src/components/admin/OdooDumpImportDialog.tsx`
 
-## Fix
-
-### 1. Pre-extract blobs sequentially before uploading
-
-In `handleZipSelect`, after matching entries to pending files, extract all blobs **sequentially** from the ZIP (one at a time), storing them in memory. Then close the ZipReader. Then pass pre-extracted blobs to `processQueue`.
+**1. Before uploading each file, check if it already exists in storage**
+In `processQueue`, before calling `supabase.storage.upload`, check if the file already exists at the target path. If it does, skip the upload and just update the DB record.
 
 ```typescript
-// After matching, extract blobs sequentially
-const queue: QueueItem[] = [];
-for (const entry of entries) {
-  // ... match logic same as before ...
-  if (match) {
-    setStatusMsg(`Extracting ${match.mapping.name}…`);
-    const blob = await entry.getData(new BlobWriter());
-    queue.push({
-      pending: match.pending,
-      mapping: match.mapping,
-      getBlob: async () => blob, // Already extracted — just return it
-    });
-  }
+// Inside processQueue batch.map:
+const storagePath = `odoo-archive/${p.lead_id}/${p.odoo_id}-${safeName}`;
+
+// Check if file already exists in storage
+const { data: existingFile } = await supabase.storage
+  .from("estimation-files")
+  .list(`odoo-archive/${p.lead_id}`, { search: `${p.odoo_id}-${safeName}` });
+
+const alreadyInStorage = existingFile && existingFile.length > 0;
+
+if (!alreadyInStorage) {
+  // Upload only if not already there
+  await retryAsync(async () => { /* upload logic */ });
 }
-await reader.close(); // Safe to close now
-await processQueue(queue);
+
+// Always update DB record
+await supabase.from("lead_files").update({ storage_path, file_url: storagePath })
+  .eq("odoo_id", p.odoo_id).is("storage_path", null);
 ```
 
-### 2. Upload batches can stay concurrent
+**2. Show skip count in status**
+Track and display how many files were skipped (already existed) vs newly uploaded.
 
-Since blobs are pre-extracted and held in memory, the `Promise.all` batch upload to Supabase Storage works fine — no more concurrent zip reads.
-
-### 3. Add memory guard for very large ZIPs
-
-Add a running byte counter during extraction. If total extracted size exceeds ~1.5GB, warn the user and suggest smaller batches. For typical Odoo dumps (a few hundred attachments), this won't be an issue.
+**3. Also improve the relPath matching**
+Add fallback matching: if `store_fname` doesn't match the ZIP path directly, also try matching by just the filename portion (after last `/`), to handle slight path differences in different Odoo dump formats.
 
 | File | Change |
 |------|--------|
-| `src/components/admin/OdooDumpImportDialog.tsx` | Pre-extract blobs sequentially before uploading; close ZipReader before processQueue |
+| `src/components/admin/OdooDumpImportDialog.tsx` | Add storage existence check before upload; add skip counter; improve path matching fallback |
 
