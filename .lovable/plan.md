@@ -1,32 +1,34 @@
 
 
-# Investigation Results: Clearance Page Label Limit
+# Auto-Enroll Face Photos During Kiosk Clock-In/Clock-Out
 
-## Finding
-After thorough investigation, **there is no `.limit(5)` or any artificial row cap** in the clearance data fetching code.
+## What This Does
+When an employee successfully punches (clock in or clock out) via the Kiosk's Face ID, the system will automatically save the captured frame as an enrollment photo for that employee — but only if they have fewer than 3 enrolled photos. This builds up the face database passively over time without requiring a separate enrollment step.
 
-The `useClearanceData` hook (`src/hooks/useClearanceData.ts`) fetches all `cut_plan_items` where `phase = "clearance"` without any limit. The suggested fix from the error report (removing `.limit(5)` from `apiLabels.ts`) does not apply — that file does not exist in this project.
+## How It Works
 
-## Database State
-The database currently has **zero** items with `phase = "clearance"`:
+### 1. Capture frame on successful punch (`src/pages/TimeClock.tsx`)
+In `handleConfirmPunch`, after a successful clock-in or clock-out, if the employee has fewer than 3 face enrollments:
+- Capture the current video frame using `face.captureFrame()` (already exposed by `useFaceRecognition`)
+- Upload the JPEG to `face-enrollments` storage bucket under the employee's user ID path
+- Insert a row into `face_enrollments` table linking the photo to the employee's profile
 
-```text
-phase        | count
--------------|------
-complete     | 13
-cut_done     | 2
-queued       | 4
-clearance    | 0
-```
+### 2. Expose `captureFrame` from the hook
+The `useFaceRecognition` hook already has `captureFrame` as an internal function. It just needs to be added to the return object so `TimeClock.tsx` can call it.
 
-The screenshot shows 5 items — this is simply the total number of items that were in the clearance phase at that time, not a limit.
+### 3. Look up enrollment count per profile
+Before auto-enrolling, query `face_enrollments` count for the matched profile to avoid exceeding 3 photos. This is a quick count query.
 
-## Possible Real Issues
-If users report missing items in the future, the likely causes would be:
-1. Items haven't been moved to the `clearance` phase yet (they're still in `cut_done`, `bending`, etc.)
-2. Items belong to a different `company_id` than the logged-in user's company
-3. RLS policies blocking visibility
+### 4. Look up the employee's `user_id` for storage path
+The storage bucket organizes photos by `user_id` (from `auth.users`). The matched result gives us `profile_id`, so we need to look up the corresponding `user_id` from the `profiles` table.
 
-## Recommendation
-**No code change is needed.** The clearance query already fetches all matching items without limits. If specific items are missing, the investigation should focus on whether those items have `phase = "clearance"` set correctly in the database.
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `src/hooks/useFaceRecognition.ts` | Add `captureFrame` to the returned object |
+| `src/pages/TimeClock.tsx` | In `handleConfirmPunch`, after successful punch in kiosk mode, auto-enroll the captured frame if enrollment count < 3 |
+
+## No Database or Edge Function Changes
+The `face_enrollments` table and `face-enrollments` storage bucket already exist. RLS allows inserts from authenticated users.
 
