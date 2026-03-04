@@ -374,7 +374,7 @@ export default function AccountingWorkspace() {
                   {activeTab === "invoices" && <AccountingInvoices data={qb} initialSearch={urlSearch} />}
                   {activeTab === "bills" && <AccountingBills data={qb} />}
                   {activeTab === "payments" && <AccountingPayments data={qb} />}
-                  {activeTab === "customers" && <AccountingCustomers data={qb} />}
+                  {activeTab === "customers" && <AccountingCustomers />}
                   {activeTab === "vendors" && <AccountingVendors data={qb} />}
                   {activeTab === "accounts" && <AccountingAccounts data={qb} />}
                   {activeTab === "audit" && <AccountingAudit data={qb} />}

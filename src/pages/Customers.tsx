@@ -12,6 +12,7 @@ import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Customer = Tables<"customers">;
@@ -26,14 +27,17 @@ export default function Customers() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { companyId } = useCompanyId();
 
   // ── Customers ──
   const { data: customers = [], isLoading } = useQuery({
-    queryKey: ["customers", searchQuery],
+    queryKey: ["customers", companyId, searchQuery],
+    enabled: !!companyId,
     queryFn: async () => {
       let query = supabase
         .from("v_customers_clean" as any)
         .select("*")
+        .eq("company_id", companyId!)
         .order("display_name", { ascending: true });
       if (searchQuery) {
         query = query.or(`name.ilike.%${searchQuery}%,company_name.ilike.%${searchQuery}%`);

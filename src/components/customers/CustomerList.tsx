@@ -49,10 +49,10 @@ export function CustomerList({ customers, isLoading, selectedId, onSelect }: Cus
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{customer.name}</p>
-                {customer.company_name && (
+                <p className="font-medium truncate">{customer.company_name || customer.name}</p>
+                {customer.company_name && customer.name !== customer.company_name && (
                   <p className="text-sm text-muted-foreground truncate">
-                    {customer.company_name}
+                    {customer.name}
                   </p>
                 )}
               </div>
