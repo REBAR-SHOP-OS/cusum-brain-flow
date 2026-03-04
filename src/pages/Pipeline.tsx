@@ -581,10 +581,22 @@ export default function Pipeline() {
         return;
       }
 
+      // Chain chatter + activity sync for full Odoo parity
+      let chatterMsg = "";
+      try {
+        const { data: chatterData } = await supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "missing" } });
+        if (chatterData && !chatterData.disabled) {
+          chatterMsg = ` | Chatter: ${chatterData.messages_inserted ?? 0} msgs, ${chatterData.activities_inserted ?? 0} activities`;
+        }
+      } catch (chatterErr) {
+        console.warn("Chatter sync failed (non-blocking):", chatterErr);
+        chatterMsg = " | Chatter sync skipped";
+      }
+
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       toast({
         title: "Odoo Sync Complete",
-        description: `${data?.created ?? 0} created, ${data?.updated ?? 0} updated, ${data?.reconciled ?? 0} reconciled, ${data?.errors ?? 0} errors (${data?.total ?? 0} total, ${data?.mode ?? "unknown"} mode)`,
+        description: `${data?.created ?? 0} created, ${data?.updated ?? 0} updated, ${data?.reconciled ?? 0} reconciled, ${data?.errors ?? 0} errors (${data?.total ?? 0} total)${chatterMsg}`,
       });
     } catch (err) {
       console.error("Odoo sync error:", err);
