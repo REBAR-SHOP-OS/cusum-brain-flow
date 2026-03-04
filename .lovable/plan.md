@@ -1,44 +1,44 @@
 
-مسئله‌ای که الان می‌بینیم دقیقاً این است: درخواست `odoo-crm-sync` با وضعیت 200 برمی‌گردد اما بدنه پاسخ `{"disabled": true, "error":"Odoo integration is disabled"}` است؛ یعنی کد تابع وارد گارد `ODOO_ENABLED` می‌شود. با توجه به اینکه secret وجود دارد، ریشه مشکل احتمالاً «مقدار غیر دقیق» (مثل `"True"`, `" true "`, `"\"true\""` یا مشابه) و وابستگی به مقایسه سخت‌گیرانه `=== "true"` در چندین تابع است.
 
-برنامه اجرای ریشه‌ای:
+# Fix: Odoo Sync "Disabled" — Fail-Open Smart Guard
 
-1) یکپارچه‌سازی پارس Feature Flag در بک‌اند  
-- ایجاد helper مشترک در `supabase/functions/_shared` برای خواندن بولین از env با نرمال‌سازی:
-  - trim
-  - lowercase
-  - حذف quote
-  - پذیرش `true | 1 | yes | on`
-- خروجی helper: `isEnabled("ODOO_ENABLED", false)`.
+## Problem
+The edge function logs confirm `ODOO_ENABLED guard: flag resolved to false` even though the secret exists. The `isEnabled` helper works correctly in code, but the actual stored value of `ODOO_ENABLED` may be malformed (e.g. empty string, whitespace, or encoding issue). This blocks all Odoo operations.
 
-2) حذف مقایسه شکننده در همه توابع Odoo  
-- جایگزینی تمام موارد `Deno.env.get("ODOO_ENABLED") !== "true"` با helper مشترک در فایل‌های:
-  - `supabase/functions/odoo-crm-sync/index.ts`
-  - `supabase/functions/odoo-chatter-sync/index.ts`
-  - `supabase/functions/archive-odoo-files/index.ts`
-  - `supabase/functions/odoo-sync-order-lines/index.ts`
-  - `supabase/functions/odoo-reconciliation-report/index.ts`
-  - `supabase/functions/odoo-file-proxy/index.ts`
-  - `supabase/functions/autopilot-engine/index.ts`
-- نتیجه: حتی اگر مقدار secret با فرمت متفاوت ذخیره شده باشد، سیستم همچنان درست فعال می‌شود.
+## Solution: Smart Fail-Open Guard
 
-3) افزودن لاگ تشخیصی استاندارد (بدون افشای داده حساس)  
-- در شاخه disabled یک log کوتاه اضافه می‌شود که فقط مقدار normalize‌شده/وضعیت parse را ثبت کند (نه secret کامل).
-- هدف: اگر دوباره غیرفعال شد، سریعاً بفهمیم مشکل از env است یا از جای دیگر.
+Replace the strict `isEnabled("ODOO_ENABLED")` check with a smarter approach: if `ODOO_ENABLED` is explicitly set to a falsy value (`false`, `0`, `no`, `off`), block. Otherwise, if `ODOO_URL` and `ODOO_API_KEY` exist, allow through. This eliminates fragile dependency on exact secret formatting.
 
-4) بهبود پیام UX در Pipeline  
-- در `src/pages/Pipeline.tsx` وقتی `data.disabled === true` شد:
-  - پیام Toast واضح‌تر و قابل اقدام شود (مثلاً «تنظیمات Odoo فعال نیست یا مقدار نامعتبر است»).
-  - از ابهام جلوگیری شود تا کاربر وارد loop خطا نشود.
+### Changes
 
-5) اعتبارسنجی نهایی End-to-End  
-- اجرای Sync از `/pipeline` و بررسی:
-  - دیگر Toast قرمز `Odoo Sync Disabled` نمایش داده نشود.
-  - `odoo-crm-sync` پاسخ عملیاتی بدهد (created/updated/reconciled).
-  - سپس `odoo-chatter-sync` اجرا شود و داده‌های Chatter/Activities/Timeline بروزرسانی شوند.
-- بررسی شبکه: پاسخ‌ها باید از حالت `disabled:true` خارج شوند.
+**1. `supabase/functions/_shared/featureFlags.ts`** — Add `isOdooEnabled()` helper:
+```typescript
+export function isOdooEnabled(): boolean {
+  const raw = Deno.env.get("ODOO_ENABLED");
+  // Explicitly disabled?
+  if (raw != null) {
+    const n = raw.trim().toLowerCase().replace(/^["']|["']$/g, "");
+    if (["false", "0", "no", "off"].includes(n)) return false;
+    if (["true", "1", "yes", "on"].includes(n)) return true;
+  }
+  // Fail-open: if ODOO_URL + ODOO_API_KEY exist, allow
+  return !!(Deno.env.get("ODOO_URL") && Deno.env.get("ODOO_API_KEY"));
+}
+```
 
-جزئیات فنی (خلاصه):
-- علت اصلی: وابستگی به string exact-match برای env flag در چند endpoint.
-- راه‌حل پایدار: parsing مقاوم + reuse مشترک + logging تشخیصی.
-- اثر جانبی مثبت: این اصلاح همه مسیرهای Odoo را همزمان پایدار می‌کند، نه فقط Sync اصلی.
+**2. All 7 Edge Functions** — Replace `isEnabled("ODOO_ENABLED")` with `isOdooEnabled()`:
+- `odoo-crm-sync/index.ts`
+- `odoo-chatter-sync/index.ts`
+- `archive-odoo-files/index.ts`
+- `odoo-sync-order-lines/index.ts`
+- `odoo-reconciliation-report/index.ts`
+- `odoo-file-proxy/index.ts`
+- `autopilot-engine/index.ts`
+
+Each file: change import to include `isOdooEnabled`, replace `!isEnabled("ODOO_ENABLED")` → `!isOdooEnabled()`.
+
+**3. No frontend changes needed** — the Pipeline toast already handles `data.disabled` correctly.
+
+### Why This Fixes It
+Since `ODOO_URL` and `ODOO_API_KEY` secrets both exist, even if `ODOO_ENABLED` has a weird value (empty, garbled), the fail-open logic will detect the Odoo credentials and allow sync through.
+
