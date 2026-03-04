@@ -1,23 +1,34 @@
 
 
-# Block zahra@rebar.shop from Customers
+# Add Kiosk Shortcut for ai@rebar.shop
 
-## What This Does
-Hides the "Customers" menu item and blocks route access for `zahra@rebar.shop`.
+## What
+Add a "Kiosk" nav item in the sidebar **only for `ai@rebar.shop`**, placed right after "Dashboard". Clicking it navigates to `/timeclock?kiosk=1` which auto-enters Kiosk mode.
 
 ## Changes
 
-### 1. Add `blockedEmails` to nav items
-In **AppSidebar.tsx**, **MobileNavV2.tsx**, and **CommandBar.tsx**:
-- Add `blockedEmails: ["zahra@rebar.shop"]` to the Customers nav item
-- Update `hasAccess` / `isVisible` functions to check `blockedEmails` and return false if the current user's email is in the list
+### 1. `src/components/layout/AppSidebar.tsx`
+Add a new item to the `aiNav` array:
+```ts
+{ name: "Kiosk", href: "/timeclock?kiosk=1", icon: Maximize }
+```
+Import `Maximize` from lucide-react (same icon used on the Kiosk button in TimeClock).
 
-### 2. Block the route in RoleGuard.tsx
-- Add a check: if user email is `zahra@rebar.shop` and path starts with `/customers`, redirect to `/home`
+### 2. `src/pages/TimeClock.tsx`
+Read `?kiosk=1` from URL on mount. If present, auto-trigger `enterKioskMode()` after camera/face hook is ready.
+```ts
+import { useSearchParams } from "react-router-dom";
+const [searchParams] = useSearchParams();
 
-### Files
-- `src/components/layout/AppSidebar.tsx` — add `blockedEmails` to Customers item + update `hasAccess`
-- `src/components/layout/MobileNavV2.tsx` — add `blockedEmails` to Customers item + update `isVisible`
-- `src/components/layout/CommandBar.tsx` — add `blockedEmails` to Customers item + filter logic
-- `src/components/auth/RoleGuard.tsx` — block `/customers` route for `zahra@rebar.shop`
+useEffect(() => {
+  if (searchParams.get("kiosk") === "1") {
+    enterKioskMode();
+  }
+}, []); // once on mount
+```
+
+### Scope
+- **Only** `ai@rebar.shop` sidebar is touched (the early-return block at line 44).
+- No other users, routes, or components are affected.
+- No database changes.
 
