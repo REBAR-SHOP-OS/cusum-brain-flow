@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useProfiles } from "@/hooks/useProfiles";
@@ -23,6 +23,9 @@ export function useTimeClock() {
   const [punching, setPunching] = useState(false);
 
   const myProfile = profiles.find((p) => p.user_id === user?.id);
+  // Use a ref so fetchEntries always sees the latest myProfile without re-creating
+  const myProfileRef = useRef(myProfile);
+  myProfileRef.current = myProfile;
 
   const fetchEntries = useCallback(async () => {
     if (!user) return;
@@ -31,41 +34,63 @@ export function useTimeClock() {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const { data, error } = await supabase
-      .from("time_clock_entries")
-      .select("*")
-      .gte("clock_in", todayStart.toISOString())
-      .order("clock_in", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("time_clock_entries")
+        .select("*")
+        .gte("clock_in", todayStart.toISOString())
+        .order("clock_in", { ascending: false });
 
-    if (!error && data) {
-      const { data: allOpenShifts } = await supabase
+      if (error) {
+        console.error("[TimeClock] fetchEntries today error:", error);
+        setLoading(false);
+        return;
+      }
+
+      // Also fetch ALL open shifts (regardless of date) for team status
+      const { data: allOpenShifts, error: openErr } = await supabase
         .from("time_clock_entries")
         .select("*")
         .is("clock_out", null);
 
+      if (openErr) {
+        console.error("[TimeClock] fetchEntries open shifts error:", openErr);
+      }
+
       const todayIds = new Set((data || []).map((e: any) => e.id));
       const extraOpen = ((allOpenShifts as TimeClockEntry[]) || []).filter(e => !todayIds.has(e.id));
       setAllEntries([...extraOpen, ...(data as TimeClockEntry[])]);
-      if (myProfile) {
-        const todayMyEntries = data.filter((e: any) => e.profile_id === myProfile.id) as TimeClockEntry[];
+
+      const profile = myProfileRef.current;
+      if (profile) {
+        const todayMyEntries = (data || []).filter((e: any) => e.profile_id === profile.id) as TimeClockEntry[];
 
         const { data: openShifts } = await supabase
           .from("time_clock_entries")
           .select("*")
-          .eq("profile_id", myProfile.id)
+          .eq("profile_id", profile.id)
           .is("clock_out", null);
 
         const myTodayIds = new Set(todayMyEntries.map(e => e.id));
         const staleOpen = ((openShifts as TimeClockEntry[]) || []).filter(e => !myTodayIds.has(e.id));
         setEntries([...staleOpen, ...todayMyEntries]);
       }
+    } catch (err) {
+      console.error("[TimeClock] fetchEntries exception:", err);
     }
     setLoading(false);
-  }, [user, myProfile]);
+  }, [user]); // Only depends on user, not myProfile
 
   useEffect(() => {
     fetchEntries();
   }, [fetchEntries]);
+
+  // Re-fetch when myProfile first becomes available
+  useEffect(() => {
+    if (myProfile) {
+      fetchEntries();
+    }
+  }, [myProfile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const channel = supabase
@@ -89,22 +114,40 @@ export function useTimeClock() {
 
     try {
       // Close ALL stale open shifts before clocking in
-      await supabase
+      const { error: closeErr } = await supabase
         .from("time_clock_entries")
         .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift]" } as any)
         .eq("profile_id", myProfile.id)
         .is("clock_out", null);
 
-      const { error } = await supabase
+      if (closeErr) {
+        console.error("[TimeClock] clockIn close stale error:", closeErr);
+      }
+
+      const { error, data } = await supabase
         .from("time_clock_entries")
-        .insert({ profile_id: myProfile.id } as any);
+        .insert({ profile_id: myProfile.id } as any)
+        .select()
+        .single();
 
       if (error) {
+        console.error("[TimeClock] clockIn insert error:", error);
         toast.error("Failed to clock in");
       } else {
+        // Optimistic: immediately add the new entry
+        if (data) {
+          const newEntry = data as unknown as TimeClockEntry;
+          setEntries(prev => [newEntry, ...prev.map(e => 
+            e.clock_out ? e : { ...e, clock_out: new Date().toISOString() }
+          )]);
+        }
         toast.success("Clocked in!");
-        fetchEntries();
       }
+      // Confirm from DB
+      await fetchEntries();
+    } catch (err) {
+      console.error("[TimeClock] clockIn exception:", err);
+      toast.error("Failed to clock in");
     } finally {
       setPunching(false);
     }
@@ -115,16 +158,38 @@ export function useTimeClock() {
     if (punching) return;
     setPunching(true);
 
+    // Optimistic: mark ALL open entries as closed immediately
+    setEntries(prev => prev.map(e =>
+      e.clock_out ? e : { ...e, clock_out: new Date().toISOString() }
+    ));
+    setAllEntries(prev => prev.map(e =>
+      e.profile_id === myProfile.id && !e.clock_out
+        ? { ...e, clock_out: new Date().toISOString() }
+        : e
+    ));
+
     try {
-      // Close ALL open shifts for this profile (root fix)
+      // Close ALL open shifts for this profile
       const { error } = await supabase
         .from("time_clock_entries")
         .update({ clock_out: new Date().toISOString() } as any)
         .eq("profile_id", myProfile.id)
         .is("clock_out", null);
 
-      if (error) toast.error("Failed to clock out");
-      else { toast.success("Clocked out!"); fetchEntries(); }
+      if (error) {
+        console.error("[TimeClock] clockOut error:", error);
+        toast.error("Failed to clock out");
+        // Revert optimistic update on failure
+        await fetchEntries();
+      } else {
+        toast.success("Clocked out!");
+        // Confirm from DB
+        await fetchEntries();
+      }
+    } catch (err) {
+      console.error("[TimeClock] clockOut exception:", err);
+      toast.error("Failed to clock out");
+      await fetchEntries();
     } finally {
       setPunching(false);
     }

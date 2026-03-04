@@ -119,29 +119,41 @@ export default function TimeClock() {
     const hasOpenShift = allEntries.some(
       (e) => e.profile_id === profileId && !e.clock_out
     );
+    const employeeName = face.matchResult?.name || "Employee";
 
     if (hasOpenShift) {
-      // Close ALL open shifts for this profile (not just one)
+      // Close ALL open shifts for this profile
       const { error } = await supabase
         .from("time_clock_entries")
         .update({ clock_out: new Date().toISOString() } as any)
         .eq("profile_id", profileId)
         .is("clock_out", null);
-      if (error) toast.error("Failed to clock out");
-      else toast.success(`${face.matchResult?.name || "Employee"} clocked out!`);
+      if (error) {
+        console.error("[TimeClock] Face/Kiosk clock out error:", error);
+        toast.error("Failed to clock out");
+      } else {
+        toast.success(`${employeeName} clocked out!`);
+      }
     } else {
       // Close any stale open shifts first, then clock in
-      await supabase
+      const { error: closeErr } = await supabase
         .from("time_clock_entries")
         .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift]" } as any)
         .eq("profile_id", profileId)
         .is("clock_out", null);
+      if (closeErr) {
+        console.error("[TimeClock] Face/Kiosk close stale error:", closeErr);
+      }
 
       const { error } = await supabase
         .from("time_clock_entries")
         .insert({ profile_id: profileId } as any);
-      if (error) toast.error("Failed to clock in");
-      else toast.success(`${face.matchResult?.name || "Employee"} clocked in!`);
+      if (error) {
+        console.error("[TimeClock] Face/Kiosk clock in error:", error);
+        toast.error("Failed to clock in");
+      } else {
+        toast.success(`${employeeName} clocked in!`);
+      }
     }
 
     face.reset();
