@@ -201,7 +201,19 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
         .select("legacy_customer_id")
         .eq("company_customer_id", customer.id);
 
-      const allIds = [customer.id, ...(mapRows || []).map((r: any) => r.legacy_customer_id).filter((id: string) => id !== customer.id)];
+      // 2. Also find comma-name children (e.g. "Company, Person")
+      const companyPrefix = (customer.company_name || customer.name || "").split(",")[0].trim();
+      const { data: commaChildren } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("company_id", customer.company_id)
+        .ilike("name", `${companyPrefix},%`);
+
+      const allIds = [
+        customer.id,
+        ...(mapRows || []).map((r: any) => r.legacy_customer_id),
+        ...(commaChildren || []).map((r: any) => r.id),
+      ].filter((id: string, i: number, arr: string[]) => arr.indexOf(id) === i);
 
       // 2. Fetch contacts from all related IDs
       const { data, error } = await supabase
