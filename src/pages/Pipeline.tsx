@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical, Bot, BarChart3, ListChecks } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePipelineBulkActions } from "@/hooks/usePipelineBulkActions";
 import { PipelineBulkBar } from "@/components/pipeline/PipelineBulkBar";
 import { usePipelineKeyboardShortcuts } from "@/hooks/usePipelineKeyboardShortcuts";
@@ -119,6 +119,7 @@ export default function Pipeline() {
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Bulk actions
   const bulk = usePipelineBulkActions();
@@ -213,6 +214,32 @@ export default function Pipeline() {
       return allLeads;
     },
   });
+
+  // ── Deep-link: auto-open lead from ?lead=<id> ──
+  const deepLinkLeadId = searchParams.get("lead");
+  useEffect(() => {
+    if (!deepLinkLeadId || leads.length === 0) return;
+    // Check if already open
+    if (selectedLead?.id === deepLinkLeadId && isDetailOpen) return;
+    const found = leads.find((l) => l.id === deepLinkLeadId);
+    if (found) {
+      setSelectedLead(found);
+      setIsDetailOpen(true);
+    } else {
+      // Lead not in current loaded set — fetch directly
+      supabase
+        .from("leads")
+        .select("*, customers(name, company_name)")
+        .eq("id", deepLinkLeadId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            setSelectedLead(data as LeadWithCustomer);
+            setIsDetailOpen(true);
+          }
+        });
+    }
+  }, [deepLinkLeadId, leads]);
 
   // Last Synced: fetch the most recent updated_at from odoo_sync leads, refresh every 5 min
   const { data: lastSyncedAt } = useQuery({

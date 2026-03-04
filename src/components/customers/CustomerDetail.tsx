@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -87,6 +88,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
+  const navigate = useNavigate();
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
@@ -1043,7 +1045,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
               <div className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase text-muted-foreground">Opportunities / Leads</h3>
                 {customerLeads.map((lead) => (
-                  <Card key={lead.id}>
+                  <Card key={lead.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate(`/pipeline?lead=${lead.id}`)}>
                     <CardContent className="p-4 space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-sm">{lead.title}</p>
