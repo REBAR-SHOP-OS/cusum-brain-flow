@@ -1,79 +1,103 @@
 
 
-# Fix: Odoo Import Audit — Reconcile Storage vs DB
+# Pipeline Duplicate Cleanup — Safe Execution Plan
 
-## Confirmed Audit Results
+## Verified Data Audit
 
-| Metric | Count |
-|--------|-------|
-| Total `lead_files` with `odoo_id` | 15,787 |
-| Records claiming `storage_path` | 527 |
-| Actually matched to real storage files | **5** |
-| Ghost DB records (path set, no file) | **522** |
-| Orphaned storage files (file exists, no DB link) | **276** |
-| Chatter activities synced | 39,836 across 2,780 leads |
-| Scheduled activities synced | 10,338 across 567 leads |
-| Total Odoo leads | 3,056 |
+| What | Count | Child Data on Duplicates |
+|------|-------|--------------------------|
+| Duplicate lead pairs (same odoo_id) | 233 pairs (466 rows) | 59 activities, 482 events, 960 sync_logs, 0 files, 0 orders, 0 quotes, 0 comms |
+| Duplicate customer groups | 19 companies (39 extra rows) | 16 contacts, 28 quotes on "loser" records |
+| Archived orphans | 33 leads | No children |
 
-Chatter and scheduled activities are properly imported and mapped — no issues there. The problem is exclusively with **file storage reconciliation**.
+**No FK constraints exist on the leads table** — all child tables use soft references (column exists but no constraint). This means we must manually re-link before deleting.
 
-## Plan
+## Execution Steps (all using the data insert/update tool, not migrations)
 
-### Step 1: SQL Data Fix — Reconcile orphans and ghosts
+### Step 1: Re-link duplicate lead children to keepers
 
-Two data operations (not schema changes, using insert/update tool):
+For each of the 233 duplicate pairs, the **older** lead (rn=1) is the keeper. Before deleting rn=2 leads, move their child records:
 
-**A. Link 276 orphaned storage files** — verified the join works perfectly:
 ```sql
-UPDATE lead_files lf
-SET storage_path = o.name,
-    file_url = o.name
-FROM storage.objects o
-WHERE o.bucket_id = 'estimation-files'
-  AND o.name LIKE 'odoo-archive/%'
-  AND lf.odoo_id = split_part(split_part(o.name, '/', 3), '-', 1)::int
-  AND lf.storage_path IS NULL;
+-- 1A: Move 59 lead_activities from duplicates to keepers
+WITH pairs AS (
+  SELECT metadata->>'odoo_id' as oid,
+    MIN(CASE WHEN rn=1 THEN id END) as keeper,
+    MIN(CASE WHEN rn=2 THEN id END) as dupe
+  FROM (
+    SELECT id, metadata->>'odoo_id' as odoo_id,
+      ROW_NUMBER() OVER (PARTITION BY metadata->>'odoo_id' ORDER BY created_at) as rn
+    FROM leads WHERE metadata->>'odoo_id' IS NOT NULL
+    AND metadata->>'odoo_id' IN (
+      SELECT metadata->>'odoo_id' FROM leads GROUP BY 1 HAVING count(*)>1
+    )
+  ) sub GROUP BY metadata->>'odoo_id'
+)
+UPDATE lead_activities SET lead_id = p.keeper
+FROM pairs p WHERE lead_activities.lead_id = p.dupe;
+
+-- 1B: Move 482 lead_events
+-- (same pattern, UPDATE lead_events)
+
+-- 1C: Delete 960 sync_validation_log entries (disposable logs)
+-- DELETE FROM sync_validation_log WHERE lead_id IN (SELECT dupe FROM pairs)
 ```
 
-**B. Clear 522 ghost records** — reset to Odoo download URL:
+### Step 2: Delete 233 duplicate leads
+
 ```sql
-UPDATE lead_files lf
-SET storage_path = NULL,
-    file_url = 'https://rebarshop-24-rebar-shop.odoo.com/web/content/' || odoo_id || '?download=true'
-WHERE storage_path IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM storage.objects o
-    WHERE o.bucket_id = 'estimation-files' AND o.name = lf.storage_path
-  );
+DELETE FROM leads WHERE id IN (
+  SELECT id FROM (
+    SELECT id, ROW_NUMBER() OVER (
+      PARTITION BY metadata->>'odoo_id' ORDER BY created_at
+    ) as rn FROM leads WHERE metadata->>'odoo_id' IS NOT NULL
+    AND metadata->>'odoo_id' IN (
+      SELECT metadata->>'odoo_id' FROM leads GROUP BY 1 HAVING count(*)>1
+    )
+  ) sub WHERE rn = 2
+);
 ```
 
-### Step 2: Fix `OdooDumpImportDialog.tsx` — Prevent future mismatches
+### Step 3: Merge 19 duplicate customers
 
-Move the DB update so it only runs after confirmed upload or confirmed skip:
+For each duplicate company, keep the one with the most leads. Re-link children from losers:
 
-```typescript
-if (alreadyInStorage) {
-  skipped++;
-} else {
-  await retryAsync(async () => { /* upload */ });
-}
+- Re-link 28 quotes (`UPDATE quotes SET customer_id = keeper WHERE customer_id = loser`)
+- Re-link 16 contacts (`UPDATE contacts SET customer_id = keeper WHERE customer_id = loser`)
+- Re-link leads (`UPDATE leads SET customer_id = keeper WHERE customer_id = loser`)
+- Mark losers as archived with `merged_into_customer_id` set (using the existing merge pattern from the ERP connector)
 
-// Generate proper public URL
-const { data: urlData } = supabase.storage
-  .from("estimation-files")
-  .getPublicUrl(storagePath);
+### Step 4: Purge 33 archived orphans
 
-// DB update — only reached if above succeeded (no throw)
-await supabase.from("lead_files").update({
-  storage_path: storagePath,
-  file_url: urlData.publicUrl || storagePath,
-}).eq("odoo_id", p.odoo_id).is("storage_path", null);
+```sql
+DELETE FROM leads WHERE stage = 'archived_orphan' AND customer_id IS NULL;
 ```
 
-Key change: store proper public URL in `file_url` instead of raw storage path.
+### Step 5: Add unique index to prevent future duplicates
 
-| File | Change |
-|------|--------|
-| Database (data fix) | Link 276 orphans + clear 522 ghosts |
-| `src/components/admin/OdooDumpImportDialog.tsx` | Use `getPublicUrl` for `file_url`; DB update only after success |
+This is a **schema change** (migration tool):
+
+```sql
+CREATE UNIQUE INDEX idx_leads_odoo_id_unique 
+ON leads ((metadata->>'odoo_id')) 
+WHERE metadata->>'odoo_id' IS NOT NULL;
+```
+
+## Safety Guarantees
+
+- Every child record is re-linked before its parent is deleted — zero data loss
+- Sync logs (disposable) are deleted, not moved
+- Customer "losers" are archived with merge audit trail, not hard-deleted
+- Unique index prevents this from happening again
+- All operations use explicit WHERE clauses tied to the CTE ranking — no accidental broad deletes
+
+| Step | Tool | Records Affected |
+|------|------|-----------------|
+| Re-link lead children | insert tool (UPDATE) | 59 activities + 482 events moved |
+| Delete sync logs | insert tool (DELETE) | 960 rows |
+| Delete dupe leads | insert tool (DELETE) | 233 rows |
+| Merge customer children | insert tool (UPDATE) | 28 quotes + 16 contacts + leads |
+| Archive loser customers | insert tool (UPDATE) | ~20 rows |
+| Purge orphan leads | insert tool (DELETE) | 33 rows |
+| Unique index | migration tool | Schema change |
 
