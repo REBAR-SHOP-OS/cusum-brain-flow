@@ -41,15 +41,15 @@ export function useShapeSchematics() {
         const withSignedUrls = await Promise.all(
           data.map(async (s) => {
             const path = extractStoragePath(s.image_url);
-            const isCurrentProject = s.image_url.includes(CURRENT_HOST);
 
-            if (path && isCurrentProject) {
+            if (path) {
+              // Storage path (relative or extracted from bucket URL) — always sign
               const { data: signedData } = await supabase.storage
                 .from("shape-schematics")
                 .createSignedUrl(path, SIGNED_URL_EXPIRY);
               return { ...s, image_url: signedData?.signedUrl || s.image_url };
             }
-            // External/public URL — use as-is
+            // Full external URL with no extractable path — use as-is
             return s;
           })
         );
