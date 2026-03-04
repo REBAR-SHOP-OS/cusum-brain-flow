@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+
 import {
   Pencil,
   Trash2,
@@ -57,7 +57,7 @@ import {
   X,
   Users,
   FolderKanban,
-  ChevronRight,
+  
 } from "lucide-react";
 import { format, differenceInDays, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, subDays, subMonths, subYears } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -221,19 +221,22 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
     },
   });
 
-  // ── State for nested contact detail sheet ──
-  const [nestedCustomerId, setNestedCustomerId] = useState<string | null>(null);
-  const { data: nestedCustomer } = useQuery({
-    queryKey: ["nested_customer", nestedCustomerId],
-    enabled: !!nestedCustomerId,
+  // ── State for contact dropdown selection ──
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const selectedContact = allContacts.find((c) => c.id === selectedContactId) ?? null;
+
+  // ── Leads/projects for selected contact's customer_id ──
+  const { data: contactLeads = [] } = useQuery({
+    queryKey: ["contact_leads", selectedContact?.customer_id],
+    enabled: !!selectedContact?.customer_id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("customers")
+        .from("leads")
         .select("*")
-        .eq("id", nestedCustomerId!)
-        .maybeSingle();
+        .eq("customer_id", selectedContact!.customer_id!)
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as Customer | null;
+      return data ?? [];
     },
   });
 
@@ -970,45 +973,91 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           </TabsContent>
 
           {/* ─── Contacts ─── */}
-          <TabsContent value="contacts" className="mt-0 px-6 py-4">
+          <TabsContent value="contacts" className="mt-0 px-6 py-4 space-y-4">
             {allContacts.length === 0 ? (
               <p className="text-sm text-muted-foreground">No contacts linked to this company.</p>
             ) : (
-              <div className="space-y-3">
-                {allContacts.map((c) => (
-                  <Card
-                    key={c.id}
-                    className="cursor-pointer hover:bg-accent/50 transition-colors"
-                    onClick={() => c.customer_id && setNestedCustomerId(c.customer_id)}
-                  >
-                    <CardContent className="p-4 flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
-                        {(c.first_name?.[0] || "").toUpperCase()}{(c.last_name?.[0] || "").toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm">{[c.first_name, c.last_name].filter(Boolean).join(" ")}</p>
-                          {c.is_primary && <Badge variant="default" className="text-[10px]">Primary</Badge>}
+              <>
+                <Select
+                  value={selectedContactId ?? ""}
+                  onValueChange={(val) => setSelectedContactId(val)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a contact..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allContacts.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {[c.first_name, c.last_name].filter(Boolean).join(" ")}
+                        {c.role ? ` — ${c.role}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {selectedContact && (
+                  <div className="space-y-4">
+                    {/* Contact info card */}
+                    <Card>
+                      <CardContent className="p-4 flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
+                          {(selectedContact.first_name?.[0] || "").toUpperCase()}{(selectedContact.last_name?.[0] || "").toUpperCase()}
                         </div>
-                        {c.role && <p className="text-xs text-muted-foreground">{c.role}</p>}
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          {c.email && (
-                            <span className="flex items-center gap-1">
-                              <Mail className="w-3 h-3" /> {c.email}
-                            </span>
-                          )}
-                          {c.phone && (
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3 h-3" /> {c.phone}
-                            </span>
-                          )}
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm">{[selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(" ")}</p>
+                            {selectedContact.is_primary && <Badge variant="default" className="text-[10px]">Primary</Badge>}
+                          </div>
+                          {selectedContact.role && <p className="text-xs text-muted-foreground">{selectedContact.role}</p>}
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            {selectedContact.email && (
+                              <span className="flex items-center gap-1">
+                                <Mail className="w-3 h-3" /> {selectedContact.email}
+                              </span>
+                            )}
+                            {selectedContact.phone && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="w-3 h-3" /> {selectedContact.phone}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground mt-3 shrink-0" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Projects / Leads for this contact */}
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-semibold uppercase text-muted-foreground">Projects / Leads</h3>
+                      {contactLeads.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No projects or leads for this contact.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {contactLeads.map((lead: any) => (
+                            <Card key={lead.id}>
+                              <CardContent className="p-4 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-sm">{lead.project_name || lead.name || "Untitled"}</p>
+                                  <Badge variant="secondary" className="text-[10px]">{lead.status}</Badge>
+                                </div>
+                                {lead.estimated_value != null && (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <DollarSign className="w-3 h-3" /> ${Number(lead.estimated_value).toLocaleString()}
+                                  </p>
+                                )}
+                                {lead.location && (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <MapPin className="w-3 h-3" /> {lead.location}
+                                  </p>
+                                )}
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
 
@@ -1110,22 +1159,6 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           onClose={() => setPreviewInvoice(null)}
         />
       )}
-      {/* ── Nested Contact Detail Sheet ── */}
-      <Sheet open={!!nestedCustomer} onOpenChange={(open) => { if (!open) setNestedCustomerId(null); }}>
-        <SheetContent side="right" className="w-full sm:max-w-4xl p-0">
-          <SheetHeader className="sr-only">
-            <SheetTitle>{nestedCustomer?.name ?? "Contact Detail"}</SheetTitle>
-            <SheetDescription>Contact details and history</SheetDescription>
-          </SheetHeader>
-          {nestedCustomer && (
-            <CustomerDetail
-              customer={nestedCustomer}
-              onEdit={() => {}}
-              onDelete={() => {}}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
 
       {/* ── Delete Button (bottom-right) ── */}
       <div className="absolute bottom-4 right-4">
