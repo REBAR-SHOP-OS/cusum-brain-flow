@@ -1,55 +1,44 @@
 
 
-# Move Contact Dropdown to Header & Filter All Tabs
+# Fix: Contact Dropdown Not Showing (Data Query Issue)
 
-## What's Changing
+## Root Cause
 
-The contact dropdown moves from the Contacts tab up to the **header area** (between the badges and the financial summary card). When a contact is selected, ALL tabs show data filtered for that person. An "All — Company Name" option lets users see unfiltered company-wide data.
+The contacts query in `CustomerDetail.tsx` uses `v_customer_company_map` to find related customer IDs. But this view maps each comma-name child (e.g., "Kingdom Construction Limited, Ben McCabe") to **itself**, not to the parent company record. So:
 
-## Changes to `src/components/customers/CustomerDetail.tsx`
+1. Query asks: "What legacy IDs map to company_customer_id = Kingdom Construction Limited?"
+2. Answer: Only the parent itself (`a7aec8da`)
+3. Contacts query finds 2 contacts under that ID — both named "Kingdom Construction Limited" (auto-generated)
+4. Name filter removes them (they match the company name)
+5. Result: **0 contacts → dropdown hidden**
 
-### 1. Add contact dropdown in header (after badges, line ~476)
-- Add a `Select` dropdown with `Users` icon
-- First option: "All — {company name}" (resets to company-wide view)
-- Other options: each contact name + role
-- Show selected contact's email/phone inline next to dropdown
+Meanwhile, the real contacts (Ben McCabe, Canberk Turkmen) are linked to the comma-name child customer IDs (`e02ae804`, `3aff2a4a`) which the query never finds.
 
-### 2. Use `activeCustomerId` to drive all tab queries
-- Create a computed `activeCustomerId`: if a contact is selected, use `selectedContact.customer_id`; otherwise use `customer.id`
-- Update these queries to use `activeCustomerId`:
-  - `customerProjects` query (line ~247): `.eq("customer_id", activeCustomerId)`
-  - `customerLeads` query (line ~261): `.eq("customer_id", activeCustomerId)`
-  - Transactions query already uses `quickbooks_id` which is fine for company-level
+## Fix
 
-### 3. Remove Contacts tab content (lines 975-1062)
-- Replace the entire Contacts tab body with a simple message: "Use the contact selector above to filter by person"
-- Or remove the Contacts tab trigger entirely since the dropdown is now in the header
+In the `allContacts` query (~line 195-222), **also find child customers by name pattern** (customers whose `name` starts with the company name + comma). This captures all comma-name variants.
 
-### 4. Remove the Contacts tab
-- Remove the `TabsTrigger` for "contacts" (line 668-670)
-- Remove the `TabsContent` for "contacts" (lines 975-1062)
-- The contact selection is now fully handled by the header dropdown
+```typescript
+// Current (broken): only uses v_customer_company_map
+const allIds = [customer.id, ...(mapRows || []).map(...)];
 
-### UI Result
+// Fixed: also find comma-name children
+const companyPrefix = (customer.company_name || customer.name || "").split(",")[0].trim();
+const { data: commaChildren } = await supabase
+  .from("customers")
+  .select("id")
+  .ilike("name", `${companyPrefix},%`);
 
-```text
-┌──────────────────────────────────────────────┐
-│ KC  Kingdom Construction Limited    Edit  New│
-│     archived_odoo_only  business  net30      │
-│     👥 [▼ Ben McCabe — PM ]  📧 ben@k..  📱 │
-│                              ┌───────────────┤
-│                              │ FINANCIAL ...  │
-├──────────────────────────────┴───────────────┤
-│ Transaction List │ Customer Details │ Notes │ │
-│ Projects │ Activity                          │
-├──────────────────────────────────────────────┤
-│ (tabs content filtered for Ben McCabe)       │
-└──────────────────────────────────────────────┘
+const allIds = [
+  customer.id,
+  ...(mapRows || []).map((r) => r.legacy_customer_id),
+  ...(commaChildren || []).map((r) => r.id),
+].filter((id, i, arr) => arr.indexOf(id) === i); // dedupe
 ```
 
-### Files Changed
+## File Changed
 
 | File | Change |
 |------|--------|
-| `src/components/customers/CustomerDetail.tsx` | Move contact dropdown to header, compute `activeCustomerId`, filter Projects/Leads tabs, remove Contacts tab |
+| `src/components/customers/CustomerDetail.tsx` | Fix contacts query to include comma-name child customer IDs |
 
