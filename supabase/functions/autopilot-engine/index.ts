@@ -1,6 +1,6 @@
 import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isEnabled } from "../_shared/featureFlags.ts";
+import { isOdooEnabled } from "../_shared/featureFlags.ts";
 
 // ── Risk level hierarchy for comparison ──
 const RISK_HIERARCHY: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 };
@@ -198,7 +198,7 @@ async function executeTool(
 ): Promise<{ success: boolean; result?: unknown; error?: string }> {
   if (toolName === "odoo_write") {
     // ODOO_ENABLED feature flag guard
-    if (!isEnabled("ODOO_ENABLED")) {
+    if (!isOdooEnabled()) {
       return { success: false, error: "Odoo integration is disabled. odoo_write is no longer available." };
     }
 

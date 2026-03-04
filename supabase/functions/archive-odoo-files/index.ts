@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isEnabled } from "../_shared/featureFlags.ts";
+import { isOdooEnabled } from "../_shared/featureFlags.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -99,7 +99,7 @@ serve(async (req) => {
   );
 
   // ODOO_ENABLED feature flag guard
-  if (!isEnabled("ODOO_ENABLED")) {
+  if (!isOdooEnabled()) {
     console.warn("ODOO_ENABLED guard: flag resolved to false");
     return new Response(JSON.stringify({ error: "Odoo integration is disabled. File migration paused.", disabled: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
