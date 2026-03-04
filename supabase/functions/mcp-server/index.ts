@@ -720,6 +720,114 @@ mcpServer.tool("send_team_message", {
   },
 });
 
+// ── Helper: proxy to vizzy-erp-action ──────────────────────
+
+async function callErpAction(action: string, params: Record<string, unknown>) {
+  const resp = await fetch(`${supabaseUrl}/functions/v1/vizzy-erp-action`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+  return resp.json();
+}
+
+// ── Tool: get_customer ──────────────────────────────────────
+
+mcpServer.tool("get_customer", {
+  description: "Get a single ERP customer record by ID.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Customer UUID" },
+    },
+    required: ["id"],
+  },
+  handler: async ({ id }: Record<string, unknown>) => {
+    const result = await callErpAction("get_customer", { id });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+});
+
+// ── Tool: update_customer ───────────────────────────────────
+
+mcpServer.tool("update_customer", {
+  description: "Update an ERP customer record. Blocks edits on archived/merged customers except merge metadata. Does NOT sync to external systems.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Customer UUID" },
+      payload: { type: "object", description: "Fields to update (e.g. name, phone, billing address)" },
+      suppress_external_sync: { type: "boolean", description: "Skip external sync (default true)" },
+    },
+    required: ["id", "payload"],
+  },
+  handler: async ({ id, payload, suppress_external_sync }: Record<string, unknown>) => {
+    const result = await callErpAction("update_customer", { id, payload, suppress_external_sync });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+});
+
+// ── Tool: list_contacts ─────────────────────────────────────
+
+mcpServer.tool("list_contacts", {
+  description: "List contacts for a given customer/company. Supports pagination.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      company_id: { type: "string", description: "Customer UUID to list contacts for" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+      offset: { type: "number", description: "Offset for pagination (default 0)" },
+    },
+    required: ["company_id"],
+  },
+  handler: async ({ company_id, limit, offset }: Record<string, unknown>) => {
+    const result = await callErpAction("list_contacts", { company_id, limit, offset });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+});
+
+// ── Tool: create_contact ────────────────────────────────────
+
+mcpServer.tool("create_contact", {
+  description: "Create a new contact under a customer/company. Enforces email/phone dedup within the same company.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      company_id: { type: "string", description: "Customer UUID to attach contact to" },
+      payload: { type: "object", description: "Contact fields: first_name (required), last_name, email, phone, role, is_primary" },
+    },
+    required: ["company_id", "payload"],
+  },
+  handler: async ({ company_id, payload }: Record<string, unknown>) => {
+    const result = await callErpAction("create_contact", { company_id, payload });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+});
+
+// ── Tool: merge_customers ───────────────────────────────────
+
+mcpServer.tool("merge_customers", {
+  description: "Merge duplicate customer records into a primary record. Re-links all ERP relations (orders, projects, leads, etc.), converts person-type duplicates to contacts, and archives duplicates. Use dry_run=true to preview. ERP-only — no external sync.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      primary_id: { type: "string", description: "UUID of the primary (surviving) customer" },
+      duplicate_ids: { type: "array", items: { type: "string" }, description: "UUIDs of duplicate customers to merge into primary" },
+      dry_run: { type: "boolean", description: "If true, returns preview of affected rows without making changes" },
+      merge_reason: { type: "string", description: "Reason for the merge (stored in audit trail)" },
+      suppress_external_sync: { type: "boolean", description: "Skip external sync (default true)" },
+    },
+    required: ["primary_id", "duplicate_ids"],
+  },
+  handler: async ({ primary_id, duplicate_ids, dry_run, merge_reason, suppress_external_sync }: Record<string, unknown>) => {
+    const result = await callErpAction("merge_customers", { primary_id, duplicate_ids, dry_run, merge_reason, suppress_external_sync });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+});
+
 // ── HTTP Transport ──────────────────────────────────────────
 
 const transport = new StreamableHttpTransport();
