@@ -38,7 +38,15 @@ export function useTimeClock() {
       .order("clock_in", { ascending: false });
 
     if (!error && data) {
-      setAllEntries(data as TimeClockEntry[]);
+      // Also fetch all open shifts across all dates/profiles for Team Status
+      const { data: allOpenShifts } = await supabase
+        .from("time_clock_entries")
+        .select("*")
+        .is("clock_out", null);
+
+      const todayIds = new Set((data || []).map((e: any) => e.id));
+      const extraOpen = ((allOpenShifts as TimeClockEntry[]) || []).filter(e => !todayIds.has(e.id));
+      setAllEntries([...extraOpen, ...(data as TimeClockEntry[])]);
       if (myProfile) {
         const todayMyEntries = data.filter((e: any) => e.profile_id === myProfile.id) as TimeClockEntry[];
 
