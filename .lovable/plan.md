@@ -1,111 +1,76 @@
 
 
-# App-Wide Customer Compatibility Layer
+# Fix Customer View Column Mismatch + Status Filter
 
-## Overview
-Create SQL views and a helper function that give every module (Accounting, CRM, Orders, Deliveries, RFQ, Inbox) a clean "companies only" read layer — without touching any existing tables or breaking legacy `customer_id` references. Then update all frontend read queries to use `v_customers_clean` instead of the raw `customers` table.
+## Root Causes
 
-## Step 1: Database Migration — Views + Trigger
+**Problem 1 — Customers page shows comma-name and "archived_odoo_only" records:**
+The `v_customers_clean` view has two bugs:
+- Status filter uses `status <> 'archived'` but many records have status `'archived_odoo_only'` — these slip through
+- View columns (`customer_id`, `display_name`) don't match the TypeScript `Customer` type (`id`, `name`) — the code casts blindly via `as Customer[]` but fields like `customer.id`, `customer.name` are undefined or wrong
 
-### A) `norm_text()` helper function
-Immutable text normalizer for matching company names across comma-split and clean records.
+**Problem 2 — Search filter uses wrong column names:**
+`Customers.tsx` line 39 filters on `name.ilike` but the view has `display_name`, not `name`. PostgREST may error or return no matches.
 
-### B) `normalized_name` column on `customers`
-Add column + backfill from `coalesce(company_name, name)`. Uses existing `status` column (no need for separate `archived` boolean).
+**Problem 3 — Accounting Customers shows 0:**
+This component reads from the `qb_customers` mirror table (not the view). The tab badge shows 1950 items loaded. This is likely a transient rendering/timing issue, not a code bug — but the Customers page issues above are definitely code bugs.
 
-### C) `v_customers_clean` — Clean company read source
+## Fix
+
+### 1. Update the `v_customers_clean` view (DB migration)
+
+Fix the view to:
+- Use `status NOT IN ('archived', 'archived_odoo_only')` instead of `status <> 'archived'`
+- Alias columns to match the existing `customers` table schema so code continues working without type mismatches: `id` (not `customer_id`), `name` (not `display_name`), and carry through all other columns that `Tables<"customers">` expects
+
 ```sql
-SELECT id as customer_id, name as display_name, 
-       coalesce(nullif(company_name,''), name) as company_name,
-       normalized_name, phone, email, status, company_id, created_at
-FROM customers
-WHERE status != 'archived'
-  AND merged_into_customer_id IS NULL
-  AND position(', ' in name) = 0;
+CREATE OR REPLACE VIEW public.v_customers_clean AS
+SELECT
+  c.id,
+  c.name,
+  c.company_name,
+  c.normalized_name,
+  c.phone,
+  c.email,
+  c.status,
+  c.company_id,
+  c.created_at,
+  c.updated_at,
+  c.quickbooks_id,
+  c.customer_type,
+  c.payment_terms,
+  c.credit_limit,
+  c.notes,
+  c.tax_exempt,
+  c.odoo_id,
+  c.merged_into_customer_id,
+  c.merged_at,
+  c.merged_by,
+  c.merge_reason
+FROM public.customers c
+WHERE c.status NOT IN ('archived', 'archived_odoo_only')
+  AND c.merged_into_customer_id IS NULL
+  AND position(', ' in c.name) = 0;
 ```
-Every dropdown/list across the app reads from this view.
 
-### D) `v_customer_company_map` — Legacy ID mapper
-Maps every `customer_id` (including "Company, Person" comma rows) to the correct clean company record. Non-comma customers map to themselves.
+This makes the view a drop-in replacement for the `customers` table — same column names, same types. No TypeScript casting issues.
 
-### E) `v_orders_enriched` — Orders with resolved company
-```sql
-SELECT o.*, m.company_customer_id, cc.name as company_name
-FROM orders o
-LEFT JOIN v_customer_company_map m ON m.legacy_customer_id = o.customer_id
-LEFT JOIN customers cc ON cc.id = m.company_customer_id;
-```
+### 2. Fix Customers.tsx search filter
 
-### F) `v_leads_enriched` — CRM leads with company resolution
-Same pattern: joins leads → customers to surface `customer_name`, `customer_company_name`.
+The `.or()` filter already uses `name.ilike` and `company_name.ilike` — with the updated view aliases these will now work correctly (the view exposes `name` and `company_name` as real column names).
 
-### G) `v_communications_enriched` — Comms with customer/contact info
-Joins communications → customers + contacts for resolved company/contact names.
+### 3. Update `useCompanies.ts` hook
 
-### H) Comma-name prevention trigger
-`BEFORE INSERT OR UPDATE` on `customers`: if name contains `", "` pattern, auto-splits into company record + contact record. Prevents future duplicate creation at the source.
+Update the hook's column references to match the corrected view (use `name` instead of `display_name`).
 
-### I) Chatter tables
-- `chat_threads` (id, company_id, project_id, customer_id, subject, created_by, timestamps)
-- `chat_thread_messages` (id, thread_id, sender_profile_id, body, metadata, created_at)
-- `chat_thread_links` (id, thread_id, entity_type, entity_id) — polymorphic link table, "no-loss guarantee"
-- RLS policies scoped by `company_id` for authenticated users
+### 4. Update `v_customer_company_map` view
 
-## Step 2: Frontend — Swap Customer Reads to View
-
-Replace `from("customers")` with `from("v_customers_clean")` in **read-only** queries across these files (17 files total):
-
-| File | What changes |
-|------|-------------|
-| `src/pages/Customers.tsx` | Main customer list query |
-| `src/components/customers/CustomerFormModal.tsx` | Customer dropdown (reads only) |
-| `src/components/estimation/TakeoffWizard.tsx` | Customer select |
-| `src/components/office/ProductionQueueView.tsx` | Customer name lookup |
-| `src/components/office/AIExtractView.tsx` | Customer list for matching |
-| `src/components/chat/MentionMenu.tsx` | @mention customer search |
-| `src/components/accounting/AccountingCustomers.tsx` | Accounting customer list |
-| `src/hooks/useCEODashboard.ts` | Active customer count |
-| `src/hooks/useQuickBooksData.ts` | QB sync customer list |
-| `src/hooks/useVendorPortalData.ts` | Vendor portal customer fetch |
-| `src/hooks/useCustomerPortalData.ts` | Customer portal fetch |
-| `src/pages/CustomerAction.tsx` | Customer detail page |
-
-**Write operations stay on `customers` table** — inserts/updates continue writing to the real table. Only reads switch to the view.
-
-### Centralized query helper
-Add `src/hooks/useCompanies.ts`:
-```typescript
-export function useCompanies(search?: string) {
-  return useQuery({
-    queryKey: ["companies", search],
-    queryFn: async () => {
-      let q = supabase.from("v_customers_clean").select("*");
-      if (search) q = q.or(`display_name.ilike.%${search}%,company_name.ilike.%${search}%`);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data;
-    },
-  });
-}
-```
-Modules can gradually adopt this hook instead of inline queries.
-
-## Step 3: Update merge_customers in edge function
-
-Add `chat_threads.customer_id` to the re-link list in `vizzy-erp-action`.
+Ensure the mapper view also uses the corrected status filter (`NOT IN` instead of `<>`).
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| Database migration | Views, trigger, chatter tables, normalized_name column |
-| `supabase/functions/vizzy-erp-action/index.ts` | Add `chat_threads` to merge re-link |
-| `src/hooks/useCompanies.ts` | New centralized hook |
-| 12 frontend files | Swap read queries from `customers` → `v_customers_clean` |
-
-## What This Does NOT Touch
-- No deletes of any data
-- No QB/Odoo writes or sync triggers
-- No changes to `quickbooks_id` or integration columns
-- Write operations continue targeting the `customers` table directly
+| DB migration | Recreate `v_customers_clean` + `v_customer_company_map` with correct columns and status filter |
+| `src/hooks/useCompanies.ts` | Update column references (`display_name` → `name`) |
 
