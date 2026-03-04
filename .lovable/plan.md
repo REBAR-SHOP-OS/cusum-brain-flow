@@ -1,28 +1,66 @@
 
 
-# Click Lead → Open in Pipeline
+# Fix: Chatter Tab Empty — Missing `lead_communications` Data
 
-## What Changes
+## Root Cause
 
-The user wants to click on a lead/opportunity card in the Customer Detail "Projects" tab and have it navigate to the Pipeline page with that lead's detail drawer open.
+The **OdooChatter** component (shown in the "Chatter" tab) queries only two tables:
+- `lead_activities` — returns `[]` (empty for this lead)
+- `lead_events` — returns 2 records (stage_changed, contact_linked)
 
-## Approach
+But the **Odoo-synced chatter history** (stage changes by specific users, field updates, emails, etc.) was imported into the `lead_communications` table. This table is only used by `LeadActivityTimeline`, which appears in a different tab section — not in the Chatter tab.
 
-**Pipeline page currently has no deep-link support.** We need to:
+So the Chatter tab is nearly empty because it's missing the main data source.
 
-1. **Add URL query param support to `src/pages/Pipeline.tsx`**:
-   - Read `?lead=<id>` from URL on mount using `useSearchParams`
-   - If present, fetch that lead and auto-open the detail drawer (`setSelectedLead` + `setIsDetailOpen(true)`)
+## Fix
 
-2. **Make lead cards clickable in `src/components/customers/CustomerDetail.tsx`**:
-   - Add `useNavigate` import
-   - Wrap each lead `<Card>` with `onClick={() => navigate(`/pipeline?lead=${lead.id}`)}`
-   - Add `cursor-pointer hover:border-primary/50 transition-colors` styling
+Integrate `lead_communications` into the `OdooChatter` component's unified thread.
 
-## Files Changed
+### Changes to `src/components/pipeline/OdooChatter.tsx`
+
+1. **Add a query for `lead_communications`** — fetch all communications for the lead, ordered by `created_at` desc.
+
+2. **Add a new `ThreadItem` kind: `"comm"`** — map each communication record into the unified thread with its date.
+
+3. **Render comm items in the thread** — display them with appropriate icons (email/call/note/meeting), showing:
+   - Author (`created_by` or `contact_name`)
+   - Subject line (if present)
+   - Body preview
+   - Direction badge (inbound/outbound)
+   - Timestamp
+
+4. **Merge into the existing sort** — communications join activities, events, and files in the single chronological thread, sorted newest-first.
+
+### Key Snippet
+
+```typescript
+// New query
+const { data: communications = [] } = useQuery({
+  queryKey: ["lead-communications-chatter", lead.id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("lead_communications")
+      .select("*")
+      .eq("lead_id", lead.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+});
+
+// Add to thread items
+type ThreadItem =
+  | { kind: "activity"; data: LeadActivity; date: Date }
+  | { kind: "file"; data: ...; date: Date }
+  | { kind: "comm"; data: LeadCommunication; date: Date };
+
+// In thread memo, add:
+...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })),
+```
+
+### File Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/Pipeline.tsx` | Add `useSearchParams`, on mount check for `?lead=` param, auto-fetch and open that lead in the detail drawer |
-| `src/components/customers/CustomerDetail.tsx` | Add `useNavigate`, make lead cards clickable to navigate to `/pipeline?lead={id}` |
+| `src/components/pipeline/OdooChatter.tsx` | Add `lead_communications` query, merge into unified thread, render comm items with icons/author/subject/body |
 
