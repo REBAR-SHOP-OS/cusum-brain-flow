@@ -20,6 +20,7 @@ export function useTimeClock() {
   const [entries, setEntries] = useState<TimeClockEntry[]>([]);
   const [allEntries, setAllEntries] = useState<TimeClockEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [punching, setPunching] = useState(false);
 
   const myProfile = profiles.find((p) => p.user_id === user?.id);
 
@@ -27,7 +28,6 @@ export function useTimeClock() {
     if (!user) return;
     setLoading(true);
 
-    // Fetch today's entries for all team members
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -38,7 +38,6 @@ export function useTimeClock() {
       .order("clock_in", { ascending: false });
 
     if (!error && data) {
-      // Also fetch all open shifts across all dates/profiles for Team Status
       const { data: allOpenShifts } = await supabase
         .from("time_clock_entries")
         .select("*")
@@ -50,16 +49,14 @@ export function useTimeClock() {
       if (myProfile) {
         const todayMyEntries = data.filter((e: any) => e.profile_id === myProfile.id) as TimeClockEntry[];
 
-        // Also fetch any open shift across ALL dates for this user (handles stale shifts from previous days)
         const { data: openShifts } = await supabase
           .from("time_clock_entries")
           .select("*")
           .eq("profile_id", myProfile.id)
           .is("clock_out", null);
 
-        // Merge: add any open shift not already in today's list
-        const todayIds = new Set(todayMyEntries.map(e => e.id));
-        const staleOpen = ((openShifts as TimeClockEntry[]) || []).filter(e => !todayIds.has(e.id));
+        const myTodayIds = new Set(todayMyEntries.map(e => e.id));
+        const staleOpen = ((openShifts as TimeClockEntry[]) || []).filter(e => !myTodayIds.has(e.id));
         setEntries([...staleOpen, ...todayMyEntries]);
       }
     }
@@ -70,7 +67,6 @@ export function useTimeClock() {
     fetchEntries();
   }, [fetchEntries]);
 
-  // Subscribe to realtime
   useEffect(() => {
     const channel = supabase
       .channel(`time-clock-realtime-${user?.id || "global"}`)
@@ -81,48 +77,57 @@ export function useTimeClock() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchEntries]);
 
-  const activeEntry = entries.find((e) => !e.clock_out);
+  // activeEntry = most recent open shift (sorted by clock_in desc)
+  const activeEntry = entries
+    .filter((e) => !e.clock_out)
+    .sort((a, b) => new Date(b.clock_in).getTime() - new Date(a.clock_in).getTime())[0] || undefined;
 
   const clockIn = async () => {
     if (!myProfile) { toast.error("No profile found"); return; }
+    if (punching) return;
+    setPunching(true);
 
-    // Auto-close any stale open shifts from previous days before clocking in
-    const { data: staleShifts } = await supabase
-      .from("time_clock_entries")
-      .select("id")
-      .eq("profile_id", myProfile.id)
-      .is("clock_out", null);
-
-    if (staleShifts && staleShifts.length > 0) {
+    try {
+      // Close ALL stale open shifts before clocking in
       await supabase
         .from("time_clock_entries")
-        .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift from previous session]" } as any)
+        .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift]" } as any)
         .eq("profile_id", myProfile.id)
         .is("clock_out", null);
-    }
 
-    const { error } = await supabase
-      .from("time_clock_entries")
-      .insert({ profile_id: myProfile.id } as any);
+      const { error } = await supabase
+        .from("time_clock_entries")
+        .insert({ profile_id: myProfile.id } as any);
 
-    if (error) {
-      toast.error("Failed to clock in");
-    } else {
-      toast.success("Clocked in!");
-      fetchEntries();
+      if (error) {
+        toast.error("Failed to clock in");
+      } else {
+        toast.success("Clocked in!");
+        fetchEntries();
+      }
+    } finally {
+      setPunching(false);
     }
   };
 
   const clockOut = async () => {
-    if (!activeEntry) { toast.error("Not clocked in"); return; }
+    if (!myProfile) { toast.error("No profile found"); return; }
+    if (punching) return;
+    setPunching(true);
 
-    const { error } = await supabase
-      .from("time_clock_entries")
-      .update({ clock_out: new Date().toISOString() } as any)
-      .eq("id", activeEntry.id);
+    try {
+      // Close ALL open shifts for this profile (root fix)
+      const { error } = await supabase
+        .from("time_clock_entries")
+        .update({ clock_out: new Date().toISOString() } as any)
+        .eq("profile_id", myProfile.id)
+        .is("clock_out", null);
 
-    if (error) toast.error("Failed to clock out");
-    else { toast.success("Clocked out!"); fetchEntries(); }
+      if (error) toast.error("Failed to clock out");
+      else { toast.success("Clocked out!"); fetchEntries(); }
+    } finally {
+      setPunching(false);
+    }
   };
 
   return {
@@ -130,6 +135,7 @@ export function useTimeClock() {
     allEntries,
     activeEntry,
     loading,
+    punching,
     clockIn,
     clockOut,
     myProfile,

@@ -35,7 +35,7 @@ function formatDuration(mins: number) {
 }
 
 export default function TimeClock() {
-  const { allEntries, activeEntry, loading, clockIn, clockOut, myProfile, profiles } = useTimeClock();
+  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, myProfile, profiles } = useTimeClock();
   const leave = useLeaveManagement();
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
@@ -116,18 +116,27 @@ export default function TimeClock() {
 
   // Confirm punch (manual or auto)
   const handleConfirmPunch = async (profileId: string) => {
-    const profileActiveEntry = allEntries.find(
+    const hasOpenShift = allEntries.some(
       (e) => e.profile_id === profileId && !e.clock_out
     );
 
-    if (profileActiveEntry) {
+    if (hasOpenShift) {
+      // Close ALL open shifts for this profile (not just one)
       const { error } = await supabase
         .from("time_clock_entries")
         .update({ clock_out: new Date().toISOString() } as any)
-        .eq("id", profileActiveEntry.id);
+        .eq("profile_id", profileId)
+        .is("clock_out", null);
       if (error) toast.error("Failed to clock out");
       else toast.success(`${face.matchResult?.name || "Employee"} clocked out!`);
     } else {
+      // Close any stale open shifts first, then clock in
+      await supabase
+        .from("time_clock_entries")
+        .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift]" } as any)
+        .eq("profile_id", profileId)
+        .is("clock_out", null);
+
       const { error } = await supabase
         .from("time_clock_entries")
         .insert({ profile_id: profileId } as any);
@@ -284,11 +293,11 @@ export default function TimeClock() {
                   </div>
                 </div>
                 {activeEntry ? (
-                  <Button size="lg" variant="destructive" className="gap-2 text-base font-bold px-8" onClick={clockOut}>
+                  <Button size="lg" variant="destructive" className="gap-2 text-base font-bold px-8" onClick={clockOut} disabled={punching}>
                     <LogOut className="w-5 h-5" /> Clock Out
                   </Button>
                 ) : (
-                  <Button size="lg" className="gap-2 text-base font-bold px-8 bg-green-600 hover:bg-green-700 text-white" onClick={clockIn}>
+                  <Button size="lg" className="gap-2 text-base font-bold px-8 bg-green-600 hover:bg-green-700 text-white" onClick={clockIn} disabled={punching}>
                     <LogIn className="w-5 h-5" /> Clock In
                   </Button>
                 )}
