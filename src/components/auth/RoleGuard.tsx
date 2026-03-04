@@ -98,6 +98,11 @@ export function RoleGuard({ children }: RoleGuardProps) {
     return <>{children}</>;
   }
 
+  // Block zahra@rebar.shop from /customers
+  if (email.toLowerCase() === "zahra@rebar.shop" && location.pathname.startsWith("/customers")) {
+    return <Navigate to="/home" replace />;
+  }
+
   // Accounting: email-only access (overrides all roles including admin)
   const ACCOUNTING_EMAILS = ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"];
   if (location.pathname.startsWith("/accounting") && !ACCOUNTING_EMAILS.includes(email.toLowerCase())) {

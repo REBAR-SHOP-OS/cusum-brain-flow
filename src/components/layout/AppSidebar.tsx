@@ -24,6 +24,7 @@ interface NavItem {
   icon: React.ElementType;
   roles?: string[];
   allowedEmails?: string[];
+  blockedEmails?: string[];
   badge?: number;
   tourId?: string;
   lockReason?: string; // shown when user lacks access
@@ -156,7 +157,7 @@ export function AppSidebar() {
         { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-support" },
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], lockReason: "Requires Sales or Office role", tourId: "nav-pipeline" },
         { name: "Lead Scoring", href: "/lead-scoring", icon: Zap, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Admin role", tourId: "nav-lead-scoring" },
-        { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers" },
+        { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers", blockedEmails: ["zahra@rebar.shop"] },
         { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"], lockReason: "Restricted access", tourId: "nav-accounting" },
       ],
     },
@@ -190,6 +191,7 @@ export function AppSidebar() {
   ];
 
   const hasAccess = (item: NavItem) => {
+    if (item.blockedEmails?.includes(email.toLowerCase())) return false;
     if (item.allowedEmails) {
       return item.allowedEmails.includes(email.toLowerCase());
     }
