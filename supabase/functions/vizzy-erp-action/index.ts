@@ -124,6 +124,241 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ─── Customer / Contact Connector Tools ───
+
+      case "get_customer": {
+        const { id } = params;
+        const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        const { data, error } = await supabaseAdmin
+          .from("customers")
+          .select("*")
+          .eq("id", id)
+          .eq("company_id", prof?.company_id)
+          .single();
+        if (error) throw error;
+        result = { success: true, data };
+        break;
+      }
+
+      case "update_customer": {
+        const { id, payload } = params;
+        // suppress_external_sync defaults true — we simply never call any sync
+        const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+
+        // Fetch current record
+        const { data: existing, error: fetchErr } = await supabaseAdmin
+          .from("customers").select("*").eq("id", id).eq("company_id", prof?.company_id).single();
+        if (fetchErr) throw fetchErr;
+
+        // Block editing archived duplicates except status/merge fields
+        if (existing.status === "archived" && existing.merged_into_customer_id) {
+          const mergeOnlyKeys = ["status", "merged_into_customer_id", "merged_at", "merged_by", "merge_reason"];
+          const payloadKeys = Object.keys(payload || {});
+          const hasNonMerge = payloadKeys.some((k: string) => !mergeOnlyKeys.includes(k));
+          if (hasNonMerge) {
+            return new Response(JSON.stringify({ error: "Cannot edit archived/merged customer except merge metadata" }), { status: 400, headers: corsHeaders });
+          }
+        }
+
+        // Whitelist safe fields (no quickbooks_id, no integration columns)
+        const allowed = [
+          "name", "company_name", "first_name", "last_name", "middle_name",
+          "email", "phone", "mobile", "fax", "other_phone", "website",
+          "billing_street1", "billing_street2", "billing_city", "billing_province", "billing_postal_code", "billing_country",
+          "shipping_street1", "shipping_street2", "shipping_city", "shipping_province", "shipping_postal_code", "shipping_country",
+          "customer_type", "status", "credit_limit", "payment_terms", "notes",
+          "title", "suffix", "print_on_check_name",
+          "merged_into_customer_id", "merged_at", "merged_by", "merge_reason",
+        ];
+        const safePayload: any = {};
+        for (const k of Object.keys(payload || {})) {
+          if (allowed.includes(k)) safePayload[k] = payload[k];
+        }
+        safePayload.updated_at = new Date().toISOString();
+
+        const { data, error } = await supabaseAdmin.from("customers").update(safePayload).eq("id", id).select().single();
+        if (error) throw error;
+        result = { success: true, message: "Customer updated (ERP only, no external sync)", data };
+        break;
+      }
+
+      case "list_contacts": {
+        const { company_id: custId, limit: lim, offset: off } = params;
+        let q = supabaseAdmin.from("contacts").select("*").eq("customer_id", custId);
+        if (lim) q = q.limit(lim);
+        if (off) q = q.range(off, off + (lim || 50) - 1);
+        const { data, error } = await q;
+        if (error) throw error;
+        result = { success: true, data };
+        break;
+      }
+
+      case "create_contact": {
+        const { company_id: custId, payload: cp } = params;
+        // Dedup check
+        if (cp.email) {
+          const { data: dup } = await supabaseAdmin.from("contacts").select("id").eq("customer_id", custId).eq("email", cp.email);
+          if (dup && dup.length > 0) {
+            return new Response(JSON.stringify({ error: `Contact with email ${cp.email} already exists for this customer` }), { status: 409, headers: corsHeaders });
+          }
+        } else if (cp.phone) {
+          const { data: dup } = await supabaseAdmin.from("contacts").select("id").eq("customer_id", custId).eq("phone", cp.phone);
+          if (dup && dup.length > 0) {
+            return new Response(JSON.stringify({ error: `Contact with phone ${cp.phone} already exists for this customer` }), { status: 409, headers: corsHeaders });
+          }
+        }
+        const { data, error } = await supabaseAdmin.from("contacts").insert({
+          customer_id: custId,
+          first_name: cp.first_name,
+          last_name: cp.last_name || null,
+          email: cp.email || null,
+          phone: cp.phone || null,
+          role: cp.role || null,
+          is_primary: cp.is_primary || false,
+        }).select().single();
+        if (error) throw error;
+        result = { success: true, message: `Contact created: ${cp.first_name} ${cp.last_name || ""}`, data };
+        break;
+      }
+
+      case "merge_customers": {
+        const { primary_id, duplicate_ids, dry_run, merge_reason: reason } = params;
+        // suppress_external_sync defaults true — no QB/Odoo writes ever
+
+        const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        const companyId = prof?.company_id;
+
+        // Validate primary exists and is active
+        const { data: primary, error: pErr } = await supabaseAdmin
+          .from("customers").select("*").eq("id", primary_id).eq("company_id", companyId).single();
+        if (pErr || !primary) throw new Error("Primary customer not found or not in your company");
+
+        // Tables with customer_id FK to customers
+        const relinkTables = [
+          "contacts", "orders", "quotes", "projects", "delivery_stops",
+          "leads", "communications", "estimation_projects", "pickup_orders",
+          "tasks", "recurring_transactions", "customer_health_scores",
+          "client_performance_memory", "customer_user_links", "lead_outcome_memory",
+          "accounting_mirror", "gl_lines",
+        ];
+
+        const allResults: any[] = [];
+
+        for (const dupId of duplicate_ids) {
+          // Idempotency: skip already merged
+          const { data: dup, error: dErr } = await supabaseAdmin
+            .from("customers").select("*").eq("id", dupId).eq("company_id", companyId).single();
+          if (dErr || !dup) {
+            allResults.push({ duplicate_id: dupId, skipped: true, reason: "Not found or not in company" });
+            continue;
+          }
+          if (dup.merged_into_customer_id === primary_id) {
+            allResults.push({ duplicate_id: dupId, skipped: true, reason: "Already merged into primary" });
+            continue;
+          }
+
+          // Count affected rows per table
+          const counts: any = {};
+          for (const table of relinkTables) {
+            const { count } = await supabaseAdmin
+              .from(table).select("*", { count: "exact", head: true }).eq("customer_id", dupId);
+            counts[table] = count || 0;
+          }
+
+          if (dry_run) {
+            allResults.push({ duplicate_id: dupId, duplicate_name: dup.name, counts, actions_preview: "Would re-link all rows and archive duplicate" });
+            continue;
+          }
+
+          // Execute re-link for each table
+          const relinked: any = {};
+          for (const table of relinkTables) {
+            if (counts[table] === 0) continue;
+
+            if (table === "contacts") {
+              // Handle contact dedup: get existing primary emails
+              const { data: primaryContacts } = await supabaseAdmin
+                .from("contacts").select("email").eq("customer_id", primary_id);
+              const existingEmails = new Set((primaryContacts || []).map((c: any) => c.email?.toLowerCase()).filter(Boolean));
+
+              // Get duplicate's contacts
+              const { data: dupContacts } = await supabaseAdmin
+                .from("contacts").select("*").eq("customer_id", dupId);
+
+              let moved = 0;
+              for (const dc of (dupContacts || [])) {
+                if (dc.email && existingEmails.has(dc.email.toLowerCase())) {
+                  // Skip duplicate email contact — leave it (will be archived with parent)
+                  continue;
+                }
+                await supabaseAdmin.from("contacts").update({ customer_id: primary_id }).eq("id", dc.id);
+                moved++;
+              }
+              relinked.contacts = moved;
+            } else {
+              const { count: updCount } = await supabaseAdmin
+                .from(table).update({ customer_id: primary_id } as any).eq("customer_id", dupId).select("*", { count: "exact", head: true });
+              relinked[table] = updCount || counts[table];
+            }
+          }
+
+          // If duplicate is a person-type customer, create a contact under primary
+          if (dup.customer_type === "person" || (!dup.company_name && dup.first_name)) {
+            const contactEmail = dup.email?.toLowerCase();
+            // Check if contact with same email already exists under primary
+            let alreadyExists = false;
+            if (contactEmail) {
+              const { data: existing } = await supabaseAdmin
+                .from("contacts").select("id").eq("customer_id", primary_id).eq("email", contactEmail);
+              if (existing && existing.length > 0) alreadyExists = true;
+            }
+            if (!alreadyExists) {
+              await supabaseAdmin.from("contacts").insert({
+                customer_id: primary_id,
+                first_name: dup.first_name || dup.name?.split(" ")[0] || "Unknown",
+                last_name: dup.last_name || dup.name?.split(" ").slice(1).join(" ") || null,
+                email: dup.email || null,
+                phone: dup.phone || dup.mobile || null,
+                role: null,
+                is_primary: false,
+              });
+            }
+          }
+
+          // Archive duplicate
+          await supabaseAdmin.from("customers").update({
+            status: "archived",
+            merged_into_customer_id: primary_id,
+            merged_at: new Date().toISOString(),
+            merged_by: userId,
+            merge_reason: reason || "Duplicate merged via Vizzy",
+            updated_at: new Date().toISOString(),
+          } as any).eq("id", dupId);
+
+          // Log activity event
+          await supabaseAdmin.from("activity_events").insert({
+            company_id: companyId,
+            entity_type: "customer_merge",
+            entity_id: dupId,
+            event_type: "customer_merged",
+            description: `Merged customer "${dup.name}" into "${primary.name}"`,
+            actor_id: userId,
+            actor_type: "vizzy",
+            source: "system",
+            metadata: { primary_id, duplicate_id: dupId, relinked_counts: relinked, merge_reason: reason },
+          }).catch(() => {});
+
+          allResults.push({ duplicate_id: dupId, duplicate_name: dup.name, relinked_counts: relinked, archived: true });
+        }
+
+        if (dry_run) {
+          result = { success: true, dry_run: true, primary: { id: primary.id, name: primary.name }, preview: allResults };
+        } else {
+          result = { success: true, dry_run: false, primary: { id: primary.id, name: primary.name }, merged: allResults, completed_at: new Date().toISOString() };
+        }
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: corsHeaders });
     }

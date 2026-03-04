@@ -2027,6 +2027,10 @@ export type Database = {
           first_name: string | null
           id: string
           last_name: string | null
+          merge_reason: string | null
+          merged_at: string | null
+          merged_by: string | null
+          merged_into_customer_id: string | null
           middle_name: string | null
           mobile: string | null
           name: string
@@ -2065,6 +2069,10 @@ export type Database = {
           first_name?: string | null
           id?: string
           last_name?: string | null
+          merge_reason?: string | null
+          merged_at?: string | null
+          merged_by?: string | null
+          merged_into_customer_id?: string | null
           middle_name?: string | null
           mobile?: string | null
           name: string
@@ -2103,6 +2111,10 @@ export type Database = {
           first_name?: string | null
           id?: string
           last_name?: string | null
+          merge_reason?: string | null
+          merged_at?: string | null
+          merged_by?: string | null
+          merged_into_customer_id?: string | null
           middle_name?: string | null
           mobile?: string | null
           name?: string
@@ -2124,7 +2136,15 @@ export type Database = {
           updated_at?: string
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customers_merged_into_customer_id_fkey"
+            columns: ["merged_into_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cut_output_batches: {
         Row: {
