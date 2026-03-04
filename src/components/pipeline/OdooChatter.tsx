@@ -155,6 +155,19 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     },
   });
 
+  const { data: communications = [] } = useQuery({
+    queryKey: ["lead-communications-chatter", lead.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lead_communications")
+        .select("*")
+        .eq("lead_id", lead.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   // ── Mutations ────────────────────────────────────────────────────
   const addActivityMutation = useMutation({
     mutationFn: async (activity: { activity_type: string; title: string; description?: string; completed_at?: string | null }) => {
@@ -232,10 +245,11 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     };
   }), [leadEvents, lead.company_id]);
 
-  // Unified thread (completed activities + events + files), newest first
+  // Unified thread (completed activities + events + files + communications), newest first
   type ThreadItem =
     | { kind: "activity"; data: LeadActivity; date: Date }
-    | { kind: "file"; data: (typeof files)[0]; date: Date };
+    | { kind: "file"; data: (typeof files)[0]; date: Date }
+    | { kind: "comm"; data: (typeof communications)[0]; date: Date };
 
   const thread = useMemo(() => {
     const completedActivities = activities.filter(
@@ -245,10 +259,11 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       ...completedActivities.map((a) => ({ kind: "activity" as const, data: a, date: new Date(a.created_at) })),
       ...eventActivities.map((a: any) => ({ kind: "activity" as const, data: a as LeadActivity, date: new Date(a.created_at) })),
       ...files.map((f) => ({ kind: "file" as const, data: f, date: new Date(f.created_at) })),
+      ...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })),
     ];
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
     return items;
-  }, [activities, eventActivities, files]);
+  }, [activities, eventActivities, files, communications]);
 
   // ── Handlers ─────────────────────────────────────────────────────
   const handleTabClick = (tab: "note" | "message" | "activity") => {
@@ -459,10 +474,12 @@ export function OdooChatter({ lead }: OdooChatterProps) {
               const showDateSep = !prevDate || format(item.date, "yyyy-MM-dd") !== format(prevDate, "yyyy-MM-dd");
 
               return (
-                <div key={item.kind === "file" ? `file-${item.data.id}` : item.data.id}>
+                <div key={item.kind === "file" ? `file-${item.data.id}` : item.kind === "comm" ? `comm-${item.data.id}` : item.data.id}>
                   {showDateSep && <DateSeparator date={item.date} />}
                   {item.kind === "file" ? (
                     <FileThreadItem file={item.data} />
+                  ) : item.kind === "comm" ? (
+                    <CommThreadItem comm={item.data} />
                   ) : (
                     <ActivityThreadItem activity={item.data} />
                   )}
@@ -572,6 +589,60 @@ function FileThreadItem({ file }: { file: any }) {
           <span className="text-xs font-medium truncate flex-1">{file.file_name}</span>
           <Download className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
         </button>
+      </div>
+    </div>
+  );
+}
+
+const COMM_ICONS: Record<string, React.ElementType> = {
+  email: Mail,
+  call: PhoneCall,
+  meeting: Calendar,
+  note: FileText,
+  sms: MessageSquare,
+};
+
+function CommThreadItem({ comm }: { comm: any }) {
+  const Icon = COMM_ICONS[comm.comm_type] || MessageSquare;
+  const author = comm.created_by_name || comm.contact_name || "Unknown";
+
+  return (
+    <div className="flex gap-3 p-3 rounded-md transition-colors hover:bg-accent/50">
+      <Avatar className="w-8 h-8 shrink-0 text-[11px]">
+        <AvatarFallback className="bg-primary/10 text-primary text-[11px]">
+          {getInitials(author)}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[13px] font-semibold truncate">{author}</span>
+            <Icon className="w-3 h-3 text-muted-foreground shrink-0" />
+            <span className="text-[11px] capitalize text-muted-foreground">{comm.comm_type}</span>
+            {comm.direction && (
+              <span className={cn(
+                "text-[10px] px-1.5 rounded",
+                comm.direction === "inbound" ? "bg-blue-500/10 text-blue-600" : "bg-emerald-500/10 text-emerald-600"
+              )}>
+                {comm.direction}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+            {format(new Date(comm.created_at), "h:mm a")}
+          </span>
+        </div>
+        {comm.subject && <p className="text-[13px] font-medium mt-0.5">{comm.subject}</p>}
+        {comm.body_preview && (
+          <p className="text-[13px] text-foreground/80 whitespace-pre-wrap mt-0.5 leading-relaxed line-clamp-3">
+            {comm.body_preview}
+          </p>
+        )}
+        {comm.contact_name && comm.contact_email && (
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {comm.contact_name} · {comm.contact_email}
+          </p>
+        )}
       </div>
     </div>
   );
