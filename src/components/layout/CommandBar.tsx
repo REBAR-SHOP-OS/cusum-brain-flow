@@ -15,6 +15,7 @@ import {
   Sparkles, MessageSquare,
 } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/lib/auth";
 
 interface CommandBarProps {
   open: boolean;
@@ -26,6 +27,7 @@ interface NavCommand {
   icon: React.ElementType;
   href: string;
   roles?: string[];
+  blockedEmails?: string[];
   group: string;
 }
 
@@ -34,7 +36,7 @@ const navCommands: NavCommand[] = [
   
   { label: "Business Tasks", icon: CheckSquare, href: "/tasks", group: "Navigate" },
   { label: "Pipeline", icon: Kanban, href: "/pipeline", roles: ["admin", "sales", "office"], group: "Navigate" },
-  { label: "Customers", icon: Users, href: "/customers", group: "Navigate" },
+  { label: "Customers", icon: Users, href: "/customers", group: "Navigate", blockedEmails: ["zahra@rebar.shop"] },
   { label: "Shop Floor Hub", icon: Factory, href: "/shop-floor", group: "Operations" },
   { label: "Station Dashboard", icon: Factory, href: "/shopfloor/station", group: "Operations" },
   { label: "Office Portal", icon: LayoutGrid, href: "/office", roles: ["admin", "office"], group: "Operations" },
@@ -49,6 +51,8 @@ const navCommands: NavCommand[] = [
 export function CommandBar({ open, onOpenChange }: CommandBarProps) {
   const navigate = useNavigate();
   const { roles, isAdmin } = useUserRole();
+  const { user } = useAuth();
+  const email = user?.email || "";
 
   // Keyboard shortcut
   useEffect(() => {
@@ -63,6 +67,7 @@ export function CommandBar({ open, onOpenChange }: CommandBarProps) {
   }, [open, onOpenChange]);
 
   const filteredCommands = navCommands.filter((cmd) => {
+    if (cmd.blockedEmails?.includes(email.toLowerCase())) return false;
     if (!cmd.roles) return true;
     if (isAdmin) return true;
     return cmd.roles.some((r) => roles.includes(r as any));

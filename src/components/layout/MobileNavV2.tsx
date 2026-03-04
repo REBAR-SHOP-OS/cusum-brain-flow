@@ -17,7 +17,7 @@ const primaryNav = [
 const moreItems = [
   { name: "Inbox", href: "/inbox-manager", icon: Inbox, roles: ["admin", "office"] },
   { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "shop_supervisor"] },
-  { name: "Customers", href: "/customers", icon: Users },
+  { name: "Customers", href: "/customers", icon: Users, blockedEmails: ["zahra@rebar.shop"] },
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
   { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"] },
   { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"] },
@@ -125,7 +125,8 @@ export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV
 
   const isMoreActive = moreItems.some((item) => location.pathname === item.href);
 
-  const isVisible = (item: { roles?: string[]; allowedEmails?: string[] }) => {
+  const isVisible = (item: { roles?: string[]; allowedEmails?: string[]; blockedEmails?: string[] }) => {
+    if (item.blockedEmails?.includes(email.toLowerCase())) return false;
     if (item.allowedEmails) {
       return item.allowedEmails.includes(email.toLowerCase());
     }
