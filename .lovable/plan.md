@@ -1,58 +1,62 @@
 
 
-# Fix: Shape Schematic Images Not Displaying
+# Fix: Projects/Leads Not Filtering by Contact
 
-## Root Cause
+## Problem
 
-The upload dialog (`AiVisionUploadDialog.tsx`) correctly saves a **relative storage path** (e.g., `TYPE_T17_1234.png`) to the `image_url` column in `custom_shape_schematics`.
-
-However, `useShapeSchematics.ts` has a flawed URL resolution strategy:
-
-```text
-image_url = "TYPE_T17_1234.png"  (relative path, not a URL)
-
-extractStoragePath("TYPE_T17_1234.png")
-  → doesn't contain "/object/public/shape-schematics/" marker
-  → doesn't start with "http"
-  → returns "TYPE_T17_1234.png" ✓ (correct path)
-
-isCurrentProject = "TYPE_T17_1234.png".includes("rzqonxnow...")
-  → false ✗ (BUG! It's a relative path, not a URL)
-
-Result: signed URL is NEVER generated → raw path "TYPE_T17_1234.png" used as img src → broken image
-```
-
-The condition `isCurrentProject` is always `false` for relative paths because they don't contain any host. So the hook returns the raw storage path as the image URL, which is not a valid URL.
+When "All" is selected, `activeCustomerId = customer.id` (the parent company record). But projects for Canberk (3) and Ben (7) are linked to their **comma-name child customer IDs** (e.g., `e02ae804`, `3aff2a4a`), not the parent ID. So the projects query returns 0 results for "All", and contact-specific filtering also fails if the contact's `customer_id` doesn't match.
 
 ## Fix
 
-In `useShapeSchematics.ts`, change the signed URL logic: if we have a valid storage path **and** the URL is NOT an external URL (doesn't start with `http`), always generate a signed URL. Only skip signing for external full URLs.
+Instead of using a single `activeCustomerId`, use the **same `allIds` array** from the contacts query for the "All" view, and the contact's specific `customer_id` for a selected contact.
+
+### Changes to `src/components/customers/CustomerDetail.tsx`
+
+1. **Extract `allIds` from contacts query** — store the computed `allIds` array (parent + map + comma-children) as a separate piece of state or return it alongside contacts, so it can be reused by projects/leads queries.
+
+2. **Update projects query** (line ~247):
+   - When no contact selected ("All"): `.in("customer_id", allRelatedIds)` — shows all 10 projects (3 + 7)
+   - When contact selected: `.eq("customer_id", selectedContact.customer_id)` — shows only that person's projects
+
+3. **Update leads query** (line ~261): Same pattern — use `.in()` for "All", `.eq()` for specific contact.
+
+### Implementation Detail
 
 ```typescript
-// Before (broken):
-if (path && isCurrentProject) {
-  // generate signed URL
-}
-// External/public URL — use as-is
+// Return allIds from the contacts query alongside contacts
+const { data: contactsData } = useQuery({
+  queryKey: ["customer_contacts_all", customer.id],
+  queryFn: async () => {
+    // ... existing allIds computation ...
+    return { contacts: filteredContacts, relatedIds: allIds };
+  },
+});
+const allContacts = contactsData?.contacts ?? [];
+const allRelatedIds = contactsData?.relatedIds ?? [customer.id];
 
-// After (fixed):
-if (path) {
-  // It's a storage path (either extracted from URL or already relative)
-  // Always generate signed URL for storage paths
-  const { data: signedData } = await supabase.storage
-    .from("shape-schematics")
-    .createSignedUrl(path, SIGNED_URL_EXPIRY);
-  return { ...s, image_url: signedData?.signedUrl || s.image_url };
-}
-// Full external URL with no extractable path — use as-is
-return s;
+// Projects query — use allRelatedIds or specific contact's customer_id
+const activeIds = selectedContact 
+  ? [selectedContact.customer_id] 
+  : allRelatedIds;
+
+const { data: customerProjects = [] } = useQuery({
+  queryKey: ["customer_projects", activeIds],
+  queryFn: async () => {
+    const { data } = await supabase
+      .from("projects")
+      .select("*")
+      .in("customer_id", activeIds)
+      .order("created_at", { ascending: false });
+    return data ?? [];
+  },
+});
+
+// Same pattern for leads query
 ```
 
-This works because `extractStoragePath` returns `null` for external URLs that don't match the bucket pattern, so those pass through untouched. For everything else (relative paths or URLs containing the bucket marker), we generate a signed URL.
-
-## File Changed
+### File Changed
 
 | File | Change |
 |------|--------|
-| `src/hooks/useShapeSchematics.ts` | Remove broken `isCurrentProject` check; always sign when we have a valid storage path |
+| `src/components/customers/CustomerDetail.tsx` | Return `allIds` from contacts query; use `.in()` for All view, `.eq()` for specific contact on projects + leads |
 
