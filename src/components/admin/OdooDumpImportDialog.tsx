@@ -152,6 +152,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
 
       let ok = 0;
       let fail = 0;
+      let skipped = 0;
       const errs: string[] = [];
       const failedItems: QueueItem[] = [];
 
@@ -165,17 +166,32 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
             try {
               const safeName = m.name.replace(/[^\w.\-]/g, "_");
               const storagePath = `odoo-archive/${p.lead_id}/${p.odoo_id}-${safeName}`;
-              await retryAsync(async () => {
-                const blob = await getBlob();
-                const { error: upErr } = await supabase.storage
-                  .from("estimation-files")
-                  .upload(storagePath, blob, {
-                    contentType: m.mimetype || "application/octet-stream",
-                    upsert: true,
-                  });
-                if (upErr) throw upErr;
-              });
+              const fileName = `${p.odoo_id}-${safeName}`;
 
+              // Check if file already exists in storage
+              const { data: existingFiles } = await supabase.storage
+                .from("estimation-files")
+                .list(`odoo-archive/${p.lead_id}`, { search: fileName });
+
+              const alreadyInStorage = existingFiles && existingFiles.some(f => f.name === fileName);
+
+              if (alreadyInStorage) {
+                // Skip upload, just ensure DB is updated
+                skipped++;
+              } else {
+                await retryAsync(async () => {
+                  const blob = await getBlob();
+                  const { error: upErr } = await supabase.storage
+                    .from("estimation-files")
+                    .upload(storagePath, blob, {
+                      contentType: m.mimetype || "application/octet-stream",
+                      upsert: true,
+                    });
+                  if (upErr) throw upErr;
+                });
+              }
+
+              // Always update DB record
               const { error: dbErr } = await supabase
                 .from("lead_files")
                 .update({
@@ -197,6 +213,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
         setUploaded(ok);
         setFailed(fail);
         setErrors([...errs]);
+        setStatusMsg(`Uploading… ${ok} done, ${skipped} skipped, ${fail} failed`);
 
         // breathe between batches
         if (i + BATCH < queue.length) {
@@ -206,8 +223,8 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
 
       failedQueueRef.current = failedItems;
       setUploading(false);
-      setStatusMsg(`Import complete: ${ok} uploaded, ${fail} failed`);
-      toast.success(`Import complete: ${ok} uploaded, ${fail} failed`);
+      setStatusMsg(`Import complete: ${ok} uploaded (${skipped} skipped), ${fail} failed`);
+      toast.success(`Import complete: ${ok} uploaded (${skipped} skipped), ${fail} failed`);
     },
     []
   );
@@ -270,14 +287,26 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       mapping.forEach((m) => mappingById.set(m.id, m));
 
       const neededFnames = new Map<string, { pending: PendingFile; mapping: MappingRow }>();
+      // Also build a fallback map by filename-only portion of store_fname
+      const neededByFilename = new Map<string, { pending: PendingFile; mapping: MappingRow }>();
       for (const p of pending) {
         const m = mappingById.get(p.odoo_id);
-        if (m) neededFnames.set(m.store_fname, { pending: p, mapping: m });
+        if (m) {
+          neededFnames.set(m.store_fname, { pending: p, mapping: m });
+          // Fallback: just the filename part after last /
+          const fnOnly = m.store_fname.includes("/")
+            ? m.store_fname.slice(m.store_fname.lastIndexOf("/") + 1)
+            : m.store_fname;
+          if (!neededByFilename.has(fnOnly)) {
+            neededByFilename.set(fnOnly, { pending: p, mapping: m });
+          }
+        }
       }
 
       setStatusMsg("Matching filestore entries…");
       // First pass: identify which entries we need
       const matched: { entry: any; pending: PendingFile; mapping: MappingRow }[] = [];
+      const matchedOdooIds = new Set<number>();
 
       for (const entry of entries) {
         if (entry.directory) continue;
@@ -285,8 +314,14 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
         const filestoreIdx = fname.indexOf("filestore/");
         const relPath = filestoreIdx >= 0 ? fname.slice(filestoreIdx + "filestore/".length) : fname;
 
-        const match = neededFnames.get(relPath);
-        if (match) {
+        let match = neededFnames.get(relPath);
+        // Fallback: try matching by just the filename portion
+        if (!match) {
+          const fnOnly = relPath.includes("/") ? relPath.slice(relPath.lastIndexOf("/") + 1) : relPath;
+          match = neededByFilename.get(fnOnly);
+        }
+        if (match && !matchedOdooIds.has(match.pending.odoo_id)) {
+          matchedOdooIds.add(match.pending.odoo_id);
           matched.push({ entry, pending: match.pending, mapping: match.mapping });
         }
       }
