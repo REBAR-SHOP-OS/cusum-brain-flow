@@ -1,35 +1,51 @@
 
 
-# Show Leads/Opportunities in the Projects Tab
+# Fix Odoo Sync "undefined" Toast Message
 
 ## Problem
 
-The "Projects" tab for Kingdom Construction Limited shows empty because the `projects` table has no entries for this customer. However, the `leads` table has 20+ entries (imported from Odoo CRM) like "FW: Thamesford WWTP Upgrades", "Lucan WWTP Expansion", etc. These are the actual project-level records the user expects to see.
+When clicking "Odoo Sync" in the Pipeline menu, the toast shows:
+> **Odoo Sync Complete**  
+> undefined created, undefined updated, 0 reconciled, undefined errors (undefined total, undefined mode)
 
-## Plan
+This happens because the edge function returns a response **without** the expected fields in certain cases, but the client always assumes success and tries to read `data.created`, `data.updated`, etc.
 
-### Update CustomerDetail Projects tab to also show Leads
+## Root Cause
 
-In `src/components/customers/CustomerDetail.tsx`:
+Two scenarios cause this:
 
-1. **Add a query for leads** linked to this customer (`leads.customer_id = customer.id`)
-2. **Display both** projects and leads in the Projects tab:
-   - Show projects from `projects` table (if any exist)
-   - Show leads/opportunities from `leads` table with title, stage badge, expected value, and priority
-3. **Update the tab count** to include both projects + leads
-4. The tab label stays "Projects" but renders two sections: "Projects" and "Opportunities/Leads"
+1. **ODOO_ENABLED is not "true"**: The function returns `{ error: "Odoo integration is disabled", disabled: true }` with status 200. Since it's not an HTTP error, `supabase.functions.invoke` doesn't throw — the client proceeds to the toast and reads `.created` (undefined), `.updated` (undefined), etc.
 
-### Data available per lead
+2. **Auth failure returning 401**: Returns `{ error: "Unauthorized" }` — similar issue if the SDK doesn't throw on 401.
 
-- `title` (e.g., "FW: Thamesford WWTP Upgrades")
-- `stage` (e.g., "quotation_bids", "lost")
-- `expected_value`, `probability`
-- `priority`, `source`
-- `created_at`
+## Fix
 
-### Files Changed
+Update `handleOdooSync` in `src/pages/Pipeline.tsx` to check for error/disabled responses before showing the success toast:
+
+```typescript
+const { data, error } = await supabase.functions.invoke("odoo-crm-sync", { body: { mode: "full" } });
+if (error) throw error;
+
+// Handle disabled or error responses that come back as 200
+if (data?.disabled) {
+  toast({ title: "Odoo Sync Disabled", description: data.error || "Odoo integration is currently disabled.", variant: "destructive" });
+  return;
+}
+if (data?.error) {
+  toast({ title: "Odoo Sync Failed", description: data.error, variant: "destructive" });
+  return;
+}
+
+// Safe display with fallbacks
+toast({
+  title: "Odoo Sync Complete",
+  description: `${data?.created ?? 0} created, ${data?.updated ?? 0} updated, ${data?.reconciled ?? 0} reconciled, ${data?.errors ?? 0} errors (${data?.total ?? 0} total, ${data?.mode ?? "unknown"} mode)`,
+});
+```
+
+## File Changed
 
 | File | Change |
 |------|--------|
-| `src/components/customers/CustomerDetail.tsx` | Add leads query, render leads list in Projects tab alongside projects |
+| `src/pages/Pipeline.tsx` | Add error/disabled response handling + null-safe fallbacks in toast description |
 
