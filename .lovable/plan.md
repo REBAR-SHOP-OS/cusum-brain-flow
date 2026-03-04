@@ -1,46 +1,30 @@
 
 
-# Fix Face Recognition — Improve AI Prompt for Better Matching
+# Fix Work Order Queue UI Not Updating After Start/Pause/Complete
 
 ## Problem
-Users get "Recognition Error" or "No Match" despite being enrolled. The screenshot shows a clear face but the system fails to recognize it.
+Clicking "Start", "Pause", or "Complete" buttons in the Work Order Queue on `/shopfloor/station` doesn't visually update the UI, even though the backend update may succeed.
 
-## Root Cause Analysis
+## Root Cause
+The `updateStatus` function in `useSupabaseWorkOrders.ts` does call `invalidateQueries`, but there are two issues:
 
-There is **no hardcoded distance threshold** — this system uses AI vision (Gemini 2.5 Flash) to visually compare photos. The issue is in the **AI prompt** which says:
+1. **No optimistic update**: The UI waits for the full round-trip (update → invalidate → refetch → re-render). During this time, the user sees no feedback.
+2. **Silent RLS failure**: Supabase `.update()` with RLS returns `{ error: null }` even when 0 rows are affected (user lacks permission). The code treats this as success and invalidates, but the refetch returns the same unchanged data — the user sees nothing happen.
 
-> "Be strict: only match if you are genuinely confident the person is the same"
+## Fix
 
-This instruction makes the AI too conservative, returning low confidence scores or no-match results under real-world conditions (lighting, angle, webcam quality vs enrollment photo quality).
+### 1. `src/hooks/useSupabaseWorkOrders.ts` — Add optimistic update + silent failure detection
 
-Additionally, the frontend threshold at line 90 requires `confidence >= 95` for auto-match, and `>= 50` for low-confidence match. The backend also gates at `confidence >= 50`.
+- **Optimistic update**: Before the Supabase call, immediately update the cached query data via `queryClient.setQueryData` so the UI reflects the change instantly.
+- **Rollback on failure**: If the Supabase update returns an error, revert the optimistic update.
+- **Detect zero-row updates**: Use `.select().single()` or check `count` to detect when RLS silently blocks the update, and return `false` in that case.
 
-## Plan
+### 2. No other files changed
 
-### 1. `supabase/functions/face-recognize/index.ts` — Relax the AI prompt
-
-**Change the prompt** from overly strict to balanced:
-- Remove "Be strict" instruction
-- Add explicit guidance to be tolerant of lighting, angle, expression, and webcam quality differences
-- Instruct the AI that if the person looks like the same individual, confidence should be 70+
-- Keep anti-spoofing awareness (photos of photos, etc.)
-
-**Lower the backend match threshold** from `confidence >= 50` to `confidence >= 40` (line 247) to catch more borderline cases that the frontend already handles with its "low confidence" UI.
-
-### 2. `src/hooks/useFaceRecognition.ts` — Lower frontend thresholds
-
-- Change high-confidence threshold from `>= 95` to `>= 75` (line 90) — this triggers auto-punch
-- Keep low-confidence threshold at `>= 50` (line 101) — this shows the confirmation dialog
-
-### 3. Improve image quality
-
-In `captureFrame()`, increase JPEG quality from `0.7` to `0.85` for better image detail sent to AI.
-
-## Files Changed
-- `supabase/functions/face-recognize/index.ts` — relaxed prompt + lower backend threshold
-- `src/hooks/useFaceRecognition.ts` — lower frontend confidence thresholds + better image quality
+The `WorkOrderQueueSection` component already handles the `boolean` return from `onUpdateStatus` — it shows success/failure toasts. The fix is entirely in the hook.
 
 ## Scope
-- No changes to any other users, routes, or components
+- Only `src/hooks/useSupabaseWorkOrders.ts` is modified
+- No changes to other users, routes, or components
 - No database changes
 
