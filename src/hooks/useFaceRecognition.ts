@@ -55,7 +55,7 @@ export function useFaceRecognition() {
 
     ctx.drawImage(video, 0, 0, 640, 480);
     // Export as JPEG base64, quality 0.7 for ~100KB
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     return dataUrl.split(",")[1]; // strip prefix
   }, []);
 
@@ -87,7 +87,7 @@ export function useFaceRecognition() {
         return null;
       }
 
-      if (data.matched && data.confidence >= 95) {
+      if (data.matched && data.confidence >= 75) {
         const result: MatchResult = {
           profile_id: data.profile_id,
           name: data.name,
