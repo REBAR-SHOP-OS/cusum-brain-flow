@@ -720,11 +720,14 @@ Deno.serve(async (req) => {
         toolResults.push({
           role: "tool",
           tool_call_id: tc.id,
+          name: tc.function?.name || tc.name || "unknown_tool",
           content: JSON.stringify(result.result)
         });
       }
 
-      accumulatedTurns.push(choice.message);
+      // Push the assistant message that triggered these tool calls
+      const currentAssistantMsg = aiResult.raw.choices?.[0]?.message;
+      accumulatedTurns.push(currentAssistantMsg);
       accumulatedTurns.push(...toolResults);
       
       const nextMessages = [...messages, ...accumulatedTurns];

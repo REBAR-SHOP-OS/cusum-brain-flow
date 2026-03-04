@@ -179,7 +179,7 @@ export default function Customers() {
 
     mapped.sort((a, b) => {
       let cmp = 0;
-      if (sortField === "name") cmp = a.customer.name.localeCompare(b.customer.name);
+      if (sortField === "name") cmp = (a.customer.name || "").localeCompare(b.customer.name || "");
       else if (sortField === "company_name") cmp = (a.customer.company_name || "").localeCompare(b.customer.company_name || "");
       else if (sortField === "open_balance") cmp = a.openBalance - b.openBalance;
       return sortDir === "desc" ? -cmp : cmp;
