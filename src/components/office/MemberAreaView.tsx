@@ -488,7 +488,19 @@ function SystemConfigTab({
         .select("*")
         .order("created_at", { ascending: false });
       if (!error && data) {
-        setSavedSchematics(data as UploadedSchematic[]);
+        // Generate signed URLs for storage paths (not full URLs)
+        const withSignedUrls = await Promise.all(
+          data.map(async (s) => {
+            if (!s.image_url.startsWith("http")) {
+              const { data: signedData } = await supabase.storage
+                .from("shape-schematics")
+                .createSignedUrl(s.image_url, 3600);
+              return { ...s, image_url: signedData?.signedUrl || s.image_url };
+            }
+            return s;
+          })
+        );
+        setSavedSchematics(withSignedUrls as UploadedSchematic[]);
       }
     } catch {
       // silent
