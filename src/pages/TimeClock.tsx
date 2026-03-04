@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { format, differenceInMinutes } from "date-fns";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ export default function TimeClock() {
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
   const face = useFaceRecognition();
+  const [searchParams] = useSearchParams();
 
   const [faceMode, setFaceMode] = useState(false);
   const [kioskMode, setKioskMode] = useState(false);
@@ -61,6 +62,14 @@ export default function TimeClock() {
   useEffect(() => {
     fetchEnrollmentCount();
   }, [fetchEnrollmentCount]);
+
+  // Auto-enter kiosk mode if ?kiosk=1
+  useEffect(() => {
+    if (searchParams.get("kiosk") === "1") {
+      enterKioskMode();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Toggle face mode
   const handleFaceModeToggle = async (enabled: boolean) => {
