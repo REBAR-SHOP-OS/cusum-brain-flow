@@ -2062,6 +2062,39 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          legal_name: string
+          normalized_name: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          legal_name: string
+          normalized_name?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          legal_name?: string
+          normalized_name?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       contact_access_log: {
         Row: {
           action: string
@@ -2890,6 +2923,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "delivery_stops_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "v_deliveries_enriched"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "delivery_stops_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
@@ -3468,6 +3508,48 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: true
             referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entity_links: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          message_id: string | null
+          thread_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          message_id?: string | null
+          thread_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          message_id?: string | null
+          thread_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_links_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_thread_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_links_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
             referencedColumns: ["id"]
           },
         ]
@@ -7440,6 +7522,13 @@ export type Database = {
             referencedRelation: "deliveries"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "packing_slips_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "v_deliveries_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       payroll_audit_log: {
@@ -10486,6 +10575,82 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      scopes_of_work: {
+        Row: {
+          company_id: string
+          contact_id: string | null
+          created_at: string
+          gps_accuracy: number | null
+          id: string
+          invoice_date: string | null
+          invoice_number: string | null
+          lat: number | null
+          lng: number | null
+          project_id: string
+          scope_name: string
+          site_address: string | null
+          status: string
+          target_eta: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          contact_id?: string | null
+          created_at?: string
+          gps_accuracy?: number | null
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          lat?: number | null
+          lng?: number | null
+          project_id: string
+          scope_name: string
+          site_address?: string | null
+          status?: string
+          target_eta?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          contact_id?: string | null
+          created_at?: string
+          gps_accuracy?: number | null
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          lat?: number | null
+          lng?: number | null
+          project_id?: string
+          scope_name?: string
+          site_address?: string | null
+          status?: string
+          target_eta?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scopes_of_work_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scopes_of_work_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scopes_of_work_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       seo_crawl_pages: {
         Row: {
@@ -13847,6 +14012,91 @@ export type Database = {
           {
             foreignKeyName: "customers_merged_into_customer_id_fkey"
             columns: ["merged_into_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_deliveries_enriched: {
+        Row: {
+          company_customer_id: string | null
+          company_id: string | null
+          company_name: string | null
+          created_at: string | null
+          customer_id: string | null
+          cut_plan_id: string | null
+          delivery_number: string | null
+          driver_name: string | null
+          driver_profile_id: string | null
+          id: string | null
+          notes: string | null
+          order_id: string | null
+          scheduled_date: string | null
+          status: string | null
+          updated_at: string | null
+          vehicle: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deliveries_cut_plan_id_fkey"
+            columns: ["cut_plan_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_driver_profile_id_fkey"
+            columns: ["driver_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_driver_profile_id_fkey"
+            columns: ["driver_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["id"]
