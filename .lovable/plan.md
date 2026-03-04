@@ -1,71 +1,23 @@
 
 
-# Root Fix: Clock In/Out Reliability for All Users
+# Block zahra@rebar.shop from Customers
 
-## Problem Analysis
+## What This Does
+Hides the "Customers" menu item and blocks route access for `zahra@rebar.shop`.
 
-After reviewing the current code and database state:
-- Database is clean (only 1 legitimate open shift exists)
-- Code logic appears correct but may have subtle issues:
-  1. **`as any` type casts** on `.update()` and `.insert()` calls suppress TypeScript errors AND may hide runtime failures — the Supabase client might silently return errors that are not caught
-  2. **No optimistic UI update** — after clock out, the UI waits for `fetchEntries()` to complete a full round-trip before toggling the button, creating a perceived delay
-  3. **`fetchEntries` dependency on `myProfile`** — if `myProfile` resolves late (profiles loading), the callback recreates and may cause unnecessary re-fetches or missed updates
+## Changes
 
-## Plan
+### 1. Add `blockedEmails` to nav items
+In **AppSidebar.tsx**, **MobileNavV2.tsx**, and **CommandBar.tsx**:
+- Add `blockedEmails: ["zahra@rebar.shop"]` to the Customers nav item
+- Update `hasAccess` / `isVisible` functions to check `blockedEmails` and return false if the current user's email is in the list
 
-### 1. `src/hooks/useTimeClock.ts` — Bulletproof Clock In/Out
+### 2. Block the route in RoleGuard.tsx
+- Add a check: if user email is `zahra@rebar.shop` and path starts with `/customers`, redirect to `/home`
 
-**Remove all `as any` casts** and use proper typing for Supabase operations. This ensures TypeScript catches any schema mismatches.
-
-**Add optimistic state updates**: Immediately clear `activeEntry` on clock out (and set it on clock in) BEFORE the database round-trip, then confirm with `fetchEntries()`. This makes the button toggle instantly.
-
-**Add comprehensive error logging**: Log the actual Supabase response on failure so we can debug if issues persist.
-
-**Decouple `fetchEntries` from `myProfile`**: Use `user.id` to look up the profile inside the callback, removing the dependency that causes recreation.
-
-```ts
-// Clock Out — optimistic + close all
-const clockOut = async () => {
-  if (!myProfile) { toast.error("No profile found"); return; }
-  if (punching) return;
-  setPunching(true);
-
-  // Optimistic: clear active entry immediately
-  setEntries(prev => prev.map(e => 
-    e.clock_out ? e : { ...e, clock_out: new Date().toISOString() }
-  ));
-
-  try {
-    const { error, count } = await supabase
-      .from("time_clock_entries")
-      .update({ clock_out: new Date().toISOString() })
-      .eq("profile_id", myProfile.id)
-      .is("clock_out", null);
-
-    if (error) {
-      console.error("Clock out failed:", error);
-      toast.error("Failed to clock out");
-    } else {
-      toast.success("Clocked out!");
-    }
-    await fetchEntries(); // Confirm from DB
-  } finally {
-    setPunching(false);
-  }
-};
-```
-
-**Same pattern for `clockIn`**: Close stale shifts, insert new entry, optimistic update.
-
-### 2. `src/pages/TimeClock.tsx` — Face/Kiosk Alignment
-
-Ensure `handleConfirmPunch` uses the same robust pattern (no `as any`, optimistic updates, error logging).
-
-### 3. Data Verification
-
-Run a query to confirm no orphaned/stale shifts exist and verify the `block_multiple_open_shifts` trigger is functioning correctly.
-
-## Files Changed
-- `src/hooks/useTimeClock.ts` — Remove `as any`, add optimistic updates, improve error handling
-- `src/pages/TimeClock.tsx` — Align face/kiosk punch with same pattern
+### Files
+- `src/components/layout/AppSidebar.tsx` — add `blockedEmails` to Customers item + update `hasAccess`
+- `src/components/layout/MobileNavV2.tsx` — add `blockedEmails` to Customers item + update `isVisible`
+- `src/components/layout/CommandBar.tsx` — add `blockedEmails` to Customers item + filter logic
+- `src/components/auth/RoleGuard.tsx` — block `/customers` route for `zahra@rebar.shop`
 
