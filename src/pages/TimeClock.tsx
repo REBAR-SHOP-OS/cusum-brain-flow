@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { FaceCamera } from "@/components/timeclock/FaceCamera";
 import { FaceEnrollment } from "@/components/timeclock/FaceEnrollment";
 import { FaceRecognitionResult } from "@/components/timeclock/FaceRecognitionResult";
+import { FirstTimeRegistration } from "@/components/timeclock/FirstTimeRegistration";
 import { MyLeaveTab } from "@/components/timeclock/MyLeaveTab";
 import { TeamCalendarTab } from "@/components/timeclock/TeamCalendarTab";
 import { PayrollSummaryTab } from "@/components/timeclock/PayrollSummaryTab";
@@ -252,7 +253,18 @@ export default function TimeClock() {
               <ScanFace className="w-5 h-5" /> Scan Face
             </Button>
           )}
-          <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={matchedIsClockedIn} onConfirmPunch={handleConfirmPunch} onReject={() => { face.reset(); }} autoPunchCountdown={autoPunchCountdown} />
+          {face.state === "no_match" ? (
+            <FirstTimeRegistration
+              captureFrame={face.captureFrame}
+              onComplete={() => {
+                face.reset();
+                setTimeout(() => handleScan(), 5000);
+              }}
+              onCancel={() => face.reset()}
+            />
+          ) : (
+            <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={matchedIsClockedIn} onConfirmPunch={handleConfirmPunch} onReject={() => { face.reset(); }} autoPunchCountdown={autoPunchCountdown} />
+          )}
         </div>
         <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
       </div>

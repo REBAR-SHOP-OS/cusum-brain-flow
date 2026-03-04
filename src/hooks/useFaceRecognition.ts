@@ -77,7 +77,8 @@ export function useFaceRecognition() {
       if (error) {
         console.error("Recognition error:", error);
         setState("error");
-        toast.error("Recognition failed");
+        const msg = typeof error === "object" && error?.message ? error.message : "Recognition failed";
+        toast.error(msg);
         return null;
       }
 
@@ -114,10 +115,10 @@ export function useFaceRecognition() {
         setMatchResult(null);
         return null;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Recognition error:", err);
       setState("error");
-      toast.error("Recognition failed");
+      toast.error(err?.message || "Recognition failed");
       return null;
     }
   }, [captureFrame]);

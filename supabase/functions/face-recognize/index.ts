@@ -10,7 +10,6 @@ serve(async (req) => {
   }
 
   try {
-    // Auth guard — caller must be authenticated
     let _userId: string;
     try {
       const auth = await requireAuth(req);
@@ -26,6 +25,7 @@ serve(async (req) => {
     });
     const parsed = faceSchema.safeParse(await req.json());
     if (!parsed.success) {
+      console.error("Validation failed:", parsed.error.flatten().fieldErrors);
       return new Response(JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -33,13 +33,11 @@ serve(async (req) => {
     }
     const { capturedImageBase64, companyId } = parsed.data;
 
-    // AI keys loaded via aiRouter
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch all active face enrollments with profile info
+    // Fetch all active face enrollments
     const { data: enrollments, error: enrollErr } = await supabase
       .from("face_enrollments")
       .select("id, profile_id, photo_url")
@@ -60,12 +58,14 @@ serve(async (req) => {
       );
     }
 
-    // Group enrollments by profile_id
+    // Group enrollments by profile_id, limit to 2 per person
     const profileEnrollments = new Map<string, string[]>();
     for (const e of enrollments) {
       const urls = profileEnrollments.get(e.profile_id) || [];
-      urls.push(e.photo_url);
-      profileEnrollments.set(e.profile_id, urls);
+      if (urls.length < 2) {
+        urls.push(e.photo_url);
+        profileEnrollments.set(e.profile_id, urls);
+      }
     }
 
     // Fetch profile names
@@ -84,8 +84,7 @@ serve(async (req) => {
 
     for (const [profileId, photoUrls] of profileEnrollments.entries()) {
       const signedUrls: string[] = [];
-      for (const url of photoUrls.slice(0, 3)) {
-        // Extract storage path from the photo_url
+      for (const url of photoUrls) {
         const storagePath = url.replace(/^.*face-enrollments\//, "");
         const { data: signedData } = await supabase.storage
           .from("face-enrollments")
@@ -133,7 +132,9 @@ RULES:
 - Be TOLERANT of differences in lighting, camera angle, distance, facial expression, and webcam quality vs enrollment photo quality
 - If the person looks like the same individual despite minor variations, assign confidence 70+
 - Only return low confidence (<50) if the faces clearly belong to different people
-- Watch for obvious spoofing (e.g. a photo of a photo held up to the camera)`,
+- Watch for obvious spoofing (e.g. a photo of a photo held up to the camera)
+
+You MUST call the face_match_result function with your answer.`,
       },
     ];
 
@@ -163,9 +164,10 @@ RULES:
       },
     });
 
-    // Call AI with vision + tool calling for structured output
+    // Call AI with vision — use "auto" toolChoice for Gemini compatibility
     let aiResult;
     try {
+      console.log(`[face-recognize] Calling AI with ${enrolledFaces.length} enrolled faces`);
       aiResult = await callAI({
         provider: "gemini",
         model: "gemini-2.5-flash",
@@ -180,15 +182,13 @@ RULES:
             type: "function",
             function: {
               name: "face_match_result",
-              description:
-                "Return the result of facial recognition matching.",
+              description: "Return the result of facial recognition matching.",
               parameters: {
                 type: "object",
                 properties: {
                   matched_profile_id: {
                     type: "string",
-                    description:
-                      "The profile_id of the matched person, or 'null' if no match.",
+                    description: "The profile_id of the matched person, or 'null' if no match.",
                   },
                   matched_name: {
                     type: "string",
@@ -203,46 +203,67 @@ RULES:
                     description: "Brief explanation of the match or non-match.",
                   },
                 },
-                required: [
-                  "matched_profile_id",
-                  "matched_name",
-                  "confidence",
-                  "reason",
-                ],
+                required: ["matched_profile_id", "matched_name", "confidence", "reason"],
                 additionalProperties: false,
               },
             },
           },
         ],
-        toolChoice: {
-          type: "function",
-          function: { name: "face_match_result" },
-        },
+        // Use "auto" instead of forced function — Gemini compat issue
+        toolChoice: "auto",
       });
+      console.log(`[face-recognize] AI response: toolCalls=${aiResult.toolCalls?.length}, content=${aiResult.content?.slice(0, 200)}`);
     } catch (aiErr) {
       if (aiErr instanceof AIError) {
+        console.error("[face-recognize] AI error:", aiErr.status, aiErr.message);
         return new Response(JSON.stringify({ error: aiErr.message }), {
           status: aiErr.status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      console.error("AI error:", aiErr);
+      console.error("[face-recognize] AI error:", aiErr);
       return new Response(JSON.stringify({ error: "AI recognition failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const toolCall = aiResult.toolCalls[0];
+    // Try to extract result from tool calls first, then fallback to text parsing
+    let resultData: any = null;
 
-    if (!toolCall) {
+    const toolCall = aiResult.toolCalls?.[0];
+    if (toolCall?.function?.arguments) {
+      try {
+        resultData = JSON.parse(toolCall.function.arguments);
+        console.log("[face-recognize] Parsed from tool call:", resultData);
+      } catch (e) {
+        console.error("[face-recognize] Failed to parse tool call arguments:", e);
+      }
+    }
+
+    // Fallback: parse from text content if no tool call
+    if (!resultData && aiResult.content) {
+      console.log("[face-recognize] No tool call, attempting text parse...");
+      try {
+        // Try to extract JSON from the text
+        const jsonMatch = aiResult.content.match(/\{[\s\S]*?"matched_profile_id"[\s\S]*?\}/);
+        if (jsonMatch) {
+          resultData = JSON.parse(jsonMatch[0]);
+          console.log("[face-recognize] Parsed from text fallback:", resultData);
+        }
+      } catch (e) {
+        console.error("[face-recognize] Text parse failed:", e);
+      }
+    }
+
+    if (!resultData) {
+      console.error("[face-recognize] No structured result from AI. Raw content:", aiResult.content?.slice(0, 500));
       return new Response(
         JSON.stringify({ matched: false, reason: "AI returned no structured result" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const resultData = JSON.parse(toolCall.function.arguments);
     const isMatched =
       resultData.matched_profile_id &&
       resultData.matched_profile_id !== "null" &&
@@ -264,7 +285,7 @@ RULES:
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
-    console.error("face-recognize error:", e);
+    console.error("[face-recognize] Unhandled error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
       {
