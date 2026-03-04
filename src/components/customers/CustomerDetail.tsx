@@ -192,7 +192,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
   });
 
   // ── All contacts for this customer (including child customer records) ──
-  const { data: allContacts = [] } = useQuery({
+  const { data: contactsData } = useQuery({
     queryKey: ["customer_contacts_all", customer.id],
     queryFn: async () => {
       // 1. Find all related customer IDs via v_customer_company_map
@@ -215,7 +215,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
         ...(commaChildren || []).map((r: any) => r.id),
       ].filter((id: string, i: number, arr: string[]) => arr.indexOf(id) === i);
 
-      // 2. Fetch contacts from all related IDs
+      // 3. Fetch contacts from all related IDs
       const { data, error } = await supabase
         .from("contacts")
         .select("*")
@@ -224,14 +224,18 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
         .order("first_name");
       if (error) throw error;
 
-      // 3. Filter out auto-generated contacts where name matches company name
+      // 4. Filter out auto-generated contacts where name matches company name
       const companyName = (customer.company_name || customer.name || "").toLowerCase().trim();
-      return (data ?? []).filter((c) => {
+      const filteredContacts = (data ?? []).filter((c) => {
         const contactName = [c.first_name, c.last_name].filter(Boolean).join(" ").toLowerCase().trim();
         return contactName !== companyName && contactName.length > 0;
       });
+
+      return { contacts: filteredContacts, relatedIds: allIds };
     },
   });
+  const allContacts = contactsData?.contacts ?? [];
+  const allRelatedIds = contactsData?.relatedIds ?? [customer.id];
 
   // ── State for contact dropdown selection ──
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
@@ -240,17 +244,19 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
 
   const primaryContact = allContacts.find((c) => c.is_primary) ?? allContacts[0] ?? null;
 
-  // ── Compute active customer ID based on contact selection ──
-  const activeCustomerId = selectedContact?.customer_id ?? customer.id;
+  // ── Compute active IDs based on contact selection ──
+  const activeIds = selectedContact?.customer_id
+    ? [selectedContact.customer_id]
+    : allRelatedIds;
 
   // ── All projects for this customer ──
   const { data: customerProjects = [] } = useQuery({
-    queryKey: ["customer_projects", activeCustomerId],
+    queryKey: ["customer_projects", activeIds],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
         .select("*")
-        .eq("customer_id", activeCustomerId)
+        .in("customer_id", activeIds)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -259,12 +265,12 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
 
   // ── All leads/opportunities for this customer ──
   const { data: customerLeads = [] } = useQuery({
-    queryKey: ["customer_leads", activeCustomerId],
+    queryKey: ["customer_leads", activeIds],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("leads")
         .select("id, title, stage, expected_value, probability, priority, source, created_at")
-        .eq("customer_id", activeCustomerId)
+        .in("customer_id", activeIds)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
