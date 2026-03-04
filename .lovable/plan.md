@@ -1,59 +1,44 @@
 
+مسئله‌ای که الان می‌بینیم دقیقاً این است: درخواست `odoo-crm-sync` با وضعیت 200 برمی‌گردد اما بدنه پاسخ `{"disabled": true, "error":"Odoo integration is disabled"}` است؛ یعنی کد تابع وارد گارد `ODOO_ENABLED` می‌شود. با توجه به اینکه secret وجود دارد، ریشه مشکل احتمالاً «مقدار غیر دقیق» (مثل `"True"`, `" true "`, `"\"true\""` یا مشابه) و وابستگی به مقایسه سخت‌گیرانه `=== "true"` در چندین تابع است.
 
-# Fix: Shape Schematic Images Not Displaying
+برنامه اجرای ریشه‌ای:
 
-## Root Cause
+1) یکپارچه‌سازی پارس Feature Flag در بک‌اند  
+- ایجاد helper مشترک در `supabase/functions/_shared` برای خواندن بولین از env با نرمال‌سازی:
+  - trim
+  - lowercase
+  - حذف quote
+  - پذیرش `true | 1 | yes | on`
+- خروجی helper: `isEnabled("ODOO_ENABLED", false)`.
 
-The `AiVisionUploadDialog` saves the **storage path** (e.g., `SHAPE_NAME_123456.png`) to the `image_url` column — not a full URL. This is correct for security (signed URLs).
+2) حذف مقایسه شکننده در همه توابع Odoo  
+- جایگزینی تمام موارد `Deno.env.get("ODOO_ENABLED") !== "true"` با helper مشترک در فایل‌های:
+  - `supabase/functions/odoo-crm-sync/index.ts`
+  - `supabase/functions/odoo-chatter-sync/index.ts`
+  - `supabase/functions/archive-odoo-files/index.ts`
+  - `supabase/functions/odoo-sync-order-lines/index.ts`
+  - `supabase/functions/odoo-reconciliation-report/index.ts`
+  - `supabase/functions/odoo-file-proxy/index.ts`
+  - `supabase/functions/autopilot-engine/index.ts`
+- نتیجه: حتی اگر مقدار secret با فرمت متفاوت ذخیره شده باشد، سیستم همچنان درست فعال می‌شود.
 
-However, **MemberAreaView** (the admin grid) loads schematics and renders `<img src={s.image_url}>` using the raw storage path directly, which is not a valid URL. The images break because the browser can't resolve a bare filename like `SHAPE_NAME_123456.png`.
+3) افزودن لاگ تشخیصی استاندارد (بدون افشای داده حساس)  
+- در شاخه disabled یک log کوتاه اضافه می‌شود که فقط مقدار normalize‌شده/وضعیت parse را ثبت کند (نه secret کامل).
+- هدف: اگر دوباره غیرفعال شد، سریعاً بفهمیم مشکل از env است یا از جای دیگر.
 
-The `useShapeSchematics` hook already handles this correctly by generating signed URLs, but the admin grid doesn't use it.
+4) بهبود پیام UX در Pipeline  
+- در `src/pages/Pipeline.tsx` وقتی `data.disabled === true` شد:
+  - پیام Toast واضح‌تر و قابل اقدام شود (مثلاً «تنظیمات Odoo فعال نیست یا مقدار نامعتبر است»).
+  - از ابهام جلوگیری شود تا کاربر وارد loop خطا نشود.
 
-## Fix
+5) اعتبارسنجی نهایی End-to-End  
+- اجرای Sync از `/pipeline` و بررسی:
+  - دیگر Toast قرمز `Odoo Sync Disabled` نمایش داده نشود.
+  - `odoo-crm-sync` پاسخ عملیاتی بدهد (created/updated/reconciled).
+  - سپس `odoo-chatter-sync` اجرا شود و داده‌های Chatter/Activities/Timeline بروزرسانی شوند.
+- بررسی شبکه: پاسخ‌ها باید از حالت `disabled:true` خارج شوند.
 
-### 1. `src/components/office/MemberAreaView.tsx` — Generate signed URLs when loading schematics
-
-In `loadSchematics()`, after fetching from DB, loop through results and generate signed URLs for each `image_url` that is a storage path (not already a full URL). This mirrors the logic in `useShapeSchematics.ts`.
-
-```typescript
-const loadSchematics = async () => {
-  setLoadingSchematics(true);
-  try {
-    const { data, error } = await supabase
-      .from("custom_shape_schematics")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (!error && data) {
-      // Generate signed URLs for storage paths
-      const withSignedUrls = await Promise.all(
-        data.map(async (s) => {
-          if (!s.image_url.startsWith("http")) {
-            const { data: signedData } = await supabase.storage
-              .from("shape-schematics")
-              .createSignedUrl(s.image_url, 3600);
-            return { ...s, image_url: signedData?.signedUrl || s.image_url };
-          }
-          return s;
-        })
-      );
-      setSavedSchematics(withSignedUrls as UploadedSchematic[]);
-    }
-  } catch { /* silent */ }
-  finally { setLoadingSchematics(false); }
-};
-```
-
-### 2. Verify `useShapeSchematics.ts` signing logic
-
-The hook already handles path detection and signing. The `extractStoragePath` function checks for both relative paths and full bucket URLs. No changes needed here — it already works for `AsaShapeDiagram` and `ProductionCard`.
-
-### 3. Verify storage bucket RLS
-
-Check that the `shape-schematics` bucket has a SELECT policy allowing authenticated users to read/download files, since signed URLs require this.
-
-| File | Change |
-|------|--------|
-| `src/components/office/MemberAreaView.tsx` | Add signed URL generation in `loadSchematics()` |
-| Storage RLS | Verify SELECT policy on `shape-schematics` bucket |
-
+جزئیات فنی (خلاصه):
+- علت اصلی: وابستگی به string exact-match برای env flag در چند endpoint.
+- راه‌حل پایدار: parsing مقاوم + reuse مشترک + logging تشخیصی.
+- اثر جانبی مثبت: این اصلاح همه مسیرهای Odoo را همزمان پایدار می‌کند، نه فقط Sync اصلی.
