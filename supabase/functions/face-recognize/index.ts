@@ -130,8 +130,10 @@ RULES:
 - Return the profile_id and name of the matching person
 - Return a confidence score from 0 to 100
 - If no match is found, return null for profile_id
-- Be strict: only match if you are genuinely confident the person is the same
-- Consider lighting, angle, and expression variations`,
+- Be TOLERANT of differences in lighting, camera angle, distance, facial expression, and webcam quality vs enrollment photo quality
+- If the person looks like the same individual despite minor variations, assign confidence 70+
+- Only return low confidence (<50) if the faces clearly belong to different people
+- Watch for obvious spoofing (e.g. a photo of a photo held up to the camera)`,
       },
     ];
 
@@ -244,7 +246,7 @@ RULES:
     const isMatched =
       resultData.matched_profile_id &&
       resultData.matched_profile_id !== "null" &&
-      resultData.confidence >= 50;
+      resultData.confidence >= 40;
 
     const matchedProfile = isMatched
       ? profileMap.get(resultData.matched_profile_id)

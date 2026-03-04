@@ -104,7 +104,7 @@ export function FaceRecognitionResult({
 
         {!isHighConfidence && (
           <p className="text-sm text-center text-muted-foreground">
-            Confidence below 95%. Please confirm your identity.
+            Confidence below 75%. Please confirm your identity.
           </p>
         )}
 
