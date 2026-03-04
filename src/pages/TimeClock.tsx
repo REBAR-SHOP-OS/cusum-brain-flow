@@ -253,7 +253,7 @@ export default function TimeClock() {
               <ScanFace className="w-5 h-5" /> Scan Face
             </Button>
           )}
-          {face.state === "no_match" ? (
+          {(face.state === "no_match" || face.state === "error") ? (
             <FirstTimeRegistration
               captureFrame={face.captureFrame}
               onComplete={() => {

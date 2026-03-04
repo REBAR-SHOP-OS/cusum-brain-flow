@@ -216,14 +216,12 @@ You MUST call the face_match_result function with your answer.`,
     } catch (aiErr) {
       if (aiErr instanceof AIError) {
         console.error("[face-recognize] AI error:", aiErr.status, aiErr.message);
-        return new Response(JSON.stringify({ error: aiErr.message }), {
-          status: aiErr.status,
+        return new Response(JSON.stringify({ matched: false, reason: `Recognition unavailable: ${aiErr.message}` }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       console.error("[face-recognize] AI error:", aiErr);
-      return new Response(JSON.stringify({ error: "AI recognition failed" }), {
-        status: 500,
+      return new Response(JSON.stringify({ matched: false, reason: "Recognition unavailable, please register manually" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
