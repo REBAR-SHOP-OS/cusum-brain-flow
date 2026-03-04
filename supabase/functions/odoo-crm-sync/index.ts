@@ -371,9 +371,7 @@ Deno.serve(async (req) => {
             }
           }
 
-          const { data: newLead, error } = await serviceClient
-            .from("leads")
-            .insert({
+          const insertPayload = {
               title: ol.name || "Untitled",
               stage: erpStage,
               probability: normalizedProb,
@@ -384,14 +382,33 @@ Deno.serve(async (req) => {
               company_id: companyId,
               metadata,
               priority: ol.priority === "3" ? "high" : ol.priority === "2" ? "medium" : "low",
-            })
+          };
+
+          const { data: newLead, error } = await serviceClient
+            .from("leads")
+            .insert(insertPayload)
             .select("id")
             .single();
 
-          if (error) { console.error(`Insert error for odoo_id ${odooId}:`, error); errors++; }
-          else {
+          if (error) {
+            // Unique index violation (23505) — race condition, treat as update
+            if (error.code === "23505" && error.message?.includes("odoo_id")) {
+              console.warn(`Duplicate caught by unique index for odoo_id ${odooId}, updating instead`);
+              const { data: existingRow } = await serviceClient
+                .from("leads").select("id").eq("source", "odoo_sync")
+                .filter("metadata->>odoo_id", "eq", odooId).limit(1).single();
+              if (existingRow) {
+                await serviceClient.from("leads").update({
+                  ...insertPayload, updated_at: new Date().toISOString(),
+                }).eq("id", existingRow.id);
+                leadIdByOdooId.set(odooId, existingRow.id);
+                updated++;
+              } else { errors++; }
+            } else {
+              console.error(`Insert error for odoo_id ${odooId}:`, error); errors++;
+            }
+          } else {
             created++;
-            // Track lead_id for validation log
             if (newLead) {
               leadIdByOdooId.set(odooId, newLead.id);
               await insertLeadEvent(serviceClient, newLead.id, "stage_changed", {
