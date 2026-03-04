@@ -1,39 +1,35 @@
 
 
-# Add Contacts & Projects Tabs to Customer Detail
+# Show Leads/Opportunities in the Projects Tab
 
 ## Problem
 
-The Customer Detail sheet only has 4 tabs: Transaction List, Customer Details, Notes, Activity. There's no way to see the **contacts (people)** or **projects** linked to this company. The user expects the hierarchy: **Company → Contacts → Projects**.
-
-## Current Data State
-
-For "Kingdom Construction Limited" (id: `a7aec8da-...`), the `contacts` table has 4 entries (Ben McCabe, Canberk Turkmen, etc.) linked via `customer_id`. The `projects` table has a `customer_id` FK. Both tables are ready to query.
+The "Projects" tab for Kingdom Construction Limited shows empty because the `projects` table has no entries for this customer. However, the `leads` table has 20+ entries (imported from Odoo CRM) like "FW: Thamesford WWTP Upgrades", "Lucan WWTP Expansion", etc. These are the actual project-level records the user expects to see.
 
 ## Plan
 
-### 1. Add "Contacts" tab to CustomerDetail
+### Update CustomerDetail Projects tab to also show Leads
 
-Query the `contacts` table filtered by `customer_id = customer.id` and display a list showing:
-- Name (first + last)
-- Role
-- Email + Phone
-- Primary badge
-- Count in tab label
+In `src/components/customers/CustomerDetail.tsx`:
 
-### 2. Add "Projects" tab to CustomerDetail
+1. **Add a query for leads** linked to this customer (`leads.customer_id = customer.id`)
+2. **Display both** projects and leads in the Projects tab:
+   - Show projects from `projects` table (if any exist)
+   - Show leads/opportunities from `leads` table with title, stage badge, expected value, and priority
+3. **Update the tab count** to include both projects + leads
+4. The tab label stays "Projects" but renders two sections: "Projects" and "Opportunities/Leads"
 
-Query the `projects` table filtered by `customer_id = customer.id` and display:
-- Project name
-- Status badge
-- Site address
-- Count in tab label
+### Data available per lead
 
-### File Changed
+- `title` (e.g., "FW: Thamesford WWTP Upgrades")
+- `stage` (e.g., "quotation_bids", "lost")
+- `expected_value`, `probability`
+- `priority`, `source`
+- `created_at`
+
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/customers/CustomerDetail.tsx` | Add 2 new queries (contacts, projects), 2 new TabsTrigger entries, 2 new TabsContent sections |
-
-No database changes needed — both tables already have the correct FKs and data.
+| `src/components/customers/CustomerDetail.tsx` | Add leads query, render leads list in Projects tab alongside projects |
 
