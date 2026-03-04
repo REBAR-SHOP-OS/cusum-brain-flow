@@ -1,4 +1,5 @@
 import { corsHeaders, json } from "../_shared/auth.ts";
+import { isEnabled } from "../_shared/featureFlags.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const MESSAGE_TYPE_MAP: Record<string, string> = {
@@ -54,7 +55,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   // ODOO_ENABLED feature flag guard
-  if (Deno.env.get("ODOO_ENABLED") !== "true") {
+  if (!isEnabled("ODOO_ENABLED")) {
+    console.warn("ODOO_ENABLED guard: flag resolved to false");
     return json({ error: "Odoo integration is disabled", disabled: true }, 200);
   }
 
