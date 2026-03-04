@@ -60,8 +60,22 @@ export type Database = {
             foreignKeyName: "accounting_mirror_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "accounting_mirror_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "accounting_mirror_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1526,8 +1540,22 @@ export type Database = {
             foreignKeyName: "chat_threads_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "chat_threads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "chat_threads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "chat_threads_project_id_fkey"
@@ -1649,8 +1677,22 @@ export type Database = {
             foreignKeyName: "client_performance_memory_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: true
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "client_performance_memory_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "client_performance_memory_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1987,8 +2029,22 @@ export type Database = {
             foreignKeyName: "communications_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "communications_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "communications_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "communications_lead_id_fkey"
@@ -2094,8 +2150,22 @@ export type Database = {
             foreignKeyName: "contacts_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "contacts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "contacts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2181,8 +2251,22 @@ export type Database = {
             foreignKeyName: "customer_health_scores_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_health_scores_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_health_scores_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2217,8 +2301,22 @@ export type Database = {
             foreignKeyName: "customer_user_links_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_user_links_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_user_links_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2364,8 +2462,22 @@ export type Database = {
             foreignKeyName: "customers_merged_into_customer_id_fkey"
             columns: ["merged_into_customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "customers_merged_into_customer_id_fkey"
+            columns: ["merged_into_customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customers_merged_into_customer_id_fkey"
+            columns: ["merged_into_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2753,8 +2865,22 @@ export type Database = {
             foreignKeyName: "delivery_stops_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "delivery_stops_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "delivery_stops_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "delivery_stops_delivery_id_fkey"
@@ -3634,8 +3760,22 @@ export type Database = {
             foreignKeyName: "estimation_projects_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "estimation_projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "estimation_projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "estimation_projects_estimator_id_fkey"
@@ -5692,8 +5832,22 @@ export type Database = {
             foreignKeyName: "lead_outcome_memory_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "lead_outcome_memory_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "lead_outcome_memory_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "lead_outcome_memory_lead_id_fkey"
@@ -6050,8 +6204,22 @@ export type Database = {
             foreignKeyName: "leads_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "leads_quote_id_fkey"
@@ -7142,8 +7310,22 @@ export type Database = {
             foreignKeyName: "orders_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "orders_lead_id_fkey"
@@ -7651,8 +7833,22 @@ export type Database = {
             foreignKeyName: "pickup_orders_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "pickup_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "pickup_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -8458,8 +8654,22 @@ export type Database = {
             foreignKeyName: "projects_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -9790,8 +10000,22 @@ export type Database = {
             foreignKeyName: "quotes_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "quotes_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "quotes_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -10098,8 +10322,22 @@ export type Database = {
             foreignKeyName: "recurring_transactions_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -11879,8 +12117,22 @@ export type Database = {
             foreignKeyName: "tasks_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "tasks_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "tasks_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -12703,8 +12955,22 @@ export type Database = {
             foreignKeyName: "vendor_user_links_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "vendor_user_links_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "vendor_user_links_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -13193,8 +13459,22 @@ export type Database = {
             foreignKeyName: "contacts_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "contacts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "contacts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -13421,8 +13701,22 @@ export type Database = {
             foreignKeyName: "communications_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "communications_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "communications_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "communications_lead_id_fkey"
@@ -13443,7 +13737,18 @@ export type Database = {
       v_customer_company_map: {
         Row: {
           company_customer_id: string | null
+          company_id: string | null
           legacy_customer_id: string | null
+        }
+        Insert: {
+          company_customer_id?: never
+          company_id?: string | null
+          legacy_customer_id?: string | null
+        }
+        Update: {
+          company_customer_id?: never
+          company_id?: string | null
+          legacy_customer_id?: string | null
         }
         Relationships: []
       }
@@ -13452,36 +13757,101 @@ export type Database = {
           company_id: string | null
           company_name: string | null
           created_at: string | null
+          credit_limit: number | null
           customer_id: string | null
+          customer_type: string | null
           display_name: string | null
           email: string | null
+          id: string | null
+          merge_reason: string | null
+          merged_at: string | null
+          merged_by: string | null
+          merged_into_customer_id: string | null
+          name: string | null
           normalized_name: string | null
+          notes: string | null
+          payment_terms: string | null
           phone: string | null
+          quickbooks_id: string | null
           status: string | null
+          updated_at: string | null
         }
         Insert: {
           company_id?: string | null
-          company_name?: never
+          company_name?: string | null
           created_at?: string | null
+          credit_limit?: number | null
           customer_id?: string | null
+          customer_type?: string | null
           display_name?: string | null
           email?: string | null
+          id?: string | null
+          merge_reason?: string | null
+          merged_at?: string | null
+          merged_by?: string | null
+          merged_into_customer_id?: string | null
+          name?: string | null
           normalized_name?: string | null
+          notes?: string | null
+          payment_terms?: string | null
           phone?: string | null
+          quickbooks_id?: string | null
           status?: string | null
+          updated_at?: string | null
         }
         Update: {
           company_id?: string | null
-          company_name?: never
+          company_name?: string | null
           created_at?: string | null
+          credit_limit?: number | null
           customer_id?: string | null
+          customer_type?: string | null
           display_name?: string | null
           email?: string | null
+          id?: string | null
+          merge_reason?: string | null
+          merged_at?: string | null
+          merged_by?: string | null
+          merged_into_customer_id?: string | null
+          name?: string | null
           normalized_name?: string | null
+          notes?: string | null
+          payment_terms?: string | null
           phone?: string | null
+          quickbooks_id?: string | null
           status?: string | null
+          updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customers_merged_into_customer_id_fkey"
+            columns: ["merged_into_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_merged_into_customer_id_fkey"
+            columns: ["merged_into_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "customers_merged_into_customer_id_fkey"
+            columns: ["merged_into_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customers_merged_into_customer_id_fkey"
+            columns: ["merged_into_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_leads_enriched: {
         Row: {
@@ -13541,8 +13911,22 @@ export type Database = {
             foreignKeyName: "leads_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "leads_quote_id_fkey"
@@ -13600,8 +13984,22 @@ export type Database = {
             foreignKeyName: "orders_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_customers_clean"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "orders_lead_id_fkey"

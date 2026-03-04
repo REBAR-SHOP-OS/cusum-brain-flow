@@ -14,9 +14,9 @@ export function useCompanies(search?: string) {
         .select("*")
         .eq("company_id", companyId!);
       if (search) {
-        q = q.or(`display_name.ilike.%${search}%,company_name.ilike.%${search}%`);
+        q = q.or(`name.ilike.%${search}%,company_name.ilike.%${search}%`);
       }
-      q = q.order("display_name", { ascending: true });
+      q = q.order("name", { ascending: true });
       const { data, error } = await q;
       if (error) throw error;
       return (data as unknown) as Array<{
