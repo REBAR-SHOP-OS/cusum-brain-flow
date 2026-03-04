@@ -50,11 +50,11 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
     queryKey: ["customers-select"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("customers")
-        .select("id, name, company_name")
-        .order("name");
+        .from("v_customers_clean" as any)
+        .select("customer_id, display_name, company_name")
+        .order("display_name");
       if (error) throw error;
-      return data;
+      return (data as unknown) as Array<{customer_id: string; display_name: string; company_name: string | null}>;
     },
   });
 
@@ -200,8 +200,8 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
                     </FormControl>
                     <SelectContent>
                       {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.company_name || customer.name}
+                        <SelectItem key={customer.customer_id} value={customer.customer_id}>
+                          {customer.company_name || customer.display_name}
                         </SelectItem>
                       ))}
                     </SelectContent>

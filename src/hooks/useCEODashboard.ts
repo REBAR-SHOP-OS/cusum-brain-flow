@@ -177,7 +177,7 @@ async function fetchCEOMetrics(companyId: string): Promise<CEOMetrics> {
     supabase.from("machines").select("id, name, type, status").eq("company_id", companyId),
     supabase.from("deliveries").select("id", { count: "exact", head: true }).in("status", ["pending", "in-transit", "loading"]).eq("company_id", companyId),
     supabase.from("leads").select("stage, expected_value").not("stage", "in", "(closed_won,closed_lost)").eq("company_id", companyId),
-    supabase.from("customers").select("id", { count: "exact", head: true }).eq("status", "active").eq("company_id", companyId),
+    supabase.from("v_customers_clean" as any).select("customer_id", { count: "exact", head: true }).eq("company_id", companyId),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("company_id", companyId),
     supabase.from("time_clock_entries").select("profile_id").gte("clock_in", todayStart),
     supabase.from("inventory_lots").select("qty_on_hand").gt("qty_on_hand", 0).eq("company_id", companyId),

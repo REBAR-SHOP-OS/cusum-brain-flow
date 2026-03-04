@@ -32,15 +32,15 @@ export default function Customers() {
     queryKey: ["customers", searchQuery],
     queryFn: async () => {
       let query = supabase
-        .from("customers")
+        .from("v_customers_clean" as any)
         .select("*")
-        .order("name", { ascending: true });
+        .order("display_name", { ascending: true });
       if (searchQuery) {
         query = query.or(`name.ilike.%${searchQuery}%,company_name.ilike.%${searchQuery}%`);
       }
       const { data, error } = await query;
       if (error) throw error;
-      return data as Customer[];
+      return (data as unknown) as Customer[];
     },
   });
 

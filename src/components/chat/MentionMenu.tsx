@@ -31,9 +31,9 @@ export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }
           .ilike("full_name", `%${filter}%`)
           .limit(5),
         supabase
-          .from("customers")
-          .select("id, name, company_name")
-          .ilike("name", `%${filter}%`)
+          .from("v_customers_clean" as any)
+          .select("customer_id, display_name, company_name")
+          .ilike("display_name", `%${filter}%`)
           .limit(5),
       ]);
 
@@ -44,9 +44,9 @@ export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }
           subtitle: p.title || "Team member",
           type: "team" as const,
         })),
-        ...(customersRes.data || []).map((c) => ({
-          id: c.id,
-          label: c.name,
+        ...((customersRes.data as unknown as {customer_id:string;display_name:string;company_name:string|null}[]) || []).map((c) => ({
+          id: c.customer_id,
+          label: c.display_name,
           subtitle: c.company_name || "Customer",
           type: "customer" as const,
         })),

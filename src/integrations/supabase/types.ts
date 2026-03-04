@@ -56,6 +56,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "accounting_mirror_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       accounting_mirror_customers: {
@@ -936,6 +943,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "barlists_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "barlists_parent_barlist_id_fkey"
             columns: ["parent_barlist_id"]
             isOneToOne: false
@@ -1030,6 +1044,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bid_board_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -1253,6 +1274,13 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "call_tasks_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       cca_schedule_items: {
@@ -1374,6 +1402,142 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_thread_links: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          thread_id: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          thread_id: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_thread_links_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_thread_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          sender_profile_id: string | null
+          thread_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          sender_profile_id?: string | null
+          thread_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          sender_profile_id?: string | null
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_thread_messages_sender_profile_id_fkey"
+            columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_thread_messages_sender_profile_id_fkey"
+            columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_thread_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_threads: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          id: string
+          project_id: string | null
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          id?: string
+          project_id?: string | null
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          id?: string
+          project_id?: string | null
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_threads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_threads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "chat_threads_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clearance_evidence: {
         Row: {
           created_at: string
@@ -1480,6 +1644,13 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_performance_memory_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
           },
         ]
       }
@@ -1645,6 +1816,13 @@ export type Database = {
             referencedRelation: "communications"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "comms_alerts_communication_id_fkey"
+            columns: ["communication_id"]
+            isOneToOne: false
+            referencedRelation: "v_communications_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       comms_config: {
@@ -1806,10 +1984,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "communications_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "communications_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -1898,6 +2090,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "contacts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       custom_shape_schematics: {
@@ -1978,6 +2177,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "customer_health_scores_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       customer_user_links: {
@@ -2007,6 +2213,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "customer_user_links_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       customers: {
@@ -2034,6 +2247,7 @@ export type Database = {
           middle_name: string | null
           mobile: string | null
           name: string
+          normalized_name: string | null
           notes: string | null
           other_phone: string | null
           payment_terms: string | null
@@ -2076,6 +2290,7 @@ export type Database = {
           middle_name?: string | null
           mobile?: string | null
           name: string
+          normalized_name?: string | null
           notes?: string | null
           other_phone?: string | null
           payment_terms?: string | null
@@ -2118,6 +2333,7 @@ export type Database = {
           middle_name?: string | null
           mobile?: string | null
           name?: string
+          normalized_name?: string | null
           notes?: string | null
           other_phone?: string | null
           payment_terms?: string | null
@@ -2143,6 +2359,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_merged_into_customer_id_fkey"
+            columns: ["merged_into_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
           },
         ]
       }
@@ -2454,6 +2677,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       delivery_stops: {
@@ -2520,6 +2750,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "delivery_stops_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "delivery_stops_delivery_id_fkey"
             columns: ["delivery_id"]
             isOneToOne: false
@@ -2531,6 +2768,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_stops_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_orders_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -3269,6 +3513,13 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "estimation_learnings_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       estimation_pricing: {
@@ -3380,6 +3631,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "estimation_projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "estimation_projects_estimator_id_fkey"
             columns: ["estimator_id"]
             isOneToOne: false
@@ -3398,6 +3656,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimation_projects_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
           {
@@ -5138,6 +5403,13 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lead_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lead_communications: {
@@ -5191,6 +5463,13 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lead_communications_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lead_events: {
@@ -5227,6 +5506,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -5279,6 +5565,13 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lead_files_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lead_loss_memory: {
@@ -5327,6 +5620,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: true
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_loss_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -5389,10 +5689,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "lead_outcome_memory_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "lead_outcome_memory_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: true
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_outcome_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -5454,6 +5768,13 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lead_qualification_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lead_quote_memory: {
@@ -5513,6 +5834,13 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lead_quote_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lead_score_history: {
@@ -5555,6 +5883,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_score_history_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -5710,6 +6045,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "leads_quote_id_fkey"
@@ -6682,6 +7024,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       orders: {
@@ -6790,10 +7139,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "orders_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
           {
@@ -7284,6 +7647,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pickup_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       pipeline_ai_actions: {
@@ -7332,6 +7702,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_ai_actions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -7460,6 +7837,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_transition_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -7673,6 +8057,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "production_tasks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "production_tasks_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
@@ -7821,6 +8212,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_coordination_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -8056,6 +8454,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       prospect_batches: {
@@ -8156,6 +8561,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospects_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -9374,6 +9786,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "quotes_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       rate_limit_entries: {
@@ -9674,6 +10093,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
           },
         ]
       }
@@ -11449,6 +11875,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tasks_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       tax_deduction_tracker: {
@@ -12266,6 +12699,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "vendor_user_links_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       ventures: {
@@ -12600,6 +13040,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "work_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "work_orders_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
@@ -12741,6 +13188,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
           },
         ]
       }
@@ -12906,6 +13360,286 @@ export type Database = {
         }
         Relationships: []
       }
+      v_communications_enriched: {
+        Row: {
+          ai_action_required: boolean | null
+          ai_action_summary: string | null
+          ai_category: string | null
+          ai_draft: string | null
+          ai_priority_data: Json | null
+          ai_processed_at: string | null
+          ai_urgency: string | null
+          body_preview: string | null
+          company_id: string | null
+          contact_email: string | null
+          contact_first_name: string | null
+          contact_id: string | null
+          contact_last_name: string | null
+          created_at: string | null
+          customer_company_name: string | null
+          customer_id: string | null
+          customer_name: string | null
+          direction: string | null
+          from_address: string | null
+          id: string | null
+          lead_id: string | null
+          metadata: Json | null
+          received_at: string | null
+          resolved_at: string | null
+          resolved_summary: string | null
+          source: string | null
+          source_id: string | null
+          status: string | null
+          subject: string | null
+          thread_id: string | null
+          to_address: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communications_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "communications_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_customer_company_map: {
+        Row: {
+          company_customer_id: string | null
+          legacy_customer_id: string | null
+        }
+        Relationships: []
+      }
+      v_customers_clean: {
+        Row: {
+          company_id: string | null
+          company_name: string | null
+          created_at: string | null
+          customer_id: string | null
+          display_name: string | null
+          email: string | null
+          normalized_name: string | null
+          phone: string | null
+          status: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          company_name?: never
+          created_at?: string | null
+          customer_id?: string | null
+          display_name?: string | null
+          email?: string | null
+          normalized_name?: string | null
+          phone?: string | null
+          status?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          company_name?: never
+          created_at?: string | null
+          customer_id?: string | null
+          display_name?: string | null
+          email?: string | null
+          normalized_name?: string | null
+          phone?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
+      v_leads_enriched: {
+        Row: {
+          assigned_to: string | null
+          company_id: string | null
+          computed_score: number | null
+          contact_id: string | null
+          created_at: string | null
+          customer_company_name: string | null
+          customer_id: string | null
+          customer_name: string | null
+          description: string | null
+          escalated_to: string | null
+          expected_close_date: string | null
+          expected_value: number | null
+          id: string | null
+          metadata: Json | null
+          notes: string | null
+          priority: string | null
+          priority_score: number | null
+          probability: number | null
+          quote_id: string | null
+          score_confidence: string | null
+          score_updated_at: string | null
+          sla_breached: boolean | null
+          sla_deadline: string | null
+          source: string | null
+          source_email_id: string | null
+          stage: string | null
+          title: string | null
+          updated_at: string | null
+          win_prob_score: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "leads_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_orders_enriched: {
+        Row: {
+          billable_revision_required: boolean | null
+          company_customer_id: string | null
+          company_id: string | null
+          created_at: string | null
+          customer_approved_at: string | null
+          customer_id: string | null
+          customer_revision_count: number | null
+          delivery_method: string | null
+          due_date: string | null
+          expected_value: number | null
+          id: string | null
+          lead_id: string | null
+          notes: string | null
+          order_date: string | null
+          order_kind: string | null
+          order_number: string | null
+          owner_id: string | null
+          pending_change_order: boolean | null
+          priority: string | null
+          production_locked: boolean | null
+          production_override: boolean | null
+          qc_evidence_uploaded: boolean | null
+          qc_final_approved: boolean | null
+          qc_internal_approved_at: string | null
+          quickbooks_invoice_id: string | null
+          quote_id: string | null
+          required_date: string | null
+          resolved_company_name: string | null
+          shop_drawing_status: string | null
+          status: string | null
+          total_amount: number | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "orders_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       accounting_health_customer_debug: {
@@ -13040,6 +13774,7 @@ export type Database = {
           similarity: number
         }[]
       }
+      norm_text: { Args: { input: string }; Returns: string }
       recalculate_client_performance: {
         Args: { p_company_id: string; p_customer_id: string }
         Returns: undefined

@@ -239,7 +239,7 @@ Deno.serve(async (req) => {
           "leads", "communications", "estimation_projects", "pickup_orders",
           "tasks", "recurring_transactions", "customer_health_scores",
           "client_performance_memory", "customer_user_links", "lead_outcome_memory",
-          "accounting_mirror", "gl_lines",
+          "accounting_mirror", "gl_lines", "chat_threads",
         ];
 
         const allResults: any[] = [];
