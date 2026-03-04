@@ -220,6 +220,20 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
     },
   });
 
+  // ── All leads/opportunities for this customer ──
+  const { data: customerLeads = [] } = useQuery({
+    queryKey: ["customer_leads", customer.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("id, title, stage, expected_value, probability, priority, source, created_at")
+        .eq("customer_id", customer.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   // ── All transactions for this customer ──
   const { data: transactions = [], isLoading: txnLoading } = useQuery({
     queryKey: ["qb_customer_transactions", customer.quickbooks_id],
@@ -619,7 +633,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
             <Users className="w-3 h-3" /> Contacts{allContacts.length > 0 && ` (${allContacts.length})`}
           </TabsTrigger>
           <TabsTrigger value="projects" className="gap-1">
-            <FolderKanban className="w-3 h-3" /> Projects{customerProjects.length > 0 && ` (${customerProjects.length})`}
+            <FolderKanban className="w-3 h-3" /> Projects{(customerProjects.length + customerLeads.length) > 0 && ` (${customerProjects.length + customerLeads.length})`}
           </TabsTrigger>
           <TabsTrigger value="activity" className="gap-1">
             <Clock className="w-3 h-3" /> Activity
@@ -961,11 +975,11 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           </TabsContent>
 
           {/* ─── Projects ─── */}
-          <TabsContent value="projects" className="mt-0 px-6 py-4">
-            {customerProjects.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No projects linked to this company.</p>
-            ) : (
+          <TabsContent value="projects" className="mt-0 px-6 py-4 space-y-6">
+            {/* Formal Projects */}
+            {customerProjects.length > 0 && (
               <div className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground">Projects</h3>
                 {customerProjects.map((p) => (
                   <Card key={p.id}>
                     <CardContent className="p-4 space-y-1">
@@ -982,6 +996,50 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                   </Card>
                 ))}
               </div>
+            )}
+
+            {/* Leads / Opportunities */}
+            {customerLeads.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground">Opportunities / Leads</h3>
+                {customerLeads.map((lead) => (
+                  <Card key={lead.id}>
+                    <CardContent className="p-4 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-sm">{lead.title}</p>
+                        {lead.stage && (
+                          <Badge variant={lead.stage === "lost" ? "destructive" : lead.stage === "won" ? "default" : "secondary"} className="text-[10px]">
+                            {lead.stage.replace(/_/g, " ")}
+                          </Badge>
+                        )}
+                        {lead.priority && (
+                          <Badge variant="outline" className="text-[10px]">{lead.priority}</Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        {lead.expected_value != null && (
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" /> {fmtCurrency(lead.expected_value)}
+                          </span>
+                        )}
+                        {lead.probability != null && (
+                          <span>{lead.probability}% probability</span>
+                        )}
+                        {lead.source && (
+                          <span>{lead.source}</span>
+                        )}
+                        {lead.created_at && (
+                          <span>{format(new Date(lead.created_at), "MMM d, yyyy")}</span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {customerProjects.length === 0 && customerLeads.length === 0 && (
+              <p className="text-sm text-muted-foreground">No projects or opportunities linked to this company.</p>
             )}
           </TabsContent>
 
