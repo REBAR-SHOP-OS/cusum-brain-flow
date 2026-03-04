@@ -544,10 +544,20 @@ export default function Pipeline() {
       const { data, error } = await supabase.functions.invoke("odoo-crm-sync", { body: { mode: "full" } });
       if (error) throw error;
 
+      // Handle disabled or error responses that come back as 200
+      if (data?.disabled) {
+        toast({ title: "Odoo Sync Disabled", description: data.error || "Odoo integration is currently disabled.", variant: "destructive" });
+        return;
+      }
+      if (data?.error) {
+        toast({ title: "Odoo Sync Failed", description: data.error, variant: "destructive" });
+        return;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       toast({
-        title: `Odoo Sync Complete`,
-        description: `${data.created} created, ${data.updated} updated, ${data.reconciled || 0} reconciled, ${data.errors} errors (${data.total} total, ${data.mode} mode)`,
+        title: "Odoo Sync Complete",
+        description: `${data?.created ?? 0} created, ${data?.updated ?? 0} updated, ${data?.reconciled ?? 0} reconciled, ${data?.errors ?? 0} errors (${data?.total ?? 0} total, ${data?.mode ?? "unknown"} mode)`,
       });
     } catch (err) {
       console.error("Odoo sync error:", err);
