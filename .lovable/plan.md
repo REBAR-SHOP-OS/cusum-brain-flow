@@ -1,49 +1,42 @@
 
 
-# Fix Face Recognition Error + Add First-Time Enrollment Flow
+# Unify Customers Across the App
 
 ## Problem
-The Face ID Kiosk shows "Recognition Error" when scanning. The most likely cause is the Gemini OpenAI-compatible API failing on the `tool_choice` format or the multi-image request. Without edge function logs appearing, the error is being swallowed silently.
 
-Additionally, the user wants: when a face is **not recognized** (first visit), prompt for the person's name, enroll their face, create their profile, and clock them in — so next time it's fully automatic.
+Two completely different customer views exist:
+- **Sidebar /customers** (`Customers.tsx`): reads from `v_customers_clean` (local DB) — shows 1000+ customers, but **missing company_id filter** (multi-tenant violation)
+- **Accounting Customers tab** (`AccountingCustomers.tsx`): reads from `qb_customers` mirror (QuickBooks data) — shows different results, search "kingdom" returns 0
+
+These should be one unified view with the same data source.
+
+## Root Cause
+
+`AccountingCustomers` gets its customer list from `useQuickBooksData().customers` which reads the `qb_customers` table. The CRM page reads `v_customers_clean` (the `customers` table). They're fundamentally different tables with different data.
 
 ## Plan
 
-### 1. Fix Edge Function (`supabase/functions/face-recognize/index.ts`)
+### 1. Fix AccountingCustomers to use the same data source
 
-- **Add robust error logging** with `console.error` for every failure path so logs are visible
-- **Handle Gemini tool_choice compatibility**: Change `toolChoice` from `{type: "function", function: {name: ...}}` to `"auto"` — Gemini's OpenAI-compat endpoint has inconsistent support for forced tool choice
-- **Add fallback text parsing**: If no `toolCalls` returned, attempt to parse the AI's text response as JSON
-- **Reduce image count**: Limit to 2 reference photos per person to stay within Gemini's token limits for multi-image requests
-- **Return `no_match` with the captured image URL** when unrecognized, so the frontend can use it for enrollment
+Replace the QB-mirror-based customer list in `AccountingCustomers.tsx` with a query to `v_customers_clean` filtered by `company_id`. This makes it identical to the sidebar Customers page data.
 
-### 2. New "First-Time Registration" UI Flow (`src/components/timeclock/FirstTimeRegistration.tsx`)
+- Query `v_customers_clean` with `.eq("company_id", companyId)` and local search filter
+- Enrich with QB balance data from the existing `get_qb_customer_balances` RPC (already in use)
+- Keep the sync-from-QB flow for customers that exist in QB but not locally (existing behavior)
+- Display `company_name` prominently (e.g., "Kingdom Construction Limited") instead of just `name`
 
-When face scan returns `no_match` in kiosk mode:
-- Show a form asking for the employee's **full name**
-- On submit:
-  1. Create a new `profiles` entry (linked to the kiosk user `ai@rebar.shop` as creator)
-  2. Upload the captured frame to `face-enrollments` storage
-  3. Create a `face_enrollments` record linking the photo to the new profile
-  4. Auto clock-in the new employee
-  5. Show success and reset to scan mode
+### 2. Fix CRM Customers page multi-tenant scoping
 
-### 3. Update Kiosk Flow (`src/pages/TimeClock.tsx`)
+`Customers.tsx` currently queries `v_customers_clean` without any `company_id` filter — this is a multi-tenant violation. Add `useCompanyId()` and filter by it.
 
-- When `face.state === "no_match"` in kiosk mode, show `FirstTimeRegistration` component instead of the generic error
-- Pass `captureFrame` function so the component can grab the current frame for enrollment
-- After registration completes, auto-clock-in and reset
+### 3. Ensure company_name is the primary display
 
-### 4. Update Hook (`src/hooks/useFaceRecognition.ts`)
-
-- Better error handling: show the actual server error message in the toast instead of generic "Recognition failed"
+Both views will show `company_name` as the primary column (e.g., "Kingdom Construction Limited"), with `name` as secondary. This addresses the user's request that "Kingdom Construction" should show as "Kingdom Construction Limited".
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/face-recognize/index.ts` | Fix tool_choice, add fallback parsing, better logging |
-| `src/components/timeclock/FirstTimeRegistration.tsx` | New component: name input + auto-enroll + clock-in |
-| `src/pages/TimeClock.tsx` | Show FirstTimeRegistration on no_match in kiosk mode |
-| `src/hooks/useFaceRecognition.ts` | Better error message display |
+| `src/components/accounting/AccountingCustomers.tsx` | Switch from `data.customers` (qb_customers) to querying `v_customers_clean` with company_id filter; keep QB balance enrichment |
+| `src/pages/Customers.tsx` | Add `useCompanyId()` and `.eq("company_id", companyId)` filter to the query |
 
