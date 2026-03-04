@@ -20,7 +20,7 @@ function getDb() {
 
 const mcpServer = new McpServer({
   name: "rebar-erp",
-  version: "1.0.0",
+  version: "1.0.1",
 });
 
 // ── Tool: list_social_posts ─────────────────────────────────
@@ -827,6 +827,12 @@ mcpServer.tool("merge_customers", {
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   },
 });
+
+// ── Boot diagnostics ────────────────────────────────────────
+
+const envName = Deno.env.get("ENV") || Deno.env.get("ENVIRONMENT") || Deno.env.get("DENO_DEPLOYMENT_ID") || "unknown";
+console.log("MCP BOOT:", { env: envName, baseUrl: supabaseUrl, server: "rebar-erp", version: "1.0.0" });
+console.log("MCP TOOLS:", mcpServer.listTools?.() || "no listTools method");
 
 // ── HTTP Transport ──────────────────────────────────────────
 
