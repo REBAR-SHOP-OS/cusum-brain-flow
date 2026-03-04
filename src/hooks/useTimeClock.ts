@@ -40,7 +40,19 @@ export function useTimeClock() {
     if (!error && data) {
       setAllEntries(data as TimeClockEntry[]);
       if (myProfile) {
-        setEntries(data.filter((e: any) => e.profile_id === myProfile.id) as TimeClockEntry[]);
+        const todayMyEntries = data.filter((e: any) => e.profile_id === myProfile.id) as TimeClockEntry[];
+
+        // Also fetch any open shift across ALL dates for this user (handles stale shifts from previous days)
+        const { data: openShifts } = await supabase
+          .from("time_clock_entries")
+          .select("*")
+          .eq("profile_id", myProfile.id)
+          .is("clock_out", null);
+
+        // Merge: add any open shift not already in today's list
+        const todayIds = new Set(todayMyEntries.map(e => e.id));
+        const staleOpen = ((openShifts as TimeClockEntry[]) || []).filter(e => !todayIds.has(e.id));
+        setEntries([...staleOpen, ...todayMyEntries]);
       }
     }
     setLoading(false);
@@ -65,15 +77,28 @@ export function useTimeClock() {
 
   const clockIn = async () => {
     if (!myProfile) { toast.error("No profile found"); return; }
-    if (activeEntry) { toast.error("Already clocked in — only one open shift allowed"); return; }
+
+    // Auto-close any stale open shifts from previous days before clocking in
+    const { data: staleShifts } = await supabase
+      .from("time_clock_entries")
+      .select("id")
+      .eq("profile_id", myProfile.id)
+      .is("clock_out", null);
+
+    if (staleShifts && staleShifts.length > 0) {
+      await supabase
+        .from("time_clock_entries")
+        .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift from previous session]" } as any)
+        .eq("profile_id", myProfile.id)
+        .is("clock_out", null);
+    }
 
     const { error } = await supabase
       .from("time_clock_entries")
       .insert({ profile_id: myProfile.id } as any);
 
     if (error) {
-      const msg = error.message?.includes("one open shift") ? "You already have an open shift" : "Failed to clock in";
-      toast.error(msg);
+      toast.error("Failed to clock in");
     } else {
       toast.success("Clocked in!");
       fetchEntries();
