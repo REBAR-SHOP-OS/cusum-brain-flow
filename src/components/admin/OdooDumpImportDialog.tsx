@@ -276,7 +276,8 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       }
 
       setStatusMsg("Matching filestore entries…");
-      const queue: QueueItem[] = [];
+      // First pass: identify which entries we need
+      const matched: { entry: any; pending: PendingFile; mapping: MappingRow }[] = [];
 
       for (const entry of entries) {
         if (entry.directory) continue;
@@ -286,24 +287,48 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
 
         const match = neededFnames.get(relPath);
         if (match) {
-          const capturedEntry = entry;
-          queue.push({
-            pending: match.pending,
-            mapping: match.mapping,
-            getBlob: async () => (capturedEntry as any).getData(new BlobWriter()),
-          });
+          matched.push({ entry, pending: match.pending, mapping: match.mapping });
         }
       }
 
-      if (queue.length === 0) {
+      if (matched.length === 0) {
         toast.error(`No matching files found (${pending.length} pending, ${mapping.length} mappings)`);
         await reader.close();
         return;
       }
 
-      toast.success(`Found ${queue.length} matching files in ZIP`);
+      toast.success(`Found ${matched.length} matching files — extracting…`);
+
+      // Second pass: extract blobs SEQUENTIALLY (zip.js cannot do concurrent reads)
+      const queue: QueueItem[] = [];
+      let extractedBytes = 0;
+      const MAX_EXTRACT_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB guard
+
+      for (let i = 0; i < matched.length; i++) {
+        const { entry, pending: p, mapping: m } = matched[i];
+        setStatusMsg(`Extracting ${i + 1}/${matched.length}: ${m.name}…`);
+        try {
+          const blob: Blob = await entry.getData(new BlobWriter());
+          extractedBytes += blob.size;
+          queue.push({ pending: p, mapping: m, getBlob: async () => blob });
+
+          if (extractedBytes > MAX_EXTRACT_BYTES) {
+            toast.warning(`Memory limit reached (${Math.round(extractedBytes / 1024 / 1024)} MB). Processing ${queue.length} of ${matched.length} files.`);
+            break;
+          }
+        } catch (err: any) {
+          console.warn(`Failed to extract ${m.name}:`, err);
+        }
+      }
+
+      await reader.close(); // Safe to close — all blobs already in memory
+
+      if (queue.length === 0) {
+        toast.error("All file extractions failed");
+        return;
+      }
+
       await processQueue(queue);
-      await reader.close();
     },
     [processQueue]
   );
