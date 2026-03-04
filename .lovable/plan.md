@@ -1,103 +1,53 @@
 
 
-# Pipeline Duplicate Cleanup — Safe Execution Plan
+# Fix: Odoo Sync — Deduplicate, Chain Chatter, Prevent Future Duplicates
 
-## Verified Data Audit
+## Problems Confirmed
 
-| What | Count | Child Data on Duplicates |
-|------|-------|--------------------------|
-| Duplicate lead pairs (same odoo_id) | 233 pairs (466 rows) | 59 activities, 482 events, 960 sync_logs, 0 files, 0 orders, 0 quotes, 0 comms |
-| Duplicate customer groups | 19 companies (39 extra rows) | 16 contacts, 28 quotes on "loser" records |
-| Archived orphans | 33 leads | No children |
+| Issue | Evidence |
+|-------|----------|
+| 181 duplicate lead pairs (same odoo_id) | Previous cleanup incomplete; unique index never created (migration failed) |
+| 203 leads have zero chatter/activities | Chatter sync is a separate function never called by the Odoo Sync button |
+| No unique index on odoo_id | Index creation failed because duplicates still existed |
+| Lead detail shows "No activities yet" | Chatter tab queries `lead_activities` which is empty for these leads |
 
-**No FK constraints exist on the leads table** — all child tables use soft references (column exists but no constraint). This means we must manually re-link before deleting.
+## Plan
 
-## Execution Steps (all using the data insert/update tool, not migrations)
+### Step 1: Deduplicate 181 remaining lead pairs (SQL data fix)
 
-### Step 1: Re-link duplicate lead children to keepers
+Re-run the deduplication: for each duplicated `metadata->>'odoo_id'`, keep the older lead (first `created_at`), migrate child records (`lead_activities`, `lead_events`, `lead_files`, `lead_communications`) from the duplicate to the keeper, then delete the duplicate.
 
-For each of the 233 duplicate pairs, the **older** lead (rn=1) is the keeper. Before deleting rn=2 leads, move their child records:
+### Step 2: Create unique index to prevent future duplicates
 
-```sql
--- 1A: Move 59 lead_activities from duplicates to keepers
-WITH pairs AS (
-  SELECT metadata->>'odoo_id' as oid,
-    MIN(CASE WHEN rn=1 THEN id END) as keeper,
-    MIN(CASE WHEN rn=2 THEN id END) as dupe
-  FROM (
-    SELECT id, metadata->>'odoo_id' as odoo_id,
-      ROW_NUMBER() OVER (PARTITION BY metadata->>'odoo_id' ORDER BY created_at) as rn
-    FROM leads WHERE metadata->>'odoo_id' IS NOT NULL
-    AND metadata->>'odoo_id' IN (
-      SELECT metadata->>'odoo_id' FROM leads GROUP BY 1 HAVING count(*)>1
-    )
-  ) sub GROUP BY metadata->>'odoo_id'
-)
-UPDATE lead_activities SET lead_id = p.keeper
-FROM pairs p WHERE lead_activities.lead_id = p.dupe;
-
--- 1B: Move 482 lead_events
--- (same pattern, UPDATE lead_events)
-
--- 1C: Delete 960 sync_validation_log entries (disposable logs)
--- DELETE FROM sync_validation_log WHERE lead_id IN (SELECT dupe FROM pairs)
-```
-
-### Step 2: Delete 233 duplicate leads
-
-```sql
-DELETE FROM leads WHERE id IN (
-  SELECT id FROM (
-    SELECT id, ROW_NUMBER() OVER (
-      PARTITION BY metadata->>'odoo_id' ORDER BY created_at
-    ) as rn FROM leads WHERE metadata->>'odoo_id' IS NOT NULL
-    AND metadata->>'odoo_id' IN (
-      SELECT metadata->>'odoo_id' FROM leads GROUP BY 1 HAVING count(*)>1
-    )
-  ) sub WHERE rn = 2
-);
-```
-
-### Step 3: Merge 19 duplicate customers
-
-For each duplicate company, keep the one with the most leads. Re-link children from losers:
-
-- Re-link 28 quotes (`UPDATE quotes SET customer_id = keeper WHERE customer_id = loser`)
-- Re-link 16 contacts (`UPDATE contacts SET customer_id = keeper WHERE customer_id = loser`)
-- Re-link leads (`UPDATE leads SET customer_id = keeper WHERE customer_id = loser`)
-- Mark losers as archived with `merged_into_customer_id` set (using the existing merge pattern from the ERP connector)
-
-### Step 4: Purge 33 archived orphans
-
-```sql
-DELETE FROM leads WHERE stage = 'archived_orphan' AND customer_id IS NULL;
-```
-
-### Step 5: Add unique index to prevent future duplicates
-
-This is a **schema change** (migration tool):
-
+Once duplicates are gone, create the partial unique index:
 ```sql
 CREATE UNIQUE INDEX idx_leads_odoo_id_unique 
 ON leads ((metadata->>'odoo_id')) 
 WHERE metadata->>'odoo_id' IS NOT NULL;
 ```
 
-## Safety Guarantees
+### Step 3: Chain chatter sync into Odoo Sync button
 
-- Every child record is re-linked before its parent is deleted — zero data loss
-- Sync logs (disposable) are deleted, not moved
-- Customer "losers" are archived with merge audit trail, not hard-deleted
-- Unique index prevents this from happening again
-- All operations use explicit WHERE clauses tied to the CTE ranking — no accidental broad deletes
+Modify `handleOdooSync` in `Pipeline.tsx` to call `odoo-chatter-sync` automatically after `odoo-crm-sync` completes successfully. This ensures every sync also pulls chatter messages and scheduled activities — making the lead detail identical to Odoo.
 
-| Step | Tool | Records Affected |
-|------|------|-----------------|
-| Re-link lead children | insert tool (UPDATE) | 59 activities + 482 events moved |
-| Delete sync logs | insert tool (DELETE) | 960 rows |
-| Delete dupe leads | insert tool (DELETE) | 233 rows |
-| Merge customer children | insert tool (UPDATE) | 28 quotes + 16 contacts + leads |
-| Archive loser customers | insert tool (UPDATE) | ~20 rows |
-| Purge orphan leads | insert tool (DELETE) | 33 rows |
-| Unique index | migration tool | Schema change |
+```typescript
+// After odoo-crm-sync succeeds:
+const { data: chatterData } = await supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "missing" } });
+```
+
+The "missing" mode only syncs leads that have zero activities, so it's safe to run repeatedly without creating duplicates (the chatter sync already deduplicates by `odoo_message_id`).
+
+### Step 4: Update `odoo-crm-sync` to use upsert logic
+
+Change the insert path in `odoo-crm-sync` to use the unique index for conflict resolution, preventing duplicates even if two syncs run simultaneously:
+```sql
+-- Instead of insert, use upsert on metadata->>'odoo_id'
+```
+This requires modifying the edge function to check for existing odoo_id before inserting.
+
+| File | Change |
+|------|--------|
+| Database (data fix) | Dedup 181 pairs, migrate children, create unique index |
+| `src/pages/Pipeline.tsx` | Chain `odoo-chatter-sync` after `odoo-crm-sync` in `handleOdooSync` |
+| `supabase/functions/odoo-crm-sync/index.ts` | Harden insert path to prevent duplicate creation |
 
