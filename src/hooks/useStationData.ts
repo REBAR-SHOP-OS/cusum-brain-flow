@@ -106,15 +106,19 @@ export function useStationData(machineId: string | null, machineType?: string, p
       const planIds = activePlans.map((p: any) => p.id);
       const planMap = new Map(activePlans.map((p: any) => [p.id, p]));
 
-      // Fetch machine capabilities to filter by allowed bar codes
+      // Fetch machine capabilities to filter by allowed bar codes (process=cut for cutters)
       const { data: caps } = await supabase
         .from("machine_capabilities")
         .select("bar_code")
-        .eq("machine_id", machineId);
+        .eq("machine_id", machineId)
+        .eq("process", "cut");
 
       const allowedBarCodes = caps?.length
         ? new Set(caps.map((c: any) => c.bar_code))
         : null;
+
+      // Fail-closed: if this is a cutter with no capabilities defined, show nothing
+      if (!allowedBarCodes) return [];
 
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
