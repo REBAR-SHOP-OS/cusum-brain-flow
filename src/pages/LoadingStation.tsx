@@ -150,7 +150,7 @@ export default function LoadingStation() {
           asa_shape_code: item.asa_shape_code,
         }));
 
-        // 5. Deterministic 3-step order data resolution for invoice fields
+        // 5. Deterministic invoice resolution: extract_sessions (primary) → orders (fallback)
         let invoiceNumber: string | null = null;
         let invoiceDate: string | null = null;
         {
@@ -161,27 +161,54 @@ export default function LoadingStation() {
             .not("work_order_id", "is", null)
             .limit(1)
             .maybeSingle();
-          if (cpiErr) console.error("Invoice resolve step 1:", cpiErr.message);
+          if (cpiErr) console.error("[Invoice] step1 cpi:", cpiErr.message);
 
           if (cpiRow?.work_order_id) {
             const { data: woRow, error: woErr } = await supabase
               .from("work_orders")
-              .select("order_id")
+              .select("barlist_id, order_id")
               .eq("id", cpiRow.work_order_id)
               .single();
-            if (woErr) console.error("Invoice resolve step 2:", woErr.message);
+            if (woErr) console.error("[Invoice] step2 wo:", woErr.message);
 
-            if (woRow?.order_id) {
+            // Primary: extract_sessions via barlists
+            if (woRow?.barlist_id) {
+              const { data: blRow, error: blErr } = await supabase
+                .from("barlists")
+                .select("extract_session_id")
+                .eq("id", woRow.barlist_id)
+                .single();
+              if (blErr) console.error("[Invoice] step3 barlist:", blErr.message);
+
+              if (blRow?.extract_session_id) {
+                const { data: esRow, error: esErr } = await supabase
+                  .from("extract_sessions")
+                  .select("invoice_number, invoice_date")
+                  .eq("id", blRow.extract_session_id)
+                  .single();
+                if (esErr) console.error("[Invoice] step4 extract_session:", esErr.message);
+
+                if (esRow) {
+                  invoiceNumber = esRow.invoice_number || null;
+                  invoiceDate = esRow.invoice_date
+                    ? new Date(esRow.invoice_date).toISOString().slice(0, 10)
+                    : null;
+                }
+              }
+            }
+
+            // Fallback: orders table (legacy)
+            if ((!invoiceNumber || !invoiceDate) && woRow?.order_id) {
               const { data: orderRow, error: ordErr } = await supabase
                 .from("orders")
                 .select("order_number, order_date")
                 .eq("id", woRow.order_id)
                 .single();
-              if (ordErr) console.error("Invoice resolve step 3:", ordErr.message);
+              if (ordErr) console.error("[Invoice] fallback order:", ordErr.message);
 
               if (orderRow) {
-                invoiceNumber = orderRow.order_number || null;
-                invoiceDate = orderRow.order_date
+                if (!invoiceNumber) invoiceNumber = orderRow.order_number || null;
+                if (!invoiceDate) invoiceDate = orderRow.order_date
                   ? new Date(orderRow.order_date).toISOString().slice(0, 10)
                   : null;
               }

@@ -72,13 +72,13 @@ export default function DeliveryTerminal() {
       setCustomerName(slip?.customer_name || "Customer");
       setSiteAddress(slip?.site_address || stop.address || "");
 
-      // Deterministic 3-step invoice resolution
+      // Deterministic invoice resolution: extract_sessions (primary) → orders (fallback)
       let invoiceNumber = slip?.invoice_number || undefined;
       let invoiceDate = slip?.invoice_date || undefined;
 
       if (slip && (!invoiceNumber || !invoiceDate) && slip.cut_plan_id) {
         try {
-          // Step 1: Get a work_order_id from cut_plan_items
+          // Step 1: Get work_order_id from cut_plan_items
           const { data: cpiRow, error: cpiErr } = await supabase
             .from("cut_plan_items")
             .select("work_order_id")
@@ -86,25 +86,51 @@ export default function DeliveryTerminal() {
             .not("work_order_id", "is", null)
             .limit(1)
             .maybeSingle();
-          if (cpiErr) console.error("Invoice resolve step 1 failed:", cpiErr.message);
+          if (cpiErr) console.error("[Invoice] step1 cpi:", cpiErr.message);
 
           if (cpiRow?.work_order_id) {
-            // Step 2: Get order_id from work_orders
+            // Step 2: Get barlist_id and order_id from work_orders
             const { data: woRow, error: woErr } = await supabase
               .from("work_orders")
-              .select("order_id")
+              .select("barlist_id, order_id")
               .eq("id", cpiRow.work_order_id)
               .single();
-            if (woErr) console.error("Invoice resolve step 2 failed:", woErr.message);
+            if (woErr) console.error("[Invoice] step2 wo:", woErr.message);
 
-            if (woRow?.order_id) {
-              // Step 3: Get order_number and order_date from orders
+            // Primary path: extract_sessions via barlists
+            if (woRow?.barlist_id) {
+              const { data: blRow, error: blErr } = await supabase
+                .from("barlists")
+                .select("extract_session_id")
+                .eq("id", woRow.barlist_id)
+                .single();
+              if (blErr) console.error("[Invoice] step3 barlist:", blErr.message);
+
+              if (blRow?.extract_session_id) {
+                const { data: esRow, error: esErr } = await supabase
+                  .from("extract_sessions")
+                  .select("invoice_number, invoice_date")
+                  .eq("id", blRow.extract_session_id)
+                  .single();
+                if (esErr) console.error("[Invoice] step4 extract_session:", esErr.message);
+
+                if (esRow) {
+                  if (!invoiceNumber && esRow.invoice_number) invoiceNumber = esRow.invoice_number;
+                  if (!invoiceDate && esRow.invoice_date) {
+                    invoiceDate = new Date(esRow.invoice_date).toISOString().slice(0, 10);
+                  }
+                }
+              }
+            }
+
+            // Fallback: orders table (legacy records)
+            if ((!invoiceNumber || !invoiceDate) && woRow?.order_id) {
               const { data: orderRow, error: ordErr } = await supabase
                 .from("orders")
                 .select("order_number, order_date")
                 .eq("id", woRow.order_id)
                 .single();
-              if (ordErr) console.error("Invoice resolve step 3 failed:", ordErr.message);
+              if (ordErr) console.error("[Invoice] fallback order:", ordErr.message);
 
               if (orderRow) {
                 if (!invoiceNumber && orderRow.order_number) invoiceNumber = orderRow.order_number;
@@ -115,7 +141,7 @@ export default function DeliveryTerminal() {
             }
           }
 
-          // Backfill: persist resolved values so they stick for future previews
+          // Backfill: persist resolved values
           if (invoiceNumber || invoiceDate) {
             const updates: Record<string, string> = {};
             if (invoiceNumber && !slip.invoice_number) updates.invoice_number = invoiceNumber;
@@ -127,12 +153,13 @@ export default function DeliveryTerminal() {
                 .eq("delivery_id", stop.delivery_id)
                 .eq("company_id", companyId)
                 .then(({ error: upErr }) => {
-                  if (upErr) console.error("Backfill packing_slips failed:", upErr.message);
+                  if (upErr) console.error("[Invoice] backfill failed:", upErr.message);
+                  else console.log("[Invoice] backfill success:", updates);
                 });
             }
           }
         } catch (err) {
-          console.error("Invoice resolution failed:", err);
+          console.error("[Invoice] resolution failed:", err);
         }
       }
 
