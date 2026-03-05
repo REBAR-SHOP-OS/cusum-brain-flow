@@ -64,17 +64,36 @@ export default function DeliveryTerminal() {
 
       const { data: slips } = await supabase
         .from("packing_slips")
-        .select("customer_name, items_json, site_address, slip_number, invoice_number, invoice_date, ship_to, scope, delivery_date")
+        .select("customer_name, items_json, site_address, slip_number, invoice_number, invoice_date, ship_to, scope, delivery_date, cut_plan_id")
         .eq("delivery_id", stop.delivery_id)
         .eq("company_id", companyId);
 
       const slip = slips?.[0];
       setCustomerName(slip?.customer_name || "Customer");
       setSiteAddress(slip?.site_address || stop.address || "");
+
+      // Fallback: if invoice_number or invoice_date missing, resolve from orders
+      let invoiceNumber = slip?.invoice_number || undefined;
+      let invoiceDate = slip?.invoice_date || undefined;
+      if (slip && (!invoiceNumber || !invoiceDate) && slip.cut_plan_id) {
+        const { data: orderData } = await supabase
+          .from("cut_plan_items")
+          .select("work_orders(orders(order_number, order_date))")
+          .eq("cut_plan_id", slip.cut_plan_id)
+          .not("work_order_id", "is", null)
+          .limit(1)
+          .maybeSingle();
+        const order = (orderData as any)?.work_orders?.orders;
+        if (!invoiceNumber && order?.order_number) invoiceNumber = order.order_number;
+        if (!invoiceDate && order?.order_date) {
+          invoiceDate = new Date(order.order_date).toISOString().slice(0, 10);
+        }
+      }
+
       setSlipMeta({
         slipNumber: slip?.slip_number || undefined,
-        invoiceNumber: slip?.invoice_number || undefined,
-        invoiceDate: slip?.invoice_date || undefined,
+        invoiceNumber,
+        invoiceDate,
         shipTo: slip?.ship_to || undefined,
         scope: slip?.scope || undefined,
         deliveryDate: slip?.delivery_date || undefined,
