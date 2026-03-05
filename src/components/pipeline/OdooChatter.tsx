@@ -11,6 +11,7 @@ import {
   MessageSquare, Phone, Mail, Calendar, ArrowRight,
   Send, Clock, CheckCircle2, Loader2, Paperclip,
   PhoneCall, FileText, Zap, Download, File, FileSpreadsheet, Image, ClipboardList,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isBefore, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,9 @@ interface OdooChatterProps {
   lead: LeadWithCustomer;
 }
 
+// ── Thread filter type ─────────────────────────────────────────────
+type ThreadFilter = "all" | "conversation" | "audit";
+
 // ── Icon / color maps ──────────────────────────────────────────────
 const activityIcons: Record<string, React.ElementType> = {
   note: MessageSquare,
@@ -46,6 +50,53 @@ function getInitials(name: string): string {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
+// ── Helpers for email quote stripping ──────────────────────────────
+function splitEmailQuotes(html: string): { main: string; quoted: string | null } {
+  // Common quote patterns
+  const patterns = [
+    /(<div[^>]*class="[^"]*gmail_quote[^"]*"[^>]*>[\s\S]*$)/i,
+    /(-----\s*Original Message\s*-----[\s\S]*$)/i,
+    /(<blockquote[^>]*>[\s\S]*<\/blockquote>\s*$)/i,
+    /(On\s+.{10,80}\s+wrote:\s*[\s\S]*$)/i,
+    /(From:\s+.{5,80}\s*Sent:\s+[\s\S]*$)/i,
+  ];
+  for (const pat of patterns) {
+    const match = html.match(pat);
+    if (match && match.index && match.index > 50) {
+      return { main: html.slice(0, match.index), quoted: html.slice(match.index) };
+    }
+  }
+  return { main: html, quoted: null };
+}
+
+// ── Check if an activity is "system noise" ─────────────────────────
+function isSystemNoise(activity: LeadActivity): boolean {
+  const type = activity.activity_type;
+  if (type !== "stage_change" && type !== "system") return false;
+  const meta = (activity.metadata as any) || {};
+  const hasTracking = meta.tracking_changes && Array.isArray(meta.tracking_changes) && meta.tracking_changes.length > 0;
+  const hasBody = !!(activity as any).body_html;
+  return !hasTracking && !hasBody;
+}
+
+// ── Check if an activity is "conversation" (email, note, comment, comm) ─
+function isConversationType(kind: string, activityType?: string): boolean {
+  if (kind === "comm") return true;
+  if (kind === "file_group") return true;
+  if (activityType === "email" || activityType === "note" || activityType === "comment" || activityType === "internal_task") return true;
+  return false;
+}
+
+function isAuditType(activityType?: string): boolean {
+  return activityType === "stage_change" || activityType === "system";
+}
+
+// ── Recognized useful event types from lead_events ─────────────────
+const USEFUL_EVENT_TYPES = new Set([
+  "stage_changed", "value_changed", "contact_linked", "note_added",
+  "owner_changed", "priority_changed", "tag_added", "tag_removed",
+]);
+
 // ── Component ──────────────────────────────────────────────────────
 export function OdooChatter({ lead }: OdooChatterProps) {
   const [activeTab, setActiveTab] = useState<"note" | "message" | "activity" | null>(null);
@@ -55,6 +106,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
 
   const handleComposerChange = (val: string) => {
     setComposerText(val);
@@ -83,7 +135,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
   const handleFileAttach = async (file: File) => {
-    if (uploadingFile) return; // throttle
+    if (uploadingFile) return;
     if (file.size > MAX_FILE_SIZE) {
       toast({ title: "File too large", description: "Maximum file size is 20MB", variant: "destructive" });
       return;
@@ -217,21 +269,30 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   );
 
   // Convert lead_events into activity-like items, deduplicating stage changes
+  // Also suppress empty/noise "Odoo Sync" entries
   const eventActivities = useMemo(() => {
-    // Build a set of stage_change timestamps from lead_activities to deduplicate
     const chatterStageTimestamps = new Set<string>();
     activities.forEach(a => {
       if (a.activity_type === "stage_change") {
-        // Use date portion for fuzzy matching (same day)
         chatterStageTimestamps.add(new Date(a.created_at).toISOString().slice(0, 10));
       }
     });
 
     return leadEvents
       .filter((evt: any) => {
-        // Skip lead_events stage changes if chatter already has stage_change activities for this lead
+        // Skip lead_events stage changes if chatter already has stage_change activities
         if (evt.event_type === "stage_changed" && chatterStageTimestamps.size > 0) {
-          return false; // Chatter activities are the source of truth for stage changes
+          return false;
+        }
+        // ── NOISE SUPPRESSION: filter out unrecognized event types with empty payloads ──
+        if (!USEFUL_EVENT_TYPES.has(evt.event_type)) {
+          const payload = (evt.payload as Record<string, unknown>) || {};
+          const desc = evt.description || "";
+          const payloadKeys = Object.keys(payload).filter(k => k !== "source" && k !== "timestamp");
+          // If payload is empty/trivial and description is empty or just a company name, skip
+          if (payloadKeys.length === 0 && (!desc || desc.length < 30)) {
+            return false;
+          }
         }
         return true;
       })
@@ -261,7 +322,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
           description,
           created_by: evt.source_system === "odoo_sync" ? "Odoo Sync" : "System",
           created_at: evt.created_at,
-          completed_at: evt.created_at, // events are always "done"
+          completed_at: evt.created_at,
           company_id: lead.company_id,
         };
       });
@@ -271,7 +332,8 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   type ThreadItem =
     | { kind: "activity"; data: LeadActivity; matchedFiles?: any[]; date: Date }
     | { kind: "file_group"; files: any[]; date: Date }
-    | { kind: "comm"; data: (typeof communications)[0]; date: Date };
+    | { kind: "comm"; data: (typeof communications)[0]; date: Date }
+    | { kind: "system_group"; items: LeadActivity[]; date: Date };
 
   const thread = useMemo(() => {
     const completedActivities = activities.filter(
@@ -294,15 +356,26 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       } else {
         const isOdooOrigin = (f as any).source === "odoo_sync" || (f as any).odoo_id;
         if (isOdooOrigin) {
-          unlinkedOdooFiles.push(f); // Show in fallback group
+          unlinkedOdooFiles.push(f);
         } else {
           orphanFiles.push(f);
         }
       }
     }
 
-    // Build activity items, attaching matched files
-    const items: ThreadItem[] = allActivities.map((a) => {
+    // Separate system noise from real activities
+    const realActivities: typeof allActivities = [];
+    const noiseActivities: typeof allActivities = [];
+    for (const a of allActivities) {
+      if (isSystemNoise(a)) {
+        noiseActivities.push(a);
+      } else {
+        realActivities.push(a);
+      }
+    }
+
+    // Build activity items from real activities
+    const items: ThreadItem[] = realActivities.map((a) => {
       const msgId = (a as any).odoo_message_id as number | undefined;
       const matched = msgId ? filesByMsgId.get(msgId) : undefined;
       return {
@@ -314,6 +387,25 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     });
 
     items.push(...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })));
+
+    // Group noise activities into collapsed system_group items (consecutive by day)
+    if (noiseActivities.length > 0) {
+      const sorted = [...noiseActivities].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      let batch: typeof sorted = [sorted[0]];
+      for (let i = 1; i < sorted.length; i++) {
+        const prevDay = new Date(sorted[i - 1].created_at).toISOString().slice(0, 10);
+        const curDay = new Date(sorted[i].created_at).toISOString().slice(0, 10);
+        if (prevDay === curDay) {
+          batch.push(sorted[i]);
+        } else {
+          items.push({ kind: "system_group", items: [...batch], date: new Date(batch[0].created_at) });
+          batch = [sorted[i]];
+        }
+      }
+      if (batch.length > 0) {
+        items.push({ kind: "system_group", items: [...batch], date: new Date(batch[0].created_at) });
+      }
+    }
 
     // Group standalone files into batches by time proximity
     const pushFileBatches = (fileList: any[]) => {
@@ -335,8 +427,6 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       }
     };
     pushFileBatches(orphanFiles);
-    // unlinkedOdooFiles intentionally not pushed — they show wrong import dates;
-    // they'll appear inline once full sync backfills odoo_message_id linkage
 
     // Sort by date descending
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -355,7 +445,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
             const prevHasTracking = prevMeta.tracking_changes && Array.isArray(prevMeta.tracking_changes) && prevMeta.tracking_changes.length > 0;
             if (!prevHasTracking && prev.data.created_by === item.data.created_by &&
                 Math.abs(prev.date.getTime() - item.date.getTime()) < 120_000) {
-              continue; // Skip duplicate
+              continue;
             }
           }
         }
@@ -364,6 +454,25 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     }
     return collapsed;
   }, [activities, eventActivities, files, communications]);
+
+  // ── Filtered thread based on threadFilter ────────────────────────
+  const filteredThread = useMemo(() => {
+    if (threadFilter === "all") return thread;
+    if (threadFilter === "conversation") {
+      return thread.filter(item => {
+        if (item.kind === "comm" || item.kind === "file_group") return true;
+        if (item.kind === "activity") return isConversationType("activity", item.data.activity_type);
+        if (item.kind === "system_group") return false;
+        return true;
+      });
+    }
+    // audit
+    return thread.filter(item => {
+      if (item.kind === "system_group") return true;
+      if (item.kind === "activity") return isAuditType(item.data.activity_type);
+      return false;
+    });
+  }, [thread, threadFilter]);
 
   // ── Handlers ─────────────────────────────────────────────────────
   const handleTabClick = (tab: "note" | "message" | "activity") => {
@@ -551,31 +660,57 @@ export function OdooChatter({ lead }: OdooChatterProps) {
         </div>
       )}
 
+      {/* ── Thread Filter Tabs ───────────────────────────────────── */}
+      <div className="flex items-center gap-1 px-3 pt-1">
+        {([
+          { key: "all" as const, label: "All" },
+          { key: "conversation" as const, label: "Conversation" },
+          { key: "audit" as const, label: "Audit" },
+        ]).map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setThreadFilter(key)}
+            className={cn(
+              "px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors",
+              threadFilter === key
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* ── Message Thread ───────────────────────────────────────── */}
       <div className="px-3 py-2">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           </div>
-        ) : thread.length === 0 ? (
+        ) : filteredThread.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <ClipboardList className="w-16 h-16 text-muted-foreground/20 mb-3" />
             <p className="text-[13px] text-muted-foreground">
-              No activities yet.
+              {threadFilter === "all" ? "No activities yet." : `No ${threadFilter} entries.`}
             </p>
-            <p className="text-[13px] text-muted-foreground">
-              Log a note or schedule an activity above.
-            </p>
+            {threadFilter === "all" && (
+              <p className="text-[13px] text-muted-foreground">
+                Log a note or schedule an activity above.
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-1">
-            {thread.map((item, idx) => {
-              const prevDate = idx > 0 ? thread[idx - 1].date : null;
+            {filteredThread.map((item, idx) => {
+              const prevDate = idx > 0 ? filteredThread[idx - 1].date : null;
               const showDateSep = !prevDate || format(item.date, "yyyy-MM-dd") !== format(prevDate, "yyyy-MM-dd");
               const key = item.kind === "file_group"
                 ? `files-${item.files[0]?.id || idx}`
                 : item.kind === "comm"
                 ? `comm-${item.data.id}`
+                : item.kind === "system_group"
+                ? `sysgrp-${idx}`
                 : `act-${item.data.id}`;
 
               return (
@@ -585,6 +720,8 @@ export function OdooChatter({ lead }: OdooChatterProps) {
                     <FileGroupThreadItem files={item.files} />
                   ) : item.kind === "comm" ? (
                     <CommThreadItem comm={item.data} />
+                  ) : item.kind === "system_group" ? (
+                    <SystemGroupItem items={item.items} />
                   ) : (
                     <ActivityThreadItem activity={item.data} matchedFiles={item.matchedFiles} />
                   )}
@@ -612,6 +749,40 @@ function DateSeparator({ date }: { date: Date }) {
   );
 }
 
+// ── Collapsed system/audit group ───────────────────────────────────
+function SystemGroupItem({ items }: { items: LeadActivity[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="py-1.5 px-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full"
+      >
+        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <Zap className="w-3 h-3" />
+        <span>
+          {items.length} system update{items.length > 1 ? "s" : ""}
+        </span>
+        <span className="text-[10px] ml-auto">
+          {format(new Date(items[0].created_at), "h:mm a")}
+        </span>
+      </button>
+      {expanded && (
+        <div className="ml-5 mt-1 space-y-0.5 border-l border-border pl-2">
+          {items.map((item) => (
+            <div key={item.id} className="text-[11px] text-muted-foreground flex items-center gap-1.5 py-0.5">
+              <span className="font-medium">{item.title}</span>
+              {item.description && <span>— {item.description}</span>}
+              <span className="ml-auto text-[10px]">{format(new Date(item.created_at), "h:mm a")}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ActivityThreadItem = React.memo(
   React.forwardRef<HTMLDivElement, { activity: LeadActivity; matchedFiles?: any[] }>(function ActivityThreadItem({ activity, matchedFiles }, ref) {
     const Icon = activityIcons[activity.activity_type] || MessageSquare;
@@ -620,6 +791,7 @@ const ActivityThreadItem = React.memo(
     const isEmail = activity.activity_type === "email";
     const author = activity.created_by || "System";
     const [htmlExpanded, setHtmlExpanded] = useState(false);
+    const [quotedExpanded, setQuotedExpanded] = useState(false);
 
     // Extract body_html and tracking_changes from the activity
     const metadata = (activity.metadata as any) || {};
@@ -631,6 +803,12 @@ const ActivityThreadItem = React.memo(
       ALLOWED_TAGS: ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "span", "div", "table", "tr", "td", "th", "thead", "tbody", "h1", "h2", "h3", "h4", "blockquote", "img", "hr", "pre", "code"],
       ALLOWED_ATTR: ["href", "target", "style", "class", "src", "alt", "width", "height", "colspan", "rowspan"],
     }) : null;
+
+    // Split email content into main + quoted portions
+    const emailParts = useMemo(() => {
+      if (!isEmail || !sanitizedHtml) return null;
+      return splitEmailQuotes(sanitizedHtml);
+    }, [isEmail, sanitizedHtml]);
 
     return (
       <div ref={ref} className={cn(
@@ -661,7 +839,6 @@ const ActivityThreadItem = React.memo(
 
           {/* Stage change: show description or parse from metadata description */}
           {isStageChange && !hasTracking && (() => {
-            // Try activity.description first, then parse metadata.description for arrow notation
             const desc = activity.description && activity.description !== activity.title
               ? activity.description
               : (metadata.description && /→|->/.test(metadata.description))
@@ -670,7 +847,7 @@ const ActivityThreadItem = React.memo(
             return desc ? <p className="text-[13px] mt-0.5 text-muted-foreground">{desc}</p> : null;
           })()}
 
-          {/* Tracking changes — field change bullets like Odoo (suppress title/desc when present) */}
+          {/* Tracking changes — field change bullets like Odoo */}
           {hasTracking && (
             <ul className="mt-1 space-y-0.5">
               {trackingChanges!.map((tc, i) => (
@@ -690,8 +867,53 @@ const ActivityThreadItem = React.memo(
             </ul>
           )}
 
-          {/* Rich HTML body — expanded by default like Odoo */}
-          {sanitizedHtml ? (
+          {/* Rich HTML body — emails get 3-line preview + expand; non-emails show full */}
+          {isEmail && emailParts ? (
+            <div className="mt-1.5 rounded border border-border bg-card p-2.5">
+              <div
+                className={cn(
+                  "odoo-html-body text-[13px] text-foreground/80 leading-relaxed overflow-hidden",
+                  !htmlExpanded && "line-clamp-3"
+                )}
+                dangerouslySetInnerHTML={{ __html: emailParts.main }}
+              />
+              {!htmlExpanded && (
+                <button
+                  onClick={() => setHtmlExpanded(true)}
+                  className="text-[11px] text-primary hover:underline mt-1"
+                >
+                  Show full email
+                </button>
+              )}
+              {htmlExpanded && (
+                <>
+                  {emailParts.quoted && (
+                    <div className="mt-2 border-t border-border pt-2">
+                      <button
+                        onClick={() => setQuotedExpanded(!quotedExpanded)}
+                        className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                      >
+                        {quotedExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                        Quoted reply
+                      </button>
+                      {quotedExpanded && (
+                        <div
+                          className="odoo-html-body text-[12px] text-muted-foreground leading-relaxed mt-1 pl-2 border-l-2 border-muted"
+                          dangerouslySetInnerHTML={{ __html: emailParts.quoted }}
+                        />
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => { setHtmlExpanded(false); setQuotedExpanded(false); }}
+                    className="text-[11px] text-primary hover:underline mt-1"
+                  >
+                    Hide
+                  </button>
+                </>
+              )}
+            </div>
+          ) : sanitizedHtml ? (
             <div className="mt-1.5 rounded border border-border bg-card p-2.5">
               <div
                 className={cn(
@@ -777,7 +999,6 @@ function InlineFileAttachments({ files }: { files: any[] }) {
                     const url = await getSignedFileUrl(file.storage_path);
                     if (url) window.open(url, "_blank");
                   } else if (file.odoo_id) {
-                    // Fetch via odoo-file-proxy for Odoo-native files
                     try {
                       const { data: { session } } = await supabase.auth.getSession();
                       if (!session?.access_token) return;
