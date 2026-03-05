@@ -150,20 +150,44 @@ export default function LoadingStation() {
           asa_shape_code: item.asa_shape_code,
         }));
 
-        // 5. Query order data for invoice fields
-        const { data: orderData } = await supabase
-          .from("cut_plan_items")
-          .select("work_orders(orders(order_number, order_date))")
-          .eq("cut_plan_id", selectedBundle.cutPlanId)
-          .not("work_order_id", "is", null)
-          .limit(1)
-          .maybeSingle();
+        // 5. Deterministic 3-step order data resolution for invoice fields
+        let invoiceNumber: string | null = null;
+        let invoiceDate: string | null = null;
+        {
+          const { data: cpiRow, error: cpiErr } = await supabase
+            .from("cut_plan_items")
+            .select("work_order_id")
+            .eq("cut_plan_id", selectedBundle.cutPlanId)
+            .not("work_order_id", "is", null)
+            .limit(1)
+            .maybeSingle();
+          if (cpiErr) console.error("Invoice resolve step 1:", cpiErr.message);
 
-        const order = (orderData as any)?.work_orders?.orders;
-        const invoiceNumber = order?.order_number || null;
-        const invoiceDate = order?.order_date
-          ? new Date(order.order_date).toISOString().slice(0, 10)
-          : null;
+          if (cpiRow?.work_order_id) {
+            const { data: woRow, error: woErr } = await supabase
+              .from("work_orders")
+              .select("order_id")
+              .eq("id", cpiRow.work_order_id)
+              .single();
+            if (woErr) console.error("Invoice resolve step 2:", woErr.message);
+
+            if (woRow?.order_id) {
+              const { data: orderRow, error: ordErr } = await supabase
+                .from("orders")
+                .select("order_number, order_date")
+                .eq("id", woRow.order_id)
+                .single();
+              if (ordErr) console.error("Invoice resolve step 3:", ordErr.message);
+
+              if (orderRow) {
+                invoiceNumber = orderRow.order_number || null;
+                invoiceDate = orderRow.order_date
+                  ? new Date(orderRow.order_date).toISOString().slice(0, 10)
+                  : null;
+              }
+            }
+          }
+        }
 
         // 6. Insert packing slip with header fields
         const { error: slipErr } = await supabase
