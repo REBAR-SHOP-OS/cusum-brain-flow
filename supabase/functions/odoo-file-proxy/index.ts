@@ -103,8 +103,10 @@ serve(async (req) => {
 
     const url = new URL(req.url);
     const odooId = url.searchParams.get("id");
-    if (!odooId) {
-      return new Response(JSON.stringify({ error: "Missing id parameter" }), {
+    const odooUrl = url.searchParams.get("url");
+
+    if (!odooId && !odooUrl) {
+      return new Response(JSON.stringify({ error: "Missing id or url parameter" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -112,10 +114,45 @@ serve(async (req) => {
 
     const odoo = await getOdooFileUrl();
 
-    // Get metadata (small call) and binary stream separately to avoid base64 memory doubling
+    // URL-based proxy: fetch an arbitrary Odoo URL with auth (for inline email images)
+    if (odooUrl) {
+      // Validate the URL points to the configured Odoo instance
+      const parsedUrl = new URL(odooUrl);
+      const odooOrigin = new URL(odoo.url).origin;
+      if (parsedUrl.origin !== odooOrigin) {
+        return new Response(JSON.stringify({ error: "URL must point to configured Odoo instance" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const proxyRes = await fetch(odooUrl, {
+        headers: {
+          "Cookie": `session_id=`,
+          "Authorization": `Bearer ${odoo.apiKey}`,
+        },
+      });
+
+      if (!proxyRes.ok) {
+        return new Response(JSON.stringify({ error: `Odoo returned ${proxyRes.status}` }), {
+          status: proxyRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const contentType = proxyRes.headers.get("content-type") || "application/octet-stream";
+      const body = await proxyRes.arrayBuffer();
+      return new Response(body, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
+    }
+
+    // ID-based proxy: fetch attachment by Odoo attachment ID
     const [meta, bytes] = await Promise.all([
-      fetchOdooFileMeta(odoo, odooId),
-      fetchOdooFileBinary(odoo, odooId),
+      fetchOdooFileMeta(odoo, odooId!),
+      fetchOdooFileBinary(odoo, odooId!),
     ]);
 
     return new Response(bytes, {

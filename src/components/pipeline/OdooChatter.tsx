@@ -458,6 +458,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       }
     };
     pushFileBatches(orphanFiles);
+    pushFileBatches(unlinkedOdooFiles);
 
     // Sort by date descending
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -830,10 +831,25 @@ const ActivityThreadItem = React.memo(
     const trackingChanges = metadata.tracking_changes as Array<{ field: string; old_value: string; new_value: string }> | undefined;
     const hasTracking = trackingChanges && trackingChanges.length > 0;
 
-    const sanitizedHtml = bodyHtml ? DOMPurify.sanitize(bodyHtml, {
-      ALLOWED_TAGS: ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "span", "div", "table", "tr", "td", "th", "thead", "tbody", "h1", "h2", "h3", "h4", "blockquote", "img", "hr", "pre", "code"],
-      ALLOWED_ATTR: ["href", "target", "style", "class", "src", "alt", "width", "height", "colspan", "rowspan"],
-    }) : null;
+    const sanitizedHtml = useMemo(() => {
+      if (!bodyHtml) return null;
+      let html = DOMPurify.sanitize(bodyHtml, {
+        ALLOWED_TAGS: ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "span", "div", "table", "tr", "td", "th", "thead", "tbody", "h1", "h2", "h3", "h4", "blockquote", "img", "hr", "pre", "code"],
+        ALLOWED_ATTR: ["href", "target", "style", "class", "src", "alt", "width", "height", "colspan", "rowspan"],
+      });
+      // Proxy Odoo-hosted images through our edge function so they load with auth
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (supabaseUrl) {
+        html = html.replace(
+          /(<img\s[^>]*src=")([^"]*odoo[^"]*\/web\/image\/[^"]*)(")/gi,
+          (_match, prefix, odooUrl, suffix) => {
+            const proxied = `${supabaseUrl}/functions/v1/odoo-file-proxy?url=${encodeURIComponent(odooUrl)}`;
+            return `${prefix}${proxied}${suffix}`;
+          }
+        );
+      }
+      return html;
+    }, [bodyHtml]);
 
     // Split email content into main + quoted portions
     const emailParts = useMemo(() => {
