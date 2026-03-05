@@ -44,10 +44,11 @@ export function ScreenshotFeedbackButton() {
     // Route-enforced viewport mode: pipeline always captures viewport only
     const path = window.location.pathname;
     const isPipelineRoute = path === "/pipeline" || path.startsWith("/pipeline/");
+    const isStationRoute = path.startsWith("/shopfloor/station");
     const totalCount = target.querySelectorAll("*").length;
     const isHeavyRoute = totalCount > 3000;
     const isExtremelyHeavy = totalCount > 6000;
-    const forceViewportOnly = isOverlay || isPipelineRoute || isHeavyRoute;
+    const forceViewportOnly = isOverlay || isPipelineRoute || isStationRoute || isHeavyRoute;
 
     // --- Pre-capture: temporarily expand overflow-hidden containers ---
     const expandedEls: { el: HTMLElement; orig: string }[] = [];
