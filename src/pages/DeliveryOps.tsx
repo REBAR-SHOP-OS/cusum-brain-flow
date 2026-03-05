@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
-import { ArrowLeft, Truck, Package, Loader2, Calendar, User, Car, Trash2 } from "lucide-react";
+import { ArrowLeft, Truck, Package, Loader2, Calendar, User, Car, Trash2, CheckSquare, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface DeliveryCard {
   id: string;
@@ -52,6 +54,32 @@ export default function DeliveryOps() {
   const [schedForm, setSchedForm] = useState({ driver_name: "", vehicle: "", scheduled_date: "" });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === cards.length) return new Set();
+      return new Set(cards.map((c) => c.id));
+    });
+  }, [cards]);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const allSelected = cards.length > 0 && selectedIds.size === cards.length;
+  const someSelected = selectedIds.size > 0;
 
   const fetchData = async () => {
     if (!companyId) return;
@@ -143,6 +171,16 @@ export default function DeliveryOps() {
     fetchData();
   }, [companyId]);
 
+  // Clear selection when cards change
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const cardIdSet = new Set(cards.map((c) => c.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (cardIdSet.has(id)) next.add(id); });
+      return next;
+    });
+  }, [cards]);
+
   const handleSchedule = async () => {
     if (!scheduleTarget) return;
     if (!schedForm.driver_name || !schedForm.vehicle || !schedForm.scheduled_date) {
@@ -174,10 +212,8 @@ export default function DeliveryOps() {
     if (!deleteTarget) return;
     setDeleting(true);
     const id = deleteTarget.id;
-    // Delete children first
     await supabase.from("packing_slips").delete().eq("delivery_id", id);
     await supabase.from("delivery_stops").delete().eq("delivery_id", id);
-    // Set to pending to bypass trigger, then delete
     await supabase.from("deliveries").update({ status: "pending" }).eq("id", id);
     const { error } = await supabase.from("deliveries").delete().eq("id", id);
     if (error) {
@@ -190,6 +226,28 @@ export default function DeliveryOps() {
     setDeleting(false);
   };
 
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    for (const id of ids) {
+      await supabase.from("packing_slips").delete().eq("delivery_id", id);
+      await supabase.from("delivery_stops").delete().eq("delivery_id", id);
+      await supabase.from("deliveries").update({ status: "pending" }).eq("id", id);
+      const { error } = await supabase.from("deliveries").delete().eq("id", id);
+      if (error) failed++;
+    }
+    if (failed > 0) {
+      toast.error(`Failed to delete ${failed} delivery(ies)`);
+    } else {
+      toast.success(`Deleted ${ids.length} delivery(ies)`);
+    }
+    clearSelection();
+    setShowBulkDeleteConfirm(false);
+    setBulkDeleting(false);
+    fetchData();
+  };
+
   return (
     <div className="relative flex flex-col min-h-screen bg-background overflow-hidden">
       <div className="absolute inset-0 pointer-events-none z-0">
@@ -200,13 +258,27 @@ export default function DeliveryOps() {
         <Link to="/shop-floor" className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-black tracking-wider text-foreground uppercase">Delivery Ops</h1>
           <p className="text-[10px] tracking-[0.3em] text-primary/70 uppercase">Active Dispatches</p>
         </div>
+        {cards.length > 0 && (
+          <button
+            onClick={toggleSelectAll}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider uppercase transition-all",
+              allSelected
+                ? "bg-primary/20 text-primary border border-primary/40"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60"
+            )}
+          >
+            <CheckSquare className="w-4 h-4" />
+            {allSelected ? "Deselect All" : "Select All"}
+          </button>
+        )}
       </header>
 
-      <div className="relative z-10 flex-1 px-4 pb-8">
+      <div className="relative z-10 flex-1 px-4 pb-20">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -220,12 +292,26 @@ export default function DeliveryOps() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {cards.map((card) => {
               const canSchedule = card.status === "staged" || card.status === "pending";
+              const isSelected = selectedIds.has(card.id);
               const inner = (
-                <div className="group relative flex flex-col gap-3 p-5 rounded-xl border border-border/60 bg-card/50 backdrop-blur-sm hover:bg-card/80 hover:border-primary/40 transition-all duration-200 hover:shadow-[0_0_30px_-10px_hsl(var(--primary)/0.3)]">
+                <div className={cn(
+                  "group relative flex flex-col gap-3 p-5 rounded-xl border bg-card/50 backdrop-blur-sm hover:bg-card/80 transition-all duration-200 hover:shadow-[0_0_30px_-10px_hsl(var(--primary)/0.3)]",
+                  isSelected
+                    ? "border-primary/60 ring-1 ring-primary/30"
+                    : "border-border/60 hover:border-primary/40"
+                )}>
                   <div className="flex items-center justify-between">
-                    <span className={cn("px-2.5 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase", STATUS_COLORS[card.status] || STATUS_COLORS.pending)}>
-                      {STATUS_LABELS[card.status] || card.status.toUpperCase()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelection(card.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                      <span className={cn("px-2.5 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase", STATUS_COLORS[card.status] || STATUS_COLORS.pending)}>
+                        {STATUS_LABELS[card.status] || card.status.toUpperCase()}
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2">
                       {card.order_number && (
                         <span className="text-[10px] text-muted-foreground font-mono">{card.order_number}</span>
@@ -303,6 +389,41 @@ export default function DeliveryOps() {
         )}
       </div>
 
+      {/* Bulk Action Bar */}
+      <AnimatePresence>
+        {someSelected && (
+          <motion.div
+            initial={{ y: 60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 60, opacity: 0 }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-popover border border-border shadow-lg rounded-lg px-4 py-2.5"
+          >
+            <span className="text-sm font-medium text-foreground">
+              {selectedIds.size} selected
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setShowBulkDeleteConfirm(true)}
+              disabled={bulkDeleting}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 text-xs"
+              onClick={clearSelection}
+            >
+              <X className="w-3.5 h-3.5" />
+              Clear
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Schedule Dialog */}
       <Dialog open={!!scheduleTarget} onOpenChange={(o) => !o && setScheduleTarget(null)}>
         <DialogContent>
@@ -330,7 +451,7 @@ export default function DeliveryOps() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* Delete Confirmation (single) */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -347,6 +468,28 @@ export default function DeliveryOps() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={showBulkDeleteConfirm} onOpenChange={(o) => !o && setShowBulkDeleteConfirm(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} Deliveries</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedIds.size} selected delivery(ies)? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleting ? "Deleting…" : "Delete All"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
