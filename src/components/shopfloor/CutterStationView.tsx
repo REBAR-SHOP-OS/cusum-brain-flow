@@ -7,6 +7,9 @@ import { AsaShapeDiagram } from "./AsaShapeDiagram";
 import { ForemanPanel } from "./ForemanPanel";
 import { SlotTracker } from "./SlotTracker";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { manageMachine } from "@/lib/manageMachineService";
 import { manageInventory } from "@/lib/inventoryService";
 import { recordCompletion, recordLearning } from "@/lib/foremanLearningService";
@@ -15,7 +18,8 @@ import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useInventoryData } from "@/hooks/useInventoryData";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { useSlotTracker } from "@/hooks/useSlotTracker";
-import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle } from "lucide-react";
+import { useUserRole } from "@/hooks/useUserRole";
+import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle, Edit3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
@@ -38,6 +42,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const effectiveCanWrite = canWrite && !isProjectPaused;
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isAdmin, isShopSupervisor } = useUserRole();
+  const canCorrectCount = isAdmin || isShopSupervisor;
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedStockLength, setSelectedStockLength] = useState(12000);
@@ -48,6 +54,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [justCompletedItemId, setJustCompletedItemId] = useState<string | null>(null);
   const [localCompletedOverride, setLocalCompletedOverride] = useState<Record<string, number>>({});
   const [completedLocally, setCompletedLocally] = useState(false);
+  const [correctCountOpen, setCorrectCountOpen] = useState(false);
+  const [correctCountValue, setCorrectCountValue] = useState("");
 
   // Keep currentIndex in bounds when items change (e.g. completed item removed by realtime)
   useEffect(() => {
@@ -628,13 +636,27 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               </CardContent>
             </Card>
             <Card className="bg-card border-border">
-              <CardContent className="p-4 text-center">
+              <CardContent className="p-4 text-center relative">
                 <Hash className="w-5 h-5 text-secondary-foreground mx-auto mb-2" />
                 <p className="text-3xl font-black font-mono text-foreground">
                   {effectiveCompleted}
                   <span className="text-lg text-muted-foreground">/{totalPieces}</span>
                 </p>
                 <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Pieces Done</p>
+                {canCorrectCount && !machineIsRunning && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1 right-1 h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setCorrectCountValue(String(effectiveCompleted));
+                      setCorrectCountOpen(true);
+                    }}
+                    title="Correct piece count"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -719,6 +741,53 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           />
         </div>
       </div>
+      {/* ── Correct Count Dialog (supervisor only) ── */}
+      <Dialog open={correctCountOpen} onOpenChange={setCorrectCountOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Correct Piece Count</DialogTitle>
+            <DialogDescription>
+              Override the completed pieces count for mark <strong>{currentItem?.mark_number}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm text-muted-foreground mb-1 block">Actual completed pieces</label>
+            <Input
+              type="number"
+              min={0}
+              max={totalPieces}
+              value={correctCountValue}
+              onChange={(e) => setCorrectCountValue(e.target.value)}
+              className="font-mono text-lg"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Total required: {totalPieces}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCorrectCountOpen(false)}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                const newVal = Math.max(0, Math.min(totalPieces, parseInt(correctCountValue) || 0));
+                if (!currentItem) return;
+                try {
+                  const { error } = await supabase
+                    .from("cut_plan_items")
+                    .update({ completed_pieces: newVal })
+                    .eq("id", currentItem.id);
+                  if (error) throw error;
+                  setLocalCompletedOverride(prev => ({ ...prev, [currentItem.id]: newVal }));
+                  queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] });
+                  toast({ title: "Count corrected", description: `Pieces done set to ${newVal}` });
+                  setCorrectCountOpen(false);
+                } catch (err: any) {
+                  toast({ title: "Failed to update", description: err.message, variant: "destructive" });
+                }
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
