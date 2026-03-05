@@ -663,6 +663,127 @@ export async function executeToolCall(
       }
     }
 
+    // ═══════════════════════════════════════════════════
+    // 15. Generate Video (Pixel / Social Agent)
+    // ═══════════════════════════════════════════════════
+    else if (name === "generate_video") {
+      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+      if (!GEMINI_API_KEY) {
+        result.result = { error: "GEMINI_API_KEY not configured for video generation" };
+      } else {
+        try {
+          const videoPrompt = args.prompt || "A professional rebar construction video";
+          const duration = Math.min(Math.max(args.duration || 8, 5), 15);
+          const slot = args.slot || "";
+
+          // Step 1: Submit generation via generate-video edge function
+          const genRes = await fetch(`${supabaseUrl}/functions/v1/generate-video`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": authHeader },
+            body: JSON.stringify({
+              action: "generate",
+              provider: "veo",
+              prompt: videoPrompt,
+              duration,
+            }),
+          });
+
+          if (!genRes.ok) {
+            const errText = await genRes.text();
+            result.result = { error: `Video generation failed: ${errText}` };
+          } else {
+            const genData = await genRes.json();
+            const jobId = genData.jobId;
+
+            if (!jobId) {
+              result.result = { error: "No job ID returned from video generation" };
+            } else {
+              // Step 2: Poll until completed (max ~4 minutes)
+              let videoUrl: string | null = null;
+              let pollError: string | null = null;
+              const maxPolls = 48; // 48 * 5s = 240s = 4 min
+              
+              for (let i = 0; i < maxPolls; i++) {
+                await new Promise(r => setTimeout(r, 5000)); // wait 5s
+
+                const pollRes = await fetch(`${supabaseUrl}/functions/v1/generate-video`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "Authorization": authHeader },
+                  body: JSON.stringify({
+                    action: "poll",
+                    provider: "veo",
+                    jobId,
+                  }),
+                });
+
+                if (!pollRes.ok) {
+                  pollError = `Poll failed: ${pollRes.status}`;
+                  break;
+                }
+
+                const pollData = await pollRes.json();
+
+                if (pollData.status === "completed") {
+                  videoUrl = pollData.videoUrl;
+                  break;
+                } else if (pollData.status === "failed") {
+                  pollError = pollData.error || "Video generation failed";
+                  break;
+                }
+                // else "processing" → continue polling
+              }
+
+              if (videoUrl) {
+                // Step 3: Download and upload to storage
+                try {
+                  const videoRes = await fetch(videoUrl);
+                  if (!videoRes.ok) throw new Error(`Download failed: ${videoRes.status}`);
+                  const videoBytes = new Uint8Array(await videoRes.arrayBuffer());
+
+                  const videoPath = `pixel-videos/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`;
+                  const { error: uploadError } = await svcClient.storage
+                    .from("social-media-assets")
+                    .upload(videoPath, videoBytes, { contentType: "video/mp4" });
+
+                  if (uploadError) {
+                    // Fallback: return the direct URL
+                    result.result = {
+                      success: true,
+                      video_url: videoUrl,
+                      slot,
+                      message: `Video generated (upload failed: ${uploadError.message}). Direct URL provided.`,
+                    };
+                  } else {
+                    const { data: urlData } = svcClient.storage.from("social-media-assets").getPublicUrl(videoPath);
+                    result.result = {
+                      success: true,
+                      video_url: urlData.publicUrl,
+                      slot,
+                      message: `Video generated and uploaded successfully${slot ? ` for slot ${slot}` : ""}`,
+                    };
+                  }
+                } catch (dlErr) {
+                  // Return direct URL as fallback
+                  result.result = {
+                    success: true,
+                    video_url: videoUrl,
+                    slot,
+                    message: `Video generated. Direct URL provided (storage upload skipped).`,
+                  };
+                }
+              } else if (pollError) {
+                result.result = { error: pollError };
+              } else {
+                result.result = { error: "Video generation timed out after 4 minutes" };
+              }
+            }
+          }
+        } catch (vidErr) {
+          result.result = { error: `Video generation error: ${vidErr instanceof Error ? vidErr.message : String(vidErr)}` };
+        }
+      }
+    }
+
     // Default fallback
     else {
       result.result = { success: true, message: "Tool executed (simulated)" };

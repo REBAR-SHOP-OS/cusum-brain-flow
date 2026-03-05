@@ -55,23 +55,41 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     });
   }
 
-  // Social / Pixel — Image Generation
+  // Social / Pixel — Image & Video Generation
   if (agent === "social") {
-    tools.push({
-      type: "function" as const,
-      function: {
-        name: "generate_image",
-        description: "Generate a promotional image for social media. The image will be created with English text overlay and the REBAR.SHOP logo. Returns a public URL of the generated image.",
-        parameters: {
-          type: "object",
-          properties: {
-            prompt: { type: "string", description: "Detailed description of the image to generate (scene, product, mood, text overlay)" },
-            slot: { type: "string", description: "Time slot identifier (e.g. '06:30', '07:30', '08:00', '12:30', '14:30')" }
-          },
-          required: ["prompt"]
+    tools.push(
+      {
+        type: "function" as const,
+        function: {
+          name: "generate_image",
+          description: "Generate a promotional image for social media. The image will be created with English text overlay and the REBAR.SHOP logo. Returns a public URL of the generated image.",
+          parameters: {
+            type: "object",
+            properties: {
+              prompt: { type: "string", description: "Detailed description of the image to generate (scene, product, mood, text overlay)" },
+              slot: { type: "string", description: "Time slot identifier (e.g. '06:30', '07:30', '08:00', '12:30', '14:30')" }
+            },
+            required: ["prompt"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "generate_video",
+          description: "Generate a short promotional video for social media using AI (Veo 3). Returns a public URL of the generated video. Use when user asks for a video, story, reel, or motion content.",
+          parameters: {
+            type: "object",
+            properties: {
+              prompt: { type: "string", description: "Detailed description of the video (scene, product, action, mood, camera movement)" },
+              duration: { type: "number", description: "Duration in seconds (5-15, default 8)" },
+              slot: { type: "string", description: "Time slot identifier" }
+            },
+            required: ["prompt"]
+          }
         }
       }
-    });
+    );
   }
 
   // Shop Floor Tools
