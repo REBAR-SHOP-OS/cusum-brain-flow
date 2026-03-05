@@ -63,7 +63,7 @@ export function StationHeader({
   if (showBedsSuffix) titleParts.push("BEDS");
   const mainTitle = titleParts.join(" ");
 
-  const hasMultipleProjects = projects && projects.length > 1 && onSelectProject;
+  const hasProjects = projects && projects.length > 0 && onSelectProject;
 
   return (
     <header className="flex items-start justify-between px-4 py-3 bg-card border-b border-border">
@@ -158,7 +158,7 @@ export function StationHeader({
         )}
 
         {/* Workspace chip — dropdown when multiple projects, static otherwise */}
-        {workspaceName && hasMultipleProjects ? (
+        {workspaceName && hasProjects ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="inline-flex items-center gap-1.5 bg-foreground text-background font-bold text-xs px-3 py-1.5 rounded-full cursor-pointer hover:bg-foreground/90 transition-colors">
