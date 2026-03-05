@@ -1,55 +1,39 @@
 
 
-# Chatter Data Loss Fix — Store & Render Full Odoo HTML
+# Fix: Missing Leads — Odoo Sync Data Gap
 
 ## Problem
 
-The `odoo-chatter-sync` function calls `stripHtml()` on every email body before storing it in `lead_activities.description`. This permanently destroys:
+The database has **1 lead** in `qc_ben` stage but Odoo shows **2**. The missing lead is "FW: 3 Kingsbury Crescent" by Walden Homes. This is not a UI bug — the data was never synced or was lost during dedup.
 
-- Full HTML email content (signatures, formatted text, links, invitation-to-bid documents)
-- Inline images and logos
-- Detailed field-change tracking (Odoo shows bullet points like "• Name → MAYSTAR GENERAL... (Customer)")
+This likely affects **all columns**, not just QC-Ben. The sync may have missed leads due to:
+1. **Incremental mode** — the default sync only fetches leads modified in the last 5 days. If a lead hasn't been touched recently, it won't sync.
+2. **Dedup logic** — the dedup process may have incorrectly deleted leads during `odoo_id` map building.
+3. **Customer resolution failure** — if customer name matching fails (line 298: `errors++; continue;`), the lead is silently skipped.
 
-The Odoo screenshot shows rich email threads with From/Sent/To/Subject headers and full HTML bodies rendered inline. Our chatter shows only plain text summaries.
+## Solution
 
-## Root Cause
+### Step 1: Run a Full Sync
 
-```javascript
-// odoo-chatter-sync/index.ts line ~189
-description: body || null,  // body = stripHtml(msg.body) — HTML is GONE
-```
+The existing `odoo-crm-sync` function already supports `{ "mode": "full" }` which fetches ALL opportunities from Odoo without the 5-day `write_date` filter. This should recover any missing leads.
 
-The `metadata` JSON column exists but only stores `odoo_subtype`. The original HTML is never saved.
+I will trigger the full sync via the edge function.
 
-## Plan
+### Step 2: Verify Counts Match
 
-### Step 1: Add `body_html` column to `lead_activities`
+After the full sync, I'll query the database and compare lead counts per stage against what Odoo reports.
 
-```sql
-ALTER TABLE lead_activities ADD COLUMN body_html text;
-```
+### Step 3: Fix Silent Failures (Code Change)
 
-### Step 2: Update `odoo-chatter-sync` to preserve HTML
+The sync function has a critical bug on **line 298-300**: when customer resolution fails for active-stage leads, it silently increments `errors++` and `continue`s — **skipping the entire lead**. This means leads with unresolvable customer names are permanently lost from sync.
 
-- Store original `msg.body` (raw HTML) in `body_html`
-- Keep stripped text in `description` (for search/preview)
-- Fetch `tracking_value_ids` from Odoo `mail.message` to capture field changes
-- Store tracking values in `metadata.tracking_changes` as an array of `{ field, old_value, new_value }`
-
-### Step 3: Update `OdooChatter.tsx` to render HTML
-
-- When `body_html` exists, render it using DOMPurify (already installed) instead of plain text
-- Show From/To/Subject headers above email bodies (from metadata or parsed from HTML)
-- Render field changes as colored bullet points matching Odoo: `• Field → New Value (Label)`
-- Use `dangerouslySetInnerHTML` with sanitized HTML inside a styled container
-
-### Step 4: Re-sync to backfill HTML
-
-After deploying the updated sync function, run a `full` mode sync to re-fetch all messages with HTML bodies. Existing `odoo_message_id` dedup will be bypassed for rows that have `body_html IS NULL`.
+**Fix**: Instead of skipping, insert the lead with `customer_id = null` and log a warning. The lead data is more important than the customer linkage.
 
 | File | Change |
 |------|--------|
-| Database migration | Add `body_html text` column |
-| `supabase/functions/odoo-chatter-sync/index.ts` | Store raw HTML in `body_html`, fetch `tracking_value_ids` |
-| `src/components/pipeline/OdooChatter.tsx` | Render HTML with DOMPurify, show field changes as bullet list |
+| `supabase/functions/odoo-crm-sync/index.ts` | Remove `continue` on customer resolution failure — insert lead with null customer_id instead of skipping |
+
+### No UI Changes Needed
+
+The pipeline board correctly displays whatever is in the database. The gap is purely in the sync layer.
 
