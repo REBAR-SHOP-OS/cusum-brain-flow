@@ -335,7 +335,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       }
     };
     pushFileBatches(orphanFiles);
-    pushFileBatches(unlinkedOdooFiles);
+    // unlinkedOdooFiles intentionally not pushed — they will appear inline once full sync backfills odoo_message_id
 
     // Sort by date descending
     items.sort((a, b) => b.date.getTime() - a.date.getTime());

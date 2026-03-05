@@ -608,7 +608,7 @@ export default function Pipeline() {
       // Chain chatter + activity sync for full Odoo parity
       let chatterMsg = "";
       try {
-        const { data: chatterData } = await supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "missing" } });
+        const { data: chatterData } = await supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "full" } });
         if (chatterData && !chatterData.disabled) {
           chatterMsg = ` | Chatter: ${chatterData.messages_inserted ?? 0} msgs, ${chatterData.activities_inserted ?? 0} activities`;
         }
