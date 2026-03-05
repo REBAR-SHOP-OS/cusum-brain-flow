@@ -696,14 +696,14 @@ export function AIExtractView() {
               <Button
                 variant={manifestType === "delivery" ? "default" : "ghost"}
                 size="sm" className="h-9 px-4 text-xs gap-1.5 font-bold"
-                onClick={() => { setManifestType("delivery"); navigate("/shopfloor/loading"); }}
+                onClick={() => setManifestType("delivery")}
               >
                 <Truck className="w-3.5 h-3.5" /> DELIVERY
               </Button>
               <Button
                 variant={manifestType === "pickup" ? "default" : "ghost"}
                 size="sm" className="h-9 px-4 text-xs gap-1.5 font-bold"
-                onClick={() => { setManifestType("pickup"); navigate("/shopfloor/pickup"); }}
+                onClick={() => setManifestType("pickup")}
               >
                 <Package className="w-3.5 h-3.5" /> PICKUP
               </Button>
