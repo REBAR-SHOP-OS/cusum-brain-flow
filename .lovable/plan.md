@@ -1,35 +1,32 @@
 
 
-# رفع دو مشکل: Publish Blocker + RLS Error
+# Fix: Allow Removing Active Bars During a Run
 
-## تحلیل ریشه‌ای
+## Problem
+When a run is active, operators cannot correct the number of loaded bars. The `removeBar` function in `useSlotTracker` only allows removing bars with `status === "removable"` (partial bars that completed their cuts). If an operator accidentally loads 12 bars but only meant to load 10, there's no way to correct this.
 
-**مشکل ۱ (Publish):** سیستم deploy از schema diff استفاده می‌کند و دستورات DML (DELETE) را روی Live اجرا نمی‌کند. بنابراین هر بار index ساخته می‌شود ولی duplicate ها حذف نشده‌اند. تنها راه‌حل: **حذف index از dev schema** تا diff تفاوتی نبیند و publish بدون مشکل انجام شود.
+## Solution
+Allow operators to remove **active** bars (not just "removable" ones) during a run. This requires changes in 3 files:
 
-**مشکل ۲ (RLS profiles):** چون publish خراب است، آخرین نسخه edge function `kiosk-register` (که از service-role استفاده می‌کند) deploy نشده. نسخه قدیمی احتمالاً بدون service-role کار می‌کند. **با رفع publish، edge function جدید خودکار deploy می‌شود و RLS error برطرف می‌شود.**
+### 1. `src/hooks/useSlotTracker.ts`
+- Update `removeBar` to also accept bars with `status === "active"` (not just `"removable"`)
+- When removing an active bar, set its status to `"removed"` and keep its current `cutsDone`
 
-## تغییرات
+### 2. `src/components/shopfloor/SlotTracker.tsx`
+- Add a section showing active bars with a "Remove" button (styled less urgently than the red "removable" alerts)
+- Each active bar shows its index, cuts done so far, and a remove button
+- Only visible when there are 2+ active bars (can't remove the last active bar)
 
-### ۱. تبدیل migration های مشکل‌ساز به no-op
-این ۴ فایل محتوایشان به `SELECT 1;` تغییر می‌کند:
-- `supabase/migrations/20260305000039_...sql`
-- `supabase/migrations/20260305175234_...sql`
-- `supabase/migrations/20260305182054_...sql`
-- `supabase/migrations/20260305182940_...sql`
+### 3. `src/components/shopfloor/CutterStationView.tsx`
+- The existing `handleRemoveBar` already handles inventory/remnant logic correctly — no changes needed here since it reads `slot.cutsDone` dynamically
 
-### ۲. ساخت migration جدید برای حذف index از dev
-یک migration جدید:
-```sql
-DROP INDEX IF EXISTS idx_scheduled_activities_dedup;
-```
-این باعث می‌شود dev schema دیگر این index را نداشته باشد → schema diff تفاوتی نمی‌بیند → publish موفق می‌شود.
+## UI Design
+- Active bars get a subtle card with a "Remove" icon button (not the flashing red alert used for "removable" bars)
+- Confirmation via AlertDialog to prevent accidental taps: "Remove Bar X? It has Y cuts done. The remnant will be set aside."
+- Disabled when only 1 active bar remains (must have at least 1 bar running)
 
-### ۳. بعد از publish موفق
-- Edge functions خودکار deploy می‌شوند → RLS error رفع می‌شود
-- بعداً می‌توانیم index را (پس از dedup دستی روی live) دوباره اضافه کنیم
-
-## نتیجه
-- Publish بدون خطا
-- Registration در Kiosk بدون RLS error
-- هیچ داده‌ای حذف نمی‌شود
+## Technical Details
+- `removeBar` guard: change `slot.status !== "removable"` → `slot.status !== "removable" && slot.status !== "active"`
+- Add minimum-bars guard: prevent removing if only 1 active slot remains
+- The existing `handleRemoveBar` in CutterStationView already computes leftover from `slot.cutsDone` and handles remnant/scrap — works as-is
 
