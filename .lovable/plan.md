@@ -1,39 +1,57 @@
 
 
-# Fix Plan: Video Generation Error + Migration Pipeline Blocker
+# Hotfix: رفع ریشه‌ای خطای `delivery_stops` RLS در Production
 
-## Two Issues
+## مشکل
+Production هنوز policy قدیمی را دارد:
+- **INSERT on `delivery_stops`**: فقط `admin, office, field` — نقش **`workshop` وجود ندارد**
+- Migration اصلاح‌کننده (`20260305154125`) هرگز اجرا نشده چون migration قبلی (`20260304234951`) به‌خاطر 181 `odoo_id` تکراری fail می‌کند
 
-### Issue 1: Video Generation 404 Error (Root Cause)
-The edge function logs show:
+## راه‌حل: دو SQL مستقیم روی Production
+
+### مرحله 1: Dedup leads (رفع بلاکر)
+```sql
+DELETE FROM leads WHERE id IN (
+  SELECT id FROM (
+    SELECT id, ROW_NUMBER() OVER (
+      PARTITION BY metadata->>'odoo_id'
+      ORDER BY created_at DESC, id DESC
+    ) AS rn FROM leads WHERE metadata->>'odoo_id' IS NOT NULL
+  ) sub WHERE rn > 1
+);
 ```
-Veo submit error: 404
-models/veo-3.0-generate-preview is not found for API version v1beta,
-or is not supported for predictLongRunning
+
+### مرحله 2: اصلاح policy (رفع خطای اصلی)
+```sql
+DROP POLICY IF EXISTS "Office staff insert delivery_stops" ON delivery_stops;
+CREATE POLICY "Staff insert delivery_stops" ON delivery_stops
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    company_id = get_user_company_id(auth.uid())
+    AND has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::app_role[])
+  );
 ```
 
-The model `veo-3.0-generate-preview` no longer exists. Per Google's official docs (verified today), the correct model is **`veo-3.1-generate-preview`**. Additionally, the polling response structure changed from `response.generatedSamples` to `response.generateVideoResponse.generatedSamples`.
+### مرحله 3: همچنین UPDATE policy هم workshop ندارد — اضافه می‌کنیم
+```sql
+DROP POLICY IF EXISTS "Office staff update delivery_stops" ON delivery_stops;
+CREATE POLICY "Staff update delivery_stops" ON delivery_stops
+  FOR UPDATE TO authenticated
+  USING (
+    company_id = get_user_company_id(auth.uid())
+    AND has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::app_role[])
+  );
+```
 
-**File: `supabase/functions/generate-video/index.ts`**
-- Change model from `veo-3.0-generate-preview` to `veo-3.1-generate-preview`
-- Update `veoGenerate`: use `x-goog-api-key` header instead of `?key=` query param (per official REST docs)
-- Update `veoPoll`: fix response parsing to use `response.generateVideoResponse.generatedSamples`
-- Update video download URL to use header-based auth
-- Constrain duration to valid values: 4, 6, or 8 seconds (Veo 3.1 requirement)
+### مرحله 4: Neutralize migration‌های تکراری در repo
+تبدیل فایل‌های fix migration به `SELECT 1;` تا pipeline بعدی مشکل نداشته باشد.
 
-### Issue 2: Migration Pipeline Blocker
-Migration `20260304234951` runs `CREATE UNIQUE INDEX idx_leads_odoo_id_unique` without deduplication. Production has duplicate `odoo_id` values (e.g., key `3083`), so it fails. All fix migrations (`20260305*`) come AFTER in the chain and never execute.
+### مرحله 5: Publish
 
-**Fix: Modify `20260304234951` to include dedup before index creation.** Since this migration has NOT been applied on production (it's the one failing), modifying it is safe. On dev/preview where it already ran, we add `IF NOT EXISTS` to prevent errors.
-
-**File: `supabase/migrations/20260304234951_f3b11fd1-92a6-4b57-a45e-2967837649e5.sql`**
-- Add dedup DELETE before the CREATE INDEX
-- Add `DROP INDEX IF EXISTS` before CREATE to handle dev environments
-- Convert the 5 redundant fix migrations (`20260305031029`, `20260305144441`, `20260305150909`, `20260305154125`, `20260305154553`, `20260305155616`) to `SELECT 1;` no-ops
-
-| File | Change |
+| عملیات | هدف |
 |---|---|
-| `supabase/functions/generate-video/index.ts` | Update Veo model to `veo-3.1-generate-preview`, fix API auth headers, fix response parsing |
-| `supabase/migrations/20260304234951_*.sql` | Add dedup + `DROP INDEX IF EXISTS` before CREATE |
-| 5-6 redundant migration files | Convert to `SELECT 1;` |
+| Dedup leads on Live | رفع بلاکر migration pipeline |
+| Fix INSERT policy on Live | اجازه دادن به `workshop` برای CREATE DELIVERY |
+| Fix UPDATE policy on Live | اجازه دادن به `workshop` برای بروزرسانی stops |
+| Neutralize redundant migrations | جلوگیری از fail شدن publish بعدی |
 
