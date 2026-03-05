@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
       try {
         const messages = await odooRpc(odooUrl, odooDB, odooKey, "mail.message", "search_read", [
           [[["model", "=", "crm.lead"], ["res_id", "in", batch]]],
-          { fields: ["id", "body", "subject", "message_type", "subtype_id", "author_id", "date", "res_id", "tracking_value_ids"] },
+          { fields: ["id", "body", "subject", "message_type", "subtype_id", "author_id", "date", "res_id", "tracking_value_ids", "attachment_ids"] },
         ]);
 
         console.log(`Batch ${i / 50 + 1}: fetched ${messages.length} messages for ${batch.length} leads`);
@@ -263,6 +263,16 @@ Deno.serve(async (req) => {
             messageErrors += chunk.length;
           } else {
             messagesInserted += chunk.length;
+          }
+        }
+        // Backfill: link lead_files to their parent message via attachment_ids
+        for (const msg of messages) {
+          if (Array.isArray(msg.attachment_ids) && msg.attachment_ids.length > 0) {
+            const { error: linkErr } = await serviceClient
+              .from("lead_files")
+              .update({ odoo_message_id: msg.id })
+              .in("odoo_id", msg.attachment_ids);
+            if (linkErr) console.warn("File linkage error for msg", msg.id, linkErr.message);
           }
         }
       } catch (e) {
