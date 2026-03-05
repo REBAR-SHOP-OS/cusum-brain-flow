@@ -285,16 +285,17 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     // Build map: odoo_message_id → files[]
     const filesByMsgId = new Map<number, any[]>();
     const orphanFiles: any[] = [];
+    const unlinkedOdooFiles: any[] = [];
     for (const f of files) {
       const msgId = (f as any).odoo_message_id;
       if (msgId) {
         if (!filesByMsgId.has(msgId)) filesByMsgId.set(msgId, []);
         filesByMsgId.get(msgId)!.push(f);
       } else {
-        // Only show non-Odoo files as standalone orphans
-        // Odoo-origin files without linkage are hidden (they'll appear once backfill runs)
         const isOdooOrigin = (f as any).source === "odoo_sync" || (f as any).odoo_id;
-        if (!isOdooOrigin) {
+        if (isOdooOrigin) {
+          unlinkedOdooFiles.push(f); // Show in fallback group
+        } else {
           orphanFiles.push(f);
         }
       }
@@ -314,9 +315,10 @@ export function OdooChatter({ lead }: OdooChatterProps) {
 
     items.push(...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })));
 
-    // Only truly unlinked files appear as standalone entries
-    if (orphanFiles.length > 0) {
-      const sorted = [...orphanFiles].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    // Group standalone files into batches by time proximity
+    const pushFileBatches = (fileList: any[]) => {
+      if (fileList.length === 0) return;
+      const sorted = [...fileList].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       let batch: any[] = [sorted[0]];
       for (let i = 1; i < sorted.length; i++) {
         const prev = new Date(sorted[i - 1].created_at).getTime();
@@ -331,11 +333,35 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       if (batch.length > 0) {
         items.push({ kind: "file_group", files: [...batch], date: new Date(batch[0].created_at) });
       }
-    }
+    };
+    pushFileBatches(orphanFiles);
+    pushFileBatches(unlinkedOdooFiles);
 
     // Sort by date descending
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
-    return items;
+
+    // Collapse consecutive generic stage-change duplicates (same author, same minute, no tracking)
+    const collapsed: ThreadItem[] = [];
+    for (const item of items) {
+      if (item.kind === "activity" && item.data.activity_type === "stage_change") {
+        const meta = (item.data.metadata as any) || {};
+        const hasTracking = meta.tracking_changes && Array.isArray(meta.tracking_changes) && meta.tracking_changes.length > 0;
+        const hasBody = !!(item.data as any).body_html;
+        if (!hasTracking && !hasBody) {
+          const prev = collapsed[collapsed.length - 1];
+          if (prev && prev.kind === "activity" && prev.data.activity_type === "stage_change") {
+            const prevMeta = (prev.data.metadata as any) || {};
+            const prevHasTracking = prevMeta.tracking_changes && Array.isArray(prevMeta.tracking_changes) && prevMeta.tracking_changes.length > 0;
+            if (!prevHasTracking && prev.data.created_by === item.data.created_by &&
+                Math.abs(prev.date.getTime() - item.date.getTime()) < 120_000) {
+              continue; // Skip duplicate
+            }
+          }
+        }
+      }
+      collapsed.push(item);
+    }
+    return collapsed;
   }, [activities, eventActivities, files, communications]);
 
   // ── Handlers ─────────────────────────────────────────────────────
@@ -743,6 +769,22 @@ function InlineFileAttachments({ files }: { files: any[] }) {
                   if (file.storage_path) {
                     const url = await getSignedFileUrl(file.storage_path);
                     if (url) window.open(url, "_blank");
+                  } else if (file.odoo_id) {
+                    // Fetch via odoo-file-proxy for Odoo-native files
+                    try {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (!session?.access_token) return;
+                      const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${file.odoo_id}`;
+                      const res = await fetch(proxyUrl, {
+                        headers: { Authorization: `Bearer ${session.access_token}` },
+                      });
+                      if (!res.ok) return;
+                      const blob = await res.blob();
+                      const blobUrl = URL.createObjectURL(blob);
+                      window.open(blobUrl, "_blank");
+                    } catch (e) {
+                      console.error("Odoo file download error:", e);
+                    }
                   } else if (file.file_url) {
                     window.open(file.file_url, "_blank");
                   }

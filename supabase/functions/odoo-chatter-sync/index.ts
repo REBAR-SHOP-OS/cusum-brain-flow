@@ -289,37 +289,52 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Re-sync: update existing stage_change activities that have has_tracking but missing tracking_changes
+        // Re-sync: update existing activities missing metadata (tracking, body_html)
         if (mode === "full") {
           for (const msg of messages) {
-            if (!Array.isArray(msg.tracking_value_ids) || msg.tracking_value_ids.length === 0) continue;
-            // Check if this activity already has tracking_changes
+            const leadId = odooToLead.get(msg.res_id);
+            if (!leadId) continue;
+            // Always try to update existing rows with richer data
             const { data: existing } = await serviceClient
               .from("lead_activities")
-              .select("id, metadata")
+              .select("id, metadata, body_html")
               .eq("odoo_message_id", msg.id)
               .limit(1);
             if (!existing || existing.length === 0) continue;
             const meta = (existing[0].metadata as any) || {};
-            if (meta.tracking_changes && Array.isArray(meta.tracking_changes) && meta.tracking_changes.length > 0) continue;
-            // Fetch tracking values from Odoo
-            try {
-              const trackingData = await odooRpc(odooUrl, odooDB, odooKey, "mail.tracking.value", "read", [
-                [msg.tracking_value_ids],
-                { fields: ["field_desc", "old_value_char", "new_value_char", "old_value_integer", "new_value_integer", "old_value_float", "new_value_float"] },
-              ]);
-              if (Array.isArray(trackingData) && trackingData.length > 0) {
-                const trackingChanges = trackingData.map((tv: any) => ({
-                  field: tv.field_desc || "Field",
-                  old_value: String(tv.old_value_char || tv.old_value_integer || tv.old_value_float || ""),
-                  new_value: String(tv.new_value_char || tv.new_value_integer || tv.new_value_float || ""),
-                }));
-                await serviceClient.from("lead_activities")
-                  .update({ metadata: { ...meta, tracking_changes: trackingChanges } })
-                  .eq("id", existing[0].id);
+            const updates: Record<string, any> = {};
+
+            // Backfill body_html if missing
+            const rawHtml = (msg.body && msg.body !== false) ? String(msg.body) : null;
+            if (rawHtml && !existing[0].body_html) {
+              updates.body_html = rawHtml;
+            }
+
+            // Backfill tracking_changes if missing
+            if ((!meta.tracking_changes || meta.tracking_changes.length === 0) &&
+                Array.isArray(msg.tracking_value_ids) && msg.tracking_value_ids.length > 0) {
+              try {
+                const trackingData = await odooRpc(odooUrl, odooDB, odooKey, "mail.tracking.value", "read", [
+                  [msg.tracking_value_ids],
+                  { fields: ["field_desc", "old_value_char", "new_value_char", "old_value_integer", "new_value_integer", "old_value_float", "new_value_float"] },
+                ]);
+                if (Array.isArray(trackingData) && trackingData.length > 0) {
+                  const trackingChanges = trackingData.map((tv: any) => ({
+                    field: tv.field_desc || "Field",
+                    old_value: String(tv.old_value_char || tv.old_value_integer || tv.old_value_float || ""),
+                    new_value: String(tv.new_value_char || tv.new_value_integer || tv.new_value_float || ""),
+                  }));
+                  updates.metadata = { ...meta, tracking_changes: trackingChanges };
+                }
+              } catch (e) {
+                console.warn("Failed to backfill tracking for msg", msg.id, e);
               }
-            } catch (e) {
-              console.warn("Failed to backfill tracking for msg", msg.id, e);
+            }
+
+            if (Object.keys(updates).length > 0) {
+              await serviceClient.from("lead_activities")
+                .update(updates)
+                .eq("id", existing[0].id);
             }
           }
         }
@@ -408,6 +423,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Count file linkage stats
+    const { count: filesLinked } = await serviceClient
+      .from("lead_files")
+      .select("id", { count: "exact", head: true })
+      .not("odoo_message_id", "is", null);
+    const { count: filesUnlinked } = await serviceClient
+      .from("lead_files")
+      .select("id", { count: "exact", head: true })
+      .is("odoo_message_id", null)
+      .eq("source", "odoo_sync");
+
     return json({
       mode,
       leads_processed: targetLeads.length,
@@ -416,6 +442,8 @@ Deno.serve(async (req) => {
       message_errors: messageErrors,
       activities_inserted: activitiesInserted,
       activity_errors: activityErrors,
+      files_linked: filesLinked || 0,
+      files_unlinked_remaining: filesUnlinked || 0,
     });
   } catch (err) {
     if (err instanceof Response) return err;
