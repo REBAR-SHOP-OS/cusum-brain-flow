@@ -1,40 +1,45 @@
 
-هدف: مشکل به‌صورت ریشه‌ای حل شود تا Cutter-02 هیچ‌وقت 10M/15M نبیند و فقط 20M به بالا نمایش دهد.
 
-1) علت ریشه‌ای که پیدا شد
-- الان در دیتابیس، جدول `machine_capabilities` برای هر دو دستگاه Cutter-01 و Cutter-02 هنوز همه سایزها (10M تا 35M) را دارد.
-- فیلتر UI درست کار می‌کند، اما چون داده‌ی قابلیت‌ها اشتباه است، Cutter-02 همچنان 10M/15M می‌گیرد.
-- ضمن اینکه در کد فعلی اگر قابلیت دستگاه خالی باشد، حالت fail-open دارد (یعنی همه آیتم‌ها را نشان می‌دهد) که ریسک تکرار مشکل را بالا می‌برد.
+# Fix: Double-Counting in `completed_pieces` (Pieces Done Mismatch)
 
-2) اصلاح دیتابیس (اصلی‌ترین بخش)
-- یک migration قطعی اجرا می‌شود که:
-  - ابتدا قابلیت‌های process=`cut` برای دو cutter مشخص را کامل پاک می‌کند.
-  - سپس دقیقاً قابلیت‌های صحیح را دوباره insert می‌کند:
-    - Cutter-01 (`e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3`): فقط `10M`, `15M`
-    - Cutter-02 (`b0000000-0000-0000-0000-000000000002`): فقط `20M`, `25M`, `30M`, `35M`
+## Problem
+The "Pieces Done" counter (54/120) is inflated because `completed_pieces` gets incremented **twice** for each run:
+1. **Per-stroke** (line 300-309): Each stroke calls `increment_completed_pieces` with `activeBars` — correctly persisting progress incrementally.
+2. **On complete** (line 386-390): Calls `increment_completed_pieces` with the **full** `totalOutput` again, instead of just the delta between what was already persisted and the actual output.
 
-3) جلوگیری از برگشت مشکل (ریشه‌ای)
-- در همان migration یک trigger/function اعتبارسنجی روی `machine_capabilities` اضافه می‌شود که:
-  - برای Cutter-01 اجازه سایزهای بالاتر از 15M ندهد.
-  - برای Cutter-02 اجازه سایزهای پایین‌تر از 20M ندهد.
-- نتیجه: حتی اگر بعداً کسی اشتباهاً capability اشتباه وارد کند، دیتابیس آن را reject می‌کند.
+Since strokes already persisted all pieces, the "Complete Run" call adds the entire run output a second time. The `LEAST(completed + increment, total)` cap prevents going over `total_pieces`, but across multiple runs the over-counting accumulates, producing values like 54 when only 36 pieces (2 × 18) should be recorded.
 
-4) سخت‌گیری امن در UI (Fail-Closed)
-- در `useStationData`:
-  - query قابلیت‌ها با `process = 'cut'` محدود می‌شود.
-  - اگر دستگاه cutter بود و capability معتبر نداشت، خروجی خالی برگردد (نه همه آیتم‌ها).
-- این کار باعث می‌شود تنظیمات ناقص/خراب دیگر باعث نمایش اشتباه نشود.
+## Fix
 
-5) اعتبارسنجی نهایی
-- با SQL تایید می‌شود Cutter-02 فقط `20M+` دارد و Cutter-01 فقط زیر `20M`.
-- در صفحه `/shopfloor/station/b0000000-0000-0000-0000-000000000002` بررسی می‌شود که 10M/15M دیگر دیده نشوند.
-- روی Cutter-01 هم بررسی می‌شود 20M+ نمایش داده نشود.
+**File: `src/components/shopfloor/CutterStationView.tsx`** (line ~381-390)
 
-بخش فنی (خلاصه تغییرات)
-- DB:
-  - reset deterministic capabilities برای 2 machine_id
-  - trigger-based enforcement برای جلوگیری از drift
-- Frontend:
-  - `src/hooks/useStationData.ts`
-    - `machine_capabilities` query با `eq("process","cut")`
-    - fail-closed وقتی cutter capability ندارد
+Change the final `increment_completed_pieces` call in `handleCompleteRun` to be a **reconciliation** rather than a full re-increment. Calculate what was already persisted (number of strokes × pieces-per-stroke) and only send the difference:
+
+```typescript
+// Calculate what was already persisted stroke-by-stroke
+const alreadyPersisted = slotTracker.slots.reduce((sum, s) => sum + s.cutsDone, 0);
+const reconciliationDelta = Math.max(0, totalOutput - alreadyPersisted);
+
+if (reconciliationDelta > 0) {
+  const { error: itemErr } = await supabase
+    .rpc("increment_completed_pieces", {
+      p_item_id: currentItem.id,
+      p_increment: reconciliationDelta,
+    });
+  if (itemErr) throw itemErr;
+}
+```
+
+Wait — `totalOutput` IS `slotTracker.totalCutsDone` (line 375), and `alreadyPersisted` would equal the same thing since each stroke increments by the same amount it reports. So `reconciliationDelta` would always be 0.
+
+This means the entire final `increment_completed_pieces` call in `handleCompleteRun` is redundant and should be **removed entirely** — strokes already fully persist the count.
+
+### Actual change:
+Remove lines 381-391 (the final `increment_completed_pieces` RPC call in `handleCompleteRun`). The stroke-by-stroke persistence at line 300-309 already handles all counting.
+
+**Additionally**: Fix the existing inflated data by running a data correction query that recalculates `completed_pieces` from actual completed run outputs (this would be a one-time data fix via the insert tool).
+
+## Summary
+- **`src/components/shopfloor/CutterStationView.tsx`**: Remove the redundant `increment_completed_pieces` call inside `handleCompleteRun` — strokes already persist the full count.
+- **Database**: One-time data correction to fix inflated `completed_pieces` values.
+
