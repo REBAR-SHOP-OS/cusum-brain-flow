@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useShapeSchematics } from "@/hooks/useShapeSchematics";
 
@@ -8,7 +9,7 @@ interface AsaShapeDiagramProps {
   size?: "sm" | "md" | "lg";
 }
 
-// SVG paths for common ASA rebar bend shapes
+// SVG paths for common ASA rebar bend shapes (fallback if image fails)
 const SHAPE_PATHS: Record<string, { path: string; labels: { key: string; x: number; y: number }[] }> = {
   // Shape 1: Straight bar
   "1": {
@@ -107,15 +108,17 @@ export function AsaShapeDiagram({ shapeCode, dimensions, className, size = "lg" 
   const customImageUrl = getShapeImageUrl(shapeCode);
   const shape = SHAPE_PATHS[shapeCode];
   const { width, height, scale } = sizeMap[size];
+  const [imgFailed, setImgFailed] = useState(false);
 
-  // Priority 1: Real uploaded schematic from the shape engine
-  if (customImageUrl) {
+  // Priority 1: Real uploaded schematic (with onError fallback)
+  if (customImageUrl && !imgFailed) {
     return (
       <div className={cn("flex flex-col items-center justify-center gap-2", className)}>
         <img
           src={customImageUrl}
           alt={`ASA Shape ${shapeCode}`}
           className={cn("object-contain rounded", imgSizeMap[size])}
+          onError={() => setImgFailed(true)}
         />
         {dimensions && Object.keys(dimensions).length > 0 && (
           <div className="flex flex-wrap gap-1.5 justify-center">
@@ -130,7 +133,7 @@ export function AsaShapeDiagram({ shapeCode, dimensions, className, size = "lg" 
     );
   }
 
-  // Priority 2: Built-in SVG path
+  // Priority 2: Built-in SVG path (also used as fallback if image fails)
   if (shape) {
     return (
       <div className={cn("flex items-center justify-center", className)}>
