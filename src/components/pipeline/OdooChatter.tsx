@@ -216,37 +216,56 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     [activities]
   );
 
-  // Convert lead_events into activity-like items
-  const eventActivities = useMemo(() => leadEvents.map((evt: any) => {
-    const payload = (evt.payload as Record<string, unknown>) || {};
-    let title = evt.event_type;
-    let description = "";
-    if (evt.event_type === "stage_changed") {
-      title = "Stage changed";
-      description = `${payload.from || "—"} → ${payload.to || "—"}`;
-      if (payload.odoo_stage) description += ` (Odoo: ${payload.odoo_stage})`;
-    } else if (evt.event_type === "value_changed") {
-      title = "Value changed";
-      description = `$${Number(payload.from || 0).toLocaleString()} → $${Number(payload.to || 0).toLocaleString()}`;
-    } else if (evt.event_type === "contact_linked") {
-      title = "Contact linked";
-      description = String(payload.customer_name || "");
-    } else if (evt.event_type === "note_added") {
-      title = "Note from Odoo";
-      description = String(payload.content || "");
-    }
-    return {
-      id: evt.id,
-      lead_id: evt.lead_id,
-      activity_type: evt.event_type === "stage_changed" ? "stage_change" : "system",
-      title,
-      description,
-      created_by: evt.source_system === "odoo_sync" ? "Odoo Sync" : "System",
-      created_at: evt.created_at,
-      completed_at: evt.created_at, // events are always "done"
-      company_id: lead.company_id,
-    };
-  }), [leadEvents, lead.company_id]);
+  // Convert lead_events into activity-like items, deduplicating stage changes
+  const eventActivities = useMemo(() => {
+    // Build a set of stage_change timestamps from lead_activities to deduplicate
+    const chatterStageTimestamps = new Set<string>();
+    activities.forEach(a => {
+      if (a.activity_type === "stage_change") {
+        // Use date portion for fuzzy matching (same day)
+        chatterStageTimestamps.add(new Date(a.created_at).toISOString().slice(0, 10));
+      }
+    });
+
+    return leadEvents
+      .filter((evt: any) => {
+        // Skip lead_events stage changes if chatter already has stage_change activities for this lead
+        if (evt.event_type === "stage_changed" && chatterStageTimestamps.size > 0) {
+          return false; // Chatter activities are the source of truth for stage changes
+        }
+        return true;
+      })
+      .map((evt: any) => {
+        const payload = (evt.payload as Record<string, unknown>) || {};
+        let title = evt.event_type;
+        let description = "";
+        if (evt.event_type === "stage_changed") {
+          title = "Stage changed";
+          description = `${payload.from || "—"} → ${payload.to || "—"}`;
+          if (payload.odoo_stage) description += ` (Odoo: ${payload.odoo_stage})`;
+        } else if (evt.event_type === "value_changed") {
+          title = "Value changed";
+          description = `$${Number(payload.from || 0).toLocaleString()} → $${Number(payload.to || 0).toLocaleString()}`;
+        } else if (evt.event_type === "contact_linked") {
+          title = "Contact linked";
+          description = String(payload.customer_name || "");
+        } else if (evt.event_type === "note_added") {
+          title = "Note from Odoo";
+          description = String(payload.content || "");
+        }
+        return {
+          id: evt.id,
+          lead_id: evt.lead_id,
+          activity_type: evt.event_type === "stage_changed" ? "stage_change" : "system",
+          title,
+          description,
+          created_by: evt.source_system === "odoo_sync" ? "Odoo Sync" : "System",
+          created_at: evt.created_at,
+          completed_at: evt.created_at, // events are always "done"
+          company_id: lead.company_id,
+        };
+      });
+  }, [leadEvents, activities, lead.company_id]);
 
   // Unified thread — files linked to their parent activity via odoo_message_id
   type ThreadItem =
@@ -608,8 +627,10 @@ const ActivityThreadItem = React.memo(
             <p className="text-[13px] font-medium mt-0.5">{activity.title}</p>
           )}
 
-          {/* Stage change: only show title if no tracking bullets */}
-          {isStageChange && !hasTracking && <p className="text-[13px] mt-0.5">{activity.title}</p>}
+          {/* Stage change: show description (from→to) if available, otherwise nothing (author+arrow already shown) */}
+          {isStageChange && !hasTracking && activity.description && activity.description !== activity.title && (
+            <p className="text-[13px] mt-0.5 text-muted-foreground">{activity.description}</p>
+          )}
 
           {/* Tracking changes — field change bullets like Odoo (suppress title/desc when present) */}
           {hasTracking && (
