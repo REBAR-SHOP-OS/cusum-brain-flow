@@ -248,10 +248,10 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     };
   }), [leadEvents, lead.company_id]);
 
-  // Unified thread — files matched to activities by timestamp proximity (5 min)
+  // Unified thread — no timestamp matching; files are standalone chronological entries
   type ThreadItem =
-    | { kind: "activity"; data: LeadActivity; matchedFiles: any[]; date: Date }
-    | { kind: "orphan_files"; files: any[]; date: Date }
+    | { kind: "activity"; data: LeadActivity; date: Date }
+    | { kind: "file_group"; files: any[]; date: Date }
     | { kind: "comm"; data: (typeof communications)[0]; date: Date };
 
   const thread = useMemo(() => {
@@ -259,67 +259,40 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       (a) => a.completed_at || !["follow_up", "call", "meeting", "email"].includes(a.activity_type)
     );
     const allActivities = [
-      ...completedActivities.map((a) => ({ ...a, _date: new Date(a.created_at).getTime() })),
-      ...eventActivities.map((a: any) => ({ ...(a as LeadActivity), _date: new Date(a.created_at).getTime() })),
+      ...completedActivities,
+      ...eventActivities.map((a: any) => a as LeadActivity),
     ];
-
-    // Match each file to closest activity within 10 minutes
-    const MATCH_WINDOW = 10 * 60 * 1000; // 10 minutes
-    const activityFilesMap = new Map<string, any[]>();
-    const orphanFiles: any[] = [];
-
-    for (const f of files) {
-      const ft = new Date(f.created_at).getTime();
-      let bestActivity: (typeof allActivities)[0] | null = null;
-      let bestDist = Infinity;
-      for (const act of allActivities) {
-        const dist = Math.abs(act._date - ft);
-        if (dist < bestDist) { bestDist = dist; bestActivity = act; }
-      }
-      if (bestActivity && bestDist <= MATCH_WINDOW) {
-        const existing = activityFilesMap.get(bestActivity.id) || [];
-        existing.push(f);
-        activityFilesMap.set(bestActivity.id, existing);
-      } else {
-        orphanFiles.push(f);
-      }
-    }
 
     const items: ThreadItem[] = [
       ...allActivities.map((a) => ({
         kind: "activity" as const,
-        data: a as LeadActivity,
-        matchedFiles: activityFilesMap.get(a.id) || [],
+        data: a,
         date: new Date(a.created_at),
       })),
       ...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })),
     ];
 
-    // Split orphan files into individual cards (grouped within 60s batches)
-    if (orphanFiles.length > 0) {
-      orphanFiles.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      let batch: any[] = [orphanFiles[0]];
-      for (let i = 1; i < orphanFiles.length; i++) {
-        const prev = new Date(orphanFiles[i - 1].created_at).getTime();
-        const cur = new Date(orphanFiles[i].created_at).getTime();
+    // Insert files as standalone chronological entries (batch within 60s)
+    if (files.length > 0) {
+      const sorted = [...files].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      let batch: any[] = [sorted[0]];
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = new Date(sorted[i - 1].created_at).getTime();
+        const cur = new Date(sorted[i].created_at).getTime();
         if (cur - prev <= 60_000) {
-          batch.push(orphanFiles[i]);
+          batch.push(sorted[i]);
         } else {
-          items.push({ kind: "orphan_files", files: [...batch], date: new Date(batch[0].created_at) });
-          batch = [orphanFiles[i]];
+          items.push({ kind: "file_group", files: [...batch], date: new Date(batch[0].created_at) });
+          batch = [sorted[i]];
         }
       }
       if (batch.length > 0) {
-        items.push({ kind: "orphan_files", files: [...batch], date: new Date(batch[0].created_at) });
+        items.push({ kind: "file_group", files: [...batch], date: new Date(batch[0].created_at) });
       }
     }
 
-    // Sort by date descending, orphan_files at top
-    items.sort((a, b) => {
-      if (a.kind === "orphan_files" && b.kind !== "orphan_files") return -1;
-      if (b.kind === "orphan_files" && a.kind !== "orphan_files") return 1;
-      return b.date.getTime() - a.date.getTime();
-    });
+    // Sort by date descending — purely chronological
+    items.sort((a, b) => b.date.getTime() - a.date.getTime());
     return items;
   }, [activities, eventActivities, files, communications]);
 
@@ -530,21 +503,21 @@ export function OdooChatter({ lead }: OdooChatterProps) {
             {thread.map((item, idx) => {
               const prevDate = idx > 0 ? thread[idx - 1].date : null;
               const showDateSep = !prevDate || format(item.date, "yyyy-MM-dd") !== format(prevDate, "yyyy-MM-dd");
-              const key = item.kind === "orphan_files"
-                ? `orphan-files`
+              const key = item.kind === "file_group"
+                ? `files-${item.files[0]?.id || idx}`
                 : item.kind === "comm"
                 ? `comm-${item.data.id}`
                 : `act-${item.data.id}`;
 
               return (
                 <div key={key} className="border-b border-border last:border-b-0">
-                  {showDateSep && item.kind !== "orphan_files" && <DateSeparator date={item.date} />}
-                  {item.kind === "orphan_files" ? (
+                  {showDateSep && <DateSeparator date={item.date} />}
+                  {item.kind === "file_group" ? (
                     <FileGroupThreadItem files={item.files} />
                   ) : item.kind === "comm" ? (
                     <CommThreadItem comm={item.data} />
                   ) : (
-                    <ActivityThreadItem activity={item.data} matchedFiles={item.matchedFiles} />
+                    <ActivityThreadItem activity={item.data} />
                   )}
                 </div>
               );
@@ -570,110 +543,109 @@ function DateSeparator({ date }: { date: Date }) {
   );
 }
 
-const ActivityThreadItem = React.memo(function ActivityThreadItem({ activity, matchedFiles = [] }: { activity: LeadActivity; matchedFiles?: any[] }) {
-  const Icon = activityIcons[activity.activity_type] || MessageSquare;
-  const isNote = activity.activity_type === "note";
-  const isStageChange = activity.activity_type === "stage_change";
-  const isEmail = activity.activity_type === "email";
-  const author = activity.created_by || "System";
-  const [htmlExpanded, setHtmlExpanded] = useState(false);
+const ActivityThreadItem = React.memo(
+  React.forwardRef<HTMLDivElement, { activity: LeadActivity }>(function ActivityThreadItem({ activity }, ref) {
+    const Icon = activityIcons[activity.activity_type] || MessageSquare;
+    const isNote = activity.activity_type === "note";
+    const isStageChange = activity.activity_type === "stage_change";
+    const isEmail = activity.activity_type === "email";
+    const author = activity.created_by || "System";
+    const [htmlExpanded, setHtmlExpanded] = useState(false);
 
-  // Extract body_html and tracking_changes from the activity
-  const bodyHtml = (activity as any).body_html as string | null;
-  const metadata = (activity.metadata as any) || {};
-  const trackingChanges = metadata.tracking_changes as Array<{ field: string; old_value: string; new_value: string }> | undefined;
+    // Extract body_html and tracking_changes from the activity
+    const bodyHtml = (activity as any).body_html as string | null;
+    const metadata = (activity.metadata as any) || {};
+    const trackingChanges = metadata.tracking_changes as Array<{ field: string; old_value: string; new_value: string }> | undefined;
+    const hasTracking = trackingChanges && trackingChanges.length > 0;
 
-  const sanitizedHtml = bodyHtml ? DOMPurify.sanitize(bodyHtml, {
-    ALLOWED_TAGS: ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "span", "div", "table", "tr", "td", "th", "thead", "tbody", "h1", "h2", "h3", "h4", "blockquote", "img", "hr", "pre", "code"],
-    ALLOWED_ATTR: ["href", "target", "style", "class", "src", "alt", "width", "height", "colspan", "rowspan"],
-  }) : null;
+    const sanitizedHtml = bodyHtml ? DOMPurify.sanitize(bodyHtml, {
+      ALLOWED_TAGS: ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "span", "div", "table", "tr", "td", "th", "thead", "tbody", "h1", "h2", "h3", "h4", "blockquote", "img", "hr", "pre", "code"],
+      ALLOWED_ATTR: ["href", "target", "style", "class", "src", "alt", "width", "height", "colspan", "rowspan"],
+    }) : null;
 
-  return (
-    <div className={cn(
-      "flex gap-3 p-3 rounded-md transition-colors hover:bg-accent/50",
-      isNote && "bg-amber-50/60 dark:bg-amber-950/20 border-l-2 border-amber-400 dark:border-amber-600"
-    )}>
-      <Avatar className="w-8 h-8 shrink-0 text-[11px]">
-        <AvatarFallback className="bg-primary/10 text-primary text-[11px]">
-          {getInitials(author)}
-        </AvatarFallback>
-      </Avatar>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[13px] font-semibold truncate">{author}</span>
-            {isEmail && <Mail className="w-3 h-3 text-muted-foreground shrink-0" />}
-            {isStageChange && <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />}
+    return (
+      <div ref={ref} className={cn(
+        "flex gap-3 p-3 rounded-md transition-colors hover:bg-accent/50",
+        isNote && "bg-amber-50/60 dark:bg-amber-950/20 border-l-2 border-amber-400 dark:border-amber-600"
+      )}>
+        <Avatar className="w-8 h-8 shrink-0 text-[11px]">
+          <AvatarFallback className="bg-primary/10 text-primary text-[11px]">
+            {getInitials(author)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-[13px] font-semibold truncate">{author}</span>
+              {isEmail && <Mail className="w-3 h-3 text-muted-foreground shrink-0" />}
+              {isStageChange && <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />}
+            </div>
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+              {format(new Date(activity.created_at), "h:mm a")}
+            </span>
           </div>
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
-            {format(new Date(activity.created_at), "h:mm a")}
-          </span>
-        </div>
 
-        {/* Email subject header */}
-        {isEmail && activity.title && activity.title !== "Email" && (
-          <p className="text-[13px] font-medium mt-0.5">{activity.title}</p>
-        )}
+          {/* Email subject header */}
+          {isEmail && activity.title && activity.title !== "Email" && (
+            <p className="text-[13px] font-medium mt-0.5">{activity.title}</p>
+          )}
 
-        {isStageChange && <p className="text-[13px] mt-0.5">{activity.title}</p>}
+          {/* Stage change: only show title if no tracking bullets */}
+          {isStageChange && !hasTracking && <p className="text-[13px] mt-0.5">{activity.title}</p>}
 
-        {/* Tracking changes — field change bullets like Odoo */}
-        {trackingChanges && trackingChanges.length > 0 && (
-          <ul className="mt-1 space-y-0.5">
-            {trackingChanges.map((tc, i) => (
-              <li key={i} className="text-[12px] flex items-start gap-1">
-                <span className="text-muted-foreground">•</span>
-                <span className="font-medium text-foreground">{tc.field}</span>
-                <span className="text-muted-foreground">:</span>
-                {tc.old_value && (
-                  <>
-                    <span className="text-red-500 line-through">{tc.old_value}</span>
-                    <ArrowRight className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
-                  </>
+          {/* Tracking changes — field change bullets like Odoo (suppress title/desc when present) */}
+          {hasTracking && (
+            <ul className="mt-1 space-y-0.5">
+              {trackingChanges!.map((tc, i) => (
+                <li key={i} className="text-[12px] flex items-start gap-1">
+                  <span className="text-muted-foreground">•</span>
+                  <span className="font-medium text-foreground">{tc.field}</span>
+                  <span className="text-muted-foreground">:</span>
+                  {tc.old_value && (
+                    <>
+                      <span className="text-red-500 line-through">{tc.old_value}</span>
+                      <ArrowRight className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
+                    </>
+                  )}
+                  <span className="text-green-600 dark:text-green-400">{tc.new_value}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Rich HTML body — expanded by default like Odoo */}
+          {sanitizedHtml ? (
+            <div className="mt-1.5 rounded border border-border bg-card p-2.5">
+              <div
+                className={cn(
+                  "odoo-html-body text-[13px] text-foreground/80 leading-relaxed overflow-hidden",
+                  !htmlExpanded && sanitizedHtml.length > 1500 && "max-h-[500px]"
                 )}
-                <span className="text-green-600 dark:text-green-400">{tc.new_value}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* Rich HTML body — expanded by default like Odoo */}
-        {sanitizedHtml ? (
-          <div className="mt-1.5 rounded border border-border bg-card p-2.5">
-            <div
-              className={cn(
-                "odoo-html-body text-[13px] text-foreground/80 leading-relaxed overflow-hidden",
-                !htmlExpanded && sanitizedHtml.length > 1500 && "max-h-[500px]"
+                dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+              />
+              {sanitizedHtml.length > 1500 && (
+                <button
+                  onClick={() => setHtmlExpanded(!htmlExpanded)}
+                  className="text-[11px] text-primary hover:underline mt-1"
+                >
+                  {htmlExpanded ? "Show less" : "Show more"}
+                </button>
               )}
-              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-            />
-            {sanitizedHtml.length > 1500 && (
-              <button
-                onClick={() => setHtmlExpanded(!htmlExpanded)}
-                className="text-[11px] text-primary hover:underline mt-1"
-              >
-                {htmlExpanded ? "Show less" : "Show more"}
-              </button>
-            )}
-          </div>
-        ) : activity.description ? (
-          <p className="text-[13px] text-foreground/80 whitespace-pre-wrap mt-0.5 leading-relaxed">
-            {activity.description}
-          </p>
-        ) : (
-          !isStageChange && !trackingChanges && (
-            <p className="text-[13px] text-foreground/80 mt-0.5">{activity.title}</p>
-          )
-        )}
-
-        {/* Inline file attachments */}
-        {matchedFiles.length > 0 && (
-          <InlineFileAttachments files={matchedFiles} />
-        )}
+            </div>
+          ) : activity.description && !hasTracking ? (
+            <p className="text-[13px] text-foreground/80 whitespace-pre-wrap mt-0.5 leading-relaxed">
+              {activity.description}
+            </p>
+          ) : (
+            !isStageChange && !hasTracking && (
+              <p className="text-[13px] text-foreground/80 mt-0.5">{activity.title}</p>
+            )
+          )}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  })
+);
 
 function InlineFileAttachments({ files }: { files: any[] }) {
   const imageFiles = files.filter(f => f.mime_type?.startsWith("image/") && !f.mime_type?.includes("dwg"));
