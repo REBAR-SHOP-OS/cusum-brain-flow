@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { getSignedFileUrl } from "@/lib/storageUtils";
 import { useToast } from "@/hooks/use-toast";
 import { OdooImagePreview as OdooImagePreviewInline } from "./OdooImagePreview";
+import { StorageImagePreview } from "./StorageImagePreview";
 import DOMPurify from "dompurify";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -253,20 +254,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     | { kind: "file"; data: (typeof files)[0]; date: Date }
     | { kind: "comm"; data: (typeof communications)[0]; date: Date };
 
-  // Build a set of file timestamps that overlap with activities (within 5s) to deduplicate
-  const activityTimestamps = useMemo(() => {
-    return activities.map(a => new Date(a.created_at).getTime());
-  }, [activities]);
-
-  const deduplicatedFiles = useMemo(() => {
-    return files.filter(f => {
-      const ft = new Date(f.created_at).getTime();
-      // If a file's created_at is within 5 seconds of any activity, it's a duplicate
-      return !activityTimestamps.some(at => Math.abs(ft - at) < 5000);
-    });
-  }, [files, activityTimestamps]);
-
-  // Group consecutive files by proximity (within 30s) into clusters
+  // No dedup filter — show ALL files, grouped by time proximity (120s window)
   type FileGroup = { kind: "file_group"; files: (typeof files); date: Date };
 
   const thread = useMemo(() => {
@@ -279,13 +267,13 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       ...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })),
     ];
 
-    // Group deduplicated files by time proximity
-    const sortedFiles = [...deduplicatedFiles].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // Group ALL files by time proximity (120s window)
+    const sortedFiles = [...files].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     const fileGroups: FileGroup[] = [];
     for (const f of sortedFiles) {
       const ft = new Date(f.created_at).getTime();
       const lastGroup = fileGroups[fileGroups.length - 1];
-      if (lastGroup && Math.abs(new Date(lastGroup.files[lastGroup.files.length - 1].created_at).getTime() - ft) < 30000) {
+      if (lastGroup && Math.abs(new Date(lastGroup.files[lastGroup.files.length - 1].created_at).getTime() - ft) < 120000) {
         lastGroup.files.push(f);
       } else {
         fileGroups.push({ kind: "file_group", files: [f], date: new Date(f.created_at) });
@@ -299,7 +287,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       return db - da;
     });
     return items;
-  }, [activities, eventActivities, deduplicatedFiles, communications]);
+  }, [activities, eventActivities, files, communications]);
 
   // ── Handlers ─────────────────────────────────────────────────────
   const handleTabClick = (tab: "note" | "message" | "activity") => {
@@ -658,6 +646,7 @@ function FileThreadItem({ file }: { file: any }) {
   const iconColor = getFileIconColor(ext);
   const isImage = file.mime_type?.startsWith("image/") && !file.mime_type?.includes("dwg");
   const isOdooFile = !file.storage_path && file.odoo_id;
+  const isStorageFile = !!file.storage_path;
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -666,7 +655,6 @@ function FileThreadItem({ file }: { file: any }) {
         const signedUrl = await getSignedFileUrl(file.storage_path);
         if (signedUrl) window.open(signedUrl, "_blank");
       } else if (isOdooFile) {
-        // Download via proxy
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) return;
         const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${file.odoo_id}`;
@@ -693,10 +681,15 @@ function FileThreadItem({ file }: { file: any }) {
             {format(new Date(file.created_at), "h:mm a")}
           </span>
         </div>
-        {/* Inline image preview for Odoo images */}
+        {/* Inline image preview */}
         {isImage && isOdooFile && (
           <div className="mt-1.5">
             <OdooImagePreviewInline odooId={file.odoo_id} fileName={file.file_name || "image"} />
+          </div>
+        )}
+        {isImage && isStorageFile && (
+          <div className="mt-1.5">
+            <StorageImagePreview storagePath={file.storage_path} fileName={file.file_name || "image"} />
           </div>
         )}
         <button
@@ -713,6 +706,9 @@ function FileThreadItem({ file }: { file: any }) {
 }
 
 function FileGroupThreadItem({ files }: { files: any[] }) {
+  const imageFiles = files.filter(f => f.mime_type?.startsWith("image/") && !f.mime_type?.includes("dwg"));
+  const nonImageFiles = files.filter(f => !f.mime_type?.startsWith("image/") || f.mime_type?.includes("dwg"));
+
   return (
     <div className="flex gap-3 p-3 hover:bg-accent/50 rounded-md transition-colors">
       <Avatar className="w-8 h-8 shrink-0 text-[11px]">
@@ -729,20 +725,36 @@ function FileGroupThreadItem({ files }: { files: any[] }) {
             {format(new Date(files[0].created_at), "h:mm a")}
           </span>
         </div>
-        <div className="flex flex-wrap gap-1.5 mt-1.5">
-          {files.map((file) => {
-            const ext = file.file_name?.split(".").pop()?.toUpperCase() || "FILE";
-            const FileIcon = getFileIcon(file.mime_type || "", ext);
-            const iconColor = getFileIconColor(ext);
-            const isImage = file.mime_type?.startsWith("image/") && !file.mime_type?.includes("dwg");
-            const isOdooFile = !file.storage_path && file.odoo_id;
-
-            return (
-              <div key={file.id} className="space-y-1">
-                {isImage && isOdooFile && (
-                  <OdooImagePreviewInline odooId={file.odoo_id} fileName={file.file_name || "image"} thumbnail />
-                )}
+        {/* Image thumbnails grid */}
+        {imageFiles.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+            {imageFiles.map((file) => {
+              const isOdooFile = !file.storage_path && file.odoo_id;
+              const isStorageFile = !!file.storage_path;
+              return (
+                <div key={file.id} className="space-y-1">
+                  {isOdooFile && (
+                    <OdooImagePreviewInline odooId={file.odoo_id} fileName={file.file_name || "image"} thumbnail />
+                  )}
+                  {isStorageFile && (
+                    <StorageImagePreview storagePath={file.storage_path} fileName={file.file_name || "image"} thumbnail />
+                  )}
+                  <p className="text-[10px] text-muted-foreground truncate">{file.file_name}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {/* Non-image file chips */}
+        {nonImageFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {nonImageFiles.map((file) => {
+              const ext = file.file_name?.split(".").pop()?.toUpperCase() || "FILE";
+              const FileIcon = getFileIcon(file.mime_type || "", ext);
+              const iconColor = getFileIconColor(ext);
+              return (
                 <button
+                  key={file.id}
                   onClick={async () => {
                     if (file.storage_path) {
                       const url = await getSignedFileUrl(file.storage_path);
@@ -756,10 +768,10 @@ function FileGroupThreadItem({ files }: { files: any[] }) {
                   <FileIcon className={cn("w-3.5 h-3.5 shrink-0", iconColor)} />
                   <span className="text-[11px] font-medium truncate">{file.file_name}</span>
                 </button>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
