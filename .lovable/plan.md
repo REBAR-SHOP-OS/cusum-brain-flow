@@ -1,16 +1,25 @@
 
 
-# Hotfix: رفع ریشه‌ای خطای `delivery_stops` RLS در Production
+# Fix: Migration `20260304234951` Blocking Publish
 
-## مشکل
-Production هنوز policy قدیمی را دارد:
-- **INSERT on `delivery_stops`**: فقط `admin, office, field` — نقش **`workshop` وجود ندارد**
-- Migration اصلاح‌کننده (`20260305154125`) هرگز اجرا نشده چون migration قبلی (`20260304234951`) به‌خاطر 181 `odoo_id` تکراری fail می‌کند
-
-## راه‌حل: دو SQL مستقیم روی Production
-
-### مرحله 1: Dedup leads (رفع بلاکر)
+## Root Cause
+The migration file `20260304234951_f3b11fd1-92a6-4b57-a45e-2967837649e5.sql` only contains:
 ```sql
+CREATE UNIQUE INDEX idx_leads_odoo_id_unique ON leads ((metadata->>'odoo_id')) WHERE metadata->>'odoo_id' IS NOT NULL;
+```
+Live has duplicate `odoo_id` values (e.g. key `3083`), so this fails every publish. The dedup was run on Test but **never embedded in the migration file itself** -- which is what actually runs on Live during publish.
+
+## Fix
+Rewrite the migration file to:
+1. Delete duplicate leads by `odoo_id` (keeping newest)
+2. Drop index if it already exists (for Test where it already ran)
+3. Create the unique index
+
+This is the **only** change needed. The migration runs on Live during publish, deduplicates first, then creates the index successfully.
+
+### File: `supabase/migrations/20260304234951_f3b11fd1-92a6-4b57-a45e-2967837649e5.sql`
+```sql
+-- Deduplicate leads by odoo_id before creating unique index
 DELETE FROM leads WHERE id IN (
   SELECT id FROM (
     SELECT id, ROW_NUMBER() OVER (
@@ -19,39 +28,13 @@ DELETE FROM leads WHERE id IN (
     ) AS rn FROM leads WHERE metadata->>'odoo_id' IS NOT NULL
   ) sub WHERE rn > 1
 );
+
+-- Safety: drop if already exists (e.g. on Test)
+DROP INDEX IF EXISTS idx_leads_odoo_id_unique;
+
+-- Create the unique index
+CREATE UNIQUE INDEX idx_leads_odoo_id_unique ON leads ((metadata->>'odoo_id')) WHERE metadata->>'odoo_id' IS NOT NULL;
 ```
 
-### مرحله 2: اصلاح policy (رفع خطای اصلی)
-```sql
-DROP POLICY IF EXISTS "Office staff insert delivery_stops" ON delivery_stops;
-CREATE POLICY "Staff insert delivery_stops" ON delivery_stops
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    company_id = get_user_company_id(auth.uid())
-    AND has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::app_role[])
-  );
-```
-
-### مرحله 3: همچنین UPDATE policy هم workshop ندارد — اضافه می‌کنیم
-```sql
-DROP POLICY IF EXISTS "Office staff update delivery_stops" ON delivery_stops;
-CREATE POLICY "Staff update delivery_stops" ON delivery_stops
-  FOR UPDATE TO authenticated
-  USING (
-    company_id = get_user_company_id(auth.uid())
-    AND has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::app_role[])
-  );
-```
-
-### مرحله 4: Neutralize migration‌های تکراری در repo
-تبدیل فایل‌های fix migration به `SELECT 1;` تا pipeline بعدی مشکل نداشته باشد.
-
-### مرحله 5: Publish
-
-| عملیات | هدف |
-|---|---|
-| Dedup leads on Live | رفع بلاکر migration pipeline |
-| Fix INSERT policy on Live | اجازه دادن به `workshop` برای CREATE DELIVERY |
-| Fix UPDATE policy on Live | اجازه دادن به `workshop` برای بروزرسانی stops |
-| Neutralize redundant migrations | جلوگیری از fail شدن publish بعدی |
+After this edit, Publish will succeed and the `delivery_stops` policy fixes (from the later migration `20260305163106`) will also apply to Live.
 
