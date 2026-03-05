@@ -1,42 +1,34 @@
 
 
-# Fix: Face Recognition Accuracy & "Ask First" Flow
+# Fix: Production Migration Pipeline Blocked → delivery_stops Policy Not Applied
 
 ## Problem
-The AI vision model is returning **false positive matches** (e.g., showing "Sattar Esmaeili" at 90% for the wrong person). The user wants:
-1. **First scan of unknown face** → Ask "What is your name?" → Enroll the face
-2. **Subsequent scans** → Show the correct name automatically
-3. **Never show a wrong name**
+The `delivery_stops` INSERT policy fix (adding `workshop` role) was applied to **Test** but **never reached Production**. Production is stuck at migration `20260304215226` because the next migration (`20260304234951`) fails -- it tries to create a unique index on `odoo_id` without deduplicating first, and production still has duplicates.
 
-## Root Causes
-1. **AI prompt is too lenient**: Says "Be TOLERANT" and "assign confidence 70+" for similar faces → false positives
-2. **Backend threshold too low**: Accepts matches at confidence ≥ 40
-3. **Multiple faces in frame**: The screenshot shows 2 people; the AI picks one randomly
-4. **No verification step**: System trusts AI match blindly without asking user to confirm identity on first encounter
+This means all subsequent migrations (including `20260305154125` which fixes the delivery_stops policy) are blocked from running on Production.
 
-## Solution
+## Production State
+- **Last applied migration**: `20260304215226` (290 total)
+- **delivery_stops INSERT policy**: Still only allows `admin`, `office`, `field` -- **missing `workshop`**
+- **Duplicate odoo_ids still exist**: 5027, 2788, 4967, etc.
 
-### 1. Rewrite `face-recognize` AI Prompt (Stricter)
-- Remove "Be TOLERANT" instruction
-- Add: "Only match if you are CERTAIN it's the same person. If in doubt, return no match."
-- Add: "If multiple faces are visible, focus on the most prominent/centered face"
-- Raise backend match threshold from **40 → 75**
-- Add instruction: "Pay close attention to unique facial features: nose shape, eye distance, jawline, facial hair"
+## Fix
 
-### 2. Add Confidence Verification in Kiosk UI
-- For **first-time matches** (profile has ≤ 2 enrollments), show confirmation: "Are you [Name]? Yes / No, I'm new"
-- If user says "No" → show FirstTimeRegistration flow
-- If user says "Yes" → proceed with punch + auto-enroll additional photo
-- For **well-enrolled profiles** (3+ enrollments with prior confirmed punches), auto-punch as before
+### 1. Edit `20260304234951` to add dedup before index
+Currently just `CREATE UNIQUE INDEX...` -- needs `DELETE` dedup step first so it won't fail on production duplicates.
 
-### 3. Update `kiosk-punch` to Track Confirmation Count
-- Add a simple check: if profile has < 3 enrollments, the frontend forces a name confirmation step before punching
+### 2. Convert redundant migrations to no-ops
+`20260305031029`, `20260305144441`, `20260305150909` all duplicate the same dedup logic. Convert to `SELECT 1;`.
 
-### Files to Edit
+### 3. No other changes needed
+Migration `20260305154125` already contains the correct `delivery_stops` INSERT policy fix with `workshop` role. Once the pipeline unblocks, it will apply automatically on next publish.
 
 | File | Change |
 |---|---|
-| `supabase/functions/face-recognize/index.ts` | Stricter prompt, raise threshold to 75, handle multiple faces |
-| `src/pages/TimeClock.tsx` | Add confirmation step for low-enrollment profiles before auto-punch |
-| `src/components/timeclock/FaceRecognitionResult.tsx` | Add "That's not me" button that triggers registration flow |
+| `supabase/migrations/20260304234951_*.sql` | Add dedup DELETE before CREATE UNIQUE INDEX |
+| `supabase/migrations/20260305031029_*.sql` | `SELECT 1;` |
+| `supabase/migrations/20260305144441_*.sql` | `SELECT 1;` |
+| `supabase/migrations/20260305150909_*.sql` | `SELECT 1;` |
+
+After these edits, publishing will unblock the pipeline and apply the `workshop` role fix to production.
 
