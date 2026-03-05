@@ -1,59 +1,43 @@
 
 
-# Fix Files Placement — Link Files to Their Parent Odoo Message
+# Root Cause: Migration Never Applied + Missing Tracking Data
 
-## Root Cause
+## What I Found
 
-The "puzzle" is this: every Odoo attachment (`ir.attachment`) belongs to a specific `mail.message`. The chatter sync already stores `odoo_message_id` on `lead_activities`. The `lead_files` table has `odoo_id` (the attachment's Odoo ID). But there's **no column linking a file to its parent message**.
+### Problem 1: `odoo_message_id` column does NOT exist on `lead_files`
+The migration file exists (`20260305013704_...sql`) but **the column was never actually created in production**. Every query against `lead_files.odoo_message_id` returns `column does not exist`. This means:
+- The backfill in `odoo-chatter-sync` silently fails when trying to `UPDATE lead_files SET odoo_message_id = ...`
+- The UI code reading `(f as any).odoo_message_id` always gets `undefined`
+- ALL files appear as orphans because none can be linked to their parent message
 
-The Odoo `mail.message` API returns an `attachment_ids` field — an array of attachment IDs belonging to that message. We never fetch it, so we can't connect the dots.
+### Problem 2: Stage change activities have `has_tracking: true` but NO `tracking_changes` array
+The existing synced data stores `has_tracking: true` in metadata but the actual field-level changes (`tracking_changes`) were never populated. The UI checks for `trackingChanges` array — finds nothing — and falls through to showing the duplicate "Stage Changed / Stage Changed" text.
+
+### Problem 3: `lead_activities` with `activity_type = 'stage_change'` duplicates from `lead_events`
+Both `lead_activities` (from chatter sync) and `lead_events` (from CRM sync) create stage change entries. The UI merges both, resulting in duplicate stage change cards.
 
 ## Plan
 
-### 1. DB Migration: Add `odoo_message_id` to `lead_files`
+### 1. DB: Actually create `odoo_message_id` on `lead_files`
+Re-run the migration with `IF NOT EXISTS` safety. The previous migration file is there but never took effect.
 
-```sql
-ALTER TABLE public.lead_files ADD COLUMN odoo_message_id integer;
-CREATE INDEX idx_lead_files_odoo_message_id ON public.lead_files (odoo_message_id);
-```
+### 2. Edge Function: Re-sync to populate `tracking_changes` and backfill file linkage
+Update `odoo-chatter-sync` to:
+- On re-sync (`full` mode), update existing activities that have `has_tracking: true` but missing `tracking_changes` in metadata
+- Continue backfilling `lead_files.odoo_message_id` (which will now work since the column exists)
 
-### 2. Sync Fix: Fetch `attachment_ids` and backfill `lead_files.odoo_message_id`
+### 3. UI: Deduplicate stage changes and fix fallback text
+In `OdooChatter.tsx`:
+- When merging `eventActivities` into the thread, skip `lead_events` stage changes if a matching `lead_activities` entry with `activity_type = 'stage_change'` exists for the same lead around the same timestamp
+- For stage changes with `has_tracking: true` but no `tracking_changes` array, show just the author name and arrow icon (no "Stage Changed / Stage Changed" double text)
+- Keep the current tracking bullet rendering for activities that DO have `tracking_changes`
 
-In `supabase/functions/odoo-chatter-sync/index.ts`:
-- Add `"attachment_ids"` to the `fields` list in the `mail.message` search_read call (line 177)
-- After inserting/updating activities, loop through messages that have `attachment_ids` and update matching `lead_files` rows:
-  ```sql
-  UPDATE lead_files SET odoo_message_id = <msg.id> WHERE odoo_id = ANY(<msg.attachment_ids>)
-  ```
-
-### 3. UI: Match files to activities by `odoo_message_id` instead of timestamp
-
-In `src/components/pipeline/OdooChatter.tsx`:
-- In the `thread` memo, build a `Map<number, any[]>` from `odoo_message_id → files[]` using `lead_files` data
-- For each activity with `odoo_message_id`, attach its matched files
-- Pass matched files to `ActivityThreadItem` and render them inline via `InlineFileAttachments`
-- Only files with NO `odoo_message_id` (locally uploaded or unlinked) remain as standalone `file_group` entries
-- Remove the 60s batching for matched files — they go under their parent message
-
-### 4. Quick backfill for existing data
-
-Add a small section at the end of the chatter sync that retroactively links existing `lead_files` to their messages:
-```ts
-// After message sync, backfill file linkage
-for (const msg of allFetchedMessages) {
-  if (msg.attachment_ids?.length) {
-    await serviceClient.from("lead_files")
-      .update({ odoo_message_id: msg.id })
-      .in("odoo_id", msg.attachment_ids);
-  }
-}
-```
+### 4. Trigger re-sync
+After deploying, the user runs "Sync Odoo" to backfill both tracking data and file linkage.
 
 | File | Change |
 |------|--------|
-| DB migration | Add `odoo_message_id` column + index to `lead_files` |
-| `supabase/functions/odoo-chatter-sync/index.ts` | Fetch `attachment_ids`, backfill `lead_files.odoo_message_id` |
-| `src/components/pipeline/OdooChatter.tsx` | Match files to activities by `odoo_message_id`, render inline under parent message |
-
-After deploying, re-running "Sync Odoo" will backfill the linkage for all existing files. Files will then appear exactly where they belong — under their parent message, just like Odoo.
+| DB migration | `ALTER TABLE lead_files ADD COLUMN IF NOT EXISTS odoo_message_id integer` + index |
+| `supabase/functions/odoo-chatter-sync/index.ts` | Update existing activities missing `tracking_changes`, backfill file linkage |
+| `src/components/pipeline/OdooChatter.tsx` | Deduplicate stage changes, fix "Stage Changed" fallback display |
 
