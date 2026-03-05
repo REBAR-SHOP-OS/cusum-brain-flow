@@ -1,45 +1,39 @@
 
 
-# Fix: Inflated `completed_pieces` — Data Correction + Supervisor Reset
+# Fix: Dynamic Max Bars Based on Cut Length
 
 ## Problem
-The code fix we just deployed (removing the duplicate `increment_completed_pieces` call on run completion) prevents **future** double-counting. However, **existing data is already inflated** from previous double-counted runs. For item A2002, the database shows `completed_pieces = 120` (fully capped at `total_pieces`), but the user has only actually completed 39 pieces. This is why the UI showed 54 before the stroke and 75 after — the `completedAtRunStart` snapshot captured an inflated DB value.
+The "Bars to Load" control allows loading up to the static `max_bars` from `machine_capabilities` (e.g., 8 for DTX 400 + 20M), regardless of how long the part is. Physically, longer parts take more space on the machine bed, so fewer bars can be loaded simultaneously. The screenshot shows 6 bars for a 2395mm cut — which may exceed the machine's physical capacity for that part length.
 
 ## Root Cause
-Every past completed run added pieces **twice**: once per-stroke and once on completion. With 3 runs of 18 pieces each:
-- Actual: 3 × 18 = 54 pieces (user says 39, so likely 2 full + 1 partial)
-- Recorded: 3 × 18 (strokes) + 3 × 18 (completion) = 108, capped at 120 by LEAST()
+`maxBars` is set purely from `machine_capabilities.max_bars` (keyed on bar_code), with no reduction based on `cut_length_mm`. The foreman brain's `computeRunPlan` receives this static `maxBars` and caps `barsThisRun` to it.
 
-## Fix (2 parts)
+## Solution
+Add a dynamic max-bars calculation that reduces the allowed bar count for longer parts. The formula uses the stock length and cut length to determine an effective limit:
 
-### Part 1: One-time data correction (Database Migration)
-Reset `completed_pieces` for the affected item(s) to actual values. Since we can't derive the true count from machine_runs (they don't link to specific items), we'll:
-1. Reset A2002 (`608a130b-3b61-4a7a-a66f-33ce213924d2`) to `39` (user-reported actual)
-2. Check other items with inflated counts and reset proportionally (roughly halve any non-zero counts, since each piece was counted ~2x)
+**Rule**: For each bar loaded, the total occupied bed length increases. If `cut_length_mm > stockLength / 2` (i.e., only 1-2 pieces per bar), the bar takes up significant space. We cap bars based on a physical bed-length constant per machine.
 
-SQL migration:
-```sql
--- Fix A2002 specifically (user-confirmed actual = 39)
-UPDATE cut_plan_items SET completed_pieces = 39 WHERE id = '608a130b-3b61-4a7a-a66f-33ce213924d2';
+Since we already have `max_length_mm` on `machine_capabilities` (currently nullable/unused), we can use it as the machine's effective bed capacity in mm. If not set, fall back to the static `max_bars`.
 
--- Fix other inflated items: halve the count (since each was ~2x counted)
-UPDATE cut_plan_items 
-SET completed_pieces = CEIL(completed_pieces::numeric / 2)
-WHERE completed_pieces > 0 
-  AND id != '608a130b-3b61-4a7a-a66f-33ce213924d2';
+### Changes
+
+**1. `src/components/shopfloor/CutterStationView.tsx`** (~line 120)
+Change `maxBars` calculation to factor in cut length:
+```typescript
+const staticMaxBars = currentItem ? (getMaxBars(currentItem.bar_code) || 10) : 10;
+// Dynamic reduction: if cut length is long relative to stock, reduce max bars
+const maxBars = currentItem 
+  ? Math.max(1, Math.min(staticMaxBars, Math.floor(selectedStockLength / currentItem.cut_length_mm)))
+  : staticMaxBars;
 ```
+This uses `floor(stockLength / cutLength)` as an upper physical bound — essentially "how many pieces fit in one stock length" also limits how many bars can be practically managed. For a 2395mm cut on 12M stock: `floor(12000/2395) = 5`, so max bars = min(8, 5) = **5 bars**.
 
-### Part 2: Supervisor "Reset Counter" button
-Add a UI control so supervisors can manually correct `completed_pieces` for any item — preventing the need for future database interventions.
+**2. `src/lib/foremanBrain.ts`** (~line 217)
+The `computeRunPlan` already receives `maxBars` and caps `barsThisRun` to it — no change needed here since the caller will pass the already-reduced value.
 
-**In `CutterStationView.tsx`**:
-- Add a small "Reset" or "Correct Count" button next to the "PIECES DONE" card, visible only when the user has write/supervisor access
-- On click, show a dialog with an input field pre-filled with the current count
-- On confirm, directly update `completed_pieces` on `cut_plan_items` via Supabase
-- Invalidate queries to refresh UI
+**3. `src/components/shopfloor/CutEngine.tsx`**
+The `maxBars` prop is already passed from CutterStationView and controls the up/down buttons — no change needed.
 
-This ensures:
-- Existing inflated data is corrected immediately
-- Future inflation is prevented by the code fix already deployed
-- Supervisors can self-service correct any remaining discrepancies
+## Summary
+Single-line change in `CutterStationView.tsx`: dynamically reduce `maxBars` using `floor(stockLength / cutLength)` so longer parts automatically limit how many bars can be loaded. This is a conservative, physics-based limit that prevents overloading.
 
