@@ -262,6 +262,13 @@ export default function StationView() {
         onToggleSupervisor={() => setIsSupervisor((v) => !v)}
         showBedsSuffix={true}
         workspaceName={selectedProjectId && selectedProjectId !== "__unassigned__" ? projects.find(p => p.id === selectedProjectId)?.name : undefined}
+        projects={projects.length > 1 ? projects : undefined}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={(id) => {
+          setSelectedProjectId(id);
+          setSelectedBarListId(null);
+          setSelectedItemId(null);
+        }}
       />
 
       {/* Back to project picker (only if multiple projects) */}
