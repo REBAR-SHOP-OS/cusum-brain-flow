@@ -1,47 +1,53 @@
 
 
-# Chatter UI Cleanup — Reduce Noise, Fix Dates, Collapse Emails
+# Fix Root Causes: Odoo Timestamps, Contact Linking, and Stage Normalization
 
-## Problem (from screenshots)
-1. **"Odoo Sync" noise entries** — generic entries like "Odoo Sync / Walden Homes" pollute the conversation thread with zero actionable content
-2. **"Stage Changed" without details** — entries show "Stage Changed" but no from→to tracking info (tracking backfill hasn't run yet for all leads)
-3. **Large email blocks** — forwarded emails with signatures and quoted history dominate the thread, burying real conversations
-4. **Mixed timeline** — system audit entries (sync events, stage changes) are interleaved with human messages, reducing signal-to-noise
+## What's wrong
+
+1. **Wrong timestamps**: `leads.created_at` stores the sync date, not the original Odoo date. Chatter/UI sorts by this, causing "February 2026" headers on records from July 2025.
+2. **Null contacts**: The sync creates/links `customer_id` but never populates `contact_id`. The `contacts` table exists with email/phone fields but Odoo sync ignores it entirely.
+3. **No Odoo origin dates stored**: `create_date` and `write_date` from Odoo are fetched (line 13 of edge function) but never written to the leads table.
 
 ## Plan
 
-### 1. Collapse system/audit entries into a compact "audit rail"
-In `OdooChatter.tsx`, change how `stage_change` and `system` type activities render:
-- **With tracking data**: show as compact single-line bullets (already works)
-- **Without tracking data** (generic "Stage Changed", "Odoo Sync"): render as a **collapsed mini-row** — single line, muted text, no avatar, smaller font. Group consecutive system entries under one collapsible block ("3 system updates — expand")
-- This keeps audit trail accessible but stops it from dominating the feed
+### 1. Database migration — add 3 columns to `leads`
 
-### 2. Email body: 3-line preview + "Show full email" expand
-In `ActivityThreadItem`, for `isEmail` activities:
-- Default: show only first ~3 lines (via `line-clamp-3`) of the sanitized HTML
-- Strip common quoted-reply patterns (`-----Original Message-----`, `On ... wrote:`, Gmail quote blocks) into a separate collapsed section
-- Add "Show full email" / "Hide" toggle
-- This is the biggest UX win — emails currently render at full height
+```sql
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS odoo_created_at timestamptz;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS odoo_updated_at timestamptz;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_touched_at timestamptz;
+```
 
-### 3. Suppress empty "Odoo Sync" lead_events entries
-In the `eventActivities` useMemo, filter out `lead_events` where:
-- `event_type` is not a recognized useful type AND
-- description/payload is empty or just a company name
-- This removes the "Odoo Sync / Walden Homes" noise entries that carry no information
+`last_touched_at` = `greatest(odoo_updated_at, updated_at)` — computed during sync and on local updates.
 
-### 4. Thread filter tabs (Conversation vs All vs Audit)
-Add a simple 3-toggle filter above the thread:
-- **All** (default): everything as today
-- **Conversation**: only emails, notes, and communications (hides system/stage_change)
-- **Audit**: only stage_change, system entries
+### 2. Edge function: `odoo-crm-sync/index.ts` — store Odoo dates + link contacts
 
-This directly addresses the audit recommendation to "separate Chatter into Conversation / Activities / Audit Log".
+**Odoo dates** (lines ~246-261, ~327-335, ~372-383):
+- Parse `ol.create_date` and `ol.write_date` from Odoo response
+- Write `odoo_created_at`, `odoo_updated_at`, and `last_touched_at` on both insert and update
 
-## Files to modify
+**Contact linking** (new logic after customer resolution ~272-300):
+- If `ol.email_from` or `ol.phone` exists, search `contacts` by email first, then phone, scoped to `customer_id`
+- If no match found, create a new contact using `ol.contact_name` (split into first/last), `ol.email_from`, `ol.phone`, linked to the resolved `customer_id`
+- Write `contact_id` on the lead insert/update payload
+
+### 3. UI: `OdooChatter.tsx` — use Odoo dates for timeline ordering
+
+Currently the chatter timeline uses `created_at` for date grouping. Change to prefer `lead.metadata.odoo_created_at` or `lead.odoo_created_at` where available, so date headers reflect real Odoo dates instead of sync dates.
+
+### 4. Backfill existing leads
+
+After migration + edge function deploy, a single "Sync Odoo" (full mode) click will:
+- Backfill `odoo_created_at` / `odoo_updated_at` / `last_touched_at` for all synced leads
+- Create missing contacts and populate `contact_id`
+
+No manual backfill script needed.
+
+## Files to change
 
 | File | Change |
 |------|--------|
-| `src/components/pipeline/OdooChatter.tsx` | Add thread filter, collapse system entries, email preview with expand, strip quoted replies |
-
-No database or edge function changes needed — this is purely UI.
+| DB migration | Add `odoo_created_at`, `odoo_updated_at`, `last_touched_at` to `leads` |
+| `supabase/functions/odoo-crm-sync/index.ts` | Store Odoo dates, add contact resolution logic, write `contact_id` |
+| `src/components/pipeline/OdooChatter.tsx` | Use `odoo_created_at` for date headers when available |
 
