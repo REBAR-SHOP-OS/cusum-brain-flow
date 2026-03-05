@@ -61,7 +61,9 @@ Language: English only. The caption MUST be purely promotional — NO guarantee 
 
 ### MANDATORY OUTPUT FORMAT (in this exact order):
 
-1. **Image** — markdown image tag
+1. **Image** — You MUST embed the image using markdown image syntax: \`![Product Name](IMAGE_URL)\`
+   Example: \`![Rebar Stirrups](https://rzqonxnowjrtbueauziu.supabase.co/storage/v1/object/public/social-images/abc.png)\`
+   ⚠️ NEVER paste a raw URL as plain text or a clickable link. ALWAYS use \`![...](url)\` syntax.
 2. **Promotional caption** — a compelling hook (question, stat, or bold statement) followed by product-focused promotional text. NO guarantees.
 3. **Contact info** — company address, phone, website (exactly as above)
 4. **Hashtags** — relevant hashtags on a separate line
