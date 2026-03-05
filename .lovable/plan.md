@@ -1,39 +1,42 @@
 
 
-# Fix: Missing Leads — Odoo Sync Data Gap
+# Fix Messy Chatter Feed — Clean Layout Matching Odoo
 
-## Problem
+## Problems Identified
 
-The database has **1 lead** in `qc_ben` stage but Odoo shows **2**. The missing lead is "FW: 3 Kingsbury Crescent" by Walden Homes. This is not a UI bug — the data was never synced or was lost during dedup.
+Looking at the Odoo screenshot vs our current implementation:
 
-This likely affects **all columns**, not just QC-Ben. The sync may have missed leads due to:
-1. **Incremental mode** — the default sync only fetches leads modified in the last 5 days. If a lead hasn't been touched recently, it won't sync.
-2. **Dedup logic** — the dedup process may have incorrectly deleted leads during `odoo_id` map building.
-3. **Customer resolution failure** — if customer name matching fails (line 298: `errors++; continue;`), the lead is silently skipped.
+1. **Duplicate items**: Files from `lead_files` appear as separate thread items AND may also be referenced in `lead_activities` — doubling up entries
+2. **No spacing between items**: `space-y-0` on the thread container — items bleed into each other
+3. **HTML body truncated at 120px** — emails get cut off awkwardly instead of showing full content like Odoo
+4. **File attachments not grouped** — each file is a separate thread entry instead of being grouped under the activity/message that attached them
+5. **Missing visual structure** — Odoo shows clear card-like separation per message with borders, our feed is flat
 
-## Solution
+## Changes
 
-### Step 1: Run a Full Sync
+### `src/components/pipeline/OdooChatter.tsx`
 
-The existing `odoo-crm-sync` function already supports `{ "mode": "full" }` which fetches ALL opportunities from Odoo without the 5-day `write_date` filter. This should recover any missing leads.
+**1. Deduplicate files from thread**
+- Files that have a matching `odoo_id` in an activity's context should not appear as separate `FileThreadItem` entries
+- Filter out `lead_files` whose `created_at` is within 2 seconds of an activity's `created_at` for the same lead (they're the same Odoo message)
+- OR simpler: remove `files` from the unified thread entirely — show files ONLY as inline attachments within their parent activity. Query `lead_files` per activity based on timestamp proximity or `odoo_message_id`.
 
-I will trigger the full sync via the edge function.
+**2. Fix spacing** 
+- Change thread container from `space-y-0` to `space-y-1` and add subtle dividers between items (matching Odoo's card separation)
 
-### Step 2: Verify Counts Match
+**3. Improve HTML rendering**
+- Remove `max-h-[120px]` default — show full email body by default (Odoo does this)
+- Keep "Show less" toggle for very long emails (>500px rendered) but expand by default
+- Add a subtle border/card wrapper around email bodies like Odoo
 
-After the full sync, I'll query the database and compare lead counts per stage against what Odoo reports.
+**4. Group file attachments under their parent message**
+- For `FileThreadItem`, group consecutive files uploaded at similar times into a single entry with multiple file chips (matching Odoo's "File attached" with multiple images shown together)
 
-### Step 3: Fix Silent Failures (Code Change)
-
-The sync function has a critical bug on **line 298-300**: when customer resolution fails for active-stage leads, it silently increments `errors++` and `continue`s — **skipping the entire lead**. This means leads with unresolvable customer names are permanently lost from sync.
-
-**Fix**: Instead of skipping, insert the lead with `customer_id = null` and log a warning. The lead data is more important than the customer linkage.
+**5. Better visual separation**
+- Add `border-b border-border` between thread items instead of relying on spacing alone
+- Give each thread item slightly more padding
 
 | File | Change |
 |------|--------|
-| `supabase/functions/odoo-crm-sync/index.ts` | Remove `continue` on customer resolution failure — insert lead with null customer_id instead of skipping |
-
-### No UI Changes Needed
-
-The pipeline board correctly displays whatever is in the database. The gap is purely in the sync layer.
+| `src/components/pipeline/OdooChatter.tsx` | Deduplicate files, fix spacing, expand HTML by default, group file attachments, add visual dividers |
 
