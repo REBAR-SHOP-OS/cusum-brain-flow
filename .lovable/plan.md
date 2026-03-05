@@ -1,34 +1,61 @@
 
 
-## Diagnosis
+# Quick Wins Implementation Plan
 
-I confirmed the core issues from production data:
+## What already exists
+- **Stale lead detection**: `PipelineAlerts.tsx` already flags leads with no update in 14+ days, and `PipelineReporting.tsx` exports stale leads. However, there is no **dedicated stale dashboard** with 7/14/30-day breakdowns, owner grouping, and actionable buttons.
+- **Activity system**: `ScheduledActivities.tsx` allows scheduling activities per lead. No enforcement that a next activity must exist.
+- **Stage gates**: `pipelineTransitionGates.ts` + `handleStageChange` in Pipeline.tsx already supports blocking transitions with modal gates.
+- **Intelligence hub**: 13 tabs at `/pipeline/intelligence` -- alerts, analytics, SLA, etc.
 
-1. **`odoo_message_id` column STILL missing in production** -- the query `select odoo_message_id from lead_files` fails with `column "odoo_message_id" does not exist`. Two migration files were committed but never executed. This blocks ALL file linkage and the edge function's preflight check.
+## 4 Quick Wins to Implement
 
-2. **File dates are wrong** -- All 7 files for this lead have `created_at = 2026-02-10` (the Odoo dump import date), NOT July 28, 2025 (the actual Odoo message date). This is why files appear under "February 9, 2026" instead of near the July 28 email. Even after linkage, the standalone file group uses `file.created_at` for its date.
+### 1. Stale Pipeline Dashboard (new component + new Intelligence tab)
+Create `src/components/pipeline/intelligence/StalePipelineDashboard.tsx`:
+- Three-tier view: 7-day, 14-day, 30-day staleness buckets
+- Group by stage and by owner (salesperson)
+- Show lead title, stage, value, days since last update, last activity date
+- "Open Lead" action button per row
+- Total value at risk per bucket
+- Add as a new "Stale" tab in `PipelineIntelligence.tsx`
 
-3. **No tracking data** -- The 3 stage_change entries on July 28 all have `tracking_changes: null` and description "Stage Changed". The full sync (which fetches `mail.tracking.value` from Odoo) has never run because the preflight check fails (missing column).
+### 2. Unattended Leads List (new component + new Intelligence tab)  
+Create `src/components/pipeline/intelligence/UnattendedLeadsDashboard.tsx`:
+- Query `scheduled_activities` to find open leads with **zero future-dated activities**
+- Show lead title, stage, value, owner, days since creation
+- Sorted by value descending (highest-value unattended leads first)
+- "Schedule Activity" quick action that opens the lead detail
+- Summary banner: "X leads ($Y value) have no next step scheduled"
+- Add as a new "Unattended" tab in `PipelineIntelligence.tsx`
 
-4. **Cascade**: Because the column is missing → edge function returns 500 → full sync never completes → no file linkage → no tracking backfill → UI shows generic "Stage Changed" and files under wrong date.
+### 3. Mandatory Next Activity for "New" and "Telephonic Enquiries" stages
+In `src/lib/pipelineTransitionGates.ts`:
+- Add a new gate type `"next_activity"` that fires when moving **out of** `new` or `telephonic_enquiries` to any forward stage
+- The gate checks whether the lead has at least one future-dated scheduled activity
+- If not, show a modal requiring the user to schedule one before proceeding
 
-## Plan
+In `src/pages/Pipeline.tsx`:
+- Wire the new gate into `handleStageChange` alongside existing qualification/pricing/loss gates
+- Add a simple `NextActivityGateModal` component that embeds the existing `ScheduledActivities` form and only allows proceeding once an activity exists
 
-### 1. Execute the migration (for real this time)
-Use the migration tool to add `odoo_message_id` to `lead_files`. This is the single blocker for everything else.
+### 4. Handoff Template for QC/Estimation Requests
+Create `src/components/pipeline/HandoffTemplateDialog.tsx`:
+- Pre-structured note template with fields: Scope Summary, Due Date, Files Needed, Blockers
+- Triggers automatically when moving a lead into any `qc_*` or `estimation_*` stage (via transition gates)
+- On submit, creates a `lead_activities` entry with type `internal_note` and the structured content
+- Uses the existing gate infrastructure (new gate type `"handoff"`)
 
-### 2. Fix file group dating in OdooChatter.tsx
-When building the `file_group` thread items, if the file is Odoo-origin and unlinked, try to find a matching parent activity by `odoo_message_id` or by proximity. But more practically: for unlinked Odoo files, DON'T show them as standalone file groups at all -- they'll appear inline once the full sync links them. This prevents the wrong-date "7 files attached" block.
+## Files to create/modify
 
-### 3. Edge function: backfill file dates during linkage
-In `odoo-chatter-sync`, when linking `lead_files.odoo_message_id = msg.id`, also update the file's `created_at` to match the message's `date` field from Odoo. This fixes the date permanently so even standalone display uses the correct date.
-
-### Files to change
-| File | Change |
+| File | Action |
 |------|--------|
-| DB migration | `ALTER TABLE lead_files ADD COLUMN IF NOT EXISTS odoo_message_id integer` + index |
-| `supabase/functions/odoo-chatter-sync/index.ts` | During file linkage backfill, also set `created_at` to the parent message's date |
-| `src/components/pipeline/OdooChatter.tsx` | Stop pushing `unlinkedOdooFiles` into thread (they show wrong dates); they'll appear inline after sync |
+| `src/components/pipeline/intelligence/StalePipelineDashboard.tsx` | **Create** -- 7/14/30-day stale dashboard |
+| `src/components/pipeline/intelligence/UnattendedLeadsDashboard.tsx` | **Create** -- leads with no next activity |
+| `src/components/pipeline/HandoffTemplateDialog.tsx` | **Create** -- structured handoff note modal |
+| `src/components/pipeline/NextActivityGateModal.tsx` | **Create** -- gate modal requiring next activity |
+| `src/lib/pipelineTransitionGates.ts` | **Edit** -- add `next_activity` and `handoff` gate types |
+| `src/pages/PipelineIntelligence.tsx` | **Edit** -- add Stale and Unattended tabs |
+| `src/pages/Pipeline.tsx` | **Edit** -- wire new gate modals into `handleStageChange` flow |
 
-After deploy: one "Sync Odoo" click will add the column, link files with correct dates, and backfill tracking data.
+No database changes required. All features use existing tables (`leads`, `scheduled_activities`, `lead_activities`).
 
