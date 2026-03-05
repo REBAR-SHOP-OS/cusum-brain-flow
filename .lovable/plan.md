@@ -1,16 +1,40 @@
 
+هدف: مشکل به‌صورت ریشه‌ای حل شود تا Cutter-02 هیچ‌وقت 10M/15M نبیند و فقط 20M به بالا نمایش دهد.
 
-# Fix Cutter-01 and Cutter-02 Machine Capabilities
+1) علت ریشه‌ای که پیدا شد
+- الان در دیتابیس، جدول `machine_capabilities` برای هر دو دستگاه Cutter-01 و Cutter-02 هنوز همه سایزها (10M تا 35M) را دارد.
+- فیلتر UI درست کار می‌کند، اما چون داده‌ی قابلیت‌ها اشتباه است، Cutter-02 همچنان 10M/15M می‌گیرد.
+- ضمن اینکه در کد فعلی اگر قابلیت دستگاه خالی باشد، حالت fail-open دارد (یعنی همه آیتم‌ها را نشان می‌دهد) که ریسک تکرار مشکل را بالا می‌برد.
 
-## Problem
-Both cutters have identical capabilities (10M–35M) in the `machine_capabilities` table. The code filter we just added works correctly, but the DB data doesn't match the routing rules:
-- **Cutter-01** should only handle **10M, 15M** (below 20M)
-- **Cutter-02** should only handle **20M, 25M, 30M, 35M**
+2) اصلاح دیتابیس (اصلی‌ترین بخش)
+- یک migration قطعی اجرا می‌شود که:
+  - ابتدا قابلیت‌های process=`cut` برای دو cutter مشخص را کامل پاک می‌کند.
+  - سپس دقیقاً قابلیت‌های صحیح را دوباره insert می‌کند:
+    - Cutter-01 (`e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3`): فقط `10M`, `15M`
+    - Cutter-02 (`b0000000-0000-0000-0000-000000000002`): فقط `20M`, `25M`, `30M`, `35M`
 
-## Fix
-Run a database migration to remove incorrect capabilities:
-1. Remove 20M, 25M, 30M, 35M from Cutter-01 (`e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3`)
-2. Remove 10M, 15M from Cutter-02 (`b0000000-0000-0000-0000-000000000002`)
+3) جلوگیری از برگشت مشکل (ریشه‌ای)
+- در همان migration یک trigger/function اعتبارسنجی روی `machine_capabilities` اضافه می‌شود که:
+  - برای Cutter-01 اجازه سایزهای بالاتر از 15M ندهد.
+  - برای Cutter-02 اجازه سایزهای پایین‌تر از 20M ندهد.
+- نتیجه: حتی اگر بعداً کسی اشتباهاً capability اشتباه وارد کند، دیتابیس آن را reject می‌کند.
 
-No code changes needed — the filter from the previous edit will handle the rest.
+4) سخت‌گیری امن در UI (Fail-Closed)
+- در `useStationData`:
+  - query قابلیت‌ها با `process = 'cut'` محدود می‌شود.
+  - اگر دستگاه cutter بود و capability معتبر نداشت، خروجی خالی برگردد (نه همه آیتم‌ها).
+- این کار باعث می‌شود تنظیمات ناقص/خراب دیگر باعث نمایش اشتباه نشود.
 
+5) اعتبارسنجی نهایی
+- با SQL تایید می‌شود Cutter-02 فقط `20M+` دارد و Cutter-01 فقط زیر `20M`.
+- در صفحه `/shopfloor/station/b0000000-0000-0000-0000-000000000002` بررسی می‌شود که 10M/15M دیگر دیده نشوند.
+- روی Cutter-01 هم بررسی می‌شود 20M+ نمایش داده نشود.
+
+بخش فنی (خلاصه تغییرات)
+- DB:
+  - reset deterministic capabilities برای 2 machine_id
+  - trigger-based enforcement برای جلوگیری از drift
+- Frontend:
+  - `src/hooks/useStationData.ts`
+    - `machine_capabilities` query با `eq("process","cut")`
+    - fail-closed وقتی cutter capability ندارد
