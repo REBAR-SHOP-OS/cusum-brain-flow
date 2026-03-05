@@ -1,30 +1,26 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
 interface ShapeSchematic {
   shape_code: string;
   image_url: string;
 }
 
 /**
- * Extract storage path from a full public/signed URL or return as-is if already a path.
+ * Build a public URL for a storage path in the shape-schematics bucket.
  */
-function extractStoragePath(url: string): string | null {
-  const marker = "/object/public/shape-schematics/";
-  const idx = url.indexOf(marker);
-  if (idx >= 0) return decodeURIComponent(url.slice(idx + marker.length));
-  // Already a relative path
-  if (!url.startsWith("http")) return url;
-  return null;
+function toPublicUrl(imageUrl: string): string {
+  // Already a full URL — use as-is
+  if (imageUrl.startsWith("http")) return imageUrl;
+  // Relative path — construct public URL
+  return `${SUPABASE_URL}/storage/v1/object/public/shape-schematics/${encodeURIComponent(imageUrl)}`;
 }
-
-const SIGNED_URL_EXPIRY = 3600; // 1 hour
-const CURRENT_HOST = new URL(import.meta.env.VITE_SUPABASE_URL).host;
 
 /**
  * Fetches all custom shape schematics and provides a lookup by shape code.
- * Uses signed URLs only for files in the current project's private bucket.
- * External/public URLs are used as-is.
+ * Uses public URLs for the shape-schematics bucket.
  */
 export function useShapeSchematics() {
   const [schematics, setSchematics] = useState<ShapeSchematic[]>([]);
@@ -38,22 +34,9 @@ export function useShapeSchematics() {
         .order("shape_code");
 
       if (!error && data) {
-        const withSignedUrls = await Promise.all(
-          data.map(async (s) => {
-            const path = extractStoragePath(s.image_url);
-
-            if (path) {
-              // Storage path (relative or extracted from bucket URL) — always sign
-              const { data: signedData } = await supabase.storage
-                .from("shape-schematics")
-                .createSignedUrl(path, SIGNED_URL_EXPIRY);
-              return { ...s, image_url: signedData?.signedUrl || s.image_url };
-            }
-            // Full external URL with no extractable path — use as-is
-            return s;
-          })
+        setSchematics(
+          data.map((s) => ({ ...s, image_url: toPublicUrl(s.image_url) }))
         );
-        setSchematics(withSignedUrls);
       }
       setLoading(false);
     }
