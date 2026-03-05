@@ -1,36 +1,34 @@
 
 
-## Root Cause Analysis (confirmed from production data)
+## Diagnosis
 
-**Problem 1 — No email bodies/signatures/images**: The `body_html` column on `lead_activities` is NULL for all 39,603 rows. However, the HTML IS stored inside `metadata.body_html` (as a JSON field from the original sync). The UI reads `(activity as any).body_html` (the column), which is always null. It never falls back to `metadata.body_html`.
+I confirmed the core issues from production data:
 
-**Problem 2 — No tracking details (New → Estimation-Ben)**: The metadata has `"has_tracking": true` but no `tracking_changes` array. The original sync set the flag but never fetched `mail.tracking.value` data from Odoo. The full sync backfill would fix this, but it hasn't been run yet.
+1. **`odoo_message_id` column STILL missing in production** -- the query `select odoo_message_id from lead_files` fails with `column "odoo_message_id" does not exist`. Two migration files were committed but never executed. This blocks ALL file linkage and the edge function's preflight check.
 
-**Problem 3 — No files/attachments visible**: All 15,745 `lead_files` have `odoo_message_id = NULL`. We hid unlinked Odoo files in the last edit, so now nothing shows. The backfill hasn't run because the user hasn't clicked "Sync Odoo" with the new full-mode code yet.
+2. **File dates are wrong** -- All 7 files for this lead have `created_at = 2026-02-10` (the Odoo dump import date), NOT July 28, 2025 (the actual Odoo message date). This is why files appear under "February 9, 2026" instead of near the July 28 email. Even after linkage, the standalone file group uses `file.created_at` for its date.
 
-**Problem 4 — Duplicate "Stage Changed"**: The collapse logic IS working (3 entries → 1 shown). The user's screenshot confirms only 1 "Stage Changed" card. The remaining issue is it says "Stage Changed" without showing "New → Estimation-Ben" because tracking data is missing.
+3. **No tracking data** -- The 3 stage_change entries on July 28 all have `tracking_changes: null` and description "Stage Changed". The full sync (which fetches `mail.tracking.value` from Odoo) has never run because the preflight check fails (missing column).
 
-## Fix Plan (immediate, no sync required)
+4. **Cascade**: Because the column is missing → edge function returns 500 → full sync never completes → no file linkage → no tracking backfill → UI shows generic "Stage Changed" and files under wrong date.
 
-### 1. Read `body_html` from metadata fallback (`OdooChatter.tsx`)
-In `ActivityThreadItem`, change:
-```typescript
-const bodyHtml = (activity as any).body_html as string | null;
-```
-to:
-```typescript
-const bodyHtml = (activity as any).body_html || metadata.body_html || null;
-```
-This immediately surfaces all email bodies, signatures, and inline images for the 39,603 existing rows.
+## Plan
 
-### 2. Show unlinked Odoo files again (`OdooChatter.tsx`)
-Revert the "hide unlinked Odoo files" change. Push `unlinkedOdooFiles` back into the thread as `file_group` items. Since the full sync hasn't run yet, hiding them means hiding ALL Odoo files. Show them until linkage works.
+### 1. Execute the migration (for real this time)
+Use the migration tool to add `odoo_message_id` to `lead_files`. This is the single blocker for everything else.
 
-### 3. Stage change description fallback
-For stage_change activities where `metadata.has_tracking === true` but no `tracking_changes` array, parse the `description` field if it contains arrow notation (e.g., "New → Estimation-Ben") and display it. Otherwise show the generic "Stage Changed" (which is already happening).
+### 2. Fix file group dating in OdooChatter.tsx
+When building the `file_group` thread items, if the file is Odoo-origin and unlinked, try to find a matching parent activity by `odoo_message_id` or by proximity. But more practically: for unlinked Odoo files, DON'T show them as standalone file groups at all -- they'll appear inline once the full sync links them. This prevents the wrong-date "7 files attached" block.
 
-## Files to change
-- `src/components/pipeline/OdooChatter.tsx` (3 targeted edits)
+### 3. Edge function: backfill file dates during linkage
+In `odoo-chatter-sync`, when linking `lead_files.odoo_message_id = msg.id`, also update the file's `created_at` to match the message's `date` field from Odoo. This fixes the date permanently so even standalone display uses the correct date.
 
-No database changes needed. No edge function changes. These fixes work with existing data immediately.
+### Files to change
+| File | Change |
+|------|--------|
+| DB migration | `ALTER TABLE lead_files ADD COLUMN IF NOT EXISTS odoo_message_id integer` + index |
+| `supabase/functions/odoo-chatter-sync/index.ts` | During file linkage backfill, also set `created_at` to the parent message's date |
+| `src/components/pipeline/OdooChatter.tsx` | Stop pushing `unlinkedOdooFiles` into thread (they show wrong dates); they'll appear inline after sync |
+
+After deploy: one "Sync Odoo" click will add the column, link files with correct dates, and backfill tracking data.
 
