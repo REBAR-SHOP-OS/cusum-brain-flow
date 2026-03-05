@@ -69,6 +69,19 @@ Deno.serve(async (req) => {
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
 
+    // ── Schema preflight: ensure odoo_message_id column exists ──
+    const { error: schemaErr } = await serviceClient
+      .from("lead_files")
+      .select("odoo_message_id")
+      .limit(0);
+    if (schemaErr && schemaErr.message?.includes("odoo_message_id")) {
+      console.error("PREFLIGHT FAIL: lead_files.odoo_message_id column does not exist!");
+      return json({
+        error: "Schema broken: lead_files.odoo_message_id column missing. Run the migration first.",
+        preflight_failed: true,
+      }, 500);
+    }
+
     if (token !== serviceRoleKey) {
       const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
         global: { headers: { Authorization: `Bearer ${token}` } },
