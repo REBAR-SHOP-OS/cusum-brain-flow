@@ -72,21 +72,67 @@ export default function DeliveryTerminal() {
       setCustomerName(slip?.customer_name || "Customer");
       setSiteAddress(slip?.site_address || stop.address || "");
 
-      // Fallback: if invoice_number or invoice_date missing, resolve from orders
+      // Deterministic 3-step invoice resolution
       let invoiceNumber = slip?.invoice_number || undefined;
       let invoiceDate = slip?.invoice_date || undefined;
+
       if (slip && (!invoiceNumber || !invoiceDate) && slip.cut_plan_id) {
-        const { data: orderData } = await supabase
-          .from("cut_plan_items")
-          .select("work_orders(orders(order_number, order_date))")
-          .eq("cut_plan_id", slip.cut_plan_id)
-          .not("work_order_id", "is", null)
-          .limit(1)
-          .maybeSingle();
-        const order = (orderData as any)?.work_orders?.orders;
-        if (!invoiceNumber && order?.order_number) invoiceNumber = order.order_number;
-        if (!invoiceDate && order?.order_date) {
-          invoiceDate = new Date(order.order_date).toISOString().slice(0, 10);
+        try {
+          // Step 1: Get a work_order_id from cut_plan_items
+          const { data: cpiRow, error: cpiErr } = await supabase
+            .from("cut_plan_items")
+            .select("work_order_id")
+            .eq("cut_plan_id", slip.cut_plan_id)
+            .not("work_order_id", "is", null)
+            .limit(1)
+            .maybeSingle();
+          if (cpiErr) console.error("Invoice resolve step 1 failed:", cpiErr.message);
+
+          if (cpiRow?.work_order_id) {
+            // Step 2: Get order_id from work_orders
+            const { data: woRow, error: woErr } = await supabase
+              .from("work_orders")
+              .select("order_id")
+              .eq("id", cpiRow.work_order_id)
+              .single();
+            if (woErr) console.error("Invoice resolve step 2 failed:", woErr.message);
+
+            if (woRow?.order_id) {
+              // Step 3: Get order_number and order_date from orders
+              const { data: orderRow, error: ordErr } = await supabase
+                .from("orders")
+                .select("order_number, order_date")
+                .eq("id", woRow.order_id)
+                .single();
+              if (ordErr) console.error("Invoice resolve step 3 failed:", ordErr.message);
+
+              if (orderRow) {
+                if (!invoiceNumber && orderRow.order_number) invoiceNumber = orderRow.order_number;
+                if (!invoiceDate && orderRow.order_date) {
+                  invoiceDate = new Date(orderRow.order_date).toISOString().slice(0, 10);
+                }
+              }
+            }
+          }
+
+          // Backfill: persist resolved values so they stick for future previews
+          if (invoiceNumber || invoiceDate) {
+            const updates: Record<string, string> = {};
+            if (invoiceNumber && !slip.invoice_number) updates.invoice_number = invoiceNumber;
+            if (invoiceDate && !slip.invoice_date) updates.invoice_date = invoiceDate;
+            if (Object.keys(updates).length > 0) {
+              supabase
+                .from("packing_slips")
+                .update(updates)
+                .eq("delivery_id", stop.delivery_id)
+                .eq("company_id", companyId)
+                .then(({ error: upErr }) => {
+                  if (upErr) console.error("Backfill packing_slips failed:", upErr.message);
+                });
+            }
+          }
+        } catch (err) {
+          console.error("Invoice resolution failed:", err);
         }
       }
 
