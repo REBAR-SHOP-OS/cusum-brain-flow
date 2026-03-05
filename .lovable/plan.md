@@ -1,50 +1,43 @@
 
 
-# Fix: Schedule Button with Calendar + Platform Selection
+# Fix: Show 20M+ Items on CUTTER-02 Station
 
-## Problem (2 issues)
-1. The "Schedule" button directly sets `status: "scheduled"` without first setting `qa_status: "approved"`, causing the DB trigger `block_social_publish_without_qa` to reject the update with "Cannot schedule/publish: QA status must be approved first".
-2. The Schedule button should open a full scheduling flow: calendar/datetime picker + platform selection, then confirm.
+## Problem
+The station view for cutters only shows items from cut plans **assigned** to that specific machine (`cut_plans.machine_id = machineId`). When a plan contains mixed bar codes (e.g., 10M + 20M), the auto-assign logic sends the entire plan to one machine. Items outside that machine's capabilities are then invisible on both stations:
+- CUTTER-01 won't show 20M items (filtered out by capabilities)
+- CUTTER-02 won't show them either (plan isn't assigned to CUTTER-02)
 
-## Solution
+The auto-assign logic at line 317-318 in `ShopFloorProductionQueue.tsx` routes the whole plan to CUTTER-02 if ANY item is >= 20M, but CUTTER-02's capabilities filter then removes the 10M/15M items. Those items vanish from both stations.
 
-### 1. Replace the Schedule button with a Popover-based scheduling flow
+## Solution: Capability-based station routing (not plan-based)
 
-In `PostReviewPanel.tsx`, replace the simple `onSchedule` button (line 469) with a new `SchedulePopover` component that shows:
+Modify `useStationData.ts` cutter query to fetch items from ALL active cut plans in the company, then filter by this machine's capabilities. This replaces the current `machine_id = machineId` filter on `cut_plans`.
 
-**Step 1 — Date & Time picker:**
-- Calendar component for date selection
-- Hour/minute dropdowns for time
-- "Next" button to proceed
+### Change in `src/hooks/useStationData.ts`
 
-**Step 2 — Platform selection:**
-- Checkbox list of platforms (Instagram, Facebook, LinkedIn, YouTube, TikTok)
-- Pre-select the current post's platform
-- User can select multiple platforms
-
-**Step 3 — Confirm button:**
-- Shows selected date/time and platforms summary
-- On confirm: updates the post with `qa_status: "approved"`, `status: "scheduled"`, `scheduled_date`, and `platform`
-
-### 2. Fix the `handleSchedule` in `SocialMediaManager.tsx`
-
-Update `handleSchedule` (line 110-113) to also set `qa_status: "approved"` alongside `status: "scheduled"`. But this function will now receive date and platform from the popover, so the signature changes.
-
-### 3. Remove the `onSchedule` prop dependency
-
-Since the scheduling logic will now live entirely in `PostReviewPanel.tsx` (using `updatePost.mutate` directly with all needed fields), we no longer need the `onSchedule` callback from the parent. The confirm action in the popover will:
-
+**Before** (lines 95-107):
 ```typescript
-updatePost.mutate({
-  id: post.id,
-  qa_status: "approved",
-  status: "scheduled",
-  scheduled_date: selectedDateTime.toISOString(),
-  platform: selectedPlatform,
-});
+let cutterQuery = supabase
+  .from("cut_plans")
+  .select("...")
+  .eq("company_id", companyId!)
+  .eq("machine_id", machineId)  // ← Only plans assigned to this machine
+  .in("status", ["draft", "queued", "running"]);
 ```
 
+**After**:
+```typescript
+let cutterQuery = supabase
+  .from("cut_plans")
+  .select("...")
+  .eq("company_id", companyId!)
+  .in("status", ["draft", "queued", "running"])
+  // Remove machine_id filter — capabilities determine routing
+  .not("machine_id", "is", null);
+```
+
+The existing capability filter (lines 109-120) already removes items whose bar_code doesn't match this machine. So CUTTER-01 will only see 10M/15M items and CUTTER-02 will only see 20M-35M items, regardless of which machine the plan is assigned to.
+
 ### Files to edit
-1. **`src/components/social/PostReviewPanel.tsx`** — Replace the Schedule button with a `SchedulePopover` containing calendar + time + platform checkboxes + confirm
-2. **`src/pages/SocialMediaManager.tsx`** — Update `handleSchedule` to include `qa_status: "approved"` (as fallback)
+1. `src/hooks/useStationData.ts` — Remove `.eq("machine_id", machineId)` from the cutter query path
 
