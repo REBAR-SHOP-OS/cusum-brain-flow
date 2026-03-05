@@ -1,0 +1,1 @@
+CREATE POLICY "Anon can read lead files" ON public.lead_files FOR SELECT TO anon USING (true);
