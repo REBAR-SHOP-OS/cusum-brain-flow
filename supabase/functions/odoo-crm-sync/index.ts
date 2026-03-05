@@ -295,9 +295,7 @@ Deno.serve(async (req) => {
           }
 
           if (!customerId) {
-            console.error(`Contact linkage failed for odoo_id ${odooId}: could not resolve customer "${customerName}"`);
-            errors++;
-            continue;
+            console.warn(`⚠️ Customer resolution failed for odoo_id ${odooId}: "${customerName}" — inserting lead with null customer_id`);
           }
         }
 
