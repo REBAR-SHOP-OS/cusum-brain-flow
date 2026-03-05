@@ -123,7 +123,7 @@ export default function LoadingStation() {
         // 3. Query project + customer data for packing slip header
         const { data: planData } = await supabase
           .from("cut_plans")
-          .select("project_name, projects(name, site_address, customers(shipping_street1, shipping_city, shipping_province, shipping_postal_code))")
+          .select("project_name, project_id, projects(name, site_address, customers(shipping_street1, shipping_city, shipping_province, shipping_postal_code))")
           .eq("id", selectedBundle.cutPlanId)
           .single();
 
@@ -212,6 +212,23 @@ export default function LoadingStation() {
                   ? new Date(orderRow.order_date).toISOString().slice(0, 10)
                   : null;
               }
+            }
+          }
+
+          // Final fallback: orders via cut_plan → project
+          if ((!invoiceNumber || !invoiceDate) && (planData as any)?.project_id) {
+            const { data: orderRow } = await supabase
+              .from("orders")
+              .select("order_number, order_date")
+              .eq("project_id", (planData as any).project_id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (orderRow) {
+              if (!invoiceNumber) invoiceNumber = orderRow.order_number || null;
+              if (!invoiceDate) invoiceDate = orderRow.order_date
+                ? new Date(orderRow.order_date).toISOString().slice(0, 10)
+                : null;
             }
           }
         }
