@@ -1,28 +1,28 @@
 
 
-# Multi-Select Pages for Publishing to Multiple Accounts
+# Auto-Publish Scheduled Posts via Cron Job
 
 ## Problem
-The Pages selector currently only allows selecting one page at a time (radio button style). The user wants to select multiple pages simultaneously so posts can be published to multiple Instagram/Facebook/LinkedIn accounts at once.
+The `social-cron-publish` edge function already exists and correctly finds posts where `status = 'scheduled'` and `scheduled_date <= now()`, then publishes them. However, **no cron job is configured to invoke it**, so scheduled posts just sit there and never get published.
 
 ## Solution
+Create a database migration that registers a `pg_cron` job to call the `social-cron-publish` edge function every 2 minutes using `pg_net`. This ensures any post whose scheduled time has passed gets automatically published.
 
-### 1. Add multi-select mode to `SelectionSubPanel`
-- Add optional `multiSelect` prop and `onSaveMulti` callback
-- When `multiSelect` is true, use checkboxes (square) instead of radio buttons (circle)
-- Track an array of selected values instead of a single string
-- Save button returns `string[]`
+### Database Migration (1 file)
+Add a `cron.schedule` entry that fires every 2 minutes, calling:
+```
+POST {SUPABASE_URL}/functions/v1/social-cron-publish
+Authorization: Bearer {SERVICE_ROLE_KEY}
+```
 
-### 2. Update `PostReviewPanel` for multi-page selection
-- Change `localPage` from `string` to `string[]` (default: `["Ontario Steel Detailing"]`)
-- Update the Pages display to show count or comma-separated names
-- Update `handlePageSave` to accept `string[]`
+Using `pg_net.http_post` (already enabled via the `pg_net` extension).
 
-### 3. Update publish logic to publish to all selected pages
-- Loop through `selectedPages` and call `publishPost` for each page
-- Show combined success/failure feedback
+### Edge Function Config
+Add `social-cron-publish` to `supabase/config.toml` with `verify_jwt = false` so the cron call (using service role key) isn't rejected.
 
-### Files to edit
-1. `src/components/social/SelectionSubPanel.tsx` — Add `multiSelect` mode with checkboxes
-2. `src/components/social/PostReviewPanel.tsx` — Use multi-select for pages, update publish to loop through selected pages
+### Files to change
+1. **New migration SQL** — `cron.schedule` every 2 minutes calling the edge function
+2. **`supabase/config.toml`** — Add `[functions.social-cron-publish]` with `verify_jwt = false`
+
+No frontend changes needed — the scheduling UI already sets `status: "scheduled"` and `scheduled_date` correctly.
 
