@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RotateCcw, ArrowRight, Loader2 } from "lucide-react";
-import { useShapeSchematics } from "@/hooks/useShapeSchematics";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
 import { TransferMachineDialog } from "./TransferMachineDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,8 +33,6 @@ export function ProductionCard({
     ? Math.round((item.completed_pieces / item.total_pieces) * 100)
     : 0;
 
-  const { getShapeImageUrl } = useShapeSchematics();
-  const shapeImageUrl = item.asa_shape_code ? getShapeImageUrl(item.asa_shape_code) : null;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -161,20 +158,11 @@ export function ProductionCard({
           {/* Center: shape image or length display */}
           <div className="flex items-center justify-center min-h-[110px] bg-muted/20 rounded-lg border border-border/50">
             {isBend && item.asa_shape_code && (item.phase === "bending" || item.bend_completed_pieces > 0) ? (
-              shapeImageUrl ? (
-                <img
-                  src={shapeImageUrl}
-                  alt={`Shape ${item.asa_shape_code}`}
-                  className="max-w-full max-h-[100px] object-contain"
-                  crossOrigin="anonymous"
-                />
-              ) : (
-                <AsaShapeDiagram
-                  shapeCode={item.asa_shape_code}
-                  dimensions={item.bend_dimensions}
-                  size="sm"
-                />
-              )
+              <AsaShapeDiagram
+                shapeCode={item.asa_shape_code}
+                dimensions={item.bend_dimensions}
+                size="sm"
+              />
             ) : (
               <div className="text-center py-4">
                 <p className="text-5xl font-black font-mono text-muted-foreground/50 tracking-tight">

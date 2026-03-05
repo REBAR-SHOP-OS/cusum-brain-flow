@@ -73,7 +73,7 @@ export function TagsExportView() {
       const size = r.bar_size_mapped || r.bar_size || "";
       const shapeType = r.shape_code_mapped || r.shape_type || "";
       const weight = getWeight(size, r.total_length_mm, r.quantity);
-      const picture = shapeType ? `TYPE-${shapeType}.PNG` : "";
+      const picture = shapeType ? (getShapeImageUrl(shapeType) || `TYPE-${shapeType}.PNG`) : "";
       return [
         r.dwg || "", r.row_index, r.grade_mapped || r.grade || "", r.mark || "",
         r.quantity || "", size, shapeType, r.total_length_mm || "",
@@ -369,7 +369,7 @@ export function TagsExportView() {
                         })}
                         <td className="text-xs text-muted-foreground text-right px-3 py-2.5 whitespace-nowrap">{weight}</td>
                         <td className="text-[10px] text-muted-foreground px-3 py-2.5 whitespace-nowrap">
-                          {shapeType ? `TYPE-${shapeType}.PNG` : "—"}
+                          {shapeType ? (getShapeImageUrl(shapeType) ? "✓" : `TYPE-${shapeType}.PNG`) : "—"}
                         </td>
                         <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.customer || "—"}</td>
                         <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.reference || "—"}</td>
