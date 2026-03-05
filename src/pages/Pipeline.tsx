@@ -31,6 +31,8 @@ import { logPipelineTransition } from "@/lib/logPipelineTransition";
 import { QualificationGateModal } from "@/components/pipeline/gates/QualificationGateModal";
 import { PricingGateModal } from "@/components/pipeline/gates/PricingGateModal";
 import { LossGateModal } from "@/components/pipeline/gates/LossGateModal";
+import { NextActivityGateModal } from "@/components/pipeline/NextActivityGateModal";
+import { HandoffTemplateDialog } from "@/components/pipeline/HandoffTemplateDialog";
 
 import { MobilePipelineView } from "@/components/pipeline/MobilePipelineView";
 import { KeyboardShortcutHelp } from "@/components/pipeline/KeyboardShortcutHelp";
@@ -493,7 +495,7 @@ export default function Pipeline() {
 
     // Check if this transition requires memory gates
     // Use a quick synchronous check — we re-check after memory loads
-    const gates = getRequiredGates(newStage, { hasQualification: false, hasPricing: false, hasLoss: false, hasOutcome: false });
+    const gates = getRequiredGates(newStage, { hasQualification: false, hasPricing: false, hasLoss: false, hasOutcome: false }, lead?.stage);
 
     if (gates.length > 0) {
       // Open gate flow — set pending transition, will check actual memory in effect
@@ -510,7 +512,7 @@ export default function Pipeline() {
   // Effect: when pendingTransition is set and memory loads, determine which gates are actually needed
   useEffect(() => {
     if (!pendingTransition) return;
-    const gates = getRequiredGates(pendingTransition.targetStage, pendingMemory);
+    const gates = getRequiredGates(pendingTransition.targetStage, pendingMemory, pendingTransition.lead?.stage);
     if (gates.length === 0) {
       // All memory already exists — proceed with transition
       updateStageMutation.mutate({ id: pendingTransition.leadId, stage: pendingTransition.targetStage, fromStage: pendingTransition.lead?.stage });
@@ -905,6 +907,19 @@ export default function Pipeline() {
             onOpenChange={(open) => { if (!open) handleGateCancel(); }}
             leadId={pendingTransition.leadId}
             companyId={pendingCompanyId}
+            onComplete={handleGateComplete}
+          />
+          <NextActivityGateModal
+            open={currentGate === "next_activity"}
+            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
+            leadId={pendingTransition.leadId}
+            onComplete={handleGateComplete}
+          />
+          <HandoffTemplateDialog
+            open={currentGate === "handoff"}
+            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
+            leadId={pendingTransition.leadId}
+            targetStage={pendingTransition.targetStage}
             onComplete={handleGateComplete}
           />
         </>

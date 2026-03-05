@@ -2,7 +2,7 @@ import { useState, useMemo, lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet, XCircle, Sparkles, Webhook, UserCheck, CalendarClock } from "lucide-react";
+import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet, XCircle, Sparkles, Webhook, UserCheck, CalendarClock, Clock, AlertCircle } from "lucide-react";
 import { usePipelineRealtime } from "@/hooks/usePipelineRealtime";
 import { PipelineErrorBoundary } from "@/components/pipeline/intelligence/PipelineErrorBoundary";
 import { TabLoadingSkeleton } from "@/components/pipeline/intelligence/TabLoadingSkeleton";
@@ -22,6 +22,8 @@ const AICoachingDashboard = lazy(() => import("@/components/pipeline/intelligenc
 const PipelineWebhooks = lazy(() => import("@/components/pipeline/intelligence/PipelineWebhooks").then(m => ({ default: m.PipelineWebhooks })));
 const RepPerformanceDashboard = lazy(() => import("@/components/pipeline/intelligence/RepPerformanceDashboard").then(m => ({ default: m.RepPerformanceDashboard })));
 const ScheduledReportsManager = lazy(() => import("@/components/pipeline/intelligence/ScheduledReportsManager").then(m => ({ default: m.ScheduledReportsManager })));
+const StalePipelineDashboardComp = lazy(() => import("@/components/pipeline/intelligence/StalePipelineDashboard").then(m => ({ default: m.StalePipelineDashboard })));
+const UnattendedLeadsDashboard = lazy(() => import("@/components/pipeline/intelligence/UnattendedLeadsDashboard").then(m => ({ default: m.UnattendedLeadsDashboard })));
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -143,6 +145,12 @@ export default function PipelineIntelligence() {
             <TabsTrigger value="scheduled" className={tabClass}>
               <CalendarClock className="w-3.5 h-3.5" /> Scheduled
             </TabsTrigger>
+            <TabsTrigger value="stale" className={tabClass}>
+              <Clock className="w-3.5 h-3.5" /> Stale
+            </TabsTrigger>
+            <TabsTrigger value="unattended" className={tabClass}>
+              <AlertCircle className="w-3.5 h-3.5" /> Unattended
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -185,6 +193,12 @@ export default function PipelineIntelligence() {
           </TabsContent>
           <TabsContent value="scheduled" className="mt-0 p-4 sm:p-6">
             {wrapTab(<ScheduledReportsManager />, "Failed to load Scheduled Reports")}
+          </TabsContent>
+          <TabsContent value="stale" className="mt-0 p-4 sm:p-6">
+            {wrapTab(<StalePipelineDashboardComp leads={leads} isLoading={isLoading} />, "Failed to load Stale Dashboard")}
+          </TabsContent>
+          <TabsContent value="unattended" className="mt-0 p-4 sm:p-6">
+            {wrapTab(<UnattendedLeadsDashboard leads={leads} isLoading={isLoading} />, "Failed to load Unattended Leads")}
           </TabsContent>
         </div>
       </Tabs>
