@@ -1,6 +1,12 @@
-import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building, Layers } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building, Layers, FolderOpen, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 
@@ -21,6 +27,12 @@ interface StationHeaderProps {
   workspaceName?: string | null;
   /** Show "BEDS" suffix in title */
   showBedsSuffix?: boolean;
+  /** Available projects for switching */
+  projects?: { id: string; name: string; count: number }[];
+  /** Currently selected project id */
+  selectedProjectId?: string | null;
+  /** Callback when user picks a different project */
+  onSelectProject?: (projectId: string | null) => void;
 }
 
 export function StationHeader({
@@ -38,6 +50,9 @@ export function StationHeader({
   backTo = "/shopfloor/station",
   workspaceName,
   showBedsSuffix = true,
+  projects,
+  selectedProjectId,
+  onSelectProject,
 }: StationHeaderProps) {
   const navigate = useNavigate();
 
@@ -47,6 +62,8 @@ export function StationHeader({
   if (barSizeRange) titleParts.push(barSizeRange);
   if (showBedsSuffix) titleParts.push("BEDS");
   const mainTitle = titleParts.join(" ");
+
+  const hasMultipleProjects = projects && projects.length > 1 && onSelectProject;
 
   return (
     <header className="flex items-start justify-between px-4 py-3 bg-card border-b border-border">
@@ -140,14 +157,39 @@ export function StationHeader({
           </Badge>
         )}
 
-        {/* Workspace chip — dark pill with dropdown */}
-        {workspaceName && (
-          <Badge className="bg-foreground text-background font-bold text-xs gap-1.5 px-3 py-1.5 rounded-full cursor-pointer hover:bg-foreground/90 transition-colors">
+        {/* Workspace chip — dropdown when multiple projects, static otherwise */}
+        {workspaceName && hasMultipleProjects ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="inline-flex items-center gap-1.5 bg-foreground text-background font-bold text-xs px-3 py-1.5 rounded-full cursor-pointer hover:bg-foreground/90 transition-colors">
+                <Building className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{workspaceName}</span>
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {projects!.map((proj) => (
+                <DropdownMenuItem
+                  key={proj.id}
+                  onClick={() => onSelectProject!(proj.id)}
+                  className="flex items-center gap-2"
+                >
+                  <FolderOpen className="w-4 h-4 text-primary shrink-0" />
+                  <span className="flex-1 truncate font-medium">{proj.name}</span>
+                  <span className="text-[10px] text-muted-foreground">{proj.count}</span>
+                  {proj.id === selectedProjectId && (
+                    <Check className="w-4 h-4 text-primary shrink-0" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : workspaceName ? (
+          <Badge className="bg-foreground text-background font-bold text-xs gap-1.5 px-3 py-1.5 rounded-full">
             <Building className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{workspaceName}</span>
-            <ChevronDown className="w-3 h-3" />
           </Badge>
-        )}
+        ) : null}
       </div>
     </header>
   );
