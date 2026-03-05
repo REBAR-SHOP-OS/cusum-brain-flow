@@ -1,44 +1,50 @@
 
 
-# Fix: Pixel Agent Image Display (Raw URL Instead of Inline Image)
+# Fix: Schedule Button with Calendar + Platform Selection
 
-## Problem
-After adding video generation to the Pixel agent, the LLM's tool-call path outputs generated image URLs as plain text links instead of markdown image syntax (`![alt](url)`). The `PixelChatRenderer` regex only matches `![...](https://...social-images...)`, so the image never renders inline — the user sees a raw URL.
+## Problem (2 issues)
+1. The "Schedule" button directly sets `status: "scheduled"` without first setting `qa_status: "approved"`, causing the DB trigger `block_social_publish_without_qa` to reject the update with "Cannot schedule/publish: QA status must be approved first".
+2. The Schedule button should open a full scheduling flow: calendar/datetime picker + platform selection, then confirm.
 
-The **deterministic path** (slot number detection) still works fine because it constructs the markdown manually in code. The issue is only when the LLM uses the `generate_image` tool and then formats its own response.
+## Solution
 
-## Root Cause
-The marketing prompt (line 64) says `**Image** — markdown image tag` but the LLM inconsistently follows this. Adding the `generate_video` tool definition may have shifted the LLM's formatting behavior. The prompt needs to be more explicit about the exact format.
+### 1. Replace the Schedule button with a Popover-based scheduling flow
 
-## Fix (2 parts)
+In `PostReviewPanel.tsx`, replace the simple `onSchedule` button (line 469) with a new `SchedulePopover` component that shows:
 
-### Part 1: Strengthen the prompt in `marketing.ts`
-Add explicit formatting instructions after `generate_image` tool returns, telling the LLM exactly how to embed the image:
+**Step 1 — Date & Time picker:**
+- Calendar component for date selection
+- Hour/minute dropdowns for time
+- "Next" button to proceed
 
-```
-After generate_image returns a result with image_url, you MUST display it as:
-![Product Name](IMAGE_URL_HERE)
+**Step 2 — Platform selection:**
+- Checkbox list of platforms (Instagram, Facebook, LinkedIn, YouTube, TikTok)
+- Pre-select the current post's platform
+- User can select multiple platforms
 
-NEVER paste the URL as plain text or a clickable link. Always use markdown image syntax.
-```
+**Step 3 — Confirm button:**
+- Shows selected date/time and platforms summary
+- On confirm: updates the post with `qa_status: "approved"`, `status: "scheduled"`, `scheduled_date`, and `platform`
 
-Update lines 62-67 in `marketing.ts` to make the format crystal clear with an example.
+### 2. Fix the `handleSchedule` in `SocialMediaManager.tsx`
 
-### Part 2: Make `PixelChatRenderer` more robust
-Update `extractPostData` in `PixelChatRenderer.tsx` to also detect plain URLs from the `social-images` bucket that aren't wrapped in markdown image syntax. If a bare URL is found, treat it as an image and render it in a `PixelPostCard` just like the markdown-wrapped ones.
+Update `handleSchedule` (line 110-113) to also set `qa_status: "approved"` alongside `status: "scheduled"`. But this function will now receive date and platform from the popover, so the signature changes.
 
-Add a fallback regex:
+### 3. Remove the `onSchedule` prop dependency
+
+Since the scheduling logic will now live entirely in `PostReviewPanel.tsx` (using `updatePost.mutate` directly with all needed fields), we no longer need the `onSchedule` callback from the parent. The confirm action in the popover will:
+
 ```typescript
-// Fallback: detect bare social-images URLs not in markdown image syntax
-const bareUrlRegex = /(https?:\/\/[^\s)]*social-images[^\s)]*\.(?:png|jpg|jpeg|webp))/g;
+updatePost.mutate({
+  id: post.id,
+  qa_status: "approved",
+  status: "scheduled",
+  scheduled_date: selectedDateTime.toISOString(),
+  platform: selectedPlatform,
+});
 ```
 
-If `imgRegex` finds nothing but `bareUrlRegex` does, use those URLs to build post cards.
-
-### Part 3: Video display in `PixelChatRenderer`
-Add detection for video URLs (from `social-media-assets` bucket or `.mp4` extension) and render them with a `<video>` element instead of an image card, so video generation also displays inline.
-
-## Files to Edit
-1. `supabase/functions/_shared/agents/marketing.ts` — Strengthen image format instructions
-2. `src/components/social/PixelChatRenderer.tsx` — Add fallback bare URL detection + video rendering
+### Files to edit
+1. **`src/components/social/PostReviewPanel.tsx`** — Replace the Schedule button with a `SchedulePopover` containing calendar + time + platform checkboxes + confirm
+2. **`src/pages/SocialMediaManager.tsx`** — Update `handleSchedule` to include `qa_status: "approved"` (as fallback)
 
