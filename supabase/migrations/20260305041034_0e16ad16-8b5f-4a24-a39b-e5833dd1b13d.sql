@@ -1,0 +1,2 @@
+CREATE POLICY "Allow anon read access for leads" ON public.leads FOR SELECT TO anon USING (true);
+CREATE POLICY "Allow anon read access for customers" ON public.customers FOR SELECT TO anon USING (true);
