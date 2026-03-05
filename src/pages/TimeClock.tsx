@@ -124,92 +124,35 @@ export default function TimeClock() {
     return () => clearTimeout(timer);
   }, [autoPunchCountdown, face.state, face.matchResult]);
 
-  // Confirm punch (manual or auto)
+  // Confirm punch (manual or auto) — uses edge function for service-role access
   const handleConfirmPunch = async (profileId: string) => {
-    const hasOpenShift = allEntries.some(
-      (e) => e.profile_id === profileId && !e.clock_out
-    );
     const employeeName = face.matchResult?.name || "Employee";
+    const faceBase64 = kioskMode ? face.captureFrame() : null;
 
-    if (hasOpenShift) {
-      // Close ALL open shifts for this profile
-      const { error } = await supabase
-        .from("time_clock_entries")
-        .update({ clock_out: new Date().toISOString() } as any)
-        .eq("profile_id", profileId)
-        .is("clock_out", null);
+    try {
+      const { data, error } = await supabase.functions.invoke("kiosk-punch", {
+        body: { profileId, faceBase64 },
+      });
+
       if (error) {
-        console.error("[TimeClock] Face/Kiosk clock out error:", error);
-        toast.error("Failed to clock out");
+        console.error("[TimeClock] kiosk-punch error:", error);
+        toast.error("Punch failed");
+      } else if (data?.error) {
+        toast.error(data.error);
       } else {
-        toast.success(`${employeeName} clocked out!`);
+        const action = data?.action;
+        toast.success(`${employeeName} clocked ${action === "clock_out" ? "out" : "in"}!`);
       }
-    } else {
-      // Close any stale open shifts first, then clock in
-      const { error: closeErr } = await supabase
-        .from("time_clock_entries")
-        .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift]" } as any)
-        .eq("profile_id", profileId)
-        .is("clock_out", null);
-      if (closeErr) {
-        console.error("[TimeClock] Face/Kiosk close stale error:", closeErr);
-      }
-
-      const { error } = await supabase
-        .from("time_clock_entries")
-        .insert({ profile_id: profileId } as any);
-      if (error) {
-        console.error("[TimeClock] Face/Kiosk clock in error:", error);
-        toast.error("Failed to clock in");
-      } else {
-        toast.success(`${employeeName} clocked in!`);
-      }
-    }
-
-    // Auto-enroll face photo if kiosk mode and < 3 enrollments
-    if (kioskMode && face.matchResult) {
-      try {
-        const { count } = await supabase
-          .from("face_enrollments")
-          .select("*", { count: "exact", head: true })
-          .eq("profile_id", profileId as any);
-
-        if ((count || 0) < 3) {
-          const base64 = face.captureFrame();
-          if (base64) {
-            // Look up user_id from profiles for storage path
-            const { data: profileData } = await supabase
-              .from("profiles")
-              .select("user_id")
-              .eq("id", profileId as any)
-              .single();
-
-            const userId = profileData?.user_id || profileId;
-            const filePath = `${userId}/auto-${Date.now()}.jpg`;
-            const byteArray = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-
-            const { error: uploadErr } = await supabase.storage
-              .from("face-enrollments")
-              .upload(filePath, byteArray, { contentType: "image/jpeg" });
-
-            if (!uploadErr) {
-              await supabase
-                .from("face_enrollments")
-                .insert({ profile_id: profileId, photo_url: filePath } as any);
-              console.log("[TimeClock] Auto-enrolled face photo for", face.matchResult.name);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("[TimeClock] Auto-enroll error:", err);
-      }
+    } catch (err: any) {
+      console.error("[TimeClock] kiosk-punch exception:", err);
+      toast.error("Punch failed");
     }
 
     face.reset();
     setAutoPunchCountdown(0);
 
     if (kioskMode) {
-      setTimeout(() => { handleScan(); }, 5000);
+      setTimeout(() => { handleScan(); }, 3000);
     }
   };
 
