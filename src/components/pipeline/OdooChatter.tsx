@@ -375,14 +375,21 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     }
 
     // Build activity items from real activities
+    // Use odoo_created_at from lead metadata when available for Odoo-synced activities
+    const leadOdooCreatedAt = (lead as any).odoo_created_at || ((lead.metadata as any)?.odoo_created_at);
     const items: ThreadItem[] = realActivities.map((a) => {
       const msgId = (a as any).odoo_message_id as number | undefined;
       const matched = msgId ? filesByMsgId.get(msgId) : undefined;
+      // For the initial "stage_changed" event (from: null), prefer odoo_created_at
+      const isInitialEvent = a.activity_type === "stage_change" && a.description?.includes("→") && a.description?.startsWith("—") || a.description?.startsWith("null");
+      const actDate = isInitialEvent && leadOdooCreatedAt
+        ? new Date(leadOdooCreatedAt)
+        : new Date(a.created_at);
       return {
         kind: "activity" as const,
         data: a,
         matchedFiles: matched,
-        date: new Date(a.created_at),
+        date: actDate,
       };
     });
 
