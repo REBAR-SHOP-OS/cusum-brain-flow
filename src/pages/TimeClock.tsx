@@ -47,6 +47,7 @@ export default function TimeClock() {
   const [kioskMode, setKioskMode] = useState(false);
   const [enrollmentCount, setEnrollmentCount] = useState(0);
   const [autoPunchCountdown, setAutoPunchCountdown] = useState(0);
+  const [showRegistration, setShowRegistration] = useState(false);
 
   const now = new Date();
 
@@ -104,8 +105,10 @@ export default function TimeClock() {
 
   // Handle scan
   const handleScan = async () => {
+    setShowRegistration(false);
     const result = await face.recognize();
-    if (result && result.confidence >= 75) {
+    // Only auto-punch for high-confidence AND well-enrolled profiles (3+ photos)
+    if (result && result.confidence >= 75 && (result.enrollment_count ?? 0) >= 3) {
       setAutoPunchCountdown(2);
     }
   };
@@ -196,7 +199,17 @@ export default function TimeClock() {
               <ScanFace className="w-5 h-5" /> Scan Face
             </Button>
           )}
-          {(face.state === "no_match" || face.state === "error") ? (
+          {showRegistration ? (
+            <FirstTimeRegistration
+              captureFrame={face.captureFrame}
+              onComplete={() => {
+                setShowRegistration(false);
+                face.reset();
+                setTimeout(() => handleScan(), 5000);
+              }}
+              onCancel={() => { setShowRegistration(false); face.reset(); }}
+            />
+          ) : (face.state === "no_match" || face.state === "error") ? (
             <FirstTimeRegistration
               captureFrame={face.captureFrame}
               onComplete={() => {
@@ -206,7 +219,15 @@ export default function TimeClock() {
               onCancel={() => face.reset()}
             />
           ) : (
-            <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={matchedIsClockedIn} onConfirmPunch={handleConfirmPunch} onReject={() => { face.reset(); }} autoPunchCountdown={autoPunchCountdown} />
+            <FaceRecognitionResult
+              state={face.state}
+              matchResult={face.matchResult}
+              isClockedIn={matchedIsClockedIn}
+              onConfirmPunch={handleConfirmPunch}
+              onReject={() => { face.reset(); }}
+              onNotMe={() => { setShowRegistration(true); }}
+              autoPunchCountdown={autoPunchCountdown}
+            />
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>

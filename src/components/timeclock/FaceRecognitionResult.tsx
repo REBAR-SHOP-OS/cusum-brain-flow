@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Check, AlertTriangle, X, LogIn, LogOut } from "lucide-react";
+import { Check, AlertTriangle, X, LogIn, LogOut, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RecognitionState } from "@/hooks/useFaceRecognition";
 
@@ -19,10 +18,12 @@ interface FaceRecognitionResultProps {
     confidence: number;
     reason: string;
     avatar_url: string | null;
+    enrollment_count?: number;
   } | null;
   isClockedIn: boolean;
   onConfirmPunch: (profileId: string) => void;
   onReject: () => void;
+  onNotMe?: () => void;
   autoPunchCountdown?: number;
 }
 
@@ -32,6 +33,7 @@ export function FaceRecognitionResult({
   isClockedIn,
   onConfirmPunch,
   onReject,
+  onNotMe,
   autoPunchCountdown,
 }: FaceRecognitionResultProps) {
   if (state === "idle" || state === "scanning") return null;
@@ -60,6 +62,7 @@ export function FaceRecognitionResult({
   if (!matchResult) return null;
 
   const isHighConfidence = state === "matched";
+  const needsConfirmation = (matchResult.enrollment_count ?? 0) <= 2;
   const action = isClockedIn ? "Clock Out" : "Clock In";
   const ActionIcon = isClockedIn ? LogOut : LogIn;
 
@@ -81,7 +84,11 @@ export function FaceRecognitionResult({
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <h3 className="text-xl font-bold">{matchResult.name}</h3>
+            {needsConfirmation ? (
+              <h3 className="text-xl font-bold">Are you {matchResult.name}?</h3>
+            ) : (
+              <h3 className="text-xl font-bold">{matchResult.name}</h3>
+            )}
             <div className="flex items-center gap-2 mt-1">
               {isHighConfidence ? (
                 <Badge className="bg-green-500/15 text-green-500 border-green-500/30 gap-1">
@@ -96,9 +103,17 @@ export function FaceRecognitionResult({
           </div>
         </div>
 
-        {isHighConfidence && autoPunchCountdown !== undefined && autoPunchCountdown > 0 && (
+        {/* Auto-punch countdown only for well-enrolled, high-confidence */}
+        {isHighConfidence && !needsConfirmation && autoPunchCountdown !== undefined && autoPunchCountdown > 0 && (
           <p className="text-sm text-center text-muted-foreground">
             Auto {action.toLowerCase()} in <span className="font-bold text-foreground">{autoPunchCountdown}s</span>...
+          </p>
+        )}
+
+        {/* Confirmation prompt for low-enrollment profiles */}
+        {needsConfirmation && isHighConfidence && (
+          <p className="text-sm text-center text-muted-foreground">
+            Please confirm your identity. We're still learning your face.
           </p>
         )}
 
@@ -109,9 +124,15 @@ export function FaceRecognitionResult({
         )}
 
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={onReject}>
-            <X className="w-4 h-4 mr-1" /> Cancel
-          </Button>
+          {onNotMe && needsConfirmation ? (
+            <Button variant="outline" className="flex-1 gap-1" onClick={onNotMe}>
+              <UserPlus className="w-4 h-4" /> No, I'm new
+            </Button>
+          ) : (
+            <Button variant="outline" className="flex-1" onClick={onReject}>
+              <X className="w-4 h-4 mr-1" /> Cancel
+            </Button>
+          )}
           <Button
             className={cn(
               "flex-1 gap-2 font-bold",
@@ -121,7 +142,8 @@ export function FaceRecognitionResult({
             )}
             onClick={() => onConfirmPunch(matchResult.profile_id)}
           >
-            <ActionIcon className="w-4 h-4" /> {action}
+            <ActionIcon className="w-4 h-4" />
+            {needsConfirmation ? `Yes, ${action}` : action}
           </Button>
         </div>
       </CardContent>
