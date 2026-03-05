@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_scheduled_activities_dedup;
