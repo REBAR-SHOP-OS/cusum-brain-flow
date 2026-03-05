@@ -3,7 +3,7 @@
  * Determines which memory capture modal must be shown before a stage transition is allowed.
  */
 
-export type GateType = "qualification" | "pricing" | "loss" | "delivery";
+export type GateType = "qualification" | "pricing" | "loss" | "delivery" | "next_activity" | "handoff";
 
 interface GateDefinition {
   type: GateType;
@@ -30,12 +30,24 @@ const DELIVERY_GATE_TARGETS = new Set([
   "delivered_pickup_done",
 ]);
 
+// Stages that require a next activity before leaving
+const NEXT_ACTIVITY_SOURCE_STAGES = new Set([
+  "new",
+  "telephonic_enquiries",
+]);
+
+// Stages that require a handoff template on entry
+const HANDOFF_TARGET_STAGES = new Set([
+  "qc_ben",
+  "estimation_ben",
+  "estimation_karthick",
+  "estimation_others",
+  "estimation_partha",
+]);
+
 /**
- * Given a target stage, returns the gate(s) that must be satisfied.
- * Returns null if no gate is required.
- * 
- * Multiple gates can apply (e.g. moving directly to quotation_bids
- * requires both qualification AND pricing memory).
+ * Given a target stage and optionally the source stage, returns the gate(s) that must be satisfied.
+ * Returns an empty array if no gate is required.
  */
 export function getRequiredGates(
   targetStage: string,
@@ -44,9 +56,19 @@ export function getRequiredGates(
     hasPricing: boolean;
     hasLoss: boolean;
     hasOutcome: boolean;
-  }
+  },
+  sourceStage?: string
 ): GateDefinition[] {
   const gates: GateDefinition[] = [];
+
+  // Gate: Next activity required when leaving New or Telephonic Enquiries
+  if (sourceStage && NEXT_ACTIVITY_SOURCE_STAGES.has(sourceStage)) {
+    gates.push({
+      type: "next_activity",
+      label: "Next Activity Required",
+      description: "Schedule a follow-up activity before moving this lead forward.",
+    });
+  }
 
   // Gate A: Qualification required for quotation stages
   if (QUALIFICATION_GATE_TARGETS.has(targetStage) && !existingMemory.hasQualification) {
@@ -81,6 +103,15 @@ export function getRequiredGates(
       type: "delivery",
       label: "Delivery Performance",
       description: "Capture delivery performance and client satisfaction before closing.",
+    });
+  }
+
+  // Gate E: Handoff template required for QC/Estimation stages
+  if (HANDOFF_TARGET_STAGES.has(targetStage)) {
+    gates.push({
+      type: "handoff",
+      label: "Handoff Template",
+      description: "Provide scope and requirements for QC/Estimation handoff.",
     });
   }
 
