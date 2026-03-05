@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronUp, ChevronDown, Lock, Zap, AlertCircle, Scissors, Package, Recycle } from "lucide-react";
+import { ChevronUp, ChevronDown, Lock, Zap, AlertCircle, Scissors, Package, Recycle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RunPlan } from "@/lib/foremanBrain";
 
@@ -13,6 +13,7 @@ interface CutEngineProps {
   onLockAndStart: (stockLength: number, bars: number) => void;
   onStockLengthChange?: (length: number) => void;
   onBarsChange?: (bars: number) => void;
+  onAbort?: () => void;
   isRunning: boolean;
   canWrite: boolean;
   darkMode?: boolean;
@@ -37,6 +38,7 @@ export function CutEngine({
   onLockAndStart,
   onStockLengthChange,
   onBarsChange,
+  onAbort,
   isRunning,
   canWrite,
   darkMode = false,
@@ -245,29 +247,41 @@ export function CutEngine({
         </p>
       </div>
 
-      {/* Lock & Start button */}
-      <Button
-        className={cn(
-          "w-full gap-2 font-bold h-12 rounded-lg",
-          darkMode
-            ? "bg-white text-slate-900 hover:bg-slate-100"
-            : "bg-primary text-primary-foreground hover:bg-primary/90"
-        )}
-        size="lg"
-        disabled={!canStart}
-        onClick={() => onLockAndStart(selectedStock, bars)}
-      >
-        <Lock className="w-4 h-4" />
-        {isRunning ? "RUNNING..." : isDone ? "✓ DONE" : "LOCK & START"}
-      </Button>
+      {/* Lock & Start / Abort buttons */}
+      {isRunning && strokesDone === 0 && onAbort ? (
+        <Button
+          className={cn(
+            "w-full gap-2 font-bold h-12 rounded-lg",
+            "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          )}
+          size="lg"
+          onClick={onAbort}
+        >
+          <XCircle className="w-4 h-4" />
+          ABORT — FIX SETTINGS
+        </Button>
+      ) : (
+        <Button
+          className={cn(
+            "w-full gap-2 font-bold h-12 rounded-lg",
+            darkMode
+              ? "bg-white text-slate-900 hover:bg-slate-100"
+              : "bg-primary text-primary-foreground hover:bg-primary/90"
+          )}
+          size="lg"
+          disabled={!canStart}
+          onClick={() => onLockAndStart(selectedStock, bars)}
+        >
+          <Lock className="w-4 h-4" />
+          {isRunning ? "RUNNING..." : isDone ? "✓ DONE" : "LOCK & START"}
+        </Button>
+      )}
 
-      {isRunning && (
+      {isRunning && strokesDone !== 0 && (
         <Badge
           className={cn(
             "w-full justify-center py-1.5",
-            darkMode
-              ? "bg-primary/20 text-primary border-primary/30"
-              : "bg-primary/20 text-primary border-primary/30"
+            "bg-primary/20 text-primary border-primary/30"
           )}
         >
           Machine Active

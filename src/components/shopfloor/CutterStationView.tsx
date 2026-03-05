@@ -218,6 +218,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // ── LOCK & START ──
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
+    // Clamp bars to dynamic max to prevent overloading
+    const clampedBars = Math.min(bars, maxBars);
     try {
       setIsRunning(true);
       // Fetch fresh completed_pieces from DB to avoid stale realtime data
@@ -229,14 +231,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const freshCompleted = freshRow?.completed_pieces ?? completedPieces;
       setCompletedAtRunStart(freshCompleted);
       // Initialize slot tracker with actual bars the operator chose
-      slotTracker.startWithBars(bars);
+      slotTracker.startWithBars(clampedBars);
 
       const result = await manageMachine({
         action: "start-run",
         machineId: machine.id,
         process: "cut",
         barCode: currentItem.bar_code,
-        qty: bars,
+        qty: clampedBars,
         notes: `Stock: ${stockLength}mm | Mark: ${currentItem.mark_number || "—"} | Length: ${currentItem.cut_length_mm}mm | Pcs/bar: ${computedPiecesPerBar}`,
       });
 
@@ -251,14 +253,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             .select("id, bar_code, source, standard_length_mm, qty_on_hand, qty_reserved")
             .eq("bar_code", currentItem.bar_code)
             .gt("qty_on_hand", 0);
-          const bestLot = (freshLots || []).find((l) => l.qty_on_hand - l.qty_reserved >= bars);
+          const bestLot = (freshLots || []).find((l) => l.qty_on_hand - l.qty_reserved >= clampedBars);
           if (bestLot) {
             await manageInventory({
               action: "consume-on-start",
               machineRunId: runId,
               cutPlanItemId: currentItem.id,
               barCode: currentItem.bar_code,
-              qty: bars,
+              qty: clampedBars,
               sourceType: bestLot.source === "remnant" ? "remnant" : "lot",
               sourceId: bestLot.id,
               stockLengthMm: stockLength,
@@ -280,7 +282,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             bar_code: currentItem.bar_code,
             cut_length_mm: currentItem.cut_length_mm,
             stock_length_mm: stockLength,
-            bars_loaded: bars,
+            bars_loaded: clampedBars,
             pcs_per_bar: computedPiecesPerBar,
             partial_bar: runPlan.lastBarPieces,
             stock_source: runPlan.stockSource,
@@ -300,6 +302,29 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     // handleCompleteRun or reset. This prevents a race condition where
     // machineIsRunning briefly becomes false before the DB status refreshes.
   };
+
+  // ── ABORT RUN (before any strokes) ──
+  const handleAbortRun = useCallback(async () => {
+    if (slotTracker.totalCutsDone > 0) return; // Safety: only abort if no strokes recorded
+    try {
+      if (activeRunId) {
+        await manageMachine({
+          action: "complete-run",
+          machineId: machine.id,
+          outputQty: 0,
+          scrapQty: 0,
+          notes: "Aborted before first stroke",
+        });
+      }
+      slotTracker.reset();
+      setIsRunning(false);
+      setActiveRunId(null);
+      setCompletedAtRunStart(null);
+      toast({ title: "Run aborted", description: "You can adjust settings and restart." });
+    } catch (err: any) {
+      toast({ title: "Abort failed", description: err.message, variant: "destructive" });
+    }
+  }, [activeRunId, machine.id, slotTracker, toast]);
 
   // ── Record stroke ──
   const handleRecordStroke = useCallback(() => {
@@ -732,6 +757,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             onLockAndStart={handleLockAndStart}
             onStockLengthChange={setSelectedStockLength}
             onBarsChange={setOperatorBars}
+            onAbort={handleAbortRun}
             isRunning={machineIsRunning}
             canWrite={effectiveCanWrite}
             isDone={isDone}
