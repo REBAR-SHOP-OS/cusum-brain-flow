@@ -1,46 +1,55 @@
 
 
-# Pipeline Cards — Odoo Exact Parity (Add, Don't Remove)
+# Chatter Data Loss Fix — Store & Render Full Odoo HTML
 
-## What to Add
+## Problem
 
-The main missing piece is Odoo's **activity type icons row** at the bottom of each card. In Odoo, each card shows small colored icons for pending activities (📧 email, 📞 call, ⏰ follow-up, etc.), color-coded by due date urgency (green=planned, orange=today, red=overdue). This is the core visual difference.
+The `odoo-chatter-sync` function calls `stripHtml()` on every email body before storing it in `lead_activities.description`. This permanently destroys:
 
-## Changes
+- Full HTML email content (signatures, formatted text, links, invitation-to-bid documents)
+- Inline images and logos
+- Detailed field-change tracking (Odoo shows bullet points like "• Name → MAYSTAR GENERAL... (Customer)")
 
-### 1. `src/pages/Pipeline.tsx` — Batch-fetch pending activities per lead
+The Odoo screenshot shows rich email threads with From/Sent/To/Subject headers and full HTML bodies rendered inline. Our chatter shows only plain text summaries.
 
-Add a query to fetch `lead_activities` where `completed_at IS NULL AND due_date IS NOT NULL`, grouped by `lead_id` and `activity_type`. Pass this data down as a map (`Record<string, ActivityIcon[]>`) to `PipelineBoard → PipelineColumn → LeadCard`.
+## Root Cause
 
-This avoids N+1 queries — one batch fetch for all visible leads.
+```javascript
+// odoo-chatter-sync/index.ts line ~189
+description: body || null,  // body = stripHtml(msg.body) — HTML is GONE
+```
 
-### 2. `src/components/pipeline/LeadCard.tsx` — Add activity icons row + visual tweaks
+The `metadata` JSON column exists but only stores `odoo_subtype`. The original HTML is never saved.
 
-**Add** (keep all existing elements):
-- New prop: `pendingActivities: { type: string; dueDate: string }[]`
-- Activity icons row between company name and bottom row — small colored icons for each pending activity type:
-  - `email` → `Mail` icon
-  - `call` → `Phone` icon
-  - `follow_up` → `Clock` icon
-  - `internal_task` → `ClipboardCheck` icon
-  - `note` → `StickyNote` icon
-  - `comment` → `MessageSquare` icon
-- Each icon colored by due date vs today (green/orange/red) — identical to Odoo
-- Change activity status icon from `AlignJustify` to `Clock`
-- Enlarge salesperson avatar from `w-5 h-5` → `w-7 h-7`, text `text-[8px]` → `text-[10px]`
+## Plan
 
-### 3. `src/components/pipeline/PipelineColumn.tsx` — Spacing
+### Step 1: Add `body_html` column to `lead_activities`
 
-- Card gap from `space-y-1` to `space-y-1.5`
+```sql
+ALTER TABLE lead_activities ADD COLUMN body_html text;
+```
 
-### 4. `src/components/pipeline/PipelineBoard.tsx` — Pass activities data through
+### Step 2: Update `odoo-chatter-sync` to preserve HTML
 
-Thread the `pendingActivitiesByLead` prop from Pipeline → PipelineBoard → PipelineColumn → LeadCard.
+- Store original `msg.body` (raw HTML) in `body_html`
+- Keep stripped text in `description` (for search/preview)
+- Fetch `tracking_value_ids` from Odoo `mail.message` to capture field changes
+- Store tracking values in `metadata.tracking_changes` as an array of `{ field, old_value, new_value }`
+
+### Step 3: Update `OdooChatter.tsx` to render HTML
+
+- When `body_html` exists, render it using DOMPurify (already installed) instead of plain text
+- Show From/To/Subject headers above email bodies (from metadata or parsed from HTML)
+- Render field changes as colored bullet points matching Odoo: `• Field → New Value (Label)`
+- Use `dangerouslySetInnerHTML` with sanitized HTML inside a styled container
+
+### Step 4: Re-sync to backfill HTML
+
+After deploying the updated sync function, run a `full` mode sync to re-fetch all messages with HTML bodies. Existing `odoo_message_id` dedup will be bypassed for rows that have `body_html IS NULL`.
 
 | File | Change |
 |------|--------|
-| `src/pages/Pipeline.tsx` | Batch-fetch pending activities, pass as prop |
-| `src/components/pipeline/PipelineBoard.tsx` | Thread new prop |
-| `src/components/pipeline/PipelineColumn.tsx` | Thread prop + spacing tweak |
-| `src/components/pipeline/LeadCard.tsx` | Add activity icons row, fix icon, enlarge avatar |
+| Database migration | Add `body_html text` column |
+| `supabase/functions/odoo-chatter-sync/index.ts` | Store raw HTML in `body_html`, fetch `tracking_value_ids` |
+| `src/components/pipeline/OdooChatter.tsx` | Render HTML with DOMPurify, show field changes as bullet list |
 
