@@ -378,17 +378,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           selectedStockLength - s.cutsDone * currentItem.cut_length_mm < REMNANT_THRESHOLD_MM
       ).length;
 
-      // ── Persist completed_pieces to DB (atomic increment, triggers auto_advance_item_phase) ──
-      // Note: strokes already persisted incrementally; this final call ensures
-      // any rounding/partial bar pieces are captured. We use the total output
-      // minus what was already persisted stroke-by-stroke. Since the RPC uses
-      // LEAST(completed + increment, total), over-counting is safe.
-      const { error: itemErr } = await supabase
-        .rpc("increment_completed_pieces", {
-          p_item_id: currentItem.id,
-          p_increment: totalOutput, // ensures full count persists even if stroke-level calls failed
-        });
-      if (itemErr) throw itemErr;
+      // NOTE: completed_pieces already persisted stroke-by-stroke (see recordStroke handler).
+      // No final increment needed here — doing so would double-count.
 
       // Immediately invalidate to refresh UI without waiting for realtime
       queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] });
