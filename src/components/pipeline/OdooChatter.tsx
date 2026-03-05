@@ -335,7 +335,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       }
     };
     pushFileBatches(orphanFiles);
-    // unlinkedOdooFiles intentionally not pushed — they will appear inline once full sync backfills odoo_message_id
+    pushFileBatches(unlinkedOdooFiles);
 
     // Sort by date descending
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -621,8 +621,8 @@ const ActivityThreadItem = React.memo(
     const [htmlExpanded, setHtmlExpanded] = useState(false);
 
     // Extract body_html and tracking_changes from the activity
-    const bodyHtml = (activity as any).body_html as string | null;
     const metadata = (activity.metadata as any) || {};
+    const bodyHtml = (activity as any).body_html || metadata.body_html || null;
     const trackingChanges = metadata.tracking_changes as Array<{ field: string; old_value: string; new_value: string }> | undefined;
     const hasTracking = trackingChanges && trackingChanges.length > 0;
 
@@ -658,10 +658,16 @@ const ActivityThreadItem = React.memo(
             <p className="text-[13px] font-medium mt-0.5">{activity.title}</p>
           )}
 
-          {/* Stage change: show description (from→to) if available, otherwise nothing (author+arrow already shown) */}
-          {isStageChange && !hasTracking && activity.description && activity.description !== activity.title && (
-            <p className="text-[13px] mt-0.5 text-muted-foreground">{activity.description}</p>
-          )}
+          {/* Stage change: show description or parse from metadata description */}
+          {isStageChange && !hasTracking && (() => {
+            // Try activity.description first, then parse metadata.description for arrow notation
+            const desc = activity.description && activity.description !== activity.title
+              ? activity.description
+              : (metadata.description && /→|->/.test(metadata.description))
+                ? metadata.description
+                : null;
+            return desc ? <p className="text-[13px] mt-0.5 text-muted-foreground">{desc}</p> : null;
+          })()}
 
           {/* Tracking changes — field change bullets like Odoo (suppress title/desc when present) */}
           {hasTracking && (
