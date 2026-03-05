@@ -1,53 +1,61 @@
 
 
-# Fix Root Causes: Odoo Timestamps, Contact Linking, and Stage Normalization
+# Fix Odoo Sync: Deduplicate, Deploy, and Backfill
 
-## What's wrong
+## Diagnosis (hard numbers from the database)
 
-1. **Wrong timestamps**: `leads.created_at` stores the sync date, not the original Odoo date. Chatter/UI sorts by this, causing "February 2026" headers on records from July 2025.
-2. **Null contacts**: The sync creates/links `customer_id` but never populates `contact_id`. The `contacts` table exists with email/phone fields but Odoo sync ignores it entirely.
-3. **No Odoo origin dates stored**: `create_date` and `write_date` from Odoo are fetched (line 13 of edge function) but never written to the leads table.
+- **2797** Odoo-synced leads total
+- **408** (14.6%) have `odoo_created_at` populated
+- **215** (7.7%) have `contact_id` populated
+- **2389** leads still have null timestamps and null contacts
 
-## Plan
+The columns exist in test. The edge function logic is correct. But **deployment to production is blocked** because migration `20260304234951` tries to create a UNIQUE index on `metadata->>'odoo_id'` and production has duplicate odoo_id values (e.g. odoo_id `3083` appears more than once).
 
-### 1. Database migration — add 3 columns to `leads`
+This is blocking everything: the column migration, the edge function deploy, and therefore the backfill.
+
+## Fix (3 steps)
+
+### Step 1: Fix the blocking migration
+
+Replace the unique index migration with a safe version that deduplicates first, then creates the index:
 
 ```sql
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS odoo_created_at timestamptz;
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS odoo_updated_at timestamptz;
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_touched_at timestamptz;
+-- Delete duplicate leads keeping only the most recently synced per odoo_id
+DELETE FROM leads a USING leads b
+WHERE a.id < b.id
+  AND a.metadata->>'odoo_id' IS NOT NULL
+  AND a.metadata->>'odoo_id' = b.metadata->>'odoo_id';
+
+-- Now create the unique index (safe — no duplicates remain)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_odoo_id_unique
+  ON leads ((metadata->>'odoo_id'))
+  WHERE metadata->>'odoo_id' IS NOT NULL;
 ```
 
-`last_touched_at` = `greatest(odoo_updated_at, updated_at)` — computed during sync and on local updates.
+This unblocks the entire deploy pipeline.
 
-### 2. Edge function: `odoo-crm-sync/index.ts` — store Odoo dates + link contacts
+### Step 2: Fix chatter date ordering (OdooChatter.tsx)
 
-**Odoo dates** (lines ~246-261, ~327-335, ~372-383):
-- Parse `ol.create_date` and `ol.write_date` from Odoo response
-- Write `odoo_created_at`, `odoo_updated_at`, and `last_touched_at` on both insert and update
+Currently only the "initial event" uses `odoo_created_at`. All other activities and the overall sort still use `created_at`.
 
-**Contact linking** (new logic after customer resolution ~272-300):
-- If `ol.email_from` or `ol.phone` exists, search `contacts` by email first, then phone, scoped to `customer_id`
-- If no match found, create a new contact using `ol.contact_name` (split into first/last), `ol.email_from`, `ol.phone`, linked to the resolved `customer_id`
-- Write `contact_id` on the lead insert/update payload
+Changes:
+- For **all** activity items from Odoo-synced leads, use `odoo_created_at` as the baseline date when the activity's own `created_at` equals the sync timestamp (i.e., when `created_at` is within a few seconds of `metadata.synced_at`)
+- The final thread sort should use each item's resolved date, which already works — the issue is that most items are getting `created_at` (sync time) as their date
 
-### 3. UI: `OdooChatter.tsx` — use Odoo dates for timeline ordering
+### Step 3: Deploy and trigger full sync
 
-Currently the chatter timeline uses `created_at` for date grouping. Change to prefer `lead.metadata.odoo_created_at` or `lead.odoo_created_at` where available, so date headers reflect real Odoo dates instead of sync dates.
-
-### 4. Backfill existing leads
-
-After migration + edge function deploy, a single "Sync Odoo" (full mode) click will:
-- Backfill `odoo_created_at` / `odoo_updated_at` / `last_touched_at` for all synced leads
-- Create missing contacts and populate `contact_id`
-
-No manual backfill script needed.
+Once the migration unblocks, the edge function (which already has correct logic for writing `odoo_created_at`, `odoo_updated_at`, `last_touched_at`, and `contact_id`) will deploy. A full sync will backfill all 2797 leads.
 
 ## Files to change
 
 | File | Change |
 |------|--------|
-| DB migration | Add `odoo_created_at`, `odoo_updated_at`, `last_touched_at` to `leads` |
-| `supabase/functions/odoo-crm-sync/index.ts` | Store Odoo dates, add contact resolution logic, write `contact_id` |
-| `src/components/pipeline/OdooChatter.tsx` | Use `odoo_created_at` for date headers when available |
+| `supabase/migrations/20260304234951_*.sql` | Replace with dedup-then-index SQL |
+| `src/components/pipeline/OdooChatter.tsx` | Use `odoo_created_at` for all Odoo-synced activity dates, not just initial event |
+
+## Expected outcome after full sync
+
+- 90%+ leads with `contact_id` populated (limited by leads that have email/phone in Odoo)
+- 100% of Odoo-synced leads with `odoo_created_at` populated
+- Chatter date headers showing real Odoo dates
 
