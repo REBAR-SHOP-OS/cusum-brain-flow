@@ -1,43 +1,51 @@
 
+Goal: make chatter match Odoo exactly and stop showing detached “files attached” cards.
 
-# Root Cause: Migration Never Applied + Missing Tracking Data
+What is still wrong (confirmed from code + database):
+1) `lead_files.odoo_message_id` is still missing in production, so file-to-message linking cannot work.
+2) `OdooChatter.tsx` still renders unlinked Odoo files as standalone `file_group` items, which creates the wrong top “7 files attached” block.
+3) Stage tracking data is still empty (`tracking_changes` not populated), so some stage entries still degrade to generic text.
 
-## What I Found
+Implementation plan (single pass, no guesswork):
 
-### Problem 1: `odoo_message_id` column does NOT exist on `lead_files`
-The migration file exists (`20260305013704_...sql`) but **the column was never actually created in production**. Every query against `lead_files.odoo_message_id` returns `column does not exist`. This means:
-- The backfill in `odoo-chatter-sync` silently fails when trying to `UPDATE lead_files SET odoo_message_id = ...`
-- The UI code reading `(f as any).odoo_message_id` always gets `undefined`
-- ALL files appear as orphans because none can be linked to their parent message
+1) Hard-fix schema with safe migration
+- Add a new migration (fresh timestamp) with:
+  - `ALTER TABLE public.lead_files ADD COLUMN IF NOT EXISTS odoo_message_id integer;`
+  - `CREATE INDEX IF NOT EXISTS idx_lead_files_odoo_message_id ON public.lead_files(odoo_message_id);`
+- Do not rely on old migration file; this one must be idempotent.
 
-### Problem 2: Stage change activities have `has_tracking: true` but NO `tracking_changes` array
-The existing synced data stores `has_tracking: true` in metadata but the actual field-level changes (`tracking_changes`) were never populated. The UI checks for `trackingChanges` array — finds nothing — and falls through to showing the duplicate "Stage Changed / Stage Changed" text.
+2) Make `odoo-chatter-sync` fail fast if schema is broken
+- Add startup preflight in `supabase/functions/odoo-chatter-sync/index.ts`:
+  - Query `information_schema.columns` for `lead_files.odoo_message_id`.
+  - If missing, return explicit error (not silent warning path).
+- This prevents “looks successful but not linked” runs.
 
-### Problem 3: `lead_activities` with `activity_type = 'stage_change'` duplicates from `lead_events`
-Both `lead_activities` (from chatter sync) and `lead_events` (from CRM sync) create stage change entries. The UI merges both, resulting in duplicate stage change cards.
+3) Backfill file linkage for all leads (approved scope)
+- Keep `attachment_ids` in `mail.message` fetch.
+- Build message→attachment mapping and update `lead_files` by `odoo_id` in batches.
+- Track and return counts: `files_linked`, `files_unlinked_remaining`, `messages_with_attachments`.
+- Keep this in full sync mode so one “Sync Odoo (full)” repairs existing history.
 
-## Plan
+4) Enforce strict Odoo parity in UI
+- In `src/components/pipeline/OdooChatter.tsx` thread builder:
+  - Keep inline render for files matched by `odoo_message_id`.
+  - For standalone orphan rendering, exclude Odoo-origin files:
+    - only show standalone files when `source !== 'odoo_sync'` (e.g., local chatter uploads).
+  - Result: no detached Odoo “files attached” card at top, even if partial linkage remains.
 
-### 1. DB: Actually create `odoo_message_id` on `lead_files`
-Re-run the migration with `IF NOT EXISTS` safety. The previous migration file is there but never took effect.
+5) Stage-change cleanup (same pass)
+- Keep current duplicate suppression between `lead_activities` and `lead_events`.
+- Improve stage fallback rendering:
+  - if `activity_type='stage_change'` and no `tracking_changes`, show only minimal line (author + arrow + from/to if available), never duplicate “Stage Changed” text blocks.
 
-### 2. Edge Function: Re-sync to populate `tracking_changes` and backfill file linkage
-Update `odoo-chatter-sync` to:
-- On re-sync (`full` mode), update existing activities that have `has_tracking: true` but missing `tracking_changes` in metadata
-- Continue backfilling `lead_files.odoo_message_id` (which will now work since the column exists)
+Validation checklist (must pass before done):
+1) DB: `lead_files` has `odoo_message_id`.
+2) Full sync result returns non-zero `files_linked` for affected leads.
+3) For lead `S02728, FW: 3 Kingsbury Crescent`, Odoo files render under the parent message, not as top standalone group.
+4) No detached Odoo file groups remain in chatter (only locally uploaded files can appear standalone).
+5) Stage cards no longer show duplicated “Stage Changed / Stage Changed”.
 
-### 3. UI: Deduplicate stage changes and fix fallback text
-In `OdooChatter.tsx`:
-- When merging `eventActivities` into the thread, skip `lead_events` stage changes if a matching `lead_activities` entry with `activity_type = 'stage_change'` exists for the same lead around the same timestamp
-- For stage changes with `has_tracking: true` but no `tracking_changes` array, show just the author name and arrow icon (no "Stage Changed / Stage Changed" double text)
-- Keep the current tracking bullet rendering for activities that DO have `tracking_changes`
-
-### 4. Trigger re-sync
-After deploying, the user runs "Sync Odoo" to backfill both tracking data and file linkage.
-
-| File | Change |
-|------|--------|
-| DB migration | `ALTER TABLE lead_files ADD COLUMN IF NOT EXISTS odoo_message_id integer` + index |
-| `supabase/functions/odoo-chatter-sync/index.ts` | Update existing activities missing `tracking_changes`, backfill file linkage |
-| `src/components/pipeline/OdooChatter.tsx` | Deduplicate stage changes, fix "Stage Changed" fallback display |
-
+Files to change:
+- `supabase/migrations/<new_timestamp>_add_odoo_message_id_safe.sql`
+- `supabase/functions/odoo-chatter-sync/index.ts`
+- `src/components/pipeline/OdooChatter.tsx`
