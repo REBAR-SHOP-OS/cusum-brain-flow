@@ -248,9 +248,9 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     };
   }), [leadEvents, lead.company_id]);
 
-  // Unified thread — no timestamp matching; files are standalone chronological entries
+  // Unified thread — files linked to their parent activity via odoo_message_id
   type ThreadItem =
-    | { kind: "activity"; data: LeadActivity; date: Date }
+    | { kind: "activity"; data: LeadActivity; matchedFiles?: any[]; date: Date }
     | { kind: "file_group"; files: any[]; date: Date }
     | { kind: "comm"; data: (typeof communications)[0]; date: Date };
 
@@ -263,18 +263,36 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       ...eventActivities.map((a: any) => a as LeadActivity),
     ];
 
-    const items: ThreadItem[] = [
-      ...allActivities.map((a) => ({
+    // Build map: odoo_message_id → files[]
+    const filesByMsgId = new Map<number, any[]>();
+    const orphanFiles: any[] = [];
+    for (const f of files) {
+      const msgId = (f as any).odoo_message_id;
+      if (msgId) {
+        if (!filesByMsgId.has(msgId)) filesByMsgId.set(msgId, []);
+        filesByMsgId.get(msgId)!.push(f);
+      } else {
+        orphanFiles.push(f);
+      }
+    }
+
+    // Build activity items, attaching matched files
+    const items: ThreadItem[] = allActivities.map((a) => {
+      const msgId = (a as any).odoo_message_id as number | undefined;
+      const matched = msgId ? filesByMsgId.get(msgId) : undefined;
+      return {
         kind: "activity" as const,
         data: a,
+        matchedFiles: matched,
         date: new Date(a.created_at),
-      })),
-      ...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })),
-    ];
+      };
+    });
 
-    // Insert files as standalone chronological entries (batch within 60s)
-    if (files.length > 0) {
-      const sorted = [...files].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    items.push(...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })));
+
+    // Only truly unlinked files appear as standalone entries
+    if (orphanFiles.length > 0) {
+      const sorted = [...orphanFiles].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       let batch: any[] = [sorted[0]];
       for (let i = 1; i < sorted.length; i++) {
         const prev = new Date(sorted[i - 1].created_at).getTime();
@@ -291,7 +309,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       }
     }
 
-    // Sort by date descending — purely chronological
+    // Sort by date descending
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
     return items;
   }, [activities, eventActivities, files, communications]);
@@ -517,7 +535,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
                   ) : item.kind === "comm" ? (
                     <CommThreadItem comm={item.data} />
                   ) : (
-                    <ActivityThreadItem activity={item.data} />
+                    <ActivityThreadItem activity={item.data} matchedFiles={item.matchedFiles} />
                   )}
                 </div>
               );
@@ -544,7 +562,7 @@ function DateSeparator({ date }: { date: Date }) {
 }
 
 const ActivityThreadItem = React.memo(
-  React.forwardRef<HTMLDivElement, { activity: LeadActivity }>(function ActivityThreadItem({ activity }, ref) {
+  React.forwardRef<HTMLDivElement, { activity: LeadActivity; matchedFiles?: any[] }>(function ActivityThreadItem({ activity, matchedFiles }, ref) {
     const Icon = activityIcons[activity.activity_type] || MessageSquare;
     const isNote = activity.activity_type === "note";
     const isStageChange = activity.activity_type === "stage_change";
@@ -640,6 +658,11 @@ const ActivityThreadItem = React.memo(
             !isStageChange && !hasTracking && (
               <p className="text-[13px] text-foreground/80 mt-0.5">{activity.title}</p>
             )
+          )}
+
+          {/* Inline file attachments matched by odoo_message_id */}
+          {matchedFiles && matchedFiles.length > 0 && (
+            <InlineFileAttachments files={matchedFiles} />
           )}
         </div>
       </div>

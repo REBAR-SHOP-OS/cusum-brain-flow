@@ -5753,6 +5753,7 @@ export type Database = {
           lead_id: string
           mime_type: string | null
           odoo_id: number | null
+          odoo_message_id: number | null
           source: string | null
           storage_path: string | null
         }
@@ -5766,6 +5767,7 @@ export type Database = {
           lead_id: string
           mime_type?: string | null
           odoo_id?: number | null
+          odoo_message_id?: number | null
           source?: string | null
           storage_path?: string | null
         }
@@ -5779,6 +5781,7 @@ export type Database = {
           lead_id?: string
           mime_type?: string | null
           odoo_id?: number | null
+          odoo_message_id?: number | null
           source?: string | null
           storage_path?: string | null
         }
