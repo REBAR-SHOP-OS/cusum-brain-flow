@@ -1,46 +1,30 @@
 
 
-# رفع مشکل Invoice # و Invoice Date در Packing Slip
+# رفع مشکل Invoice # / Invoice Date و بلاکر Publish
 
-## مشکل
-هنگام ساخت packing slip در Loading Station، فیلدهای `invoice_number` و `invoice_date` اصلاً مقداردهی نمی‌شوند و خالی (—) نمایش داده می‌شوند.
+## دو مشکل موجود
 
-## ریشه مشکل
-در `src/pages/LoadingStation.tsx` خطوط 153-168، insert به جدول `packing_slips` شامل `invoice_number` و `invoice_date` **نیست**.
+### مشکل ۱: بلاکر Publish
+Migration `20260305000039` سعی می‌کند unique index بسازد **قبل از** اینکه migration `20260305175234` رکوردهای تکراری را حذف کند. ترتیب اجرا اشتباه است.
 
-## راه‌حل
-مسیر دیتا وجود دارد: `cut_plans → cut_plan_items → work_orders → orders`
+**راه‌حل**: dedup SQL را داخل همان migration `20260305000039` و **قبل از** CREATE INDEX قرار می‌دهیم. Migration دوم (`175234`) را خالی می‌کنیم.
 
-در Loading Station، **قبل از insert packing slip**، یک query اضافه می‌شود:
+### مشکل ۲: Invoice # و Invoice Date خالی در Preview
+Packing slip‌های قبلی بدون `invoice_number` و `invoice_date` ذخیره شده‌اند. کد جدید LoadingStation فقط برای slip‌های **جدید** کار می‌کند.
 
-```typescript
-// Query order data for invoice fields
-const { data: orderData } = await supabase
-  .from("cut_plan_items")
-  .select("work_orders(orders(order_number, order_date))")
-  .eq("cut_plan_id", selectedBundle.cutPlanId)
-  .not("work_order_id", "is", null)
-  .limit(1)
-  .maybeSingle();
+**راه‌حل**: در `DeliveryTerminal.tsx`، وقتی slip بارگذاری می‌شود و `invoice_number` یا `invoice_date` خالی است، یک query فالبک اجرا شود:
 
-const order = (orderData as any)?.work_orders?.orders;
-const invoiceNumber = order?.order_number || null;
-const invoiceDate = order?.order_date
-  ? new Date(order.order_date).toISOString().slice(0, 10)
-  : null;
+```
+packing_slips.cut_plan_id → cut_plan_items → work_orders → orders
 ```
 
-سپس در insert، دو فیلد اضافه می‌شود:
+از آنجا `order_number` و `order_date` خوانده و به عنوان invoiceNumber/invoiceDate نمایش داده شود.
 
-```typescript
-invoice_number: invoiceNumber,
-invoice_date: invoiceDate,
-```
+## فایل‌های تغییر یافته
 
-## فایل تغییر یافته
 | فایل | تغییر |
 |---|---|
-| `src/pages/LoadingStation.tsx` | اضافه کردن query برای order_number/order_date و مقداردهی invoice_number/invoice_date در insert packing_slips |
-
-**نکته**: این تغییر فقط برای packing slip‌های **جدید** اعمال می‌شود. Slip‌های قبلی همچنان خالی خواهند بود مگر دستی آپدیت شوند.
+| `supabase/migrations/20260305000039_...sql` | اضافه کردن dedup قبل از CREATE INDEX |
+| `supabase/migrations/20260305175234_...sql` | خالی کردن (دیگر لازم نیست) |
+| `src/pages/DeliveryTerminal.tsx` | فالبک query برای invoice data از cut_plan_items → orders |
 
