@@ -1,37 +1,35 @@
 
 
-# Clean File & Image Display in Chatter Feed
+# Show Files Inline in Chatter Feed — Odoo Style
 
 ## Problem
 
-The feed shows each file as a separate "File attached" entry, creating visual clutter. The 5-second dedup filter also removes files that should be visible. Images from Odoo need inline previews like the Odoo screenshot shows.
+Files exist in the chatter thread but are buried at the bottom (sorted by date), and they show as a separate "files attached" group disconnected from the messages that uploaded them. In Odoo, files appear as inline attachments within the specific message/activity that uploaded them — not as standalone entries.
 
-## Changes — `src/components/pipeline/OdooChatter.tsx`
+Currently files with `created_at` of Feb 10 sink below all stage changes from Feb 17+, making them invisible unless the user scrolls to the very bottom.
 
-### 1. Remove aggressive dedup filter
-The current 5s proximity filter hides legitimate files. Remove it — show ALL files from `lead_files`, grouped by time proximity.
+## Solution
 
-### 2. Increase grouping window from 30s to 120s
-Files uploaded in the same batch (within 2 minutes) get grouped into one "Files attached" card with a grid of thumbnails, not separate entries.
+### 1. Attach files to their parent activity instead of showing separately
 
-### 3. Improve `FileGroupThreadItem` layout
-- Show image thumbnails in a 2-3 column grid inside the card
-- Show non-image files as compact chips below the grid
-- Single "File attached" header per group
+Instead of putting files into the thread as standalone `FileGroupThreadItem` entries, match files to their closest activity by timestamp proximity (within 5 minutes) and render them inline below that activity's content. This matches Odoo's behavior where attachments appear under the message that uploaded them.
 
-### 4. Improve `FileThreadItem` for single files
-- If it's an image, show inline preview thumbnail directly
-- If it's a non-image, show the file chip only
-- Add storage-path image support (not just Odoo images)
+- In `ActivityThreadItem`, accept a `files` prop and render attached files (image thumbnails + file chips) below the activity body
+- Remove standalone `FileGroup` and `FileThreadItem` from the main thread
+- Files that don't match any activity still appear as standalone entries (fallback)
 
-### 5. Add signed URL support for storage-path images
-Currently only Odoo images get previews. Files uploaded via chatter (with `storage_path`) should also render inline image previews using signed URLs.
+### 2. Show unmatched files at the top of the feed
 
-| Area | Detail |
+Any files that don't match an activity should appear at the top of the thread (not buried at the bottom) so users always see them.
+
+### 3. Clean layout for inline file attachments
+
+Within each activity that has files:
+- Image files: show as a thumbnail grid (2-3 cols, 64px thumbnails)
+- Non-image files: show as compact download chips
+- Use `OdooImagePreview` for Odoo files, `StorageImagePreview` for storage files
+
+| File | Change |
 |------|--------|
-| Dedup | Remove 5s activity proximity filter, keep all files |
-| Grouping | 120s window, combine into single card |
-| Image preview | Grid layout for grouped images, inline for singles |
-| Storage images | Signed URL preview for locally uploaded images |
-| File | `src/components/pipeline/OdooChatter.tsx` |
+| `src/components/pipeline/OdooChatter.tsx` | Match files to activities by timestamp, render inline, show orphan files at top |
 
