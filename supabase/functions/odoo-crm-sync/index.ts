@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
 
     for (const l of allExisting) {
       const meta = l.metadata as Record<string, unknown> | null;
-      const oid = meta?.odoo_id as string;
+      const oid = String(meta?.odoo_id ?? "");
       if (!oid) continue;
 
       const syncedAt = (meta?.synced_at as string) || "";
