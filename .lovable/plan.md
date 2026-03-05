@@ -1,61 +1,46 @@
 
 
-# Fix Odoo Sync: Deduplicate, Deploy, and Backfill
+# Fix Missing Files and Images in Chatter
 
-## Diagnosis (hard numbers from the database)
+## Root Causes Found
 
-- **2797** Odoo-synced leads total
-- **408** (14.6%) have `odoo_created_at` populated
-- **215** (7.7%) have `contact_id` populated
-- **2389** leads still have null timestamps and null contacts
+**Bug 1: Unlinked Odoo files are silently dropped.**
+In `OdooChatter.tsx` line 349-460, files from Odoo that lack an `odoo_message_id` are pushed into `unlinkedOdooFiles` — but that array is **never rendered**. Only `orphanFiles` (non-Odoo uploads) get pushed to `pushFileBatches`. So any Odoo file that wasn't successfully linked to a message during chatter sync simply vanishes from the UI.
 
-The columns exist in test. The edge function logic is correct. But **deployment to production is blocked** because migration `20260304234951` tries to create a UNIQUE index on `metadata->>'odoo_id'` and production has duplicate odoo_id values (e.g. odoo_id `3083` appears more than once).
+**Bug 2: Email body images from Odoo don't load.**
+Odoo emails contain `<img src="https://odoo.rebar.shop/web/image/...">` tags. These require Odoo authentication to fetch. DOMPurify correctly allows `<img>` tags, but the browser can't load them because there's no auth cookie/header. Result: broken image placeholders in email bodies (the signature logo, inline screenshots, etc.).
 
-This is blocking everything: the column migration, the edge function deploy, and therefore the backfill.
+## Fix
 
-## Fix (3 steps)
+### 1. Render unlinked Odoo files (OdooChatter.tsx)
 
-### Step 1: Fix the blocking migration
+Change line 460 from only pushing `orphanFiles` to also pushing `unlinkedOdooFiles`:
 
-Replace the unique index migration with a safe version that deduplicates first, then creates the index:
-
-```sql
--- Delete duplicate leads keeping only the most recently synced per odoo_id
-DELETE FROM leads a USING leads b
-WHERE a.id < b.id
-  AND a.metadata->>'odoo_id' IS NOT NULL
-  AND a.metadata->>'odoo_id' = b.metadata->>'odoo_id';
-
--- Now create the unique index (safe — no duplicates remain)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_odoo_id_unique
-  ON leads ((metadata->>'odoo_id'))
-  WHERE metadata->>'odoo_id' IS NOT NULL;
+```
+pushFileBatches(orphanFiles);
+pushFileBatches(unlinkedOdooFiles);  // ← ADD THIS
 ```
 
-This unblocks the entire deploy pipeline.
+This immediately makes all Odoo-synced files (PDFs, images) visible in the chatter timeline, even if they couldn't be matched to a specific message.
 
-### Step 2: Fix chatter date ordering (OdooChatter.tsx)
+### 2. Proxy Odoo images in email HTML bodies (OdooChatter.tsx)
 
-Currently only the "initial event" uses `odoo_created_at`. All other activities and the overall sort still use `created_at`.
+After DOMPurify sanitizes the HTML, post-process it to replace Odoo image URLs with proxied URLs:
 
-Changes:
-- For **all** activity items from Odoo-synced leads, use `odoo_created_at` as the baseline date when the activity's own `created_at` equals the sync timestamp (i.e., when `created_at` is within a few seconds of `metadata.synced_at`)
-- The final thread sort should use each item's resolved date, which already works — the issue is that most items are getting `created_at` (sync time) as their date
+- Detect `<img src="...odoo...">` patterns in the sanitized HTML
+- Replace with `src="${VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?url=..."` (passing the original URL as a query param)
+- The existing `odoo-file-proxy` edge function already handles authenticated fetching from Odoo
 
-### Step 3: Deploy and trigger full sync
+This requires a small update to `odoo-file-proxy` to accept a `url` query parameter (currently it only accepts `id`). Add a branch that fetches by direct URL when `url` is provided.
 
-Once the migration unblocks, the edge function (which already has correct logic for writing `odoo_created_at`, `odoo_updated_at`, `last_touched_at`, and `contact_id`) will deploy. A full sync will backfill all 2797 leads.
+### 3. Update odoo-file-proxy to support URL-based fetching
+
+Add logic: if `?url=<odoo-url>` is provided instead of `?id=`, fetch that URL directly using the stored Odoo credentials, and stream the response back. This handles inline email images without needing to know the attachment ID.
 
 ## Files to change
 
 | File | Change |
 |------|--------|
-| `supabase/migrations/20260304234951_*.sql` | Replace with dedup-then-index SQL |
-| `src/components/pipeline/OdooChatter.tsx` | Use `odoo_created_at` for all Odoo-synced activity dates, not just initial event |
-
-## Expected outcome after full sync
-
-- 90%+ leads with `contact_id` populated (limited by leads that have email/phone in Odoo)
-- 100% of Odoo-synced leads with `odoo_created_at` populated
-- Chatter date headers showing real Odoo dates
+| `src/components/pipeline/OdooChatter.tsx` | Push `unlinkedOdooFiles` to file batches; post-process sanitized HTML to proxy Odoo image URLs |
+| `supabase/functions/odoo-file-proxy/index.ts` | Accept `?url=` param for proxying arbitrary Odoo image URLs |
 
