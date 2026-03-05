@@ -1,41 +1,44 @@
 
 
-# Fix: Allow Bar Count Adjustment Before First Stroke + Abort Run
+# Fix: Pixel Agent Image Display (Raw URL Instead of Inline Image)
 
 ## Problem
-The screenshot shows 6 bars loaded on a running job where the dynamic max should be 5 (for 2395mm cut on 12M stock). Once "LOCK & START" is pressed, the bar count buttons are disabled (`isRunning` check), with no way to abort or correct the mistake. There's also no abort/stop mechanism at all.
+After adding video generation to the Pixel agent, the LLM's tool-call path outputs generated image URLs as plain text links instead of markdown image syntax (`![alt](url)`). The `PixelChatRenderer` regex only matches `![...](https://...social-images...)`, so the image never renders inline — the user sees a raw URL.
 
-## Two Issues to Fix
+The **deterministic path** (slot number detection) still works fine because it constructs the markdown manually in code. The issue is only when the LLM uses the `generate_image` tool and then formats its own response.
 
-### 1. Enforce dynamic maxBars on LOCK & START
-The `handleLockAndStart` function doesn't validate that the requested bar count is within the dynamic limit. Even though the UI buttons should prevent going over, the run plan or a race condition can still set bars above the dynamic max.
+## Root Cause
+The marketing prompt (line 64) says `**Image** — markdown image tag` but the LLM inconsistently follows this. Adding the `generate_video` tool definition may have shifted the LLM's formatting behavior. The prompt needs to be more explicit about the exact format.
 
-**Fix in `CutterStationView.tsx` `handleLockAndStart`**: Clamp the bars value before starting:
-```typescript
-const clampedBars = Math.min(bars, maxBars);
+## Fix (2 parts)
+
+### Part 1: Strengthen the prompt in `marketing.ts`
+Add explicit formatting instructions after `generate_image` tool returns, telling the LLM exactly how to embed the image:
+
 ```
-Use `clampedBars` for all downstream calls.
+After generate_image returns a result with image_url, you MUST display it as:
+![Product Name](IMAGE_URL_HERE)
 
-### 2. Add "Abort Run" capability (before any strokes are recorded)
-Allow operators to abort a run if no strokes have been recorded yet, so they can fix the bar count and restart.
+NEVER paste the URL as plain text or a clickable link. Always use markdown image syntax.
+```
 
-**Changes in `CutterStationView.tsx`**:
-- Add `handleAbortRun` function that:
-  - Calls `manageMachine({ action: "stop-run", machineId })` (or updates the machine_runs record to `aborted`)
-  - Resets `isRunning`, `activeRunId`, `completedAtRunStart`, and `slotTracker.reset()`
-  - Only available when `slotTracker.totalCutsDone === 0`
+Update lines 62-67 in `marketing.ts` to make the format crystal clear with an example.
 
-**Changes in `CutEngine.tsx`**:
-- When `isRunning && strokesDone === 0`, show an "Abort" button instead of disabling bar controls
-- Pass `onAbort` callback prop from CutterStationView
+### Part 2: Make `PixelChatRenderer` more robust
+Update `extractPostData` in `PixelChatRenderer.tsx` to also detect plain URLs from the `social-images` bucket that aren't wrapped in markdown image syntax. If a bare URL is found, treat it as an image and render it in a `PixelPostCard` just like the markdown-wrapped ones.
 
-### 3. Also show dynamic max in the info text
-Currently shows "Max capacity: 8" (static). Should show the dynamic max so the operator knows the real limit.
+Add a fallback regex:
+```typescript
+// Fallback: detect bare social-images URLs not in markdown image syntax
+const bareUrlRegex = /(https?:\/\/[^\s)]*social-images[^\s)]*\.(?:png|jpg|jpeg|webp))/g;
+```
 
-**Fix in `CutEngine.tsx`**: The `maxBars` prop already reflects the dynamic value — verify the info text uses it (it does via the `maxBars` prop, line ~238).
+If `imgRegex` finds nothing but `bareUrlRegex` does, use those URLs to build post cards.
 
-## Summary
-- Clamp bars at `handleLockAndStart` to enforce the dynamic limit
-- Add abort capability when no strokes have been recorded
-- Both changes in `CutterStationView.tsx` and `CutEngine.tsx`
+### Part 3: Video display in `PixelChatRenderer`
+Add detection for video URLs (from `social-media-assets` bucket or `.mp4` extension) and render them with a `<video>` element instead of an image card, so video generation also displays inline.
+
+## Files to Edit
+1. `supabase/functions/_shared/agents/marketing.ts` — Strengthen image format instructions
+2. `src/components/social/PixelChatRenderer.tsx` — Add fallback bare URL detection + video rendering
 
