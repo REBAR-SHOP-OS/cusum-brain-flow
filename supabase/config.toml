@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.kiosk-punch]
 verify_jwt = false
+
+[functions.social-cron-publish]
+verify_jwt = false
