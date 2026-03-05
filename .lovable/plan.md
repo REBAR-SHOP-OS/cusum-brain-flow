@@ -1,46 +1,33 @@
 
 
-# Audit & Fix: Chatter Feed vs Odoo
+# Fix Chatter Feed — Match Odoo Exactly
 
-## Issues Found
+## Root Cause Found
 
-After reviewing the code, console logs, and comparing with Odoo's behavior:
+All files have `created_at = 2026-02-10 04:46:27` (the sync timestamp), NOT their original Odoo timestamp. The 10-minute matching window matches them to the wrong activity. There's no `odoo_message_id` column on `lead_files` to directly link files to their parent message. **Timestamp-based matching is fundamentally broken for synced data.**
 
-### 1. Root container still uses `space-y-0` (line 339)
-The main wrapper is `<div className="space-y-0">` — items are cramped together with no breathing room between sections.
+## Issues to Fix
 
-### 2. Orphan files rendered as a single blob at top
-All unmatched files are crammed into one `FileGroupThreadItem` at the top. In Odoo, each file attachment event is a separate, clean card with the uploader's name, timestamp, and inline preview.
+1. **Files matched to wrong activities** — Timestamp matching attaches files to whatever activity is closest to the sync time, not the actual parent message
+2. **"Stage Changed / Stage Changed" duplicate text** — Title says "Stage Changed", description also says "Stage Changed". In Odoo, stage changes show tracking bullets only (`• Stage: Old → New`)
+3. **Orphan files pinned at top** — Files should appear in chronological order within the feed, not forced to the top
+4. **forwardRef console warning** — `ActivityThreadItem` still triggers ref warning
 
-### 3. Files with `odoo_id` that also lack `storage_path` may not render previews
-The `InlineFileAttachments` component checks `!file.storage_path && file.odoo_id` for Odoo files — but files that have neither `storage_path` nor `odoo_id` get no preview at all (just a chip).
+## Plan — `src/components/pipeline/OdooChatter.tsx`
 
-### 4. Matching window may miss files
-The 5-minute window works for synced data, but locally uploaded files via chatter may have timestamps that don't align with any activity. These become orphans instead of showing as their own "File attached" activity card.
+### A. Remove timestamp-based file matching
+Delete the entire `MATCH_WINDOW` / `activityFilesMap` matching logic. Files and activities are independent data sources — stop trying to merge them.
 
-### 5. Console warning: `Function components cannot be given refs`
-`ActivityThreadItem` is being passed a ref somewhere — needs `forwardRef` or ref removal.
+### B. Show files as chronological standalone entries
+Insert each file (or 60s batch) into the thread sorted by `created_at` alongside activities and communications. No more `orphan_files` special kind — just `file_group` entries sorted normally.
 
-### 6. No download button on file chips
-Odoo shows a clear download action on each file. Current chips open in new tab but lack visual download affordance.
+### C. Fix stage change display
+In `ActivityThreadItem`, when `tracking_changes` exist (from metadata), suppress the duplicate "Stage Changed" title and description text. Only show the tracking bullets. When no tracking_changes, show the current title/description as fallback.
 
-## Plan
+### D. Fix forwardRef
+The `React.memo` wrapper is already there but something is passing a ref. Wrap with `React.forwardRef` inside the memo.
 
-### `src/components/pipeline/OdooChatter.tsx`
-
-**A. Fix spacing** — Change root `space-y-0` to `space-y-2` for visual separation between composer, planned activities, and thread.
-
-**B. Split orphan files into individual cards** — Instead of one `FileGroupThreadItem` for all orphans, render each orphan file (or time-grouped batch within 60s) as its own thread entry with avatar, timestamp, and inline preview. This matches Odoo where each "file attached" event is a separate card.
-
-**C. Increase matching window to 10 minutes** — Some Odoo-synced files have timestamps that drift from their parent message. Widen from 5min to 10min.
-
-**D. Add download icon to file chips** — Add a small `Download` icon to non-image file buttons for clearer affordance.
-
-**E. Show file preview for files without odoo_id or storage_path** — If a file has a `file_url`, render it as a clickable link/thumbnail. Currently these files show nothing.
-
-**F. Fix forwardRef warning** — Not critical but clean up the console warning.
-
-| File | Change |
-|------|--------|
-| `src/components/pipeline/OdooChatter.tsx` | Fix spacing, split orphan files into individual cards, widen matching window, add download icons, handle file_url previews |
+| File | Changes |
+|------|---------|
+| `OdooChatter.tsx` | Remove timestamp matching, chronological file entries, fix stage change text, fix forwardRef |
 
