@@ -291,7 +291,12 @@ export function OdooChatter({ lead }: OdooChatterProps) {
         if (!filesByMsgId.has(msgId)) filesByMsgId.set(msgId, []);
         filesByMsgId.get(msgId)!.push(f);
       } else {
-        orphanFiles.push(f);
+        // Only show non-Odoo files as standalone orphans
+        // Odoo-origin files without linkage are hidden (they'll appear once backfill runs)
+        const isOdooOrigin = (f as any).source === "odoo_sync" || (f as any).odoo_id;
+        if (!isOdooOrigin) {
+          orphanFiles.push(f);
+        }
       }
     }
 
