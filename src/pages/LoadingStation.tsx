@@ -150,7 +150,22 @@ export default function LoadingStation() {
           asa_shape_code: item.asa_shape_code,
         }));
 
-        // 5. Insert packing slip with header fields
+        // 5. Query order data for invoice fields
+        const { data: orderData } = await supabase
+          .from("cut_plan_items")
+          .select("work_orders(orders(order_number, order_date))")
+          .eq("cut_plan_id", selectedBundle.cutPlanId)
+          .not("work_order_id", "is", null)
+          .limit(1)
+          .maybeSingle();
+
+        const order = (orderData as any)?.work_orders?.orders;
+        const invoiceNumber = order?.order_number || null;
+        const invoiceDate = order?.order_date
+          ? new Date(order.order_date).toISOString().slice(0, 10)
+          : null;
+
+        // 6. Insert packing slip with header fields
         const { error: slipErr } = await supabase
           .from("packing_slips")
           .insert({
@@ -165,6 +180,8 @@ export default function LoadingStation() {
             scope: scope,
             site_address: siteAddress,
             delivery_date: deliveryDate,
+            invoice_number: invoiceNumber,
+            invoice_date: invoiceDate,
           });
         if (slipErr) throw slipErr;
       } catch (innerErr) {
