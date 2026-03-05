@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -263,8 +263,8 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       ...eventActivities.map((a: any) => ({ ...(a as LeadActivity), _date: new Date(a.created_at).getTime() })),
     ];
 
-    // Match each file to closest activity within 5 minutes
-    const MATCH_WINDOW = 5 * 60 * 1000; // 5 minutes
+    // Match each file to closest activity within 10 minutes
+    const MATCH_WINDOW = 10 * 60 * 1000; // 10 minutes
     const activityFilesMap = new Map<string, any[]>();
     const orphanFiles: any[] = [];
 
@@ -295,15 +295,29 @@ export function OdooChatter({ lead }: OdooChatterProps) {
       ...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })),
     ];
 
-    // Orphan files go at the top as a single group
+    // Split orphan files into individual cards (grouped within 60s batches)
     if (orphanFiles.length > 0) {
-      items.unshift({ kind: "orphan_files", files: orphanFiles, date: new Date(orphanFiles[0].created_at) });
+      orphanFiles.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      let batch: any[] = [orphanFiles[0]];
+      for (let i = 1; i < orphanFiles.length; i++) {
+        const prev = new Date(orphanFiles[i - 1].created_at).getTime();
+        const cur = new Date(orphanFiles[i].created_at).getTime();
+        if (cur - prev <= 60_000) {
+          batch.push(orphanFiles[i]);
+        } else {
+          items.push({ kind: "orphan_files", files: [...batch], date: new Date(batch[0].created_at) });
+          batch = [orphanFiles[i]];
+        }
+      }
+      if (batch.length > 0) {
+        items.push({ kind: "orphan_files", files: [...batch], date: new Date(batch[0].created_at) });
+      }
     }
 
-    // Sort by date descending, but orphan_files always stays at top
+    // Sort by date descending, orphan_files at top
     items.sort((a, b) => {
-      if (a.kind === "orphan_files") return -1;
-      if (b.kind === "orphan_files") return 1;
+      if (a.kind === "orphan_files" && b.kind !== "orphan_files") return -1;
+      if (b.kind === "orphan_files" && a.kind !== "orphan_files") return 1;
       return b.date.getTime() - a.date.getTime();
     });
     return items;
@@ -336,7 +350,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
 
   // ── Render ───────────────────────────────────────────────────────
   return (
-    <div className="space-y-0">
+    <div className="space-y-2">
       {/* ── Composer Tab Bar ─────────────────────────────────────── */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-border">
         {(["note", "message", "activity"] as const).map((tab) => (
@@ -556,7 +570,7 @@ function DateSeparator({ date }: { date: Date }) {
   );
 }
 
-function ActivityThreadItem({ activity, matchedFiles = [] }: { activity: LeadActivity; matchedFiles?: any[] }) {
+const ActivityThreadItem = React.memo(function ActivityThreadItem({ activity, matchedFiles = [] }: { activity: LeadActivity; matchedFiles?: any[] }) {
   const Icon = activityIcons[activity.activity_type] || MessageSquare;
   const isNote = activity.activity_type === "note";
   const isStageChange = activity.activity_type === "stage_change";
@@ -659,7 +673,7 @@ function ActivityThreadItem({ activity, matchedFiles = [] }: { activity: LeadAct
       </div>
     </div>
   );
-}
+});
 
 function InlineFileAttachments({ files }: { files: any[] }) {
   const imageFiles = files.filter(f => f.mime_type?.startsWith("image/") && !f.mime_type?.includes("dwg"));
@@ -672,6 +686,7 @@ function InlineFileAttachments({ files }: { files: any[] }) {
           {imageFiles.map((file) => {
             const isOdooFile = !file.storage_path && file.odoo_id;
             const isStorageFile = !!file.storage_path;
+            const hasFileUrl = !isOdooFile && !isStorageFile && file.file_url;
             return (
               <div key={file.id} className="space-y-1">
                 {isOdooFile && (
@@ -679,6 +694,14 @@ function InlineFileAttachments({ files }: { files: any[] }) {
                 )}
                 {isStorageFile && (
                   <StorageImagePreview storagePath={file.storage_path} fileName={file.file_name || "image"} thumbnail />
+                )}
+                {hasFileUrl && (
+                  <img
+                    src={file.file_url}
+                    alt={file.file_name || "image"}
+                    className="w-16 h-16 rounded-md border border-border object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(file.file_url, "_blank")}
+                  />
                 )}
                 <p className="text-[10px] text-muted-foreground truncate">{file.file_name}</p>
               </div>
@@ -707,6 +730,7 @@ function InlineFileAttachments({ files }: { files: any[] }) {
               >
                 <FileIconComp className={cn("w-3.5 h-3.5 shrink-0", iconColor)} />
                 <span className="text-[11px] font-medium truncate">{file.file_name}</span>
+                <Download className="w-3 h-3 shrink-0 text-muted-foreground" />
               </button>
             );
           })}
@@ -717,9 +741,6 @@ function InlineFileAttachments({ files }: { files: any[] }) {
 }
 
 function FileGroupThreadItem({ files }: { files: any[] }) {
-  const imageFiles = files.filter(f => f.mime_type?.startsWith("image/") && !f.mime_type?.includes("dwg"));
-  const nonImageFiles = files.filter(f => !f.mime_type?.startsWith("image/") || f.mime_type?.includes("dwg"));
-
   return (
     <div className="flex gap-3 p-3 hover:bg-accent/50 rounded-md transition-colors">
       <Avatar className="w-8 h-8 shrink-0 text-[11px]">
@@ -736,53 +757,7 @@ function FileGroupThreadItem({ files }: { files: any[] }) {
             {format(new Date(files[0].created_at), "h:mm a")}
           </span>
         </div>
-        {/* Image thumbnails grid */}
-        {imageFiles.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-            {imageFiles.map((file) => {
-              const isOdooFile = !file.storage_path && file.odoo_id;
-              const isStorageFile = !!file.storage_path;
-              return (
-                <div key={file.id} className="space-y-1">
-                  {isOdooFile && (
-                    <OdooImagePreviewInline odooId={file.odoo_id} fileName={file.file_name || "image"} thumbnail />
-                  )}
-                  {isStorageFile && (
-                    <StorageImagePreview storagePath={file.storage_path} fileName={file.file_name || "image"} thumbnail />
-                  )}
-                  <p className="text-[10px] text-muted-foreground truncate">{file.file_name}</p>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {/* Non-image file chips */}
-        {nonImageFiles.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {nonImageFiles.map((file) => {
-              const ext = file.file_name?.split(".").pop()?.toUpperCase() || "FILE";
-              const FileIcon = getFileIcon(file.mime_type || "", ext);
-              const iconColor = getFileIconColor(ext);
-              return (
-                <button
-                  key={file.id}
-                  onClick={async () => {
-                    if (file.storage_path) {
-                      const url = await getSignedFileUrl(file.storage_path);
-                      if (url) window.open(url, "_blank");
-                    } else if (file.file_url) {
-                      window.open(file.file_url, "_blank");
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-secondary/50 hover:bg-secondary transition-colors text-left max-w-[200px]"
-                >
-                  <FileIcon className={cn("w-3.5 h-3.5 shrink-0", iconColor)} />
-                  <span className="text-[11px] font-medium truncate">{file.file_name}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <InlineFileAttachments files={files} />
       </div>
     </div>
   );
