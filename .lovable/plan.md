@@ -1,41 +1,52 @@
 
 
-# Add Video Generation to Pixel Agent
+# Hotfix: رفع فوری ارور `delivery_stops` در Loading Station (Production)
 
-## Problem
-Pixel agent says "I can't generate videos" because it has no `generate_video` tool. The infrastructure already exists: `generate-video` edge function (Veo/Sora), `VideoGeneratorDialog` UI component, and `social-media-assets` storage.
+## مشکل تایید‌شده
+وضعیت Production (Live) الان:
+- آخرین migration اعمال‌شده: `20260304215226`
+- Migration بعدی (`20260304234951`) به‌خاطر duplicate `odoo_id` در جدول `leads` fail می‌شود
+- Policy فعلی `delivery_stops` برای INSERT: فقط `admin, office, field` — نقش **`workshop` ندارد**
+- کاربران workshop وقتی CREATE DELIVERY می‌زنند، INSERT به `delivery_stops` با RLS reject می‌شود
 
-## Changes
+## راه‌حل: دو عملیات مستقیم روی Production
 
-### 1. Add `generate_video` tool definition (`supabase/functions/_shared/agentTools.ts`)
-In the `if (agent === "social")` block, add a second tool:
-```typescript
-{
-  name: "generate_video",
-  description: "Generate a short promotional video for social media using AI (Veo 3). Returns a public URL.",
-  parameters: {
-    prompt: { type: "string", description: "Detailed description of the video" },
-    duration: { type: "number", description: "Duration in seconds (5-15)" },
-    slot: { type: "string", description: "Time slot identifier" }
-  }
-}
+### عملیات 1: Dedup leads (رفع بلاکر migration)
+```sql
+DELETE FROM leads WHERE id IN (
+  SELECT id FROM (
+    SELECT id, ROW_NUMBER() OVER (
+      PARTITION BY metadata->>'odoo_id'
+      ORDER BY created_at DESC, id DESC
+    ) AS rn FROM leads WHERE metadata->>'odoo_id' IS NOT NULL
+  ) sub WHERE rn > 1
+);
 ```
 
-### 2. Add `generate_video` executor (`supabase/functions/_shared/agentToolExecutor.ts`)
-After the `generate_image` block, add a new `else if (name === "generate_video")` block that:
-- Calls the existing `generate-video` edge function with action `"generate"`, provider `"veo"` 
-- Polls until completed (with timeout)
-- Uploads the resulting video to `social-media-assets` bucket
-- Returns the public URL
+### عملیات 2: اضافه کردن `workshop` به policy INSERT
+```sql
+DROP POLICY IF EXISTS "Office staff insert delivery_stops" ON delivery_stops;
+CREATE POLICY "Staff insert delivery_stops" ON delivery_stops
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    company_id = get_user_company_id(auth.uid())
+    AND has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::app_role[])
+  );
+```
 
-### 3. Update Pixel prompt (`supabase/functions/_shared/agents/marketing.ts`)
-- Change "image and caption generator" to "image, video, and caption generator"
-- Add instructions: when user asks for a video or story, call `generate_video` instead of `generate_image`
-- Add video rules (duration, style, etc.)
+### عملیات 3: Neutralize migration فایل‌های تکراری در repo
+تبدیل 5 فایل migration تکراری به `SELECT 1;` تا pipeline بعدی fail نشود:
+- `20260305031029...`
+- `20260305144441...`
+- `20260305150909...`
+- `20260305155616...`
+- `20260305161208...`
 
-| File | Change |
-|---|---|
-| `supabase/functions/_shared/agentTools.ts` | Add `generate_video` tool for social agent |
-| `supabase/functions/_shared/agentToolExecutor.ts` | Add video generation executor using existing `generate-video` function |
-| `supabase/functions/_shared/agents/marketing.ts` | Update Pixel prompt to support video generation |
+### عملیات 4: Publish
+بعد از اجرای SQL روی Production و تمیز‌کردن migration ها، Publish برای sync کامل.
+
+## جزئیات فنی
+- عملیات 1 و 2 مستقیماً روی Production اجرا می‌شوند (via migration tool with production target)
+- عملیات 3 فایل‌های repo را تمیز می‌کند تا migration chain در publish بعدی مشکل نداشته باشد
+- هیچ تغییری در کد frontend یا فایل‌های auto-generated نمی‌شود
 
