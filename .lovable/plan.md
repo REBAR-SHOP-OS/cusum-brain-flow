@@ -1,28 +1,27 @@
 
 
-# Auto-Publish Scheduled Posts via Cron Job
+# Fix RLS Policy for Kiosk Profile Registration
 
 ## Problem
-The `social-cron-publish` edge function already exists and correctly finds posts where `status = 'scheduled'` and `scheduled_date <= now()`, then publishes them. However, **no cron job is configured to invoke it**, so scheduled posts just sit there and never get published.
+When `ai@rebar.shop` (workshop role) tries to register a new employee via the Face ID Kiosk, the insert into `profiles` table fails with "new row violates row-level security policy for table 'profiles'".
 
-## Solution
-Create a database migration that registers a `pg_cron` job to call the `social-cron-publish` edge function every 2 minutes using `pg_net`. This ensures any post whose scheduled time has passed gets automatically published.
+The `kiosk-register` edge function uses the service role client (`SUPABASE_SERVICE_ROLE_KEY`) which should bypass RLS, but the error persists. The current INSERT policy on `profiles` only allows `admin` role — not `workshop`.
 
-### Database Migration (1 file)
-Add a `cron.schedule` entry that fires every 2 minutes, calling:
+## Fix
+Add an INSERT policy on `profiles` for `workshop` and `shop_supervisor` roles, scoped to their own company. This ensures kiosk registration works even if the service role bypass isn't functioning as expected.
+
+```sql
+CREATE POLICY "Workshop can insert profiles for their company"
+ON public.profiles FOR INSERT
+TO authenticated
+WITH CHECK (
+  (has_role(auth.uid(), 'workshop'::app_role) OR has_role(auth.uid(), 'shop_supervisor'::app_role))
+  AND company_id = get_user_company_id(auth.uid())
+);
 ```
-POST {SUPABASE_URL}/functions/v1/social-cron-publish
-Authorization: Bearer {SERVICE_ROLE_KEY}
-```
-
-Using `pg_net.http_post` (already enabled via the `pg_net` extension).
-
-### Edge Function Config
-Add `social-cron-publish` to `supabase/config.toml` with `verify_jwt = false` so the cron call (using service role key) isn't rejected.
 
 ### Files to change
-1. **New migration SQL** — `cron.schedule` every 2 minutes calling the edge function
-2. **`supabase/config.toml`** — Add `[functions.social-cron-publish]` with `verify_jwt = false`
+1. **Database migration** — Add the new INSERT policy
 
-No frontend changes needed — the scheduling UI already sets `status: "scheduled"` and `scheduled_date` correctly.
+No code changes needed.
 
