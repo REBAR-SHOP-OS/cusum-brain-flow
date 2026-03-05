@@ -25,6 +25,7 @@ interface PipelineBoardProps {
   onReorder?: (newOrder: string[]) => void;
   aiMode?: boolean;
   aiActionLeadIds?: Set<string>;
+  pendingActivitiesByLead?: Record<string, { type: string; dueDate: string }[]>;
 }
 
 export { type PipelineBoardProps };
@@ -44,6 +45,7 @@ export function PipelineBoard({
   onReorder,
   aiMode = false,
   aiActionLeadIds = new Set(),
+  pendingActivitiesByLead = {},
 }: PipelineBoardProps) {
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -218,6 +220,7 @@ export function PipelineBoard({
               onLeadClick={onLeadClick}
               aiMode={aiMode}
               aiActionLeadIds={aiActionLeadIds}
+              pendingActivitiesByLead={pendingActivitiesByLead}
             />
           </div>
         ))}

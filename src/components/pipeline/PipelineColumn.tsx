@@ -39,6 +39,7 @@ interface PipelineColumnProps {
   onLeadClick: (lead: LeadWithCustomer) => void;
   aiMode?: boolean;
   aiActionLeadIds?: Set<string>;
+  pendingActivitiesByLead?: Record<string, { type: string; dueDate: string }[]>;
 }
 
 const ACTIVITY_COLORS: Record<ActivityStatus, string> = {
@@ -64,6 +65,7 @@ export function PipelineColumn({
   onLeadClick,
   aiMode = false,
   aiActionLeadIds = new Set(),
+  pendingActivitiesByLead = {},
 }: PipelineColumnProps) {
   const [activityFilter, setActivityFilter] = useState<ActivityStatus | null>(null);
 
@@ -138,7 +140,7 @@ export function PipelineColumn({
       </div>
 
       {/* Cards */}
-      <div className="px-1.5 py-1.5 space-y-1 min-h-[120px] flex-1 overflow-y-auto">
+      <div className="px-1.5 py-1.5 space-y-1.5 min-h-[120px] flex-1 overflow-y-auto">
         {displayedLeads.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8 opacity-50">
             {activityFilter ? "No leads with this activity" : "Drop leads here"}
@@ -154,6 +156,7 @@ export function PipelineColumn({
               onDelete={onDelete}
               onClick={onLeadClick}
               hasAIAction={aiMode && aiActionLeadIds.has(lead.id)}
+              pendingActivities={pendingActivitiesByLead[lead.id] || []}
             />
           ))
         )}

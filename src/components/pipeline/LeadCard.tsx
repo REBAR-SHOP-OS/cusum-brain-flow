@@ -1,4 +1,4 @@
-import { Star, AlignJustify, Mail, Brain, Clock } from "lucide-react";
+import { Star, Mail, Brain, Clock, Phone, ClipboardCheck, StickyNote, MessageSquare } from "lucide-react";
 import { differenceInDays, differenceInHours, formatDistanceToNowStrict, differenceInCalendarDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
@@ -6,6 +6,11 @@ import { LeadScoreBreakdown } from "./LeadScoreBreakdown";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
+
+interface PendingActivity {
+  type: string;
+  dueDate: string;
+}
 
 interface LeadCardProps {
   lead: LeadWithCustomer;
@@ -15,6 +20,24 @@ interface LeadCardProps {
   onDelete: (id: string) => void;
   onClick: (lead: LeadWithCustomer) => void;
   hasAIAction?: boolean;
+  pendingActivities?: PendingActivity[];
+}
+
+// Map activity types to icons — Odoo parity
+const ACTIVITY_ICON_MAP: Record<string, React.ElementType> = {
+  email: Mail,
+  call: Phone,
+  follow_up: Clock,
+  internal_task: ClipboardCheck,
+  note: StickyNote,
+  comment: MessageSquare,
+};
+
+function getActivityIconColor(dueDate: string): string {
+  const diff = differenceInDays(new Date(dueDate), new Date());
+  if (diff < 0) return "text-red-500";
+  if (diff === 0) return "text-orange-500";
+  return "text-green-500";
 }
 
 // Odoo-style activity status: overdue=red, today=orange, future=green, none=grey
@@ -83,7 +106,7 @@ function getSlaInfo(lead: Lead): { label: string; urgent: boolean; breached: boo
   return { label: dist, urgent: hoursLeft <= 12, breached: false };
 }
 
-export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick, hasAIAction = false }: LeadCardProps) {
+export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick, hasAIAction = false, pendingActivities = [] }: LeadCardProps) {
   const stars = getPriorityStars(lead);
   const salesperson = getSalesperson(lead);
   const meta = lead.metadata as Record<string, unknown> | null;
@@ -162,8 +185,23 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
           {/* Odoo activity status indicator */}
           {activity && (
             <span title={activity.label}>
-              <AlignJustify className={cn("w-3 h-3", activity.color)} />
+              <Clock className={cn("w-3 h-3", activity.color)} />
             </span>
+          )}
+
+          {/* Pending activity type icons — Odoo parity */}
+          {pendingActivities.length > 0 && (
+            <div className="flex items-center gap-0.5">
+              {pendingActivities.map((act, idx) => {
+                const IconComp = ACTIVITY_ICON_MAP[act.type] || Clock;
+                const colorClass = getActivityIconColor(act.dueDate);
+                return (
+                  <span key={idx} title={`${act.type} — due ${act.dueDate}`}>
+                    <IconComp className={cn("w-3 h-3", colorClass)} />
+                  </span>
+                );
+              })}
+            </div>
           )}
 
           {/* Win probability badge with score breakdown */}
@@ -197,7 +235,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
           {/* Salesperson badge */}
           {salesperson && (
             <div
-              className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0", salesperson.color)}
+              className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", salesperson.color)}
               title={salesperson.name}
             >
               {salesperson.initials}
