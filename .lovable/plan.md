@@ -1,33 +1,59 @@
 
 
-# Fix Chatter Feed — Match Odoo Exactly
+# Fix Files Placement — Link Files to Their Parent Odoo Message
 
-## Root Cause Found
+## Root Cause
 
-All files have `created_at = 2026-02-10 04:46:27` (the sync timestamp), NOT their original Odoo timestamp. The 10-minute matching window matches them to the wrong activity. There's no `odoo_message_id` column on `lead_files` to directly link files to their parent message. **Timestamp-based matching is fundamentally broken for synced data.**
+The "puzzle" is this: every Odoo attachment (`ir.attachment`) belongs to a specific `mail.message`. The chatter sync already stores `odoo_message_id` on `lead_activities`. The `lead_files` table has `odoo_id` (the attachment's Odoo ID). But there's **no column linking a file to its parent message**.
 
-## Issues to Fix
+The Odoo `mail.message` API returns an `attachment_ids` field — an array of attachment IDs belonging to that message. We never fetch it, so we can't connect the dots.
 
-1. **Files matched to wrong activities** — Timestamp matching attaches files to whatever activity is closest to the sync time, not the actual parent message
-2. **"Stage Changed / Stage Changed" duplicate text** — Title says "Stage Changed", description also says "Stage Changed". In Odoo, stage changes show tracking bullets only (`• Stage: Old → New`)
-3. **Orphan files pinned at top** — Files should appear in chronological order within the feed, not forced to the top
-4. **forwardRef console warning** — `ActivityThreadItem` still triggers ref warning
+## Plan
 
-## Plan — `src/components/pipeline/OdooChatter.tsx`
+### 1. DB Migration: Add `odoo_message_id` to `lead_files`
 
-### A. Remove timestamp-based file matching
-Delete the entire `MATCH_WINDOW` / `activityFilesMap` matching logic. Files and activities are independent data sources — stop trying to merge them.
+```sql
+ALTER TABLE public.lead_files ADD COLUMN odoo_message_id integer;
+CREATE INDEX idx_lead_files_odoo_message_id ON public.lead_files (odoo_message_id);
+```
 
-### B. Show files as chronological standalone entries
-Insert each file (or 60s batch) into the thread sorted by `created_at` alongside activities and communications. No more `orphan_files` special kind — just `file_group` entries sorted normally.
+### 2. Sync Fix: Fetch `attachment_ids` and backfill `lead_files.odoo_message_id`
 
-### C. Fix stage change display
-In `ActivityThreadItem`, when `tracking_changes` exist (from metadata), suppress the duplicate "Stage Changed" title and description text. Only show the tracking bullets. When no tracking_changes, show the current title/description as fallback.
+In `supabase/functions/odoo-chatter-sync/index.ts`:
+- Add `"attachment_ids"` to the `fields` list in the `mail.message` search_read call (line 177)
+- After inserting/updating activities, loop through messages that have `attachment_ids` and update matching `lead_files` rows:
+  ```sql
+  UPDATE lead_files SET odoo_message_id = <msg.id> WHERE odoo_id = ANY(<msg.attachment_ids>)
+  ```
 
-### D. Fix forwardRef
-The `React.memo` wrapper is already there but something is passing a ref. Wrap with `React.forwardRef` inside the memo.
+### 3. UI: Match files to activities by `odoo_message_id` instead of timestamp
 
-| File | Changes |
-|------|---------|
-| `OdooChatter.tsx` | Remove timestamp matching, chronological file entries, fix stage change text, fix forwardRef |
+In `src/components/pipeline/OdooChatter.tsx`:
+- In the `thread` memo, build a `Map<number, any[]>` from `odoo_message_id → files[]` using `lead_files` data
+- For each activity with `odoo_message_id`, attach its matched files
+- Pass matched files to `ActivityThreadItem` and render them inline via `InlineFileAttachments`
+- Only files with NO `odoo_message_id` (locally uploaded or unlinked) remain as standalone `file_group` entries
+- Remove the 60s batching for matched files — they go under their parent message
+
+### 4. Quick backfill for existing data
+
+Add a small section at the end of the chatter sync that retroactively links existing `lead_files` to their messages:
+```ts
+// After message sync, backfill file linkage
+for (const msg of allFetchedMessages) {
+  if (msg.attachment_ids?.length) {
+    await serviceClient.from("lead_files")
+      .update({ odoo_message_id: msg.id })
+      .in("odoo_id", msg.attachment_ids);
+  }
+}
+```
+
+| File | Change |
+|------|--------|
+| DB migration | Add `odoo_message_id` column + index to `lead_files` |
+| `supabase/functions/odoo-chatter-sync/index.ts` | Fetch `attachment_ids`, backfill `lead_files.odoo_message_id` |
+| `src/components/pipeline/OdooChatter.tsx` | Match files to activities by `odoo_message_id`, render inline under parent message |
+
+After deploying, re-running "Sync Odoo" will backfill the linkage for all existing files. Files will then appear exactly where they belong — under their parent message, just like Odoo.
 
