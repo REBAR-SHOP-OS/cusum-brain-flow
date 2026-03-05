@@ -278,7 +278,7 @@ Deno.serve(async (req) => {
           const { data: existingCust } = await serviceClient
             .from("customers")
             .select("id")
-            .eq("name", customerName)
+            .ilike("name", customerName)
             .eq("company_id", companyId)
             .limit(1)
             .single();
@@ -354,7 +354,7 @@ Deno.serve(async (req) => {
             const { data: existingCust } = await serviceClient
               .from("customers")
               .select("id")
-              .eq("name", customerName)
+              .ilike("name", customerName)
               .eq("company_id", companyId)
               .limit(1)
               .single();

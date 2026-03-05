@@ -299,10 +299,11 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Insert (no upsert — scheduled_activities doesn't have odoo dedup column)
+        // Upsert with ignoreDuplicates — unique index on (entity_id, activity_type, summary, due_date)
         for (let j = 0; j < rows.length; j += 100) {
           const chunk = rows.slice(j, j + 100);
-          const { error } = await serviceClient.from("scheduled_activities").insert(chunk);
+          const { error } = await serviceClient.from("scheduled_activities")
+            .upsert(chunk, { onConflict: "entity_id,activity_type,summary,due_date", ignoreDuplicates: true });
           if (error) {
             console.error("Scheduled activity insert error:", error.message);
             activityErrors += chunk.length;
