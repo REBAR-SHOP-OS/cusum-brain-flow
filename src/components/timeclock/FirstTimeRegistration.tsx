@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { UserPlus, Check, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useCompanyId } from "@/hooks/useCompanyId";
 
 interface FirstTimeRegistrationProps {
   captureFrame: () => string | null;
@@ -18,7 +17,6 @@ export function FirstTimeRegistration({ captureFrame, onComplete, onCancel }: Fi
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const { companyId } = useCompanyId();
 
   const handleSubmit = async () => {
     const trimmed = name.trim();
@@ -26,59 +24,28 @@ export function FirstTimeRegistration({ captureFrame, onComplete, onCancel }: Fi
       toast.error("Please enter your full name");
       return;
     }
-    if (!companyId) {
-      toast.error("Company not found");
-      return;
-    }
 
     setSubmitting(true);
     try {
-      // 1. Create profile
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .insert({ full_name: trimmed, is_active: true, company_id: companyId } as any)
-        .select("id")
-        .single();
+      const faceBase64 = captureFrame();
 
-      if (profileErr || !profile) {
-        throw new Error(profileErr?.message || "Failed to create profile");
+      const { data, error } = await supabase.functions.invoke("kiosk-register", {
+        body: { name: trimmed, faceBase64 },
+      });
+
+      if (error) {
+        throw new Error(typeof error === "object" && error?.message ? error.message : "Registration failed");
       }
 
-      const profileId = (profile as any).id;
-
-      // 2. Capture and upload face photo
-      const base64 = captureFrame();
-      if (base64) {
-        const filePath = `${profileId}/enroll-${Date.now()}.jpg`;
-        const byteArray = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-
-        const { error: uploadErr } = await supabase.storage
-          .from("face-enrollments")
-          .upload(filePath, byteArray, { contentType: "image/jpeg" });
-
-        if (!uploadErr) {
-          await supabase
-            .from("face_enrollments")
-            .insert({ profile_id: profileId, photo_url: filePath } as any);
-        } else {
-          console.error("[FirstTimeReg] Upload error:", uploadErr);
-        }
-      }
-
-      // 3. Clock in
-      const { error: clockErr } = await supabase
-        .from("time_clock_entries")
-        .insert({ profile_id: profileId } as any);
-
-      if (clockErr) {
-        console.error("[FirstTimeReg] Clock in error:", clockErr);
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
       setSuccess(true);
       toast.success(`Welcome ${trimmed}! You're clocked in.`);
 
       setTimeout(() => {
-        onComplete(profileId, trimmed);
+        onComplete(data.profile_id, trimmed);
       }, 3000);
     } catch (err: any) {
       console.error("[FirstTimeReg] Error:", err);
