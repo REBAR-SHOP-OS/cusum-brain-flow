@@ -46,6 +46,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState<"material" | "tag" | null>(null);
+  const [deleting, setDeleting] = useState<"material" | "tag" | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [signedUrls, setSignedUrls] = useState<{ material?: string; tag?: string }>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -189,6 +190,35 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
     }
   };
 
+  const handleDeletePhoto = async (type: "material" | "tag") => {
+    if (!canWrite || !item.evidence_id) return;
+    setDeleting(type);
+    try {
+      const field = type === "material" ? "material_photo_url" : "tag_scan_url";
+      const storedPath = type === "material" ? item.material_photo_url : item.tag_scan_url;
+
+      if (storedPath) {
+        let path = storedPath;
+        const marker = "/object/public/clearance-photos/";
+        const idx = storedPath.indexOf(marker);
+        if (idx !== -1) path = storedPath.substring(idx + marker.length);
+        await supabase.storage.from("clearance-photos").remove([path]);
+      }
+
+      await supabase.from("clearance_evidence")
+        .update({ [field]: null })
+        .eq("id", item.evidence_id);
+
+      setValidationResult(null);
+      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+      toast({ title: `${type === "material" ? "Material" : "Tag"} photo removed` });
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   const handleVerify = async () => {
     if (!canWrite || isCleared) return;
     setVerifying(true);
@@ -285,20 +315,22 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           <PhotoSlot
             label="Material"
             url={signedUrls.material || null}
-            loading={uploading === "material" || (validating && uploading === null)}
+            loading={uploading === "material" || (validating && uploading === null) || deleting === "material"}
             disabled={!canWrite || isCleared}
             inputRef={materialRef}
             onFileSelect={(f) => handleUpload("material", f)}
             onPreview={(url) => setPreviewUrl(url)}
+            onDelete={() => handleDeletePhoto("material")}
           />
           <PhotoSlot
             label="Tag Scan"
             url={signedUrls.tag || null}
-            loading={uploading === "tag"}
+            loading={uploading === "tag" || deleting === "tag"}
             disabled={!canWrite || isCleared}
             inputRef={tagRef}
             onFileSelect={(f) => handleUpload("tag", f)}
             onPreview={(url) => setPreviewUrl(url)}
+            onDelete={() => handleDeletePhoto("tag")}
           />
         </div>
 
@@ -427,9 +459,10 @@ interface PhotoSlotProps {
   inputRef: React.RefObject<HTMLInputElement>;
   onFileSelect: (file: File) => void;
   onPreview: (url: string) => void;
+  onDelete?: () => void;
 }
 
-function PhotoSlot({ label, url, loading, disabled, inputRef, onFileSelect, onPreview }: PhotoSlotProps) {
+function PhotoSlot({ label, url, loading, disabled, inputRef, onFileSelect, onPreview, onDelete }: PhotoSlotProps) {
   return (
     <div
       className={`relative aspect-[4/3] rounded-lg border border-border bg-muted/30 overflow-hidden flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors ${disabled ? "opacity-60 pointer-events-none" : ""}`}
@@ -441,6 +474,14 @@ function PhotoSlot({ label, url, loading, disabled, inputRef, onFileSelect, onPr
         }
       }}
     >
+      {url && !disabled && onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="absolute top-1 right-1 p-1 rounded-full bg-black/60 hover:bg-destructive text-white z-10"
+        >
+          <XCircle className="w-4 h-4" />
+        </button>
+      )}
       {url ? (
         <img src={url} alt={label} className="w-full h-full object-cover" />
       ) : loading ? (
