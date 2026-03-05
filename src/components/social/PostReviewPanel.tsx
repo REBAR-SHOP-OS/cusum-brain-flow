@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
+import { SchedulePopover } from "./SchedulePopover";
 import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
 import { SelectionSubPanel, type SelectionOption } from "./SelectionSubPanel";
 import { uploadSocialMediaAsset } from "@/lib/socialMediaStorage";
@@ -466,9 +467,7 @@ export function PostReviewPanel({
                     <Button variant="outline" className="flex-1" onClick={onDecline}>
                       Decline
                     </Button>
-                    <Button className="flex-1" onClick={onSchedule}>
-                      {post.status === "scheduled" ? "Approve" : "Schedule"}
-                    </Button>
+                    <SchedulePopover post={post} onScheduled={onClose} />
                   </div>
                   <Button
                     variant="ghost"

@@ -108,7 +108,7 @@ export default function SocialMediaManager() {
   const handleNextWeek = () => setWeekStart((prev) => addDays(prev, 7));
 
   const handleSchedule = (post: SocialPost) => {
-    updatePost.mutate({ id: post.id, status: "scheduled" });
+    updatePost.mutate({ id: post.id, qa_status: "approved", status: "scheduled" });
     setSelectedPost(null);
   };
 
