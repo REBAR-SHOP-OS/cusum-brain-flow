@@ -1,61 +1,47 @@
 
 
-# Quick Wins Implementation Plan
+# Chatter UI Cleanup — Reduce Noise, Fix Dates, Collapse Emails
 
-## What already exists
-- **Stale lead detection**: `PipelineAlerts.tsx` already flags leads with no update in 14+ days, and `PipelineReporting.tsx` exports stale leads. However, there is no **dedicated stale dashboard** with 7/14/30-day breakdowns, owner grouping, and actionable buttons.
-- **Activity system**: `ScheduledActivities.tsx` allows scheduling activities per lead. No enforcement that a next activity must exist.
-- **Stage gates**: `pipelineTransitionGates.ts` + `handleStageChange` in Pipeline.tsx already supports blocking transitions with modal gates.
-- **Intelligence hub**: 13 tabs at `/pipeline/intelligence` -- alerts, analytics, SLA, etc.
+## Problem (from screenshots)
+1. **"Odoo Sync" noise entries** — generic entries like "Odoo Sync / Walden Homes" pollute the conversation thread with zero actionable content
+2. **"Stage Changed" without details** — entries show "Stage Changed" but no from→to tracking info (tracking backfill hasn't run yet for all leads)
+3. **Large email blocks** — forwarded emails with signatures and quoted history dominate the thread, burying real conversations
+4. **Mixed timeline** — system audit entries (sync events, stage changes) are interleaved with human messages, reducing signal-to-noise
 
-## 4 Quick Wins to Implement
+## Plan
 
-### 1. Stale Pipeline Dashboard (new component + new Intelligence tab)
-Create `src/components/pipeline/intelligence/StalePipelineDashboard.tsx`:
-- Three-tier view: 7-day, 14-day, 30-day staleness buckets
-- Group by stage and by owner (salesperson)
-- Show lead title, stage, value, days since last update, last activity date
-- "Open Lead" action button per row
-- Total value at risk per bucket
-- Add as a new "Stale" tab in `PipelineIntelligence.tsx`
+### 1. Collapse system/audit entries into a compact "audit rail"
+In `OdooChatter.tsx`, change how `stage_change` and `system` type activities render:
+- **With tracking data**: show as compact single-line bullets (already works)
+- **Without tracking data** (generic "Stage Changed", "Odoo Sync"): render as a **collapsed mini-row** — single line, muted text, no avatar, smaller font. Group consecutive system entries under one collapsible block ("3 system updates — expand")
+- This keeps audit trail accessible but stops it from dominating the feed
 
-### 2. Unattended Leads List (new component + new Intelligence tab)  
-Create `src/components/pipeline/intelligence/UnattendedLeadsDashboard.tsx`:
-- Query `scheduled_activities` to find open leads with **zero future-dated activities**
-- Show lead title, stage, value, owner, days since creation
-- Sorted by value descending (highest-value unattended leads first)
-- "Schedule Activity" quick action that opens the lead detail
-- Summary banner: "X leads ($Y value) have no next step scheduled"
-- Add as a new "Unattended" tab in `PipelineIntelligence.tsx`
+### 2. Email body: 3-line preview + "Show full email" expand
+In `ActivityThreadItem`, for `isEmail` activities:
+- Default: show only first ~3 lines (via `line-clamp-3`) of the sanitized HTML
+- Strip common quoted-reply patterns (`-----Original Message-----`, `On ... wrote:`, Gmail quote blocks) into a separate collapsed section
+- Add "Show full email" / "Hide" toggle
+- This is the biggest UX win — emails currently render at full height
 
-### 3. Mandatory Next Activity for "New" and "Telephonic Enquiries" stages
-In `src/lib/pipelineTransitionGates.ts`:
-- Add a new gate type `"next_activity"` that fires when moving **out of** `new` or `telephonic_enquiries` to any forward stage
-- The gate checks whether the lead has at least one future-dated scheduled activity
-- If not, show a modal requiring the user to schedule one before proceeding
+### 3. Suppress empty "Odoo Sync" lead_events entries
+In the `eventActivities` useMemo, filter out `lead_events` where:
+- `event_type` is not a recognized useful type AND
+- description/payload is empty or just a company name
+- This removes the "Odoo Sync / Walden Homes" noise entries that carry no information
 
-In `src/pages/Pipeline.tsx`:
-- Wire the new gate into `handleStageChange` alongside existing qualification/pricing/loss gates
-- Add a simple `NextActivityGateModal` component that embeds the existing `ScheduledActivities` form and only allows proceeding once an activity exists
+### 4. Thread filter tabs (Conversation vs All vs Audit)
+Add a simple 3-toggle filter above the thread:
+- **All** (default): everything as today
+- **Conversation**: only emails, notes, and communications (hides system/stage_change)
+- **Audit**: only stage_change, system entries
 
-### 4. Handoff Template for QC/Estimation Requests
-Create `src/components/pipeline/HandoffTemplateDialog.tsx`:
-- Pre-structured note template with fields: Scope Summary, Due Date, Files Needed, Blockers
-- Triggers automatically when moving a lead into any `qc_*` or `estimation_*` stage (via transition gates)
-- On submit, creates a `lead_activities` entry with type `internal_note` and the structured content
-- Uses the existing gate infrastructure (new gate type `"handoff"`)
+This directly addresses the audit recommendation to "separate Chatter into Conversation / Activities / Audit Log".
 
-## Files to create/modify
+## Files to modify
 
-| File | Action |
+| File | Change |
 |------|--------|
-| `src/components/pipeline/intelligence/StalePipelineDashboard.tsx` | **Create** -- 7/14/30-day stale dashboard |
-| `src/components/pipeline/intelligence/UnattendedLeadsDashboard.tsx` | **Create** -- leads with no next activity |
-| `src/components/pipeline/HandoffTemplateDialog.tsx` | **Create** -- structured handoff note modal |
-| `src/components/pipeline/NextActivityGateModal.tsx` | **Create** -- gate modal requiring next activity |
-| `src/lib/pipelineTransitionGates.ts` | **Edit** -- add `next_activity` and `handoff` gate types |
-| `src/pages/PipelineIntelligence.tsx` | **Edit** -- add Stale and Unattended tabs |
-| `src/pages/Pipeline.tsx` | **Edit** -- wire new gate modals into `handleStageChange` flow |
+| `src/components/pipeline/OdooChatter.tsx` | Add thread filter, collapse system entries, email preview with expand, strip quoted replies |
 
-No database changes required. All features use existing tables (`leads`, `scheduled_activities`, `lead_activities`).
+No database or edge function changes needed — this is purely UI.
 
