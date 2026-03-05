@@ -197,6 +197,10 @@ export default function Pipeline() {
         from += PAGE;
       }
 
+      // Deduplicate by id (pagination during sync can cause overlaps)
+      const seen = new Set<string>();
+      allLeads = allLeads.filter(l => { if (seen.has(l.id)) return false; seen.add(l.id); return true; });
+
       // Client-side search across lead fields + customer name/company
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase();
