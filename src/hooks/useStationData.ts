@@ -87,8 +87,8 @@ export function useStationData(machineId: string | null, machineType?: string, p
         .from("cut_plans")
         .select("id, name, project_name, project_id, machine_id, projects(status, customers(name))")
         .eq("company_id", companyId!)
-        .eq("machine_id", machineId)
-        .in("status", ["draft", "queued", "running"]);
+        .in("status", ["draft", "queued", "running"])
+        .not("machine_id", "is", null);
 
       if (projectId) {
         cutterQuery = cutterQuery.eq("project_id", projectId);
