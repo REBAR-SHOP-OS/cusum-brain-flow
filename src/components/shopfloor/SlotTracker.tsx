@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,18 @@ import {
   PlayCircle,
   AlertTriangle,
   Layers,
+  MinusCircle,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ── Types ────────────────────────────────────────────────────────────
 export type SlotStatus = "waiting" | "active" | "removable" | "removed" | "completed";
@@ -40,6 +52,91 @@ function computeLeftover(stockMm: number, cutsMade: number, cutLenMm: number): n
 }
 
 const REMNANT_THRESHOLD_MM = 300;
+
+// ── Active Bar Removal Sub-Component ────────────────────────────────
+
+function ActiveBarRemovalSection({
+  activeSlots,
+  cutLengthMm,
+  stockLengthMm,
+  onRemoveBar,
+}: {
+  activeSlots: ActiveSlot[];
+  cutLengthMm: number;
+  stockLengthMm: number;
+  onRemoveBar: (slotIndex: number) => void;
+}) {
+  const [confirmSlot, setConfirmSlot] = useState<ActiveSlot | null>(null);
+
+  return (
+    <>
+      <Card className="border-muted">
+        <CardContent className="p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <MinusCircle className="w-4 h-4 text-muted-foreground" />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Loaded Bars — tap to remove
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {activeSlots.map((slot) => {
+              const leftover = computeLeftover(stockLengthMm, slot.cutsDone, cutLengthMm);
+              return (
+                <Button
+                  key={slot.index}
+                  variant="outline"
+                  size="sm"
+                  className="justify-between text-xs h-9 gap-2"
+                  onClick={() => setConfirmSlot(slot)}
+                >
+                  <span>Bar {slot.index + 1}</span>
+                  <span className="text-muted-foreground">
+                    {slot.cutsDone} cuts · {leftover}mm left
+                  </span>
+                  <MinusCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+                </Button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={!!confirmSlot} onOpenChange={(o) => !o && setConfirmSlot(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove Bar {confirmSlot ? confirmSlot.index + 1 : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmSlot && (
+                <>
+                  This bar has <strong>{confirmSlot.cutsDone}</strong> cut{confirmSlot.cutsDone !== 1 ? "s" : ""} done.
+                  The remnant ({computeLeftover(stockLengthMm, confirmSlot.cutsDone, cutLengthMm)}mm) will be set aside.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (confirmSlot) {
+                  onRemoveBar(confirmSlot.index);
+                  setConfirmSlot(null);
+                }
+              }}
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Confirm Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 
 // ── Component ────────────────────────────────────────────────────────
 
@@ -229,7 +326,16 @@ export function SlotTracker({
         );
       })}
 
-      {/* ── Action buttons ── */}
+      {/* ── ACTIVE BARS — Removable by operator ── */}
+      {activeSlots.length > 1 && canWrite && (
+        <ActiveBarRemovalSection
+          activeSlots={activeSlots}
+          cutLengthMm={cutLengthMm}
+          stockLengthMm={stockLengthMm}
+          onRemoveBar={onRemoveBar}
+        />
+      )}
+
       <div className="flex gap-2">
         {/* Record stroke */}
         {activeSlots.length > 0 && canWrite && (

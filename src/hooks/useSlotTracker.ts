@@ -148,7 +148,11 @@ export function useSlotTracker({ runPlan, isRunning }: UseSlotTrackerOpts): Slot
     setSlots((prev) => {
       const next = prev.map((s) => ({ ...s }));
       const slot = next.find((s) => s.index === slotIndex);
-      if (!slot || slot.status !== "removable") return prev;
+      if (!slot || (slot.status !== "removable" && slot.status !== "active")) return prev;
+
+      // Guard: don't allow removing the last active bar
+      const activeCount = next.filter((s) => s.status === "active").length;
+      if (slot.status === "active" && activeCount <= 1) return prev;
 
       slot.status = "removed";
       return next;
