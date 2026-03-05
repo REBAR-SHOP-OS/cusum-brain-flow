@@ -1,60 +1,63 @@
 
 
-# Odoo Sync Fix — Root Cause Analysis & Plan
+# Chatter Audit & Odoo-Identical UI Overhaul
 
-## Problems Found
+## Findings
 
-### 1. Map Key Type Mismatch (ROOT CAUSE of "every lead hits unique index")
+| Area | Status | Detail |
+|------|--------|--------|
+| lead_activities duplicates | 17 pairs | Same (lead_id, type, title, created_at) — from lead_events overlap |
+| scheduled_activities duplicates | CLEAN | 0 (fixed in prior session) |
+| lead_communications | CLEAN | 0 duplicates, 0 rows total |
+| lead_events | CLEAN | 0 duplicates |
+| Files/images not viewable | BUG | 9,362 Odoo images show "not yet migrated" placeholder — `odoo-file-proxy` edge function exists but is not used |
+| No "Files" tab in drawer | GAP | `LeadFiles.tsx` component exists but is not wired into the drawer tabs |
+| Chatter UI differs from Odoo | UX | Missing: inline image previews, file attachments shown in chatter stream, Odoo-style note backgrounds, proper "Files" tab |
+| Duplicate components | DEBT | Both `OdooChatter.tsx` (665 lines) and `LeadTimeline.tsx` (528 lines) render nearly identical data with different UIs |
 
-In `odoo-crm-sync/index.ts` line 188, existing leads are loaded and their `odoo_id` is cast as-is (`meta?.odoo_id as string`). But the database has **mixed types**: 2,191 leads store `odoo_id` as a JSON number (`1944`) and 599 store it as a JSON string (`"1944"`).
+## Plan
 
-When building the lookup Map, number-typed values become numeric keys (e.g., `1944`). But the lookup at line 239 uses `String(ol.id)` which is `"1944"`. JavaScript Maps treat `1944 !== "1944"`, so the lookup fails, and every lead falls through to the insert path, hits the unique index, and does a slow fallback update.
+### Step 1: Delete 17 duplicate lead_activities (SQL data fix)
 
-This makes every sync run process ALL ~2,800 leads as "duplicate caught by unique index" instead of a fast update — causing timeouts and the "failed" error.
+Delete the extra row from 17 duplicate pairs, keeping the one with the lower id.
 
-### 2. Metadata `odoo_id` stored as number, should be string
+### Step 2: Add "Files" tab to LeadDetailDrawer
 
-Line 247: `odoo_id: odooId` where `odooId = String(ol.id)` — this correctly stores as string on NEW inserts. But the fallback update at line 401-403 re-stores the whole `insertPayload` which has string `odoo_id`. So over time, records flip between number and string. Need to normalize all to string.
+Add a 5th tab "files" to the drawer tab bar, rendering the existing `LeadFiles` component plus inline image preview for Odoo images via the file proxy.
 
-### 3. Duplicate React Keys in Pipeline (secondary)
+### Step 3: Enable Odoo image preview in chatter
 
-The pipeline fetches leads with `order by updated_at desc` using range pagination. During sync, `updated_at` changes, causing leads to shift between pages — the same lead can appear on page 1 and page 2. This produces the "two children with the same key" React warnings.
+Replace the `OdooImagePreview` placeholder in both `OdooChatter.tsx` and `LeadTimeline.tsx` with an actual image component that loads from the `odoo-file-proxy` edge function:
 
-## Fix Plan
-
-### Step 1: Fix Map key normalization in `odoo-crm-sync/index.ts`
-
-Change line 188 from `const oid = meta?.odoo_id as string` to `const oid = String(meta?.odoo_id)`. This ensures the Map key is always a string, matching the `String(ol.id)` lookup.
-
-### Step 2: Normalize all existing `odoo_id` values to strings (SQL)
-
-```sql
-UPDATE leads 
-SET metadata = jsonb_set(metadata, '{odoo_id}', to_jsonb((metadata->>'odoo_id')::text))
-WHERE metadata->>'odoo_id' IS NOT NULL 
-AND jsonb_typeof(metadata->'odoo_id') = 'number';
-```
-
-This converts 2,191 number-typed values to strings, preventing the mismatch permanently.
-
-### Step 3: Deduplicate pipeline fetch to prevent React key warnings
-
-In `Pipeline.tsx` line 195, after `allLeads = allLeads.concat(data)`, add deduplication:
 ```typescript
-// Deduplicate by id (pagination during sync can cause overlaps)
-const seen = new Set<string>();
-allLeads = allLeads.filter(l => { if (seen.has(l.id)) return false; seen.add(l.id); return true; });
+const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${odooId}`;
+// Use <img> with auth header via fetch + blob URL
 ```
 
-### Step 4: Also fix the same type issue in `odoo-chatter-sync`
+This will render Odoo images inline in the chatter thread, identical to how Odoo shows them.
 
-The chatter sync has the same pattern — `odooToLead.set(Number(l.odoo_id), l.id)` and lookups via `msg.res_id` (number). This one is actually correct since both sides are numbers, but we should normalize for safety.
+### Step 4: Show file attachments inline in chatter thread (Odoo parity)
+
+In the `OdooChatter` thread, when a file is attached to a chatter message (via `lead_files` linked by timestamp proximity or `odoo_message_id`), show it inline below the message — images as thumbnails, documents as download cards. This mirrors Odoo's behavior where attachments appear directly in the conversation flow.
+
+### Step 5: Style chatter to match Odoo
+
+- Notes: amber/yellow background with left border (already partially done)
+- Emails: show subject line prominently, body below
+- Stage changes: compact arrow format with "from → to"
+- System messages: subtle gray, smaller text
+- Avatar with initials (already done)
+- Timestamps: relative time ("2 hours ago") with absolute on hover
+
+### Step 6: Consolidate timeline tab into chatter
+
+The "timeline" tab (LeadActivityTimeline) and "chatter" tab (OdooChatter) show overlapping data. Merge the `lead_communications` query into `OdooChatter` (already done) and remove the redundant "timeline" tab. Final tabs: **Chatter | Activities | Files | Notes** — matching Odoo's layout.
 
 | File | Change |
 |------|--------|
-| `supabase/functions/odoo-crm-sync/index.ts` | Normalize Map keys with `String()` |
-| Database (SQL) | Convert 2,191 number-typed `odoo_id` to strings |
-| `src/pages/Pipeline.tsx` | Deduplicate leads after paginated fetch |
-
-**Expected result**: Sync completes in seconds (direct updates, no index fallbacks), no React key warnings, no "failed" errors.
+| Database (data fix) | Delete 17 duplicate lead_activities |
+| `src/components/pipeline/LeadDetailDrawer.tsx` | Add "files" tab, remove "timeline" tab, reorder to match Odoo |
+| `src/components/pipeline/OdooChatter.tsx` | Use `odoo-file-proxy` for inline image previews, show files in thread |
+| `src/components/pipeline/LeadTimeline.tsx` | Replace placeholder `OdooImagePreview` with proxy-based image loading |
+| `src/components/pipeline/LeadFiles.tsx` | Add inline image preview using `odoo-file-proxy` for Odoo-sourced images |
 
