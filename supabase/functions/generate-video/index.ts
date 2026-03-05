@@ -30,17 +30,27 @@ const OPENAI_BASE = "https://api.openai.com/v1";
 // ─── Veo helpers ────────────────────────────────────────────
 
 async function veoGenerate(apiKey: string, prompt: string, duration: number) {
-  const model = "veo-3.0-generate-preview";
-  const url = `${GEMINI_BASE}/models/${model}:predictLongRunning?key=${apiKey}`;
+  const model = "veo-3.1-generate-preview";
+  const url = `${GEMINI_BASE}/models/${model}:predictLongRunning`;
+
+  // Veo 3.1 supports 4, 6, or 8 second durations
+  const validDurations = [4, 6, 8];
+  const rawDuration = duration || 6;
+  const veoDuration = validDurations.reduce((prev, curr) =>
+    Math.abs(curr - rawDuration) < Math.abs(prev - rawDuration) ? curr : prev
+  );
 
   const resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
     body: JSON.stringify({
       instances: [{ prompt }],
       parameters: {
         sampleCount: 1,
-        durationSeconds: duration || 5,
+        durationSeconds: veoDuration,
         aspectRatio: "16:9",
         personGeneration: "allow_adult",
       },
@@ -59,8 +69,10 @@ async function veoGenerate(apiKey: string, prompt: string, duration: number) {
 }
 
 async function veoPoll(apiKey: string, operationName: string) {
-  const pollUrl = `${GEMINI_BASE}/${operationName}?key=${apiKey}`;
-  const resp = await fetch(pollUrl);
+  const pollUrl = `${GEMINI_BASE}/${operationName}`;
+  const resp = await fetch(pollUrl, {
+    headers: { "x-goog-api-key": apiKey },
+  });
 
   if (!resp.ok) {
     const errText = await resp.text();
@@ -71,14 +83,18 @@ async function veoPoll(apiKey: string, operationName: string) {
   const data = await resp.json();
 
   if (data.done) {
-    const videos = data.response?.generatedSamples || data.result?.generatedSamples || [];
+    // Veo 3.1 response structure
+    const videos =
+      data.response?.generateVideoResponse?.generatedSamples ||
+      data.response?.generatedSamples ||
+      data.result?.generateVideoResponse?.generatedSamples ||
+      data.result?.generatedSamples ||
+      [];
     const videoUri = videos[0]?.video?.uri || null;
 
     if (videoUri) {
-      const videoUrl = videoUri.includes("?")
-        ? `${videoUri}&key=${apiKey}`
-        : `${videoUri}?key=${apiKey}`;
-      return { status: "completed", videoUrl };
+      // Use header-based auth for download — client will fetch via proxy
+      return { status: "completed", videoUrl: videoUri, needsGeminiAuth: true };
     }
 
     const error = data.error || data.response?.error;
@@ -93,10 +109,27 @@ async function veoPoll(apiKey: string, operationName: string) {
   return { status: "processing", progress: metadata.percentComplete || null };
 }
 
+async function veoDownload(apiKey: string, videoUrl: string) {
+  const resp = await fetch(videoUrl, {
+    headers: { "x-goog-api-key": apiKey },
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Veo download failed (${resp.status})`);
+  }
+
+  return new Response(resp.body, {
+    headers: {
+      "Content-Type": resp.headers.get("Content-Type") || "video/mp4",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    },
+  });
+}
+
 // ─── Sora helpers ───────────────────────────────────────────
 
 async function soraGenerate(apiKey: string, prompt: string, duration: number, model: string) {
-  // Sora only supports 4, 8, 12 seconds — snap to nearest valid value
   const validDurations = [4, 8, 12];
   const rawDuration = duration || 8;
   const soraDuration = validDurations.reduce((prev, curr) =>
@@ -142,7 +175,6 @@ async function soraPoll(apiKey: string, videoId: string) {
   const data = await resp.json();
 
   if (data.status === "completed") {
-    // Build the download URL — client will fetch via our proxy action
     const videoUrl = `${OPENAI_BASE}/videos/${videoId}/content`;
     return { status: "completed", videoUrl, needsAuth: true };
   }
@@ -151,7 +183,6 @@ async function soraPoll(apiKey: string, videoId: string) {
     return { status: "failed", error: data.error?.message || "Sora generation failed" };
   }
 
-  // queued or in_progress
   return { status: "processing", progress: data.progress || null };
 }
 
@@ -194,6 +225,7 @@ serve(async (req) => {
       provider: z.enum(["veo", "sora"]).optional(),
       prompt: z.string().max(5000).optional(),
       jobId: z.string().max(500).optional(),
+      videoUrl: z.string().max(2000).optional(),
       duration: z.number().min(1).max(30).optional(),
       model: z.string().max(50).optional(),
     });
@@ -204,9 +236,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { action, provider, prompt, jobId, duration, model } = parsed.data;
+    const { action, provider, prompt, jobId, videoUrl, duration, model } = parsed.data;
 
-    // Determine which API key to use
     const isVeo = provider === "veo";
     const apiKey = isVeo
       ? Deno.env.get("GEMINI_API_KEY")
@@ -228,8 +259,6 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      
 
       const result = isVeo
         ? await veoGenerate(apiKey, prompt, duration)
@@ -260,15 +289,25 @@ serve(async (req) => {
       );
     }
 
-    // ── Download (Sora only — needs auth header proxy) ──
-    if (action === "download" && !isVeo) {
-      if (!jobId) {
-        return new Response(
-          JSON.stringify({ error: "jobId is required for download" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    // ── Download (proxy with auth headers) ──
+    if (action === "download") {
+      if (isVeo) {
+        if (!videoUrl) {
+          return new Response(
+            JSON.stringify({ error: "videoUrl is required for Veo download" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        return await veoDownload(apiKey, videoUrl);
+      } else {
+        if (!jobId) {
+          return new Response(
+            JSON.stringify({ error: "jobId is required for download" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        return await soraDownload(apiKey, jobId);
       }
-      return await soraDownload(apiKey, jobId);
     }
 
     return new Response(
