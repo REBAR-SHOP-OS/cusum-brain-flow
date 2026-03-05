@@ -1,55 +1,41 @@
 
-هدف: رفع ریشه‌ای خطای Loading Station در Published بدون اثر جانبی.
 
-Do I know what the issue is? بله.
+# Add Video Generation to Pixel Agent
 
-مشکل دقیق (با شواهد):
-1) خطا هنگام Publish روی Production هنوز روی migration `20260304234951` می‌شکند:
-- `could not create unique index "idx_leads_odoo_id_unique"... (3083) is duplicated`
-2) به همین دلیل migrationهای بعدی اجرا نمی‌شوند، از جمله migration اصلاح policy برای `delivery_stops`.
-3) وضعیت فعلی Production:
-- آخرین migration اعمال‌شده: `20260304215226`
-- policy فعلی `delivery_stops` برای INSERT: فقط `admin, office, field` (نقش `workshop` ندارد)
-- duplicate واقعی روی `leads.metadata->>'odoo_id'` وجود دارد (از جمله `3083`)
+## Problem
+Pixel agent says "I can't generate videos" because it has no `generate_video` tool. The infrastructure already exists: `generate-video` edge function (Veo/Sora), `VideoGeneratorDialog` UI component, and `social-media-assets` storage.
 
-چرا تلاش قبلی جواب نداد:
-- فایل `20260305155616...` به‌عنوان “safety-net before blocker” نوشته شده، اما timestamp آن بعد از migration بلاکر است؛ پس هرگز قبل از `20260304234951` اجرا نمی‌شود.
+## Changes
 
-برنامه اجرای جراحی‌شده (Surgical):
-1) اصلاح migration بلاکر اصلی (اولین نقطه شکست)
-- فایل: `supabase/migrations/20260304234951_f3b11fd1-92a6-4b57-a45e-2967837649e5.sql`
-- تغییر: قبل از ساخت unique index، dedup قطعی اضافه شود (نگه‌داشتن جدیدترین رکورد هر `odoo_id` با `row_number()` بر اساس `created_at DESC, id DESC`)، سپس `CREATE UNIQUE INDEX`.
-- نتیجه: زنجیره migration از همان نقطه باز می‌شود.
+### 1. Add `generate_video` tool definition (`supabase/functions/_shared/agentTools.ts`)
+In the `if (agent === "social")` block, add a second tool:
+```typescript
+{
+  name: "generate_video",
+  description: "Generate a short promotional video for social media using AI (Veo 3). Returns a public URL.",
+  parameters: {
+    prompt: { type: "string", description: "Detailed description of the video" },
+    duration: { type: "number", description: "Duration in seconds (5-15)" },
+    slot: { type: "string", description: "Time slot identifier" }
+  }
+}
+```
 
-2) خنثی‌سازی migrationهای تکراری index-fix برای کاهش ریسک
-- فایل‌ها:
-  - `20260305031029...`
-  - `20260305144441...`
-  - `20260305150909...`
-  - `20260305154553...`
-  - `20260305155616...`
-- تغییر: تبدیل به no-op (`SELECT 1;`)
-- دلیل: جلوگیری از drop/create تکراری index، کاهش lock و failure مجدد.
+### 2. Add `generate_video` executor (`supabase/functions/_shared/agentToolExecutor.ts`)
+After the `generate_image` block, add a new `else if (name === "generate_video")` block that:
+- Calls the existing `generate-video` edge function with action `"generate"`, provider `"veo"` 
+- Polls until completed (with timeout)
+- Uploads the resulting video to `social-media-assets` bucket
+- Returns the public URL
 
-3) تمیز کردن migration policy تا فقط authorization fix انجام دهد
-- فایل: `20260305154125_3e4c2883-7ac9-480f-9ed1-f20ca694dcc2.sql`
-- تغییر: بخش dedup/index حذف شود و فقط policy `delivery_stops` باقی بماند:
-  - drop policy قدیمی
-  - create policy جدید INSERT با نقش‌های `admin, office, field, workshop`
-- دلیل: تفکیک دقیق مسئولیت migration و جلوگیری از side-effect.
+### 3. Update Pixel prompt (`supabase/functions/_shared/agents/marketing.ts`)
+- Change "image and caption generator" to "image, video, and caption generator"
+- Add instructions: when user asks for a video or story, call `generate_video` instead of `generate_image`
+- Add video rules (duration, style, etc.)
 
-4) جلوگیری از تغییر فایل‌های auto-generated
-- هرگونه تغییر روی `src/integrations/supabase/types.ts` حذف/بازگردانی شود.
-- هیچ تغییری در `src/integrations/supabase/client.ts` انجام نشود.
+| File | Change |
+|---|---|
+| `supabase/functions/_shared/agentTools.ts` | Add `generate_video` tool for social agent |
+| `supabase/functions/_shared/agentToolExecutor.ts` | Add video generation executor using existing `generate-video` function |
+| `supabase/functions/_shared/agents/marketing.ts` | Update Pixel prompt to support video generation |
 
-5) راستی‌آزمایی بعد از Publish (Production)
-- چک 1: migration head از `20260304215226` جلوتر رفته باشد.
-- چک 2: policy INSERT جدول `delivery_stops` شامل `workshop` باشد.
-- چک 3: query duplicate روی `odoo_id` خروجی خالی بدهد.
-- چک 4 (E2E): در Published → Loading Station → `CREATE DELIVERY` بدون خطای RLS.
-- چک 5 (E2E تکمیلی): Kiosk first-time register/punch بدون خطای RLS روی `profiles`.
-
-جزئیات فنی (مختصر):
-- ریشه خطای Loading Station خود کد صفحه نیست؛ Insert درست `company_id` را می‌فرستد.
-- علت واقعی: policy صحیح هنوز به Live نرسیده چون migration chain قبل‌تر fail می‌شود.
-- راه‌حل ریشه‌ای: unblock از اولین migration شکست‌خورده، نه افزودن migration دیرتر.
