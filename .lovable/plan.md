@@ -1,43 +1,39 @@
 
 
-# Fix: Show 20M+ Items on CUTTER-02 Station
+# Restructure PixelPostCard Layout
 
-## Problem
-The station view for cutters only shows items from cut plans **assigned** to that specific machine (`cut_plans.machine_id = machineId`). When a plan contains mixed bar codes (e.g., 10M + 20M), the auto-assign logic sends the entire plan to one machine. Items outside that machine's capabilities are then invisible on both stations:
-- CUTTER-01 won't show 20M items (filtered out by capabilities)
-- CUTTER-02 won't show them either (plan isn't assigned to CUTTER-02)
+## Current Problem
+The card currently shows: Image → Caption (mixed with everything) → Hashtags → Persian box. Contact info is stripped out entirely. Persian translation is shown as one block.
 
-The auto-assign logic at line 317-318 in `ShopFloorProductionQueue.tsx` routes the whole plan to CUTTER-02 if ANY item is >= 20M, but CUTTER-02's capabilities filter then removes the 10M/15M items. Those items vanish from both stations.
+## Desired Layout (per user request)
+1. **Image**
+2. **Caption** (promotional text only, no address/hashtags)
+3. **Company Address** (📍 📞 🌐 lines)
+4. **Hashtags**
+5. **Internal Reference Box** (separate styled box):
+   - Translation of the text on the image (🖼️ متن روی عکس)
+   - Translation of the caption (📝 ترجمه کپشن)
+   - Labeled as "for your reference only — not published"
+6. **Action buttons** (Approve / Regenerate)
 
-## Solution: Capability-based station routing (not plan-based)
+## Changes
 
-Modify `useStationData.ts` cutter query to fetch items from ALL active cut plans in the company, then filter by this machine's capabilities. This replaces the current `machine_id = machineId` filter on `cut_plans`.
+### 1. `PixelPostData` interface — add `contactInfo` and split Persian fields
+Add `contactInfo` field and split `persianTranslation` into `imageTextTranslation` and `captionTranslation`.
 
-### Change in `src/hooks/useStationData.ts`
+### 2. `PixelChatRenderer.tsx` — extract contact info separately
+Instead of stripping contact info lines, capture them into a `contactInfo` string. Parse the `---PERSIAN---` section into two parts: image text (🖼️) and caption translation (📝).
 
-**Before** (lines 95-107):
-```typescript
-let cutterQuery = supabase
-  .from("cut_plans")
-  .select("...")
-  .eq("company_id", companyId!)
-  .eq("machine_id", machineId)  // ← Only plans assigned to this machine
-  .in("status", ["draft", "queued", "running"]);
-```
+### 3. `PixelPostCard.tsx` — restructure the card layout
+Reorder sections:
+- Image
+- Caption text
+- Contact info block (📍 📞 🌐)
+- Hashtags
+- Internal reference box with image text translation + caption translation
+- Approve/Regenerate buttons at the bottom
 
-**After**:
-```typescript
-let cutterQuery = supabase
-  .from("cut_plans")
-  .select("...")
-  .eq("company_id", companyId!)
-  .in("status", ["draft", "queued", "running"])
-  // Remove machine_id filter — capabilities determine routing
-  .not("machine_id", "is", null);
-```
-
-The existing capability filter (lines 109-120) already removes items whose bar_code doesn't match this machine. So CUTTER-01 will only see 10M/15M items and CUTTER-02 will only see 20M-35M items, regardless of which machine the plan is assigned to.
-
-### Files to edit
-1. `src/hooks/useStationData.ts` — Remove `.eq("machine_id", machineId)` from the cutter query path
+## Files to Edit
+1. `src/components/social/PixelPostCard.tsx` — Update interface + layout
+2. `src/components/social/PixelChatRenderer.tsx` — Extract contact info + split Persian translations
 
