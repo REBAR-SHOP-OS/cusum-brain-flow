@@ -375,16 +375,40 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     }
 
     // Build activity items from real activities
-    // Use odoo_created_at from lead metadata when available for Odoo-synced activities
+    // Use odoo_created_at for ALL Odoo-synced activity dates when the activity's
+    // created_at matches the sync timestamp (meaning it was bulk-created during sync)
     const leadOdooCreatedAt = (lead as any).odoo_created_at || ((lead.metadata as any)?.odoo_created_at);
+    const syncedAt = (lead.metadata as any)?.synced_at;
     const items: ThreadItem[] = realActivities.map((a) => {
       const msgId = (a as any).odoo_message_id as number | undefined;
       const matched = msgId ? filesByMsgId.get(msgId) : undefined;
-      // For the initial "stage_changed" event (from: null), prefer odoo_created_at
-      const isInitialEvent = a.activity_type === "stage_change" && a.description?.includes("→") && a.description?.startsWith("—") || a.description?.startsWith("null");
-      const actDate = isInitialEvent && leadOdooCreatedAt
-        ? new Date(leadOdooCreatedAt)
-        : new Date(a.created_at);
+
+      // Determine the best date for this activity:
+      // 1. If the activity has its own odoo-origin date in metadata, use that
+      // 2. If the activity was created during sync (created_at ≈ synced_at), use odoo_created_at
+      // 3. Otherwise use the activity's own created_at
+      const actMeta = (a.metadata as any) || {};
+      const actOdooDate = actMeta.odoo_date || actMeta.message_date;
+      let actDate: Date;
+      if (actOdooDate) {
+        actDate = new Date(actOdooDate);
+      } else if (leadOdooCreatedAt && syncedAt) {
+        const createdMs = new Date(a.created_at).getTime();
+        const syncMs = new Date(syncedAt).getTime();
+        // If created within 60s of sync run, this is a sync-generated record
+        if (Math.abs(createdMs - syncMs) < 60_000) {
+          actDate = new Date(leadOdooCreatedAt);
+        } else {
+          actDate = new Date(a.created_at);
+        }
+      } else if (leadOdooCreatedAt) {
+        // Fallback: if activity is a stage_change initial event, use odoo_created_at
+        const isInitialEvent = a.activity_type === "stage_change" && (a.description?.startsWith("—") || a.description?.startsWith("null"));
+        actDate = isInitialEvent ? new Date(leadOdooCreatedAt) : new Date(a.created_at);
+      } else {
+        actDate = new Date(a.created_at);
+      }
+
       return {
         kind: "activity" as const,
         data: a,
