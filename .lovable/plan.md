@@ -1,91 +1,61 @@
 
-هدف: رفع قطعی خطای `delivery_stops` با اجرای مستقیم SQL روی Production + تمیزکاری زنجیره migration تا Publish بعدی بدون شکست انجام شود.
+هدف: رفع ریشه‌ای خطای `new row violates row-level security policy for table delivery_stops` در Production و پایدارسازی زنجیره migration برای Publish‌های بعدی.
 
-## وضعیت فعلی (بررسی انجام‌شده)
-- در Production هنوز **181 کلید تکراری** برای `metadata->>'odoo_id'` در جدول `leads` وجود دارد؛ همین باعث خطای `CREATE UNIQUE INDEX idx_leads_odoo_id_unique` می‌شود.
-- policyهای Production روی `delivery_stops` هنوز این‌ها هستند:
-  - `Office staff insert delivery_stops` (بدون role `workshop`)
-  - `Office staff update delivery_stops` (بدون role `workshop`)
-- migration شکست‌خورده فعلی:
-  - `20260304234951_f3b11fd1-92a6-4b57-a45e-2967837649e5.sql` فقط `CREATE UNIQUE INDEX` دارد و dedup داخلش نیست.
+وضعیت واقعی که الان از Production تأیید شد:
+- هنوز `181` کلید تکراری `metadata->>'odoo_id'` در `public.leads` وجود دارد.
+- ایندکس `idx_leads_odoo_id_unique` در Production وجود ندارد (به‌خاطر fail شدن migration).
+- policyهای فعال `delivery_stops` هنوز قدیمی‌اند:
+  - `Office staff insert delivery_stops` (بدون `workshop`)
+  - `Office staff update delivery_stops` (بدون `workshop`)
+- در کد Loading Station، هنگام `CREATE DELIVERY` درج در `delivery_stops` با `company_id` انجام می‌شود؛ پس ریشه خطا policy است، نه payload.
 
-## برنامه اجرا
+برنامه اجرا (Root Fix):
 
-### 1) Hotfix مستقیم روی Production (Run SQL در Live)
-یک اسکریپت اتمیک اجرا می‌شود تا هم duplicate پاک شود هم policyها اصلاح شوند:
+1) Hotfix مستقیم روی Production (SQL اتمیک)
+- در یک `BEGIN/COMMIT`:
+  - dedup روی `leads` (نگه‌داشتن جدیدترین رکورد بر اساس `created_at DESC, id DESC`)
+  - `DROP INDEX IF EXISTS` و سپس ساخت مجدد `idx_leads_odoo_id_unique`
+  - حذف policyهای قدیمی insert/update روی `delivery_stops`
+  - ساخت policyهای جدید `Staff insert delivery_stops` و `Staff update delivery_stops` با نقش‌های:
+    `['admin','office','field','workshop']`
+  - شرط tenant:
+    `company_id = get_user_company_id(auth.uid())`
 
-```sql
-BEGIN;
-
--- A) Dedup leads by odoo_id (keep newest)
-DELETE FROM public.leads
-WHERE id IN (
-  SELECT id FROM (
-    SELECT id,
-           ROW_NUMBER() OVER (
-             PARTITION BY metadata->>'odoo_id'
-             ORDER BY created_at DESC, id DESC
-           ) AS rn
-    FROM public.leads
-    WHERE metadata->>'odoo_id' IS NOT NULL
-  ) t
-  WHERE rn > 1
-);
-
--- B) Rebuild unique index safely
-DROP INDEX IF EXISTS public.idx_leads_odoo_id_unique;
-CREATE UNIQUE INDEX idx_leads_odoo_id_unique
-  ON public.leads ((metadata->>'odoo_id'))
-  WHERE metadata->>'odoo_id' IS NOT NULL;
-
--- C) Fix delivery_stops INSERT policy (include workshop)
-DROP POLICY IF EXISTS "Office staff insert delivery_stops" ON public.delivery_stops;
-DROP POLICY IF EXISTS "Staff insert delivery_stops" ON public.delivery_stops;
-CREATE POLICY "Staff insert delivery_stops"
-ON public.delivery_stops
-FOR INSERT TO authenticated
-WITH CHECK (
-  company_id = public.get_user_company_id(auth.uid())
-  AND public.has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::public.app_role[])
-);
-
--- D) Fix delivery_stops UPDATE policy (include workshop)
-DROP POLICY IF EXISTS "Office staff update delivery_stops" ON public.delivery_stops;
-DROP POLICY IF EXISTS "Staff update delivery_stops" ON public.delivery_stops;
-CREATE POLICY "Staff update delivery_stops"
-ON public.delivery_stops
-FOR UPDATE TO authenticated
-USING (
-  company_id = public.get_user_company_id(auth.uid())
-  AND public.has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::public.app_role[])
-);
-
-COMMIT;
-```
-
-### 2) تمیزکاری migrationها در ریپو (برای Publish پایدار)
-- فایل `20260304234951_...sql` بازنویسی می‌شود تا همیشه قبل از ساخت index، dedup انجام دهد + `DROP INDEX IF EXISTS`.
-- migrationهای تکراری مربوط به همان index به no-op (`SELECT 1;`) تبدیل می‌شوند:
+2) تمیزکاری migration chain در ریپو (برای جلوگیری از fail بعدی)
+- بازنویسی migration بلاکر:
+  - `20260304234951_...sql` → شامل dedup + `DROP INDEX IF EXISTS` + `CREATE UNIQUE INDEX`
+- خنثی‌سازی migrationهای تکراری ایندکس به `SELECT 1;`
   - `20260305031029_...sql`
   - `20260305144441_...sql`
   - `20260305150909_...sql`
   - `20260305154553_...sql`
   - `20260305155616_...sql`
-  - `20260305163106_...sql`
-- برای policyها یک migration نهایی و تمیز نگه می‌داریم (idempotent) تا Test/Live همیشه همگام بمانند؛ منطق policy داخل no-opها گم نشود.
+- یک migration نهایی idempotent برای policy نگه می‌داریم که هر دو policy insert/update را با role `workshop` تثبیت کند (به‌جای پخش شدن منطق بین چند فایل).
 
-### 3) Publish و راستی‌آزمایی
-- Publish مجدد.
-- چک دیتابیس:
-  - `duplicate_keys = 0` برای `odoo_id`
-  - وجود policyهای `Staff insert/update delivery_stops` با role `workshop`
-- چک عملکردی در Published:
-  - ورود با نقش workshop
-  - مسیر Loading Station
-  - اجرای `CREATE DELIVERY` بدون RLS error
-  - ثبت موفق `deliveries` + `delivery_stops` + `packing_slips`
+3) همگام‌سازی policy migrationها
+- `20260305164953_...sql` از حالت فقط UPDATE خارج می‌شود و هر دو INSERT/UPDATE را پوشش می‌دهد (idempotent با `DROP POLICY IF EXISTS`).
 
-## خروجی مورد انتظار
-- خطای publish مربوط به `idx_leads_odoo_id_unique` به‌صورت ریشه‌ای حذف می‌شود.
-- خطای RLS روی `delivery_stops` برای نقش `workshop` دیگر تکرار نمی‌شود.
-- زنجیره migration تمیز و پایدار می‌شود و deployهای بعدی fail نمی‌شوند.
+4) راستی‌آزمایی فنی پس از اجرا
+- DB checks:
+  - duplicates برای `odoo_id` باید `0` شود.
+  - policyهای `Staff insert/update delivery_stops` باید فعال باشند و شامل `workshop` باشند.
+  - وجود `idx_leads_odoo_id_unique` روی `leads`.
+- Functional checks (Published):
+  - ورود با کاربر نقش `workshop`
+  - مسیر `/shopfloor/loading`
+  - تکمیل checklist
+  - `CREATE DELIVERY` بدون خطای RLS
+  - ایجاد موفق `deliveries` + `delivery_stops` + `packing_slips`
+
+جزئیات فنی (خلاصه SQL هدف)
+- policy INSERT:
+  `WITH CHECK (company_id = get_user_company_id(auth.uid()) AND has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::app_role[]))`
+- policy UPDATE:
+  `USING (company_id = get_user_company_id(auth.uid()) AND has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::app_role[]))`
+- dedup:
+  window function با `ROW_NUMBER() OVER (PARTITION BY metadata->>'odoo_id' ORDER BY created_at DESC, id DESC)` و حذف `rn > 1`.
+
+خروجی مورد انتظار:
+- خطای RLS برای `delivery_stops` به‌صورت ریشه‌ای رفع می‌شود.
+- migration بلاکر ایندکس دیگر Publish را متوقف نمی‌کند.
+- زنجیره migration تمیز و پایدار می‌شود و deployهای بعدی fail نخواهند شد.
