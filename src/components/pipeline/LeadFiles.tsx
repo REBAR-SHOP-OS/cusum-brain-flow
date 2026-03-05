@@ -5,6 +5,7 @@ import { getSignedFileUrl } from "@/lib/storageUtils";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { OdooImagePreview } from "./OdooImagePreview";
 import type { Json } from "@/integrations/supabase/types";
 
 interface LeadFilesProps {
@@ -101,33 +102,46 @@ export function LeadFiles({ metadata, leadId }: LeadFilesProps) {
             Odoo Files ({dbFiles.length})
           </h4>
           <div className="space-y-1.5">
-            {dbFiles.map((file) => (
-              <div
-                key={file.id}
-                className="flex items-center justify-between rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="text-lg shrink-0">{fileIcon(file.mime_type)}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{file.file_name}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {file.mime_type && <span>{file.mime_type.split("/").pop()}</span>}
-                      {file.file_size_bytes && <span>{formatSize(file.file_size_bytes)}</span>}
+            {dbFiles.map((file) => {
+              const isImage = file.mime_type?.startsWith("image/") && !file.mime_type?.includes("dwg");
+              const isOdooFile = !file.storage_path && file.odoo_id;
+
+              return (
+                <div
+                  key={file.id}
+                  className="rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-lg shrink-0">{fileIcon(file.mime_type)}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{file.file_name}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {file.mime_type && <span>{file.mime_type.split("/").pop()}</span>}
+                          {file.file_size_bytes && <span>{formatSize(file.file_size_bytes)}</span>}
+                        </div>
+                      </div>
                     </div>
+                    {file.file_url && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 gap-1"
+                        onClick={() => window.open(file.file_url!, "_blank")}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                   </div>
+                  {/* Inline image preview for Odoo images */}
+                  {isImage && isOdooFile && (
+                    <div className="mt-2">
+                      <OdooImagePreview odooId={file.odoo_id!} fileName={file.file_name || "image"} />
+                    </div>
+                  )}
                 </div>
-                {file.file_url && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="shrink-0 gap-1"
-                    onClick={() => window.open(file.file_url!, "_blank")}
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

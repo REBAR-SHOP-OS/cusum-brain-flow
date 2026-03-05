@@ -16,6 +16,7 @@ import { format, formatDistanceToNow, isToday, isBefore, startOfDay } from "date
 import { cn } from "@/lib/utils";
 import { getSignedFileUrl } from "@/lib/storageUtils";
 import { useToast } from "@/hooks/use-toast";
+import { OdooImagePreview as OdooImagePreviewInline } from "./OdooImagePreview";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -552,6 +553,8 @@ function FileThreadItem({ file }: { file: any }) {
   const ext = file.file_name?.split(".").pop()?.toUpperCase() || "FILE";
   const FileIcon = getFileIcon(file.mime_type || "", ext);
   const iconColor = getFileIconColor(ext);
+  const isImage = file.mime_type?.startsWith("image/") && !file.mime_type?.includes("dwg");
+  const isOdooFile = !file.storage_path && file.odoo_id;
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -559,6 +562,12 @@ function FileThreadItem({ file }: { file: any }) {
       if (file.storage_path) {
         const signedUrl = await getSignedFileUrl(file.storage_path);
         if (signedUrl) window.open(signedUrl, "_blank");
+      } else if (isOdooFile) {
+        // Download via proxy
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${file.odoo_id}`;
+        window.open(proxyUrl, "_blank");
       } else if (file.file_url) {
         window.open(file.file_url, "_blank");
       }
@@ -581,6 +590,12 @@ function FileThreadItem({ file }: { file: any }) {
             {format(new Date(file.created_at), "h:mm a")}
           </span>
         </div>
+        {/* Inline image preview for Odoo images */}
+        {isImage && isOdooFile && (
+          <div className="mt-1.5">
+            <OdooImagePreviewInline odooId={file.odoo_id} fileName={file.file_name || "image"} />
+          </div>
+        )}
         <button
           onClick={handleDownload}
           className="flex items-center gap-2 mt-1 px-2.5 py-1.5 rounded border border-border bg-secondary/50 hover:bg-secondary transition-colors group text-left max-w-[280px]"
