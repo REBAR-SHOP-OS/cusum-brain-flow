@@ -278,12 +278,15 @@ Deno.serve(async (req) => {
             messagesInserted += chunk.length;
           }
         }
-        // Backfill: link lead_files to their parent message via attachment_ids
+        // Backfill: link lead_files to their parent message via attachment_ids + fix created_at
         for (const msg of messages) {
           if (Array.isArray(msg.attachment_ids) && msg.attachment_ids.length > 0) {
+            const msgDate = msg.date ? msg.date.replace(" ", "T") + "Z" : null;
+            const updatePayload: Record<string, any> = { odoo_message_id: msg.id };
+            if (msgDate) updatePayload.created_at = msgDate;
             const { error: linkErr } = await serviceClient
               .from("lead_files")
-              .update({ odoo_message_id: msg.id })
+              .update(updatePayload)
               .in("odoo_id", msg.attachment_ids);
             if (linkErr) console.warn("File linkage error for msg", msg.id, linkErr.message);
           }
