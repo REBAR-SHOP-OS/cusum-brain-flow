@@ -275,6 +275,41 @@ Deno.serve(async (req) => {
             if (linkErr) console.warn("File linkage error for msg", msg.id, linkErr.message);
           }
         }
+
+        // Re-sync: update existing stage_change activities that have has_tracking but missing tracking_changes
+        if (mode === "full") {
+          for (const msg of messages) {
+            if (!Array.isArray(msg.tracking_value_ids) || msg.tracking_value_ids.length === 0) continue;
+            // Check if this activity already has tracking_changes
+            const { data: existing } = await serviceClient
+              .from("lead_activities")
+              .select("id, metadata")
+              .eq("odoo_message_id", msg.id)
+              .limit(1);
+            if (!existing || existing.length === 0) continue;
+            const meta = (existing[0].metadata as any) || {};
+            if (meta.tracking_changes && Array.isArray(meta.tracking_changes) && meta.tracking_changes.length > 0) continue;
+            // Fetch tracking values from Odoo
+            try {
+              const trackingData = await odooRpc(odooUrl, odooDB, odooKey, "mail.tracking.value", "read", [
+                [msg.tracking_value_ids],
+                { fields: ["field_desc", "old_value_char", "new_value_char", "old_value_integer", "new_value_integer", "old_value_float", "new_value_float"] },
+              ]);
+              if (Array.isArray(trackingData) && trackingData.length > 0) {
+                const trackingChanges = trackingData.map((tv: any) => ({
+                  field: tv.field_desc || "Field",
+                  old_value: String(tv.old_value_char || tv.old_value_integer || tv.old_value_float || ""),
+                  new_value: String(tv.new_value_char || tv.new_value_integer || tv.new_value_float || ""),
+                }));
+                await serviceClient.from("lead_activities")
+                  .update({ metadata: { ...meta, tracking_changes: trackingChanges } })
+                  .eq("id", existing[0].id);
+              }
+            } catch (e) {
+              console.warn("Failed to backfill tracking for msg", msg.id, e);
+            }
+          }
+        }
       } catch (e) {
         console.error(`Batch error at offset ${i}:`, e);
         messageErrors += batch.length;
