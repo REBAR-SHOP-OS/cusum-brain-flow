@@ -105,8 +105,8 @@ export default function TimeClock() {
   // Handle scan
   const handleScan = async () => {
     const result = await face.recognize();
-    if (result && result.confidence >= 95) {
-      setAutoPunchCountdown(3);
+    if (result && result.confidence >= 75) {
+      setAutoPunchCountdown(2);
     }
   };
 
