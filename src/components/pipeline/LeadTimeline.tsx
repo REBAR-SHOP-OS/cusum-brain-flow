@@ -428,7 +428,7 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                   <div className="flex gap-3 py-1 pl-11">
                     <div className="space-y-1.5 max-w-[320px]">
                       {isOdooFile && !hasStoragePath && (
-                        <OdooImagePreview odooId={f.odoo_id!} fileName={f.file_name || "image"} />
+                        <OdooImagePreviewWrapper odooId={f.odoo_id!} fileName={f.file_name || "image"} />
                       )}
                       <button
                         onClick={handleDownload}
@@ -500,14 +500,10 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
   );
 }
 
-// Inline image preview for Odoo attachments
-function OdooImagePreview({ odooId, fileName }: { odooId: string | number; fileName: string }) {
-  // Odoo proxy disabled — show placeholder for unmigrated files
-  return (
-    <div className="w-full max-w-[280px] rounded-md border border-border bg-muted/30 p-3 text-center">
-      <p className="text-xs text-muted-foreground">Image not yet migrated (Odoo #{odooId})</p>
-    </div>
-  );
+// Inline image preview for Odoo attachments — uses proxy
+import { OdooImagePreview } from "./OdooImagePreview";
+function OdooImagePreviewWrapper({ odooId, fileName }: { odooId: string | number; fileName: string }) {
+  return <OdooImagePreview odooId={odooId} fileName={fileName} />;
 }
 
 

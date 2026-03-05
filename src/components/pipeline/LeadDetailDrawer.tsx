@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScheduledActivities } from "./ScheduledActivities";
-import { LeadActivityTimeline } from "./LeadActivityTimeline";
 import { AddCommunicationDialog } from "./AddCommunicationDialog";
+import { LeadFiles } from "./LeadFiles";
 import { Progress } from "@/components/ui/progress";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -76,7 +76,7 @@ export function LeadDetailDrawer({
   onStageChange,
 }: LeadDetailDrawerProps) {
   const { isAdmin } = useUserRole();
-  const [activeTab, setActiveTab] = useState<"notes" | "chatter" | "activities" | "timeline">("chatter");
+  const [activeTab, setActiveTab] = useState<"chatter" | "activities" | "files" | "notes">("chatter");
   const { data: recommendation, isLoading: recLoading } = useLeadRecommendation(lead, open);
   const [convertingToQuote, setConvertingToQuote] = useState(false);
 
@@ -358,7 +358,7 @@ export function LeadDetailDrawer({
 
         <div className="border-b border-border bg-background">
           <div className="flex">
-          {(["notes", "chatter", "activities", "timeline"] as const).map((tab) => (
+          {(["chatter", "activities", "files", "notes"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -414,15 +414,9 @@ export function LeadDetailDrawer({
             </div>
           )}
 
-          {activeTab === "timeline" && (
+          {activeTab === "files" && (
             <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xs font-semibold flex items-center gap-1">
-                  <MessageSquare className="w-3 h-3" /> Communication Timeline
-                </h4>
-                <AddCommButton leadId={lead.id} />
-              </div>
-              <LeadActivityTimeline leadId={lead.id} />
+              <LeadFiles metadata={lead.metadata} leadId={lead.id} />
             </div>
           )}
         </div>
