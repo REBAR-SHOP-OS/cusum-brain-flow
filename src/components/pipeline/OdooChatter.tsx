@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { getSignedFileUrl } from "@/lib/storageUtils";
 import { useToast } from "@/hooks/use-toast";
 import { OdooImagePreview as OdooImagePreviewInline } from "./OdooImagePreview";
+import DOMPurify from "dompurify";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -512,7 +513,19 @@ function ActivityThreadItem({ activity }: { activity: LeadActivity }) {
   const Icon = activityIcons[activity.activity_type] || MessageSquare;
   const isNote = activity.activity_type === "note";
   const isStageChange = activity.activity_type === "stage_change";
+  const isEmail = activity.activity_type === "email";
   const author = activity.created_by || "System";
+  const [htmlExpanded, setHtmlExpanded] = useState(false);
+
+  // Extract body_html and tracking_changes from the activity
+  const bodyHtml = (activity as any).body_html as string | null;
+  const metadata = (activity.metadata as any) || {};
+  const trackingChanges = metadata.tracking_changes as Array<{ field: string; old_value: string; new_value: string }> | undefined;
+
+  const sanitizedHtml = bodyHtml ? DOMPurify.sanitize(bodyHtml, {
+    ALLOWED_TAGS: ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "span", "div", "table", "tr", "td", "th", "thead", "tbody", "h1", "h2", "h3", "h4", "blockquote", "img", "hr", "pre", "code"],
+    ALLOWED_ATTR: ["href", "target", "style", "class", "src", "alt", "width", "height", "colspan", "rowspan"],
+  }) : null;
 
   return (
     <div className={cn(
@@ -528,21 +541,68 @@ function ActivityThreadItem({ activity }: { activity: LeadActivity }) {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-[13px] font-semibold truncate">{author}</span>
-            {activity.activity_type === "email" && <Mail className="w-3 h-3 text-muted-foreground shrink-0" />}
+            {isEmail && <Mail className="w-3 h-3 text-muted-foreground shrink-0" />}
             {isStageChange && <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />}
           </div>
           <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
             {format(new Date(activity.created_at), "h:mm a")}
           </span>
         </div>
+
+        {/* Email subject header */}
+        {isEmail && activity.title && activity.title !== "Email" && (
+          <p className="text-[13px] font-medium mt-0.5">{activity.title}</p>
+        )}
+
         {isStageChange && <p className="text-[13px] mt-0.5">{activity.title}</p>}
-        {activity.description && (
+
+        {/* Tracking changes — field change bullets like Odoo */}
+        {trackingChanges && trackingChanges.length > 0 && (
+          <ul className="mt-1 space-y-0.5">
+            {trackingChanges.map((tc, i) => (
+              <li key={i} className="text-[12px] flex items-start gap-1">
+                <span className="text-muted-foreground">•</span>
+                <span className="font-medium text-foreground">{tc.field}</span>
+                <span className="text-muted-foreground">:</span>
+                {tc.old_value && (
+                  <>
+                    <span className="text-red-500 line-through">{tc.old_value}</span>
+                    <ArrowRight className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
+                  </>
+                )}
+                <span className="text-green-600 dark:text-green-400">{tc.new_value}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Rich HTML body (email content with signatures, formatting) */}
+        {sanitizedHtml ? (
+          <div className="mt-1">
+            <div
+              className={cn(
+                "odoo-html-body text-[13px] text-foreground/80 leading-relaxed overflow-hidden",
+                !htmlExpanded && "max-h-[120px]"
+              )}
+              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+            />
+            {sanitizedHtml.length > 300 && (
+              <button
+                onClick={() => setHtmlExpanded(!htmlExpanded)}
+                className="text-[11px] text-primary hover:underline mt-1"
+              >
+                {htmlExpanded ? "Show less" : "Show more"}
+              </button>
+            )}
+          </div>
+        ) : activity.description ? (
           <p className="text-[13px] text-foreground/80 whitespace-pre-wrap mt-0.5 leading-relaxed">
             {activity.description}
           </p>
-        )}
-        {!isStageChange && !activity.description && (
-          <p className="text-[13px] text-foreground/80 mt-0.5">{activity.title}</p>
+        ) : (
+          !isStageChange && !trackingChanges && (
+            <p className="text-[13px] text-foreground/80 mt-0.5">{activity.title}</p>
+          )
         )}
       </div>
     </div>

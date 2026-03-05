@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
       try {
         const messages = await odooRpc(odooUrl, odooDB, odooKey, "mail.message", "search_read", [
           [[["model", "=", "crm.lead"], ["res_id", "in", batch]]],
-          { fields: ["id", "body", "subject", "message_type", "subtype_id", "author_id", "date", "res_id"] },
+          { fields: ["id", "body", "subject", "message_type", "subtype_id", "author_id", "date", "res_id", "tracking_value_ids"] },
         ]);
 
         console.log(`Batch ${i / 50 + 1}: fetched ${messages.length} messages for ${batch.length} leads`);
@@ -188,10 +188,31 @@ Deno.serve(async (req) => {
           const activityType = MESSAGE_TYPE_MAP[msg.message_type] || "note";
           const authorName = Array.isArray(msg.author_id) ? msg.author_id[1] : null;
           const body = stripHtml(msg.body);
+          const rawHtml = (msg.body && msg.body !== false) ? String(msg.body) : null;
           const subject = msg.subject || null;
 
-          // Skip empty notification messages
-          if (activityType === "system" && !body && !subject) continue;
+          // Build tracking changes array
+          let trackingChanges: Array<{ field: string; old_value: string; new_value: string }> | null = null;
+          if (Array.isArray(msg.tracking_value_ids) && msg.tracking_value_ids.length > 0) {
+            try {
+              const trackingData = await odooRpc(odooUrl, odooDB, odooKey, "mail.tracking.value", "read", [
+                [msg.tracking_value_ids],
+                { fields: ["field_desc", "old_value_char", "new_value_char", "old_value_integer", "new_value_integer", "old_value_float", "new_value_float"] },
+              ]);
+              if (Array.isArray(trackingData)) {
+                trackingChanges = trackingData.map((tv: any) => ({
+                  field: tv.field_desc || "Field",
+                  old_value: String(tv.old_value_char || tv.old_value_integer || tv.old_value_float || ""),
+                  new_value: String(tv.new_value_char || tv.new_value_integer || tv.new_value_float || ""),
+                }));
+              }
+            } catch (e) {
+              console.warn("Failed to fetch tracking values for msg", msg.id, e);
+            }
+          }
+
+          // Skip empty notification messages (but keep if they have tracking changes)
+          if (activityType === "system" && !body && !subject && !trackingChanges) continue;
 
           rows.push({
             lead_id: leadId,
@@ -199,10 +220,14 @@ Deno.serve(async (req) => {
             activity_type: activityType,
             title: subject || (activityType === "email" ? "Email" : activityType === "system" ? "System Update" : "Note"),
             description: body || null,
+            body_html: rawHtml,
             created_by: authorName,
             created_at: msg.date ? msg.date.replace(" ", "T") + "Z" : new Date().toISOString(),
             odoo_message_id: msg.id,
-            metadata: { odoo_subtype: Array.isArray(msg.subtype_id) ? msg.subtype_id[1] : null },
+            metadata: {
+              odoo_subtype: Array.isArray(msg.subtype_id) ? msg.subtype_id[1] : null,
+              ...(trackingChanges ? { tracking_changes: trackingChanges } : {}),
+            },
           });
         }
 
@@ -216,6 +241,14 @@ Deno.serve(async (req) => {
             .select("odoo_message_id")
             .in("odoo_message_id", batch2);
           (existing || []).forEach((e: any) => existingMsgIds.add(e.odoo_message_id));
+        }
+
+        // For re-sync: update existing rows that are missing body_html
+        const updateRows = rows.filter(r => existingMsgIds.has(r.odoo_message_id) && r.body_html);
+        for (const ur of updateRows) {
+          await serviceClient.from("lead_activities")
+            .update({ body_html: ur.body_html, metadata: ur.metadata })
+            .eq("odoo_message_id", ur.odoo_message_id);
         }
 
         const newRows = rows.filter(r => !existingMsgIds.has(r.odoo_message_id));

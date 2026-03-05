@@ -5574,6 +5574,7 @@ export type Database = {
       lead_activities: {
         Row: {
           activity_type: string
+          body_html: string | null
           company_id: string
           completed_at: string | null
           created_at: string
@@ -5589,6 +5590,7 @@ export type Database = {
         }
         Insert: {
           activity_type?: string
+          body_html?: string | null
           company_id: string
           completed_at?: string | null
           created_at?: string
@@ -5604,6 +5606,7 @@ export type Database = {
         }
         Update: {
           activity_type?: string
+          body_html?: string | null
           company_id?: string
           completed_at?: string | null
           created_at?: string
