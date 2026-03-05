@@ -10,6 +10,7 @@ interface MatchResult {
   confidence: number;
   reason: string;
   avatar_url: string | null;
+  enrollment_count: number;
 }
 
 export function useFaceRecognition() {
@@ -54,9 +55,8 @@ export function useFaceRecognition() {
     if (!ctx) return null;
 
     ctx.drawImage(video, 0, 0, 640, 480);
-    // Export as JPEG base64, quality 0.7 for ~100KB
     const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-    return dataUrl.split(",")[1]; // strip prefix
+    return dataUrl.split(",")[1];
   }, []);
 
   const recognize = useCallback(async () => {
@@ -95,6 +95,7 @@ export function useFaceRecognition() {
           confidence: data.confidence,
           reason: data.reason,
           avatar_url: data.avatar_url,
+          enrollment_count: data.enrollment_count || 0,
         };
         setMatchResult(result);
         setState("matched");
@@ -106,6 +107,7 @@ export function useFaceRecognition() {
           confidence: data.confidence,
           reason: data.reason,
           avatar_url: data.avatar_url,
+          enrollment_count: data.enrollment_count || 0,
         };
         setMatchResult(result);
         setState("low_confidence");
@@ -128,7 +130,6 @@ export function useFaceRecognition() {
     setMatchResult(null);
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (cameraStream) {

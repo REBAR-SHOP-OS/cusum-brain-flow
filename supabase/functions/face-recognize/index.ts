@@ -60,7 +60,10 @@ serve(async (req) => {
 
     // Group enrollments by profile_id, limit to 2 per person
     const profileEnrollments = new Map<string, string[]>();
+    const profileEnrollmentCounts = new Map<string, number>();
     for (const e of enrollments) {
+      // Track total count
+      profileEnrollmentCounts.set(e.profile_id, (profileEnrollmentCounts.get(e.profile_id) || 0) + 1);
       const urls = profileEnrollments.get(e.profile_id) || [];
       if (urls.length < 2) {
         urls.push(e.photo_url);
@@ -110,7 +113,7 @@ serve(async (req) => {
       );
     }
 
-    // Build the prompt for AI vision
+    // Build the prompt for AI vision — STRICT matching
     const employeeList = enrolledFaces
       .map((e, i) => `Employee ${i + 1}: profile_id="${e.profile_id}", name="${e.name}"`)
       .join("\n");
@@ -118,21 +121,23 @@ serve(async (req) => {
     const contentParts: any[] = [
       {
         type: "text",
-        text: `You are a facial recognition system. Compare the CAPTURED photo against the enrolled employee reference photos below.
+        text: `You are a STRICT facial recognition system. Compare the CAPTURED photo against the enrolled employee reference photos below.
 
 Enrolled employees:
 ${employeeList}
 
 For each employee, I'm providing their reference photos followed by the captured photo to match.
 
-RULES:
-- Return the profile_id and name of the matching person
-- Return a confidence score from 0 to 100
-- If no match is found, return null for profile_id
-- Be TOLERANT of differences in lighting, camera angle, distance, facial expression, and webcam quality vs enrollment photo quality
-- If the person looks like the same individual despite minor variations, assign confidence 70+
-- Only return low confidence (<50) if the faces clearly belong to different people
-- Watch for obvious spoofing (e.g. a photo of a photo held up to the camera)
+STRICT RULES:
+- You must be CERTAIN it is the same person before returning a match. If in doubt, return NO match.
+- Pay close attention to UNIQUE facial features: nose shape, eye spacing, jawline, facial hair, eyebrow shape, face proportions.
+- Do NOT assume a match just because of similar hair color, skin tone, or general build.
+- If MULTIPLE faces are visible in the captured photo, focus ONLY on the most prominent/centered face closest to the camera.
+- Return confidence 85+ ONLY if you are highly certain it's the same person.
+- Return confidence 60-84 if there is a reasonable resemblance but you are not fully certain.
+- Return confidence below 50 and matched_profile_id="null" if you cannot confidently identify the person.
+- Watch for obvious spoofing (e.g. a photo of a photo held up to the camera).
+- It is MUCH better to return "no match" than to return a wrong match.
 
 You MUST call the face_match_result function with your answer.`,
       },
@@ -164,7 +169,7 @@ You MUST call the face_match_result function with your answer.`,
       },
     });
 
-    // Call AI with vision — use "auto" toolChoice for Gemini compatibility
+    // Call AI with vision
     let aiResult;
     try {
       console.log(`[face-recognize] Calling AI with ${enrolledFaces.length} enrolled faces`);
@@ -209,7 +214,6 @@ You MUST call the face_match_result function with your answer.`,
             },
           },
         ],
-        // Use "auto" instead of forced function — Gemini compat issue
         toolChoice: "auto",
       });
       console.log(`[face-recognize] AI response: toolCalls=${aiResult.toolCalls?.length}, content=${aiResult.content?.slice(0, 200)}`);
@@ -243,7 +247,6 @@ You MUST call the face_match_result function with your answer.`,
     if (!resultData && aiResult.content) {
       console.log("[face-recognize] No tool call, attempting text parse...");
       try {
-        // Try to extract JSON from the text
         const jsonMatch = aiResult.content.match(/\{[\s\S]*?"matched_profile_id"[\s\S]*?\}/);
         if (jsonMatch) {
           resultData = JSON.parse(jsonMatch[0]);
@@ -262,14 +265,20 @@ You MUST call the face_match_result function with your answer.`,
       );
     }
 
+    // STRICT threshold: only match at confidence >= 75
     const isMatched =
       resultData.matched_profile_id &&
       resultData.matched_profile_id !== "null" &&
-      resultData.confidence >= 40;
+      resultData.confidence >= 75;
 
     const matchedProfile = isMatched
       ? profileMap.get(resultData.matched_profile_id)
       : null;
+
+    // Include enrollment_count so the frontend can decide whether to require confirmation
+    const enrollCount = isMatched
+      ? (profileEnrollmentCounts.get(resultData.matched_profile_id) || 0)
+      : 0;
 
     return new Response(
       JSON.stringify({
@@ -279,6 +288,7 @@ You MUST call the face_match_result function with your answer.`,
         confidence: resultData.confidence,
         reason: resultData.reason,
         avatar_url: matchedProfile?.avatar || null,
+        enrollment_count: enrollCount,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
