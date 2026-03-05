@@ -1,54 +1,46 @@
 
 
-# پلن: Select All + رفع Delete + رفع بلاکر Publish
+# رفع مشکل Invoice # و Invoice Date در Packing Slip
 
-## ۱. رفع بلاکر Publish (اقدام دستی شما روی Live)
+## مشکل
+هنگام ساخت packing slip در Loading Station، فیلدهای `invoice_number` و `invoice_date` اصلاً مقداردهی نمی‌شوند و خالی (—) نمایش داده می‌شوند.
 
-Migration `20260305000039` یک unique index روی `scheduled_activities` می‌سازد اما رکوردهای تکراری در Live وجود دارند. باید این SQL را در **Backend View → Run SQL → Live** اجرا کنید:
+## ریشه مشکل
+در `src/pages/LoadingStation.tsx` خطوط 153-168، insert به جدول `packing_slips` شامل `invoice_number` و `invoice_date` **نیست**.
 
-```sql
-DELETE FROM public.scheduled_activities WHERE id IN (
-  SELECT id FROM (
-    SELECT id, ROW_NUMBER() OVER (
-      PARTITION BY entity_id, activity_type, summary, due_date
-      ORDER BY created_at DESC, id DESC
-    ) AS rn FROM public.scheduled_activities
-    WHERE entity_type = 'lead'
-  ) t WHERE rn > 1
-);
+## راه‌حل
+مسیر دیتا وجود دارد: `cut_plans → cut_plan_items → work_orders → orders`
+
+در Loading Station، **قبل از insert packing slip**، یک query اضافه می‌شود:
+
+```typescript
+// Query order data for invoice fields
+const { data: orderData } = await supabase
+  .from("cut_plan_items")
+  .select("work_orders(orders(order_number, order_date))")
+  .eq("cut_plan_id", selectedBundle.cutPlanId)
+  .not("work_order_id", "is", null)
+  .limit(1)
+  .maybeSingle();
+
+const order = (orderData as any)?.work_orders?.orders;
+const invoiceNumber = order?.order_number || null;
+const invoiceDate = order?.order_date
+  ? new Date(order.order_date).toISOString().slice(0, 10)
+  : null;
 ```
 
-بعد از اجرا، Publish کنید.
+سپس در insert، دو فیلد اضافه می‌شود:
 
----
+```typescript
+invoice_number: invoiceNumber,
+invoice_date: invoiceDate,
+```
 
-## ۲. رفع مشکل Delete (RLS Policy)
-
-**مشکل اصلی**: policy DELETE روی `deliveries` فقط `admin` را مجاز می‌کند. همچنین policy UPDATE روی `deliveries` شامل `workshop` نیست. بنابراین کاربران workshop نمی‌توانند نه status را تغییر دهند و نه حذف کنند.
-
-**راه‌حل**: یک migration جدید:
-- DELETE policy روی `deliveries` → اضافه کردن `office`, `field`, `workshop`
-- DELETE policy روی `delivery_stops` → اضافه کردن `office`, `field`, `workshop`  
-- UPDATE policy روی `deliveries` → اضافه کردن `workshop`
-
----
-
-## ۳. فیچر Select All + Bulk Delete
-
-در صفحه `DeliveryOps.tsx`:
-
-- **آیکون Select All** در هدر (کنار عنوان): یک checkbox/toggle که تمام کارت‌ها را انتخاب می‌کند
-- هر کارت یک **checkbox** دریافت می‌کند برای انتخاب/خروج از انتخاب تکی
-- وقتی آیتم‌هایی انتخاب شده‌اند، یک **Bulk Action Bar** ثابت در پایین نمایش داده می‌شود (مشابه `PipelineBulkBar`) با دکمه Delete
-- State: `selectedIds: Set<string>` — toggle تکی + select all + clear
-- کلیک Select All وقتی همه انتخاب‌اند → deselect all
-
----
-
-## فایل‌های تغییر یافته
+## فایل تغییر یافته
 | فایل | تغییر |
 |---|---|
-| `supabase/migrations/new.sql` | Fix DELETE/UPDATE policies |
-| `supabase/migrations/20260305000039_...sql` | Add dedup before index creation |
-| `src/pages/DeliveryOps.tsx` | Select All checkbox, per-card checkbox, bulk bar, bulk delete |
+| `src/pages/LoadingStation.tsx` | اضافه کردن query برای order_number/order_date و مقداردهی invoice_number/invoice_date در insert packing_slips |
+
+**نکته**: این تغییر فقط برای packing slip‌های **جدید** اعمال می‌شود. Slip‌های قبلی همچنان خالی خواهند بود مگر دستی آپدیت شوند.
 
