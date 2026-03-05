@@ -253,19 +253,53 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     | { kind: "file"; data: (typeof files)[0]; date: Date }
     | { kind: "comm"; data: (typeof communications)[0]; date: Date };
 
+  // Build a set of file timestamps that overlap with activities (within 5s) to deduplicate
+  const activityTimestamps = useMemo(() => {
+    return activities.map(a => new Date(a.created_at).getTime());
+  }, [activities]);
+
+  const deduplicatedFiles = useMemo(() => {
+    return files.filter(f => {
+      const ft = new Date(f.created_at).getTime();
+      // If a file's created_at is within 5 seconds of any activity, it's a duplicate
+      return !activityTimestamps.some(at => Math.abs(ft - at) < 5000);
+    });
+  }, [files, activityTimestamps]);
+
+  // Group consecutive files by proximity (within 30s) into clusters
+  type FileGroup = { kind: "file_group"; files: (typeof files); date: Date };
+
   const thread = useMemo(() => {
     const completedActivities = activities.filter(
       (a) => a.completed_at || !["follow_up", "call", "meeting", "email"].includes(a.activity_type)
     );
-    const items: ThreadItem[] = [
+    const items: (ThreadItem | FileGroup)[] = [
       ...completedActivities.map((a) => ({ kind: "activity" as const, data: a, date: new Date(a.created_at) })),
       ...eventActivities.map((a: any) => ({ kind: "activity" as const, data: a as LeadActivity, date: new Date(a.created_at) })),
-      ...files.map((f) => ({ kind: "file" as const, data: f, date: new Date(f.created_at) })),
       ...communications.map((c) => ({ kind: "comm" as const, data: c, date: new Date(c.created_at) })),
     ];
-    items.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    // Group deduplicated files by time proximity
+    const sortedFiles = [...deduplicatedFiles].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const fileGroups: FileGroup[] = [];
+    for (const f of sortedFiles) {
+      const ft = new Date(f.created_at).getTime();
+      const lastGroup = fileGroups[fileGroups.length - 1];
+      if (lastGroup && Math.abs(new Date(lastGroup.files[lastGroup.files.length - 1].created_at).getTime() - ft) < 30000) {
+        lastGroup.files.push(f);
+      } else {
+        fileGroups.push({ kind: "file_group", files: [f], date: new Date(f.created_at) });
+      }
+    }
+    items.push(...fileGroups);
+
+    items.sort((a, b) => {
+      const da = 'date' in a ? a.date.getTime() : 0;
+      const db = 'date' in b ? b.date.getTime() : 0;
+      return db - da;
+    });
     return items;
-  }, [activities, eventActivities, files, communications]);
+  }, [activities, eventActivities, deduplicatedFiles, communications]);
 
   // ── Handlers ─────────────────────────────────────────────────────
   const handleTabClick = (tab: "note" | "message" | "activity") => {
@@ -470,15 +504,24 @@ export function OdooChatter({ lead }: OdooChatterProps) {
             </p>
           </div>
         ) : (
-          <div className="space-y-0">
+          <div className="space-y-1">
             {thread.map((item, idx) => {
               const prevDate = idx > 0 ? thread[idx - 1].date : null;
               const showDateSep = !prevDate || format(item.date, "yyyy-MM-dd") !== format(prevDate, "yyyy-MM-dd");
+              const key = item.kind === "file_group"
+                ? `fg-${item.files[0].id}`
+                : item.kind === "file"
+                ? `file-${item.data.id}`
+                : item.kind === "comm"
+                ? `comm-${item.data.id}`
+                : item.data.id;
 
               return (
-                <div key={item.kind === "file" ? `file-${item.data.id}` : item.kind === "comm" ? `comm-${item.data.id}` : item.data.id}>
+                <div key={key} className="border-b border-border last:border-b-0">
                   {showDateSep && <DateSeparator date={item.date} />}
-                  {item.kind === "file" ? (
+                  {item.kind === "file_group" ? (
+                    <FileGroupThreadItem files={item.files} />
+                  ) : item.kind === "file" ? (
                     <FileThreadItem file={item.data} />
                   ) : item.kind === "comm" ? (
                     <CommThreadItem comm={item.data} />
@@ -576,17 +619,17 @@ function ActivityThreadItem({ activity }: { activity: LeadActivity }) {
           </ul>
         )}
 
-        {/* Rich HTML body (email content with signatures, formatting) */}
+        {/* Rich HTML body — expanded by default like Odoo */}
         {sanitizedHtml ? (
-          <div className="mt-1">
+          <div className="mt-1.5 rounded border border-border bg-card p-2.5">
             <div
               className={cn(
                 "odoo-html-body text-[13px] text-foreground/80 leading-relaxed overflow-hidden",
-                !htmlExpanded && "max-h-[120px]"
+                !htmlExpanded && sanitizedHtml.length > 1500 && "max-h-[500px]"
               )}
               dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
             />
-            {sanitizedHtml.length > 300 && (
+            {sanitizedHtml.length > 1500 && (
               <button
                 onClick={() => setHtmlExpanded(!htmlExpanded)}
                 className="text-[11px] text-primary hover:underline mt-1"
@@ -664,6 +707,59 @@ function FileThreadItem({ file }: { file: any }) {
           <span className="text-xs font-medium truncate flex-1">{file.file_name}</span>
           <Download className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
         </button>
+      </div>
+    </div>
+  );
+}
+
+function FileGroupThreadItem({ files }: { files: any[] }) {
+  return (
+    <div className="flex gap-3 p-3 hover:bg-accent/50 rounded-md transition-colors">
+      <Avatar className="w-8 h-8 shrink-0 text-[11px]">
+        <AvatarFallback className="bg-muted text-muted-foreground text-[11px]">
+          <Paperclip className="w-4 h-4" />
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[13px] font-semibold truncate">
+            {files.length} file{files.length > 1 ? "s" : ""} attached
+          </span>
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+            {format(new Date(files[0].created_at), "h:mm a")}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-1.5">
+          {files.map((file) => {
+            const ext = file.file_name?.split(".").pop()?.toUpperCase() || "FILE";
+            const FileIcon = getFileIcon(file.mime_type || "", ext);
+            const iconColor = getFileIconColor(ext);
+            const isImage = file.mime_type?.startsWith("image/") && !file.mime_type?.includes("dwg");
+            const isOdooFile = !file.storage_path && file.odoo_id;
+
+            return (
+              <div key={file.id} className="space-y-1">
+                {isImage && isOdooFile && (
+                  <OdooImagePreviewInline odooId={file.odoo_id} fileName={file.file_name || "image"} thumbnail />
+                )}
+                <button
+                  onClick={async () => {
+                    if (file.storage_path) {
+                      const url = await getSignedFileUrl(file.storage_path);
+                      if (url) window.open(url, "_blank");
+                    } else if (file.file_url) {
+                      window.open(file.file_url, "_blank");
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-secondary/50 hover:bg-secondary transition-colors text-left max-w-[200px]"
+                >
+                  <FileIcon className={cn("w-3.5 h-3.5 shrink-0", iconColor)} />
+                  <span className="text-[11px] font-medium truncate">{file.file_name}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
