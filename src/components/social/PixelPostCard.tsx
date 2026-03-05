@@ -7,7 +7,10 @@ export interface PixelPostData {
   imageUrl: string;
   caption: string;
   hashtags?: string;
-  persianTranslation?: string;
+  contactInfo?: string;
+  imageTextTranslation?: string;
+  captionTranslation?: string;
+  persianTranslation?: string; // kept for backward compat
   platform?: string;
   status: "published" | "scheduled" | "draft";
 }
@@ -36,32 +39,72 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
       }
     };
 
+    const hasInternalRef = post.imageTextTranslation || post.captionTranslation;
+
     return (
       <div
         ref={ref}
         className="rounded-xl border border-border bg-card my-2 shadow-sm overflow-hidden max-w-sm"
       >
-        {/* Larger image */}
+        {/* 1. Image */}
         <img
           src={post.imageUrl}
           alt="Post preview"
           className="w-full aspect-square object-cover"
         />
 
-        {/* Caption + Hashtags */}
-        <div className="px-3 py-2">
-          <p className="text-sm text-foreground leading-snug">
+        {/* 2. Caption */}
+        <div className="px-3 pt-3 pb-1">
+          <p className="text-sm text-foreground leading-snug whitespace-pre-line">
             {post.caption || "Untitled post"}
           </p>
-          {post.hashtags && (
-            <p className="text-xs text-primary/70 leading-tight mt-1">
-              {post.hashtags}
-            </p>
-          )}
         </div>
 
-        {/* Action icons */}
-        <div className="flex items-center gap-3 px-4 pb-4">
+        {/* 3. Contact Info */}
+        {post.contactInfo && (
+          <div className="px-3 py-1">
+            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">
+              {post.contactInfo}
+            </p>
+          </div>
+        )}
+
+        {/* 4. Hashtags */}
+        {post.hashtags && (
+          <div className="px-3 py-1">
+            <p className="text-xs text-primary/70 leading-tight">
+              {post.hashtags}
+            </p>
+          </div>
+        )}
+
+        {/* 5. Internal Reference Box */}
+        {hasInternalRef && (
+          <div className="mx-3 my-2 p-2.5 rounded-lg bg-muted/50 border border-border/50">
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
+              🔒 Internal reference only — not published
+            </p>
+            {post.imageTextTranslation && (
+              <div className="mb-1.5">
+                <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                  {post.imageTextTranslation}
+                </p>
+              </div>
+            )}
+            {post.captionTranslation && (
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                  {post.captionTranslation}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 6. Action buttons */}
+        <div className="flex items-center gap-3 px-4 pb-4 pt-1">
           {approved ? (
             <span className="text-sm text-emerald-500 font-semibold flex items-center gap-2">
               <CheckCircle2 className="w-6 h-6 fill-emerald-500/20" />
@@ -88,16 +131,6 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
             </>
           )}
         </div>
-
-        {/* Persian Translation - internal info below buttons */}
-        {post.persianTranslation && (
-          <div className="mx-3 mb-3 p-2 rounded-lg bg-muted/50 border border-border/50">
-            <p className="text-xs font-medium text-muted-foreground mb-1">🇮🇷 Persian Translation (internal)</p>
-            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-              {post.persianTranslation}
-            </p>
-          </div>
-        )}
       </div>
     );
   }
