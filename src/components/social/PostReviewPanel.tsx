@@ -149,7 +149,7 @@ export function PostReviewPanel({
   // Sub-panel state
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
   const [localContentType, setLocalContentType] = useState("post");
-  const [localPage, setLocalPage] = useState("Ontario Steel Detailing");
+  const [localPages, setLocalPages] = useState<string[]>(["Ontario Steel Detailing"]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
@@ -219,8 +219,8 @@ export function PostReviewPanel({
     setSubPanel(null);
   };
 
-  const handlePageSave = (value: string) => {
-    setLocalPage(value);
+  const handlePagesSaveMulti = (values: string[]) => {
+    setLocalPages(values);
     setSubPanel(null);
   };
 
@@ -260,8 +260,9 @@ export function PostReviewPanel({
             <SelectionSubPanel
               title="Pages"
               options={PAGES_OPTIONS}
-              selected={localPage}
-              onSave={handlePageSave}
+              multiSelect
+              selectedMulti={localPages}
+              onSaveMulti={handlePagesSaveMulti}
               onBack={() => setSubPanel(null)}
             />
           )}
@@ -392,8 +393,12 @@ export function PostReviewPanel({
                           <DateSchedulePopover
                             post={post}
                            onPublishNow={async () => {
-                              const success = await publishPost({ ...post, page_name: localPage });
-                              if (success) onClose();
+                              let allSuccess = true;
+                              for (const pageName of localPages) {
+                                const success = await publishPost({ ...post, page_name: pageName });
+                                if (!success) allSuccess = false;
+                              }
+                              if (allSuccess) onClose();
                             }}
                             publishing={publishing}
                             onSetDate={(date) => {
@@ -432,10 +437,10 @@ export function PostReviewPanel({
                         onClick={() => setSubPanel("pages")}
                         className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors"
                       >
-                        <p className="text-xs text-muted-foreground mb-1">Pages</p>
+                        <p className="text-xs text-muted-foreground mb-1">Pages ({localPages.length})</p>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{localPage}</span>
-                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium truncate">{localPages.join(", ")}</span>
+                          <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         </div>
                       </button>
                     </div>
@@ -447,11 +452,15 @@ export function PostReviewPanel({
               {!editing && (
                 <div className="p-4 border-t space-y-2">
                   {(post.platform === "facebook" || post.platform === "instagram" || post.platform === "linkedin") && (
-                    <Button
+                   <Button
                       className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
                       onClick={async () => {
-                        const success = await publishPost({ ...post, page_name: localPage });
-                        if (success) onClose();
+                        let allSuccess = true;
+                        for (const pageName of localPages) {
+                          const success = await publishPost({ ...post, page_name: pageName });
+                          if (!success) allSuccess = false;
+                        }
+                        if (allSuccess) onClose();
                       }}
                       disabled={publishing}
                     >
@@ -460,7 +469,7 @@ export function PostReviewPanel({
                       ) : (
                         <Send className="w-4 h-4" />
                       )}
-                      {publishing ? "Publishing..." : `Publish to ${post.platform}`}
+                      {publishing ? "Publishing..." : `Publish to ${localPages.length} page${localPages.length > 1 ? "s" : ""}`}
                     </Button>
                   )}
                   <div className="flex gap-2">
