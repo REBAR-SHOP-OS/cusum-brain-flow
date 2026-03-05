@@ -18,9 +18,11 @@ serve(async (req) => {
     // Authenticate via service role key (cron) or user auth
     const authHeader = req.headers.get("Authorization");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+    const isAnonCron = authHeader === `Bearer ${anonKey}`;
 
-    if (!isServiceRole) {
+    if (!isServiceRole && !isAnonCron) {
       // Also check for x-cron-secret
       const cronSecret = req.headers.get("x-cron-secret");
       const mcpKey = Deno.env.get("MCP_API_KEY");
