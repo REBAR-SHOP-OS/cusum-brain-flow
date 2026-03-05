@@ -141,6 +141,30 @@ export default function DeliveryTerminal() {
             }
           }
 
+          // Final fallback: orders via cut_plan → project
+          if (!invoiceNumber || !invoiceDate) {
+            const { data: cpRow } = await (supabase as any)
+              .from("cut_plans")
+              .select("project_id")
+              .eq("id", slip.cut_plan_id)
+              .single();
+            if (cpRow?.project_id) {
+              const { data: orderRow } = await (supabase as any)
+                .from("orders")
+                .select("order_number, order_date")
+                .eq("project_id", cpRow.project_id)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (orderRow) {
+                if (!invoiceNumber && orderRow.order_number) invoiceNumber = orderRow.order_number;
+                if (!invoiceDate && orderRow.order_date) {
+                  invoiceDate = new Date(orderRow.order_date).toISOString().slice(0, 10);
+                }
+              }
+            }
+          }
+
           // Backfill: persist resolved values
           if (invoiceNumber || invoiceDate) {
             const updates: Record<string, string> = {};
