@@ -106,6 +106,16 @@ export function useStationData(machineId: string | null, machineType?: string, p
       const planIds = activePlans.map((p: any) => p.id);
       const planMap = new Map(activePlans.map((p: any) => [p.id, p]));
 
+      // Fetch machine capabilities to filter by allowed bar codes
+      const { data: caps } = await supabase
+        .from("machine_capabilities")
+        .select("bar_code")
+        .eq("machine_id", machineId);
+
+      const allowedBarCodes = caps?.length
+        ? new Set(caps.map((c: any) => c.bar_code))
+        : null;
+
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
         .select("*")
@@ -115,6 +125,10 @@ export function useStationData(machineId: string | null, machineType?: string, p
       if (itemsError) throw itemsError;
 
       return (items || [])
+        .filter((item: Record<string, unknown>) => {
+          if (allowedBarCodes && !allowedBarCodes.has(item.bar_code as string)) return false;
+          return true;
+        })
         .map((item: Record<string, unknown>) => {
           const plan = planMap.get(item.cut_plan_id as string);
           return {
