@@ -195,6 +195,40 @@
   }
 }
 
+/* Odoo HTML body rendering */
+.odoo-html-body {
+  word-break: break-word;
+}
+.odoo-html-body a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+.odoo-html-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+.odoo-html-body blockquote {
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 12px;
+  margin: 8px 0;
+  color: hsl(var(--muted-foreground));
+}
+.odoo-html-body table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.odoo-html-body td, .odoo-html-body th {
+  border: 1px solid hsl(var(--border));
+  padding: 4px 8px;
+}
+.odoo-html-body ul, .odoo-html-body ol {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+
 /* ============================================
    Zebra Label Print Styles — 4x6 Continuous Roll
    ============================================ */
