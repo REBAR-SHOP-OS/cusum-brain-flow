@@ -6191,8 +6191,11 @@ export type Database = {
           expected_close_date: string | null
           expected_value: number | null
           id: string
+          last_touched_at: string | null
           metadata: Json | null
           notes: string | null
+          odoo_created_at: string | null
+          odoo_updated_at: string | null
           priority: string | null
           priority_score: number | null
           probability: number | null
@@ -6220,8 +6223,11 @@ export type Database = {
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
+          last_touched_at?: string | null
           metadata?: Json | null
           notes?: string | null
+          odoo_created_at?: string | null
+          odoo_updated_at?: string | null
           priority?: string | null
           priority_score?: number | null
           probability?: number | null
@@ -6249,8 +6255,11 @@ export type Database = {
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
+          last_touched_at?: string | null
           metadata?: Json | null
           notes?: string | null
+          odoo_created_at?: string | null
+          odoo_updated_at?: string | null
           priority?: string | null
           priority_score?: number | null
           probability?: number | null

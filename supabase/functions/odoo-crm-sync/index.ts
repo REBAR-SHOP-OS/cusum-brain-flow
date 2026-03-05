@@ -243,6 +243,11 @@ Deno.serve(async (req) => {
         const leadWarnings = validateOdooLead(ol, erpStage, previousStage);
         allValidationWarnings.push(...leadWarnings);
 
+        // Parse Odoo origin dates
+        const odooCreatedAt = ol.create_date ? new Date(String(ol.create_date).replace(" ", "T") + (String(ol.create_date).includes("+") ? "" : "Z")).toISOString() : null;
+        const odooUpdatedAt = ol.write_date ? new Date(String(ol.write_date).replace(" ", "T") + (String(ol.write_date).includes("+") ? "" : "Z")).toISOString() : null;
+        const now = new Date().toISOString();
+
         const metadata: Record<string, unknown> = {
           odoo_id: odooId,
           odoo_stage: stageName,
@@ -257,7 +262,9 @@ Deno.serve(async (req) => {
           odoo_priority: ol.priority || "0",
           odoo_type: ol.type || null,
           odoo_date_deadline: ol.date_deadline || null,
-          synced_at: new Date().toISOString(),
+          odoo_created_at: odooCreatedAt,
+          odoo_updated_at: odooUpdatedAt,
+          synced_at: now,
           validation_warnings: leadWarnings.length,
         };
 
@@ -323,7 +330,45 @@ Deno.serve(async (req) => {
             });
           }
 
+          // ── Contact linking ──
+          let contactId: string | null = null;
+          if (customerId && (ol.email_from || ol.phone)) {
+            // Try email match first, then phone
+            if (ol.email_from) {
+              const { data: byEmail } = await serviceClient
+                .from("contacts").select("id")
+                .eq("customer_id", customerId).ilike("email", String(ol.email_from))
+                .limit(1).single();
+              if (byEmail) contactId = byEmail.id;
+            }
+            if (!contactId && ol.phone) {
+              const { data: byPhone } = await serviceClient
+                .from("contacts").select("id")
+                .eq("customer_id", customerId).eq("phone", String(ol.phone))
+                .limit(1).single();
+              if (byPhone) contactId = byPhone.id;
+            }
+            // Create contact if not found
+            if (!contactId) {
+              const contactName = String(ol.contact_name || ol.partner_name || "Unknown");
+              const nameParts = contactName.trim().split(/\s+/);
+              const firstName = nameParts[0] || "Unknown";
+              const lastName = nameParts.slice(1).join(" ") || null;
+              const { data: newContact } = await serviceClient
+                .from("contacts").insert({
+                  customer_id: customerId,
+                  company_id: companyId,
+                  first_name: firstName,
+                  last_name: lastName,
+                  email: ol.email_from ? String(ol.email_from) : null,
+                  phone: ol.phone ? String(ol.phone) : null,
+                }).select("id").single();
+              contactId = newContact?.id || null;
+            }
+          }
+
           // Update existing lead
+          const lastTouchedAt = odooUpdatedAt && odooUpdatedAt > now ? odooUpdatedAt : now;
           const updatePayload: Record<string, unknown> = {
             title: ol.name || "Untitled",
             stage: erpStage,
@@ -331,12 +376,18 @@ Deno.serve(async (req) => {
             expected_value: Number(ol.expected_revenue) || 0,
             expected_close_date: dateDeadline,
             metadata,
-            updated_at: new Date().toISOString(),
+            updated_at: now,
+            odoo_created_at: odooCreatedAt,
+            odoo_updated_at: odooUpdatedAt,
+            last_touched_at: lastTouchedAt,
           };
 
-          // Enforce contact linkage on update too
+          // Enforce contact + customer linkage on update
           if (customerId && ACTIVE_STAGES.has(erpStage)) {
             updatePayload.customer_id = customerId;
+          }
+          if (contactId) {
+            updatePayload.contact_id = contactId;
           }
 
           const { error } = await serviceClient
@@ -369,6 +420,42 @@ Deno.serve(async (req) => {
             }
           }
 
+          // ── Contact linking for new leads ──
+          let newContactId: string | null = null;
+          if (customerId && (ol.email_from || ol.phone)) {
+            if (ol.email_from) {
+              const { data: byEmail } = await serviceClient
+                .from("contacts").select("id")
+                .eq("customer_id", customerId).ilike("email", String(ol.email_from))
+                .limit(1).single();
+              if (byEmail) newContactId = byEmail.id;
+            }
+            if (!newContactId && ol.phone) {
+              const { data: byPhone } = await serviceClient
+                .from("contacts").select("id")
+                .eq("customer_id", customerId).eq("phone", String(ol.phone))
+                .limit(1).single();
+              if (byPhone) newContactId = byPhone.id;
+            }
+            if (!newContactId) {
+              const contactName = String(ol.contact_name || ol.partner_name || "Unknown");
+              const nameParts = contactName.trim().split(/\s+/);
+              const firstName = nameParts[0] || "Unknown";
+              const lastName = nameParts.slice(1).join(" ") || null;
+              const { data: newContact } = await serviceClient
+                .from("contacts").insert({
+                  customer_id: customerId,
+                  company_id: companyId,
+                  first_name: firstName,
+                  last_name: lastName,
+                  email: ol.email_from ? String(ol.email_from) : null,
+                  phone: ol.phone ? String(ol.phone) : null,
+                }).select("id").single();
+              newContactId = newContact?.id || null;
+            }
+          }
+
+          const lastTouchedAtInsert = odooUpdatedAt || now;
           const insertPayload = {
               title: ol.name || "Untitled",
               stage: erpStage,
@@ -377,9 +464,13 @@ Deno.serve(async (req) => {
               expected_close_date: dateDeadline,
               source: "odoo_sync",
               customer_id: customerId,
+              contact_id: newContactId,
               company_id: companyId,
               metadata,
               priority: ol.priority === "3" ? "high" : ol.priority === "2" ? "medium" : "low",
+              odoo_created_at: odooCreatedAt,
+              odoo_updated_at: odooUpdatedAt,
+              last_touched_at: lastTouchedAtInsert,
           };
 
           const { data: newLead, error } = await serviceClient
