@@ -1,25 +1,24 @@
 
 
-# وضعیت فعلی
+# رفع خطای trigger قبل از اجرای dedup
 
-**Test**: اصلاح شده — policyهای جدید `Staff insert/update delivery_stops` (با role `workshop`) فعال‌اند.
+## مشکل
+تابع trigger به نام `block_lead_delete_with_children()` روی جدول `leads` فعال است و هنگام DELETE، ستون `lead_id` را در جدول `quotes` جستجو می‌کند — اما این ستون در `quotes` **وجود ندارد**. به همین دلیل اسکریپت dedup شکست خورد.
 
-**Production (Live)**: هنوز خراب است:
-- ۱۸۱ کلید تکراری `odoo_id` → migration `20260304234951` fail می‌کند
-- ایندکس `idx_leads_odoo_id_unique` وجود ندارد
-- policyهای قدیمی (`Office staff insert/update`) بدون role `workshop` فعال‌اند
-- تمام migrationهای بعدی (از جمله fix policy) بلاک شده‌اند
-
-# مشکل اصلی
-
-ابزار migration فقط روی Test اعمال می‌شود. برای Live، migration‌ها فقط هنگام **Publish** اجرا می‌شوند — اما همان migration بلاکر (`20260304234951`) باعث شکست Publish می‌شود. یک حلقه بن‌بست وجود دارد.
-
-# راه‌حل: اقدام دستی شما روی Production
-
-شما باید این SQL را در **Backend View → Run SQL → محیط Live** اجرا کنید:
+## راه‌حل
+SQL زیر را در همان SQL editor (محیط **Live**) paste و Run کنید. این اسکریپت اول trigger را اصلاح می‌کند، سپس dedup و بقیه کارها را انجام می‌دهد:
 
 ```sql
--- 1) پاک‌سازی رکوردهای تکراری leads
+-- 0) Fix broken trigger (quotes has no lead_id column)
+CREATE OR REPLACE FUNCTION public.block_lead_delete_with_children()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- quotes table has no lead_id; skip that check
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 1) Dedup leads by odoo_id (keep newest)
 DELETE FROM public.leads WHERE id IN (
   SELECT id FROM (
     SELECT id, ROW_NUMBER() OVER (
@@ -30,13 +29,13 @@ DELETE FROM public.leads WHERE id IN (
   ) t WHERE rn > 1
 );
 
--- 2) ساخت ایندکس (برای رفع بلاک migration)
+-- 2) Rebuild unique index
 DROP INDEX IF EXISTS public.idx_leads_odoo_id_unique;
 CREATE UNIQUE INDEX idx_leads_odoo_id_unique
   ON public.leads ((metadata->>'odoo_id'))
   WHERE metadata->>'odoo_id' IS NOT NULL;
 
--- 3) اصلاح policy INSERT (اضافه کردن workshop)
+-- 3) Fix delivery_stops INSERT policy
 DROP POLICY IF EXISTS "Office staff insert delivery_stops" ON public.delivery_stops;
 DROP POLICY IF EXISTS "Staff insert delivery_stops" ON public.delivery_stops;
 CREATE POLICY "Staff insert delivery_stops" ON public.delivery_stops
@@ -46,7 +45,7 @@ WITH CHECK (
   AND public.has_any_role(auth.uid(), ARRAY['admin','office','field','workshop']::public.app_role[])
 );
 
--- 4) اصلاح policy UPDATE (اضافه کردن workshop)
+-- 4) Fix delivery_stops UPDATE policy
 DROP POLICY IF EXISTS "Office staff update delivery_stops" ON public.delivery_stops;
 DROP POLICY IF EXISTS "Staff update delivery_stops" ON public.delivery_stops;
 CREATE POLICY "Staff update delivery_stops" ON public.delivery_stops
@@ -57,13 +56,7 @@ USING (
 );
 ```
 
-<lov-actions>
-<lov-open-backend>Open Backend (Run SQL on Live)</lov-open-backend>
-</lov-actions>
+همین SQL را کپی کنید، در editor بچسبانید و **Run** بزنید. بعد از موفقیت، **Publish** کنید.
 
-### بعد از اجرای SQL:
-1. **Publish** کنید تا migration history همگام شود
-2. با کاربر `workshop` وارد شوید و `CREATE DELIVERY` را در Loading Station تست کنید
-
-من نمی‌توانم مستقیماً روی Production بنویسم — این اقدام باید توسط شما انجام شود.
+سپس یک migration هم برای Test ایجاد خواهد شد تا trigger در آنجا هم اصلاح شود و زنجیره migration همگام بماند.
 
