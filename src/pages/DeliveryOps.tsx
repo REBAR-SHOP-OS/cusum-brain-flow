@@ -89,7 +89,7 @@ export default function DeliveryOps() {
       .from("deliveries")
       .select("id, delivery_number, status, scheduled_date, order_id, driver_name, vehicle")
       .eq("company_id", companyId)
-      .in("status", ["pending", "staged", "scheduled", "in-transit", "delivered"])
+      .in("status", ["staged", "scheduled", "in-transit"])
       .order("created_at", { ascending: false });
 
     if (!deliveries?.length) {
