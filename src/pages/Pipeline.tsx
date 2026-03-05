@@ -174,6 +174,26 @@ export default function Pipeline() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Batch-fetch pending activities for all leads (Odoo activity icons)
+  const { data: pendingActivitiesByLead = {} } = useQuery({
+    queryKey: ["lead-pending-activities"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lead_activities")
+        .select("lead_id, activity_type, due_date")
+        .is("completed_at", null)
+        .not("due_date", "is", null);
+      if (error) throw error;
+      const map: Record<string, { type: string; dueDate: string }[]> = {};
+      (data ?? []).forEach((row) => {
+        if (!map[row.lead_id]) map[row.lead_id] = [];
+        map[row.lead_id].push({ type: row.activity_type, dueDate: row.due_date! });
+      });
+      return map;
+    },
+    staleTime: 60 * 1000,
+  });
+
   const { data: leads = [], isLoading } = useQuery({
     queryKey: ["leads", debouncedSearch],
     queryFn: async () => {
@@ -805,6 +825,7 @@ export default function Pipeline() {
               onReorder={saveOrder}
               aiMode={aiMode}
               aiActionLeadIds={new Set(aiActions.filter(a => a.status === "pending").map(a => a.lead_id))}
+              pendingActivitiesByLead={pendingActivitiesByLead}
             />
           )}
         </div>
