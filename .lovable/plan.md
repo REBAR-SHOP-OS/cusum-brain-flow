@@ -1,45 +1,45 @@
 
 
-# Fix: Double-Counting in `completed_pieces` (Pieces Done Mismatch)
+# Fix: Inflated `completed_pieces` — Data Correction + Supervisor Reset
 
 ## Problem
-The "Pieces Done" counter (54/120) is inflated because `completed_pieces` gets incremented **twice** for each run:
-1. **Per-stroke** (line 300-309): Each stroke calls `increment_completed_pieces` with `activeBars` — correctly persisting progress incrementally.
-2. **On complete** (line 386-390): Calls `increment_completed_pieces` with the **full** `totalOutput` again, instead of just the delta between what was already persisted and the actual output.
+The code fix we just deployed (removing the duplicate `increment_completed_pieces` call on run completion) prevents **future** double-counting. However, **existing data is already inflated** from previous double-counted runs. For item A2002, the database shows `completed_pieces = 120` (fully capped at `total_pieces`), but the user has only actually completed 39 pieces. This is why the UI showed 54 before the stroke and 75 after — the `completedAtRunStart` snapshot captured an inflated DB value.
 
-Since strokes already persisted all pieces, the "Complete Run" call adds the entire run output a second time. The `LEAST(completed + increment, total)` cap prevents going over `total_pieces`, but across multiple runs the over-counting accumulates, producing values like 54 when only 36 pieces (2 × 18) should be recorded.
+## Root Cause
+Every past completed run added pieces **twice**: once per-stroke and once on completion. With 3 runs of 18 pieces each:
+- Actual: 3 × 18 = 54 pieces (user says 39, so likely 2 full + 1 partial)
+- Recorded: 3 × 18 (strokes) + 3 × 18 (completion) = 108, capped at 120 by LEAST()
 
-## Fix
+## Fix (2 parts)
 
-**File: `src/components/shopfloor/CutterStationView.tsx`** (line ~381-390)
+### Part 1: One-time data correction (Database Migration)
+Reset `completed_pieces` for the affected item(s) to actual values. Since we can't derive the true count from machine_runs (they don't link to specific items), we'll:
+1. Reset A2002 (`608a130b-3b61-4a7a-a66f-33ce213924d2`) to `39` (user-reported actual)
+2. Check other items with inflated counts and reset proportionally (roughly halve any non-zero counts, since each piece was counted ~2x)
 
-Change the final `increment_completed_pieces` call in `handleCompleteRun` to be a **reconciliation** rather than a full re-increment. Calculate what was already persisted (number of strokes × pieces-per-stroke) and only send the difference:
+SQL migration:
+```sql
+-- Fix A2002 specifically (user-confirmed actual = 39)
+UPDATE cut_plan_items SET completed_pieces = 39 WHERE id = '608a130b-3b61-4a7a-a66f-33ce213924d2';
 
-```typescript
-// Calculate what was already persisted stroke-by-stroke
-const alreadyPersisted = slotTracker.slots.reduce((sum, s) => sum + s.cutsDone, 0);
-const reconciliationDelta = Math.max(0, totalOutput - alreadyPersisted);
-
-if (reconciliationDelta > 0) {
-  const { error: itemErr } = await supabase
-    .rpc("increment_completed_pieces", {
-      p_item_id: currentItem.id,
-      p_increment: reconciliationDelta,
-    });
-  if (itemErr) throw itemErr;
-}
+-- Fix other inflated items: halve the count (since each was ~2x counted)
+UPDATE cut_plan_items 
+SET completed_pieces = CEIL(completed_pieces::numeric / 2)
+WHERE completed_pieces > 0 
+  AND id != '608a130b-3b61-4a7a-a66f-33ce213924d2';
 ```
 
-Wait — `totalOutput` IS `slotTracker.totalCutsDone` (line 375), and `alreadyPersisted` would equal the same thing since each stroke increments by the same amount it reports. So `reconciliationDelta` would always be 0.
+### Part 2: Supervisor "Reset Counter" button
+Add a UI control so supervisors can manually correct `completed_pieces` for any item — preventing the need for future database interventions.
 
-This means the entire final `increment_completed_pieces` call in `handleCompleteRun` is redundant and should be **removed entirely** — strokes already fully persist the count.
+**In `CutterStationView.tsx`**:
+- Add a small "Reset" or "Correct Count" button next to the "PIECES DONE" card, visible only when the user has write/supervisor access
+- On click, show a dialog with an input field pre-filled with the current count
+- On confirm, directly update `completed_pieces` on `cut_plan_items` via Supabase
+- Invalidate queries to refresh UI
 
-### Actual change:
-Remove lines 381-391 (the final `increment_completed_pieces` RPC call in `handleCompleteRun`). The stroke-by-stroke persistence at line 300-309 already handles all counting.
-
-**Additionally**: Fix the existing inflated data by running a data correction query that recalculates `completed_pieces` from actual completed run outputs (this would be a one-time data fix via the insert tool).
-
-## Summary
-- **`src/components/shopfloor/CutterStationView.tsx`**: Remove the redundant `increment_completed_pieces` call inside `handleCompleteRun` — strokes already persist the full count.
-- **Database**: One-time data correction to fix inflated `completed_pieces` values.
+This ensures:
+- Existing inflated data is corrected immediately
+- Future inflation is prevented by the code fix already deployed
+- Supervisors can self-service correct any remaining discrepancies
 
