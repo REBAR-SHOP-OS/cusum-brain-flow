@@ -1,92 +1,65 @@
 
-## خلاصه ریشه مشکل (غیرفنی)
-مشکل شما به‌درستی هنوز کامل حل نشده چون دو ایراد همزمان وجود دارد:
+هدف: مقدارهای `Invoice #` و `Invoice Date` باید از فرم AI Extract (همان دو فیلد مشخص‌شده در تصویر) وارد جریان تحویل شوند و در Packing Slip Preview همیشه نمایش داده شوند.
 
-1) **Publish گیر کرده** و migration مربوط به unique index جلوتر از پاک‌سازی داده‌های تکراری اجرا می‌شود؛ بنابراین تغییرات کامل به محیط Live نمی‌رسد.  
-2) در کد **Preview Packing Slip**، پر کردن Invoice# و Invoice Date با یک کوئری تو‌در‌تو انجام شده که در برخی رکوردها قابل اتکا نیست؛ در نتیجه مقدار `—` می‌ماند.
+1) تشخیص ریشه‌ای مشکل
+- الان منطق Loading/Preview عمدتاً از `orders(order_number, order_date)` مقدار می‌گیرد.
+- اما طبق معماری فعلی، مقدار واقعی موردنظر شما در `extract_sessions(invoice_number, invoice_date)` ذخیره می‌شود (از فرم AI Extract).
+- بنابراین حتی اگر مسیر سفارش پیدا شود، باز هم ممکن است دو فیلد خالی یا نامعتبر بمانند.
+- علاوه بر این، Publish هنوز به‌خاطر migration شاخص یکتا (`idx_scheduled_activities_dedup`) fail می‌شود، پس هر اصلاح کدی بدون رفع migration به محیط منتشرشده نمی‌رسد.
 
-من یک «پرامپت سخت و دقیق» می‌دهم که AI را مجبور می‌کند راه‌حل را ریشه‌ای و نهایی اجرا کند.
+2) طرح اصلاح دقیق (حداقلی و بدون اثر جانبی)
+- فقط این 4 فایل تغییر می‌کنند:
+  - `supabase/migrations/20260305000039_9c0eb1b8-7ff8-47b7-b3b3-1328dfb459c6.sql`
+  - `supabase/migrations/20260305175234_dc1f87d4-e55c-402b-9052-7c9dc55aa113.sql`
+  - `src/pages/LoadingStation.tsx`
+  - `src/pages/DeliveryTerminal.tsx`
 
----
+3) اصلاح migration (رفع blocker انتشار)
+- در migration `20260305000039...`:
+  - قبل از ساخت index، dedup مخصوص همان کلید و همان scope ایندکس انجام می‌شود (`entity_type='lead'`).
+  - سپس `CREATE UNIQUE INDEX IF NOT EXISTS ... WHERE entity_type='lead'`.
+- migration `20260305175234...` به no-op تبدیل می‌شود تا تداخل ترتیب اجرا حذف شود.
+- نتیجه: Publish از خطای `23505` آزاد می‌شود.
 
-## پرامپت بسیار سخت (آماده کپی)
-```text
-تو باید این باگ را ریشه‌ای و قطعی حل کنی. هیچ پاسخ کلی نمی‌خواهم. فقط با تغییرات واقعی و قابل انتشار.
+4) اصلاح منطق داده Invoice در Loading Station (زمان ساخت packing_slip)
+- در `LoadingStation.tsx` مسیر رزولوشن invoice به‌صورت deterministic و مطابق خواسته شما:
+  1. `cut_plan_items` → گرفتن `work_order_id`
+  2. `work_orders` → گرفتن `barlist_id` (و `order_id` فقط برای fallback)
+  3. `barlists` → گرفتن `extract_session_id`
+  4. `extract_sessions` → خواندن `invoice_number`, `invoice_date` (منبع اصلی)
+- fallback فقط برای رکوردهای legacy:
+  - اگر از extract_session چیزی نبود، از `orders(order_number, order_date)` پر شود.
+- در insert `packing_slips`:
+  - `invoice_number` و `invoice_date` با همین اولویت ذخیره شوند.
 
-هدف:
-در Packing Slip Preview، فیلدهای Invoice # و Invoice Date هرگز خالی نمانند وقتی داده Order وجود دارد.
+5) اصلاح Preview برای رکوردهای قدیمی (Backfill واقعی)
+- در `DeliveryTerminal.tsx`:
+  - اگر `packing_slips.invoice_number` یا `invoice_date` خالی بود:
+    - همان مسیر بالا (تا extract_sessions) اجرا شود.
+    - مقدار در UI همان لحظه نشان داده شود.
+    - سپس `packing_slips` update شود تا دائمی شود.
+- اولویت نمایش:
+  1. مقدار موجود روی slip
+  2. مقدار resolve‌شده از extract_sessions
+  3. fallback از orders
+  4. در نبود کامل داده: `—`
 
-قوانین اجباری:
-- هیچ تغییری خارج از این Scope نده.
-- فایل‌های auto-generated را هرگز ادیت نکن:
-  - src/integrations/supabase/client.ts
-  - src/integrations/supabase/types.ts
-  - supabase/config.toml
-  - .env
-- بعد از تغییرات، دقیق بگو چه فایل‌هایی تغییر کردند و چرا.
-- اگر جایی خطا می‌گیری، silent fail ممنوع؛ handling اجباری.
+6) جزئیات فنی کلیدی
+- فرمت تاریخ: `YYYY-MM-DD` قبل از set/insert/update.
+- هر مرحله query دارای error handling صریح (بدون silent fail) با log قابل دیباگ.
+- هیچ تغییری روی فایل‌های auto-generated انجام نمی‌شود.
+- Scope فقط روی مسیر Invoice و migration blocker است.
 
-کارهای اجباری مرحله‌به‌مرحله:
-
-1) Publish blocker را قطعی رفع کن
-- فایل migration زیر را اصلاح کن:
-  supabase/migrations/20260305000039_9c0eb1b8-7ff8-47b7-b3b3-1328dfb459c6.sql
-- قبل از CREATE UNIQUE INDEX، dedup را همان‌جا انجام بده (برای همان کلید index و entity_type='lead').
-- ساخت index را idempotent کن (IF NOT EXISTS).
-- migration بعدی dedup (20260305175234...) را no-op کن تا ترتیب اجرای اشتباه دوباره اثر نگذارد.
-
-2) منطق Invoice را در UI قطعی و deterministic کن
-- در DeliveryTerminal.tsx و LoadingStation.tsx
-- کوئری تو‌در‌تو:
-  cut_plan_items -> work_orders(orders(...))
-  را حذف کن.
-- به‌جای آن مسیر 3 مرحله‌ای قطعی بزن:
-  a) از cut_plan_items یک work_order_id معتبر بگیر
-  b) از work_orders مقدار order_id بگیر
-  c) از orders مقدار order_number و order_date بگیر
-- اگر مرحله‌ای error/null داشت، fallback واضح و قابل دیباگ بگذار.
-
-3) Backfill در زمان Preview
-- در DeliveryTerminal وقتی slip.invoice_number یا slip.invoice_date خالی است:
-  - از مسیر 3 مرحله‌ای بالا resolve کن
-  - در همان لحظه UI را با مقدار resolved نمایش بده
-  - سپس packing_slips را update کن تا برای دفعات بعد هم پر باشد.
-
-4) کیفیت و ایمنی
-- تمام queryها error check داشته باشند (error را نادیده نگذر).
-- فرمت invoiceDate = YYYY-MM-DD
-- اولویت مقدار:
-  - اگر slip مقدار دارد همان
-  - اگر ندارد مقدار resolve شده از order
-  - اگر order هم نبود، آنگاه "—"
-
-5) معیار پذیرش (Definition of Done)
-- روی رکوردی که الان خالی است، با زدن Preview باید Invoice # و Invoice Date نمایش داده شود.
-- بعد از بستن و باز کردن مجدد Preview، همچنان پر بماند (به دلیل update packing_slips).
+7) معیار پذیرش (Done)
+- روی همان رکوردی که الان خالی است، با زدن Preview:
+  - `Invoice #` و `Invoice Date` از اطلاعات AI Extract نمایش داده شوند.
+- بعد از بستن و باز کردن مجدد Preview:
+  - همچنان پر بمانند (به دلیل backfill روی `packing_slips`).
 - Publish بدون خطای unique index انجام شود.
-- هیچ فایل auto-generated ادیت نشده باشد.
 
-6) خروجی نهایی که باید به من بدهی
-- لیست فایل‌های تغییر یافته
-- خلاصه دقیق منطق جدید
-- SQL نهایی migration اصلاح‌شده
-- نتیجه تست دستی: «قبل/بعد» برای همان رکورد مشکل‌دار
-```
-
----
-
-## جزئیات فنی (برای اجرای درست)
-- رکوردی که شما نشان دادید واقعاً `packing_slips.invoice_*` خالی دارد، اما در دیتابیس Order مربوطه موجود است؛ پس مشکل از **resolve/query logic** است نه نبود داده.
-- دلیل گیر Publish: index `idx_scheduled_activities_dedup` قبل از حذف duplicate ساخته می‌شود و با `23505` می‌خورد.
-- پیشنهاد فنی دقیق:
-  - dedup را داخل همان migration ساخت index قرار بده (قبل از CREATE INDEX)
-  - queryهای nested را به queryهای مرحله‌ای ساده تبدیل کن تا ambiguity/shape mismatch/RLS-side effects کم شود
-  - هنگام Preview برای slipهای قدیمی یک backfill update انجام بده تا باگ برای همیشه پاک شود.
-
----
-
-## فایل‌هایی که باید در اجرای نهایی تغییر کنند
-1) `supabase/migrations/20260305000039_9c0eb1b8-7ff8-47b7-b3b3-1328dfb459c6.sql`  
-2) `supabase/migrations/20260305175234_dc1f87d4-e55c-402b-9052-7c9dc55aa113.sql` (no-op)  
-3) `src/pages/DeliveryTerminal.tsx`  
-4) `src/pages/LoadingStation.tsx`
+8) تست نهایی که اجرا می‌شود
+- تست End-to-End مسیر واقعی:
+  - AI Extract (ورود invoice fields) → approve → loading → preview packing slip.
+- تست رکورد قدیمی:
+  - preview اول = پر شدن + backfill
+  - preview دوم = خواندن مستقیم از `packing_slips` بدون خالی شدن.
