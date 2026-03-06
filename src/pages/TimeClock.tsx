@@ -287,6 +287,7 @@ export default function TimeClock() {
   }
 
   return (
+    <>
     <div className="relative flex flex-col items-center min-h-screen bg-background overflow-hidden">
       <canvas ref={face.canvasRef} className="hidden" />
       <div className="absolute inset-0 pointer-events-none z-0">
