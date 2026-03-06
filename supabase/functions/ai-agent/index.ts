@@ -189,22 +189,21 @@ function extractImageFromAIResponse(aiData: any): string | null {
  * Searches knowledge for logo/favicon, generates fresh signed URLs if needed,
  * and falls back to a hardcoded branding path.
  */
-async function resolveLogoUrl(): Promise<string> {
+async function resolveLogoUrl(): Promise<string | null> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  if (!supabaseUrl) throw new Error("SUPABASE_URL not configured");
+  if (!supabaseUrl) return null;
   const logoUrl = `${supabaseUrl}/storage/v1/object/public/social-images/brand/company-logo.png`;
 
-  // Preflight: verify the logo file actually exists before sending to the model
+  // Preflight: verify the logo file actually exists — return null if missing
   try {
     const check = await fetch(logoUrl, { method: "HEAD" });
     if (!check.ok) {
-      throw new Error(
-        `لوگوی رسمی شرکت در مخزن برند پیدا نشد (HTTP ${check.status})؛ لطفاً همگام‌سازی لوگو انجام شود.`
-      );
+      console.warn(`⚠️ Company logo not found (HTTP ${check.status}), proceeding without logo.`);
+      return null;
     }
   } catch (err) {
-    if (err instanceof Error && err.message.includes("لوگوی رسمی")) throw err;
-    throw new Error("لوگوی رسمی شرکت در مخزن برند پیدا نشد؛ لطفاً همگام‌سازی لوگو انجام شود.");
+    console.warn("⚠️ Could not verify logo, proceeding without it:", err);
+    return null;
   }
 
   return logoUrl;
@@ -516,16 +515,8 @@ Deno.serve(async (req) => {
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
 
-        // Resolve company logo — abort early if missing
-        let logoUrl: string;
-        try {
-          logoUrl = await resolveLogoUrl();
-        } catch (logoErr) {
-          const errMsg = logoErr instanceof Error ? logoErr.message : "لوگوی رسمی شرکت در مخزن برند پیدا نشد.";
-          return new Response(JSON.stringify({ reply: `❌ ${errMsg}` }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+        // Resolve company logo — proceed without if missing
+        const logoUrl = await resolveLogoUrl();
 
         const resolvedSlotNum = isRegenerate
           ? parseInt(regenMatch![1])
