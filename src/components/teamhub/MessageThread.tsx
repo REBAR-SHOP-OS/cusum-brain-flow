@@ -30,6 +30,7 @@ import type { TeamMessage, ChatAttachment } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { cn } from "@/lib/utils";
+import { downloadFile } from "@/lib/downloadUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { primeMobileAudio } from "@/lib/audioPlayer";
