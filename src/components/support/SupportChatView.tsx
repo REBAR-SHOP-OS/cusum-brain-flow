@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2, MapPin, Globe, ExternalLink } from "lucide-react";
+import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2, MapPin, Globe, ExternalLink, Paperclip, Download, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
