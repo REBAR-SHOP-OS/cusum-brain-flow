@@ -1,34 +1,24 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Fix: Download Button Not Actually Downloading Files
 
 ## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+The download icon (`<a download>`) doesn't trigger a file download because browsers ignore the `download` attribute on cross-origin URLs (Supabase storage URLs are on a different domain). Instead, clicking it just opens the image in a new tab.
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## Solution
+Create a shared `downloadFile` utility that uses `fetch` → `blob` → programmatic `<a>` click to force a real download. Then replace the `<a download>` links in both `DockChatBox.tsx` and `MessageThread.tsx` with `<button onClick={downloadFile}>`.
 
-## Fix
-Two options — the simplest and most reliable:
+### Files Changed
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+1. **New**: `src/lib/downloadUtils.ts` — shared helper:
+   - `async function downloadFile(url: string, filename: string)` 
+   - Fetches the URL as a blob, creates a temporary object URL, triggers a programmatic click on a hidden `<a>` element with the `download` attribute (same-origin blob URL, so `download` works), then revokes the object URL.
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+2. **Edit**: `src/components/chat/DockChatBox.tsx` (lines 449-458)
+   - Replace `<a href download>` with `<button onClick={() => downloadFile(att.url, att.name)}>` for image attachments
+   - Same for non-image file attachments (lines 464-474)
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
-
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
-
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+3. **Edit**: `src/components/teamhub/MessageThread.tsx` (lines 476-486)
+   - Replace `<a href download>` with `<button onClick={() => downloadFile(fixedUrl, att.name)}>` for image attachments
+   - Same for non-image file attachments (lines 490-501)
 
