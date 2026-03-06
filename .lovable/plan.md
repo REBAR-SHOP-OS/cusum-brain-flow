@@ -1,19 +1,20 @@
 
 
-# وضعیت فعلی — همه چیز درست است
+# Fix: Show All Profiles in Team Status
 
-بررسی کد نشان می‌دهد که سیستم **دقیقاً همان چیزی که می‌خواهید** را انجام می‌دهد:
+## Problem
+Line 175 in `src/pages/TimeClock.tsx` filters profiles by `is_active !== false`. Since `is_active` now reflects clock-in status (not employment status), the Team Status tab only shows currently clocked-in users instead of all employees.
 
-1. **پروفایل‌ها حذف نشده‌اند** — فقط `is_active = false` شده‌اند. اسم همه کارمندان در لیست هست و نمایش داده می‌شوند.
+## Solution
+Change the Team Status section to show **all profiles** instead of only active ones. The `is_active` field is used for real-time clock status, not for filtering who appears in the list.
 
-2. **Clock-in از ساعت ۸ صبح** — محدودیت ۸ صبح ET برای `@rebar.shop` در سه لایه اعمال شده:
-   - فرانت‌اند (`useTimeClock.ts` خط ۱۱۴-۱۲۲)
-   - کیوسک (`kiosk-punch/index.ts`)
-   - دیتابیس (trigger `trg_validate_clockin_time`)
+### File: `src/pages/TimeClock.tsx`
+- **Line 175**: Change `activeProfiles` filter to show all profiles:
+  ```typescript
+  const activeProfiles = profiles; // Show all employees regardless of clock status
+  ```
 
-3. **Clock-out دستی** — هر زمان که کارمند بخواهد می‌تواند clock out کند و `is_active` به `false` تغییر می‌کند.
+This single-line change will restore the full employee list in Team Status while keeping the active/off badges working correctly based on clock entries.
 
-4. **Auto clock-out ساعت ۵ عصر** — `auto-clockout` edge function شیفت‌های باز `@rebar.shop` را می‌بندد و `is_active = false` می‌کند.
-
-**نتیجه**: نیازی به تغییر کد نیست. سیستم فعلی دقیقاً مطابق خواسته شما کار می‌کند — کارمندان لیست هستند، صبح ۸ clock in می‌کنند، هر وقت خواستند clock out می‌کنند، و ساعت ۵ اتوماتیک بسته می‌شوند.
+**Note**: Other files (OrgChart, MemberAreaView, SettingsPeople, etc.) also filter by `is_active`. These should remain as-is since they serve different purposes, but if needed we can revisit them.
 
