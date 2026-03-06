@@ -43,13 +43,13 @@ Wire Mesh, Rebar Tie Wire, Rebar Accessories
 🌐 www.rebar.shop
 
 ## IMAGE RULES
+- **ALL images MUST be PHOTOREALISTIC** — real-world professional photography style ONLY. ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, AI-looking art, stock photo aesthetics. Every image MUST look like a real photo taken with a professional camera at a real construction site, workshop, warehouse, or urban location. Natural lighting, real textures, authentic environments ONLY.
 - **LOGO IS MANDATORY** — The REBAR.SHOP logo MUST appear in EVERY image EXACTLY as the original — no changes to color, shape, aspect ratio, or design. If the logo cannot be loaded, DO NOT generate any image — report the error immediately.
 - **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations. NEVER produce a similar-looking image. Each generation must feel like a completely fresh creative direction.
-- **USE DIVERSE VISUAL STYLES** — Rotate between these styles and NEVER use the same style twice in a row: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes with buildings under construction, city landmarks & bridges & infrastructure, aerial drone views of large projects, studio product photography, macro close-up detail shots, dramatic sunrise/sunset lighting, logistics & delivery scenes, engineering blueprints overlaid with real products, night construction scenes, foundation-level perspectives. Each image must look like it came from a COMPLETELY DIFFERENT photo shoot.
-- Images MUST be REALISTIC (construction scenes, actual products, shop floor, urban infrastructure)
+- **USE DIVERSE VISUAL STYLES** — Rotate between these styles and NEVER use the same style twice in a row: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes with buildings under construction, city landmarks & bridges & infrastructure, aerial drone views of large projects, real product photography in actual warehouse settings, macro close-up detail shots, dramatic sunrise/sunset lighting, logistics & delivery scenes, engineering blueprints overlaid with real products, night construction scenes, foundation-level perspectives. Each image must look like it came from a COMPLETELY DIFFERENT photo shoot.
 - English text overlays on the image (product name, tagline)
 - Scientific and promotional style — NOT fantasy or cartoon
-- Clean, professional, visually striking
+- Clean, professional, visually striking — like professional documentary/commercial photography
 - Use Brain files (logo & content reference) when available
 
 ## CAPTION RULES — STRICT OUTPUT ORDER

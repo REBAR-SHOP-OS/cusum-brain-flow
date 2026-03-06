@@ -627,7 +627,10 @@ Deno.serve(async (req) => {
             ? `\nFORBIDDEN STYLES (already used recently, DO NOT use): ${forbiddenStyles.join("; ")}`
             : "";
 
-          const imagePrompt = `VISUAL STYLE: ${selectedStyle}. ` +
+          const imagePrompt = `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
+            `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
+            `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
+            `VISUAL STYLE: ${selectedStyle}. ` +
             `PRODUCT FOCUS: ${slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
@@ -638,7 +641,8 @@ Deno.serve(async (req) => {
             `- Use the specified visual style EXACTLY as described above\n` +
             `- FORBIDDEN: Do not repeat any composition, camera angle, color palette, or scene layout from recent images\n` +
             `- Each image must feel like it belongs to a completely different photo series\n` +
-            `- Ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram`;
+            `- Ultra high resolution, PHOTOREALISTIC ONLY, 1:1 square aspect ratio, perfect for Instagram\n` +
+            `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot} with style #${selectedStyleIndex}: ${selectedStyle}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex });
