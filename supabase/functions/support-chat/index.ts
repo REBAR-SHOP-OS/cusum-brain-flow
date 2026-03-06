@@ -718,7 +718,7 @@ document.body.appendChild(bubble);
 
 var panel = document.createElement('div');
 panel.id = 'sw-panel';
-panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+'</h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div><div id="sw-messages"></div><div id="sw-input-area"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
+panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+'</h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div><div id="sw-messages"></div><div id="sw-input-area"><button id="sw-attach" title="Send image">📎</button><input type="file" id="sw-file" accept="image/*" style="display:none"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
 document.body.appendChild(panel);
 
 var started = false;
