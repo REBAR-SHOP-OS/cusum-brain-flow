@@ -217,13 +217,14 @@ export default function LoadingStation() {
 
           // Final fallback: orders via cut_plan → project
           if ((!invoiceNumber || !invoiceDate) && (planData as any)?.project_id) {
-            const orderQuery = supabase
+            // @ts-ignore - deep type instantiation
+            const { data: orderRow } = await supabase
               .from("orders")
               .select("order_number, order_date")
               .eq("project_id", (planData as any).project_id)
-              .order("created_at", { ascending: false })
-              .limit(1);
-            const { data: orderRow } = await (orderQuery as any).maybeSingle();
+              .order("created_at", { ascending: false } as any)
+              .limit(1)
+              .maybeSingle();
             if (orderRow) {
               if (!invoiceNumber) invoiceNumber = orderRow.order_number || null;
               if (!invoiceDate) invoiceDate = orderRow.order_date
