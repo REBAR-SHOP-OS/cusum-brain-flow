@@ -1,34 +1,40 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Fix Stale Shifts & Enforce 8 AM–5 PM Clock-In Window
 
 ## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+1. Multiple @rebar.shop employees have **stale open shifts** (some 193+ hours!) showing as ACTIVE
+2. The auto-clockout at 5 PM exists but clearly isn't catching everything
+3. No restriction prevents clocking in before 8 AM ET
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## Plan
 
-## Fix
-Two options — the simplest and most reliable:
+### Step 1: Close All Stale Open Shifts Now
+Run a direct SQL update to close all currently open shifts for @rebar.shop users (except kourosh@rebar.shop) with a cleanup note:
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
-
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
-
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
+```sql
+UPDATE time_clock_entries
+SET clock_out = now(), notes = '[auto-closed: stale shift cleanup]'
+WHERE clock_out IS NULL
+AND profile_id IN (
+  SELECT id FROM profiles WHERE email LIKE '%@rebar.shop' AND email != 'kourosh@rebar.shop'
+);
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+Also close kiosk-created profiles (no email) with stale shifts (clock_in older than today).
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+### Step 2: Enforce 8 AM ET Clock-In Restriction
+Add time validation in two places:
+
+**A. Frontend (`useTimeClock.ts`)** — In the `clockIn` function, check if current Eastern Time is before 8:00 AM. If so, show a toast error "Clock-in is available from 8:00 AM" and block.
+
+**B. Kiosk edge function (`kiosk-punch/index.ts`)** — Before allowing a clock-in action, check the current Eastern Time. If before 8 AM, return an error response.
+
+**C. Database trigger (optional but recommended)** — Add a validation trigger on `time_clock_entries` INSERT that rejects clock-ins before 8 AM ET for @rebar.shop profiles, as a server-side safety net.
+
+### Files to Change
+1. **Database** — SQL to close all stale shifts immediately
+2. **`src/hooks/useTimeClock.ts`** — Add 8 AM ET check in `clockIn()`
+3. **`supabase/functions/kiosk-punch/index.ts`** — Add 8 AM ET check before clock-in
+4. **Database migration** — Validation trigger to enforce 8 AM rule server-side
 
