@@ -283,7 +283,13 @@ export default function AgentWorkspace() {
       const errorMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
-        content: `Sorry, I encountered an error. ${error instanceof Error ? error.message : ""}`,
+        content: (() => {
+          const errText = error instanceof Error ? error.message : "";
+          const friendlyMsg = /abort|timeout|failed to send/i.test(errText)
+            ? "Image generation is taking longer than expected. Please try again."
+            : errText;
+          return `Sorry, I encountered an error. ${friendlyMsg}`;
+        })(),
         agent: config.agentType as any,
         timestamp: new Date(),
       };
