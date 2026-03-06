@@ -63,6 +63,17 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
       { title: "Team comms overview", prompt: "Show me today's communication summary — emails sent/received, calls made, and any gaps.", icon: "MessageSquare", category: "Comms" },
     ],
   },
+  "zahra@rebar.shop": {
+    agentKey: "social",
+    userRole: "social_media_manager",
+    heroText: "How can **Pixel** assist you today?",
+    quickActions: [
+      { title: "Generate post", prompt: "Create a new social media post for today — pick the best platform and generate a caption and image.", icon: "Sparkles", category: "Content" },
+      { title: "Weekly content plan", prompt: "Plan this week's social media content — suggest topics, platforms, and posting times.", icon: "Calendar", category: "Planning" },
+      { title: "Post performance", prompt: "Show me how our recent social media posts have performed — engagement, reach, and top performers.", icon: "TrendingUp", category: "Analytics" },
+      { title: "Brand consistency", prompt: "Review our latest posts for brand consistency — logo usage, tone, and visual style.", icon: "Eye", category: "Brand" },
+    ],
+  },
   "vicky@rebar.shop": {
     agentKey: "accounting",
     userRole: "accountant",
