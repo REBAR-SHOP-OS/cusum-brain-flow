@@ -485,17 +485,15 @@ export function MessageThread({
                                   );
                                 }
                                 return (
-                                  <a
+                                  <button
                                     key={i}
-                                    href={fixedUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80"
+                                    onClick={() => downloadFile(fixedUrl, att.name)}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80 cursor-pointer"
                                   >
                                     <FileText className="w-3.5 h-3.5 text-primary" />
                                     <span className="truncate max-w-[120px]">{att.name}</span>
                                     <Download className="w-3.5 h-3.5 text-muted-foreground" />
-                                  </a>
+                                  </button>
                                 );
                               })}
                             </div>

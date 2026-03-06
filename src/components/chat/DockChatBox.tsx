@@ -458,17 +458,15 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
 
                               {/* Non-image file links */}
                               {uniqueAttachments.filter((a) => !isImageUrl(a.url)).map((att, ai) => (
-                                <a
+                              <button
                                   key={ai}
-                                  href={att.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-md border border-border bg-muted/30 text-[10px] text-foreground/80 hover:bg-muted/60 transition-colors"
+                                  onClick={() => downloadFile(att.url, att.name)}
+                                  className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-md border border-border bg-muted/30 text-[10px] text-foreground/80 hover:bg-muted/60 transition-colors cursor-pointer"
                                 >
                                   <FileIcon className="w-3 h-3 text-primary" />
                                   <span className="truncate max-w-[120px]">{att.name}</span>
                                   <Download className="w-3 h-3 ml-1 text-muted-foreground" />
-                                </a>
+                                </button>
                               ))}
 
                               {/* Copy button for text messages */}
