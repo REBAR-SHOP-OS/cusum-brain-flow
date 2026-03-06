@@ -515,16 +515,8 @@ Deno.serve(async (req) => {
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
 
-        // Resolve company logo — abort early if missing
-        let logoUrl: string;
-        try {
-          logoUrl = await resolveLogoUrl();
-        } catch (logoErr) {
-          const errMsg = logoErr instanceof Error ? logoErr.message : "لوگوی رسمی شرکت در مخزن برند پیدا نشد.";
-          return new Response(JSON.stringify({ reply: `❌ ${errMsg}` }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+        // Resolve company logo — proceed without if missing
+        const logoUrl = await resolveLogoUrl();
 
         const resolvedSlotNum = isRegenerate
           ? parseInt(regenMatch![1])
