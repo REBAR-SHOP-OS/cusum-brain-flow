@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, Send, ImageIcon, Video, ChevronDown } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { usePublishPost } from "@/hooks/usePublishPost";
 import { Textarea } from "@/components/ui/textarea";
@@ -137,7 +139,9 @@ export function PostReviewPanel({
   const { updatePost, deletePost } = useSocialPosts();
   const { publishPost, publishing } = usePublishPost();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editHashtags, setEditHashtags] = useState("");
@@ -307,9 +311,31 @@ export function PostReviewPanel({
 
                   {/* Regenerate / AI Edit buttons for visual */}
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowImageGen(true)}>
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      {post.image_url && !isVideo ? "Regenerate image" : "Generate image"}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={regenerating}
+                      onClick={async () => {
+                        setRegenerating(true);
+                        try {
+                          const { data, error } = await supabase.functions.invoke("regenerate-post", {
+                            body: { post_id: post.id },
+                          });
+                          if (error) throw error;
+                          if (data?.error) throw new Error(data.error);
+                          queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                          toast({ title: "Post regenerated", description: "New image and caption generated successfully." });
+                        } catch (err: any) {
+                          console.error("Regenerate error:", err);
+                          toast({ title: "Regeneration failed", description: err?.message || "Could not regenerate post", variant: "destructive" });
+                        } finally {
+                          setRegenerating(false);
+                        }
+                      }}
+                    >
+                      {regenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      {regenerating ? "Regenerating..." : "Regenerate image"}
                     </Button>
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowVideoGen(true)}>
                       <Video className="w-3.5 h-3.5" />
