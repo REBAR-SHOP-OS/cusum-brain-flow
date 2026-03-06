@@ -62,6 +62,7 @@ async function generateDynamicContent(
   isRegenerate: boolean,
   brainContext?: string,
   preferredModel?: string,
+  sessionSeed?: string,
 ): Promise<DynamicContent> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -96,6 +97,7 @@ CRITICAL RULES:
 - The image slogan must be short enough to be readable when printed on an image
 - NEVER mention any posting time, schedule time, or clock time in the caption or slogan
 - Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
+- SESSION CREATIVE SEED: ${sessionSeed || crypto.randomUUID()} — You MUST use this seed to drive a COMPLETELY UNIQUE creative direction. No two sessions should ever produce similar styles, angles, metaphors, or visual concepts. Treat this seed as your creative DNA for this specific session.
 ${brainContext ? "- You MUST follow any brand guidelines, tone, or language preferences from the Brain Context above" : ""}
 
 Respond with ONLY a valid JSON object (no markdown, no code fences):
@@ -533,7 +535,10 @@ Deno.serve(async (req) => {
           // Step A: Generate unique, non-repeating caption + slogan + hashtags via LLM
           // Inject brain knowledge block into content generation
           const brainKnowledge = (mergedContext.brainKnowledgeBlock as string) || "";
-          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel);
+          // Generate a session-unique seed to ensure every chat produces distinct creative output
+          const sessionSeed = `${(mergedContext.sessionId as string) || "anon"}-${crypto.randomUUID()}`;
+
+          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel, sessionSeed);
 
           // Step B: Build image prompt with MANDATORY advertising text on image
           // If brain has image references, append them to inspire generation
@@ -547,7 +552,7 @@ Deno.serve(async (req) => {
           const imagePrompt = slot.imageStyle +
             `. MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
-            ` — variation timestamp: ${Date.now()}`;
+            ` — unique session seed: ${sessionSeed} — create a visually DISTINCT image with a unique color palette, composition, lighting, and artistic style that has never been generated before`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
