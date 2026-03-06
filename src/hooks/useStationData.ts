@@ -82,71 +82,54 @@ export function useStationData(machineId: string | null, machineType?: string, p
           })) as StationItem[];
       }
 
-      // Cutter / default: plans assigned to this machine or unassigned, scoped by company
-      let cutterQuery = supabase
-        .from("cut_plans")
-        .select("id, name, project_name, project_id, machine_id, projects(status, customers(name))")
-        .eq("company_id", companyId!)
-      .in("status", ["draft", "queued", "running"])
-        .eq("machine_id", machineId!);
-
-      if (projectId) {
-        cutterQuery = cutterQuery.eq("project_id", projectId);
-      }
-
-      const { data: plans, error: plansError } = await cutterQuery as { data: any[] | null; error: any };
-
-      if (plansError) throw plansError;
-      if (!plans?.length) return [];
-
-      // Filter out plans linked to paused projects (keep unlinked plans)
-      const activePlans = plans.filter((p: any) => !p.projects || p.projects.status !== 'paused');
-      if (!activePlans.length) return [];
-
-      const planIds = activePlans.map((p: any) => p.id);
-      const planMap = new Map(activePlans.map((p: any) => [p.id, p]));
-
-      // Fetch machine capabilities to filter by allowed bar codes (process=cut for cutters)
+      // Cutter: route items by bar_code capability, not by plan assignment
+      // 1. Fetch machine capabilities
       const { data: caps } = await supabase
         .from("machine_capabilities")
         .select("bar_code")
-        .eq("machine_id", machineId)
+        .eq("machine_id", machineId!)
         .eq("process", "cut");
 
       const allowedBarCodes = caps?.length
-        ? new Set(caps.map((c: any) => c.bar_code))
+        ? caps.map((c: any) => c.bar_code)
         : null;
 
-      // Fail-closed: if this is a cutter with no capabilities defined, show nothing
-      if (!allowedBarCodes) return [];
+      // Fail-closed: no capabilities defined → show nothing
+      if (!allowedBarCodes || allowedBarCodes.length === 0) return [];
 
-      const { data: items, error: itemsError } = await supabase
+      // 2. Fetch ALL cut_plan_items matching this machine's bar_codes
+      let cutterQuery = supabase
         .from("cut_plan_items")
-        .select("*")
-        .in("cut_plan_id", planIds)
-        .or("phase.eq.queued,phase.eq.cutting");
+        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, status, projects(status, customers(name)))")
+        .in("bar_code", allowedBarCodes)
+        .or("phase.eq.queued,phase.eq.cutting")
+        .eq("cut_plans.company_id", companyId!)
+        .in("cut_plans.status", ["draft", "queued", "running"]);
+
+      if (projectId) {
+        cutterQuery = cutterQuery.eq("cut_plans.project_id", projectId);
+      }
+
+      const { data: items, error: itemsError } = await cutterQuery;
 
       if (itemsError) throw itemsError;
 
       return (items || [])
         .filter((item: Record<string, unknown>) => {
-          if (allowedBarCodes && !allowedBarCodes.has(item.bar_code as string)) return false;
-          return true;
+          const proj = (item.cut_plans as any)?.projects;
+          return !proj || proj.status !== 'paused';
         })
-        .map((item: Record<string, unknown>) => {
-          const plan = planMap.get(item.cut_plan_id as string);
-          return {
-            ...item,
-            bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
-            phase: (item.phase as string) || "queued",
-            bend_dimensions: item.bend_dimensions as Record<string, number> | null,
-            plan_name: plan?.name || "",
-            project_name: plan?.project_name || null,
-            project_id: plan?.project_id || null,
-            customer_name: (plan?.projects as any)?.customers?.name || null,
-            project_status: (plan?.projects as any)?.status || null,
-          } as StationItem;
-        });
+        .map((item: Record<string, unknown>) => ({
+          ...item,
+          bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
+          phase: (item.phase as string) || "queued",
+          bend_dimensions: item.bend_dimensions as Record<string, number> | null,
+          plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
+          project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
+          project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
+          customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
+          project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
+        })) as StationItem[];
     },
   });
 
