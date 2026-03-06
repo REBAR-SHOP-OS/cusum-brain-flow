@@ -632,6 +632,7 @@ Deno.serve(async (req) => {
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
             dedupHint +
+            forbiddenHint +
             ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` +
             `\n\nMANDATORY VISUAL DIVERSITY RULES:\n` +
             `- Use the specified visual style EXACTLY as described above\n` +
@@ -639,8 +640,8 @@ Deno.serve(async (req) => {
             `- Each image must feel like it belongs to a completely different photo series\n` +
             `- Ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram`;
 
-          console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
-          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
+          console.log(`🎨 Pixel: Generating image for slot ${slot.slot} with style #${selectedStyleIndex}: ${selectedStyle}...`);
+          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex });
 
           // Only show imageTextFa line if it has actual content
           const hasImageText = dynContent.imageTextFa && dynContent.imageTextFa.trim() !== "" && dynContent.imageTextFa.trim() !== "-";
