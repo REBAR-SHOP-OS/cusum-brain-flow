@@ -401,6 +401,13 @@ export default function AgentWorkspace() {
       const titleLine = lines[0] || "Pixel Post";
       const title = titleLine.replace(/^[\p{Emoji}\s]+/u, "").slice(0, 50) || "Pixel Post";
       const content = cleanCaption;
+      // Extract slot index from post id (format: "post-{index}-{hash}")
+      const scheduledDate = new Date(selectedDate);
+      const idMatch = post.id?.match(/^post-(\d+)/);
+      const slotIdx = idMatch ? parseInt(idMatch[1]) : 0;
+      const slotTime = SLOT_TIMES[slotIdx] || SLOT_TIMES[0];
+      scheduledDate.setHours(slotTime.hour, slotTime.minute, 0, 0);
+
       const { error } = await supabase.from("social_posts").insert({
         platform: post.platform || "instagram",
         status: "draft",
@@ -408,7 +415,7 @@ export default function AgentWorkspace() {
         content,
         image_url: post.imageUrl || null,
         hashtags,
-        scheduled_date: selectedDate.toISOString(),
+        scheduled_date: scheduledDate.toISOString(),
         user_id: user.id,
       });
       if (error) {
