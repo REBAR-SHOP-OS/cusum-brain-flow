@@ -97,6 +97,7 @@ CRITICAL RULES:
 - The image slogan must be short enough to be readable when printed on an image
 - NEVER mention any posting time, schedule time, or clock time in the caption or slogan
 - Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
+- SESSION CREATIVE SEED: ${sessionSeed || crypto.randomUUID()} — You MUST use this seed to drive a COMPLETELY UNIQUE creative direction. No two sessions should ever produce similar styles, angles, metaphors, or visual concepts. Treat this seed as your creative DNA for this specific session.
 ${brainContext ? "- You MUST follow any brand guidelines, tone, or language preferences from the Brain Context above" : ""}
 
 Respond with ONLY a valid JSON object (no markdown, no code fences):
