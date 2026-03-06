@@ -580,10 +580,17 @@ Deno.serve(async (req) => {
             ? `\nReference brand images for style inspiration: ${brainImageRefs.slice(0, 3).join(", ")}`
             : "";
 
+          // Build anti-duplicate context from recent images
+          const dedupHint = recentImageNames.length > 0
+            ? `\n\nPREVIOUSLY GENERATED (MUST NOT resemble any of these — use completely different composition, angle, color scheme): ${recentImageNames.slice(0, 15).join(", ")}`
+            : "";
+
           const imagePrompt = slot.imageStyle +
             `. MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
-            ` — unique session seed: ${sessionSeed} — create a visually DISTINCT image with a unique color palette, composition, lighting, and artistic style that has never been generated before`;
+            dedupHint +
+            ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` +
+            ` — create a visually DISTINCT image with a UNIQUE color palette, composition, lighting, camera angle, and artistic style that has NEVER been generated before. ABSOLUTE RULE: No two images should ever look similar.`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
