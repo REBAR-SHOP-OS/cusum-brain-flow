@@ -14414,6 +14414,7 @@ export type Database = {
         Args: { _channel_id: string; _user_id: string }
         Returns: boolean
       }
+      is_social_team: { Args: never; Returns: boolean }
       log_contact_access: {
         Args: {
           _action: string
