@@ -361,6 +361,9 @@ export default function TimeClock() {
             <TabsTrigger value="payroll" className="flex-1 gap-1.5">
               <DollarSign className="w-3.5 h-3.5" /> Payroll
             </TabsTrigger>
+            <TabsTrigger value="kiosk-status" className="flex-1 gap-1.5">
+              <Monitor className="w-3.5 h-3.5" /> وضعیت کیوسک
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="team-status">
