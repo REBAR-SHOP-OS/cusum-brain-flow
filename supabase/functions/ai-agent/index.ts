@@ -526,8 +526,30 @@ Deno.serve(async (req) => {
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
 
-        // Resolve company logo — proceed without if missing
+        // Resolve company logo — MANDATORY, block if missing
         const logoUrl = await resolveLogoUrl();
+        if (!logoUrl) {
+          return new Response(
+            JSON.stringify({
+              reply: "🚫 **Company logo not found!**\n\nThe company logo is **required** for all image generation. Please upload it to `social-images/brand/company-logo.png` in storage, then try again.",
+              context: mergedContext,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Fetch recent image file names to prevent duplicates
+        let recentImageNames: string[] = [];
+        try {
+          const { data: recentFiles } = await svcClient.storage
+            .from("social-images")
+            .list("pixel", { limit: 30, sortBy: { column: "created_at", order: "desc" } });
+          if (recentFiles) {
+            recentImageNames = recentFiles.map((f: any) => f.name);
+          }
+        } catch (e) {
+          console.warn("Could not fetch recent images for dedup:", e);
+        }
 
         const resolvedSlotNum = isRegenerate
           ? parseInt(regenMatch![1])
