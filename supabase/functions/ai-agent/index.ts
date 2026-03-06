@@ -543,16 +543,10 @@ Deno.serve(async (req) => {
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
 
-        // Resolve company logo — MANDATORY, block if missing
+        // Resolve company logo — optional, continue without if missing
         const logoUrl = await resolveLogoUrl();
         if (!logoUrl) {
-          return new Response(
-            JSON.stringify({
-              reply: "🚫 **Company logo not found!**\n\nThe company logo is **required** for all image generation. Please upload it to `social-images/brand/company-logo.png` in storage, then try again.",
-              context: mergedContext,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          console.warn("⚠️ Logo not found, will generate images without logo overlay.");
         }
 
         // Fetch recent image file names to prevent duplicates
