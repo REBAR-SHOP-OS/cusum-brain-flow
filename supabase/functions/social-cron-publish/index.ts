@@ -91,7 +91,13 @@ serve(async (req) => {
             if (pages.length === 0) {
               publishResult = { error: "No Facebook Pages found" };
             } else {
-              const pageId = pages[0].id;
+              // Match page_name from the post to the correct page
+              let selectedPage = pages[0] as { id: string; name?: string };
+              if (post.page_name) {
+                const matched = pages.find((p: { id: string; name?: string }) => p.name === post.page_name);
+                if (matched) selectedPage = matched;
+              }
+              const pageId = selectedPage.id;
               const { data: pageTokenData } = await supabase
                 .from("user_meta_tokens")
                 .select("access_token")
