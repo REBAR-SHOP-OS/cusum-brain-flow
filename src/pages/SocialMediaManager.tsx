@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { Skeleton } from "@/components/ui/skeleton";
-import { format, addDays, startOfWeek } from "date-fns";
+import { format, addDays, startOfWeek, parseISO, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PostReviewPanel } from "@/components/social/PostReviewPanel";
 import { BrandKitDialog } from "@/components/social/BrandKitDialog";
@@ -94,13 +94,32 @@ export default function SocialMediaManager() {
     return items;
   }, [posts, platformFilter, statusFilter, searchQuery]);
 
+  const weekPosts = useMemo(() => {
+    const wEnd = addDays(weekStart, 7);
+    return filteredPosts.filter((p) => {
+      if (!p.scheduled_date) return false;
+      const d = parseISO(p.scheduled_date);
+      return d >= weekStart && d < wEnd;
+    });
+  }, [filteredPosts, weekStart]);
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: posts.length };
-    for (const p of posts) {
+    const c: Record<string, number> = { all: weekPosts.length };
+    for (const p of weekPosts) {
       c[p.platform] = (c[p.platform] || 0) + 1;
     }
     return c;
-  }, [posts]);
+  }, [weekPosts]);
+
+  const jumpToLatestPost = useCallback(() => {
+    const sorted = [...filteredPosts]
+      .filter((p) => p.scheduled_date)
+      .sort((a, b) => new Date(b.scheduled_date!).getTime() - new Date(a.scheduled_date!).getTime());
+    if (sorted.length > 0) {
+      const latestDate = parseISO(sorted[0].scheduled_date!);
+      setWeekStart(startOfWeek(latestDate, { weekStartsOn: 1 }));
+    }
+  }, [filteredPosts]);
 
   const postsToReview = posts.filter((p) => p.status === "scheduled").length;
 
@@ -355,11 +374,21 @@ export default function SocialMediaManager() {
             </div>
           </div>
         ) : (
-          <SocialCalendar
-            posts={filteredPosts}
-            weekStart={weekStart}
-            onPostClick={setSelectedPost}
-          />
+          <>
+            <SocialCalendar
+              posts={filteredPosts}
+              weekStart={weekStart}
+              onPostClick={setSelectedPost}
+            />
+            {weekPosts.length === 0 && filteredPosts.length > 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <p className="text-sm mb-2">No posts scheduled this week</p>
+                <Button variant="outline" size="sm" onClick={jumpToLatestPost}>
+                  Jump to latest post
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
