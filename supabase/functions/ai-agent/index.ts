@@ -235,6 +235,7 @@ async function generatePixelImage(
   prompt: string,
   svcClient: ReturnType<typeof createClient>,
   logoUrl?: string,
+  options?: { styleIndex?: number | string },
 ): Promise<{ imageUrl: string | null; error?: string }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -323,7 +324,9 @@ async function generatePixelImage(
         imageBytes = new Uint8Array(buf);
       }
 
-      const imagePath = `pixel/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+      // Encode styleIndex in filename for dedup tracking (set by caller via options)
+      const styleTag = options?.styleIndex ?? "x";
+      const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
       const { error: uploadError } = await svcClient.storage
         .from("social-images")
         .upload(imagePath, imageBytes, { contentType: "image/png", upsert: false });
@@ -601,19 +604,35 @@ Deno.serve(async (req) => {
             ? `\n\nPREVIOUSLY GENERATED (MUST NOT resemble any of these — use completely different composition, angle, color scheme): ${recentImageNames.slice(0, 15).join(", ")}`
             : "";
 
-          // Randomly select a visual style, avoiding recently used ones
-          const usedStyleHints = recentImageNames.join(" ").toLowerCase();
-          const availableStyles = slot.imageStyles.filter(
-            (s) => !usedStyleHints.includes(s.slice(0, 20).toLowerCase())
-          );
-          const stylePool = availableStyles.length > 0 ? availableStyles : slot.imageStyles;
-          const selectedStyle = stylePool[Math.floor(Math.random() * stylePool.length)];
+          // Extract style indices from recent filenames (format: timestamp-sINDEX-random.png)
+          const usedStyleIndices = new Set<number>();
+          for (const name of recentImageNames) {
+            const match = name.match(/-s(\d+)-/);
+            if (match) usedStyleIndices.add(parseInt(match[1]));
+          }
+          const availableStyles = slot.imageStyles
+            .map((s, idx) => ({ style: s, idx }))
+            .filter(({ idx }) => !usedStyleIndices.has(idx));
+          const stylePool = availableStyles.length > 0 ? availableStyles : slot.imageStyles.map((s, idx) => ({ style: s, idx }));
+          const selected = stylePool[Math.floor(Math.random() * stylePool.length)];
+          const selectedStyle = selected.style;
+          const selectedStyleIndex = selected.idx;
+
+          // Build forbidden styles hint from recently used indices
+          const forbiddenStyles = [...usedStyleIndices]
+            .map(i => slot.imageStyles[i])
+            .filter(Boolean)
+            .slice(0, 5);
+          const forbiddenHint = forbiddenStyles.length > 0
+            ? `\nFORBIDDEN STYLES (already used recently, DO NOT use): ${forbiddenStyles.join("; ")}`
+            : "";
 
           const imagePrompt = `VISUAL STYLE: ${selectedStyle}. ` +
             `PRODUCT FOCUS: ${slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
             dedupHint +
+            forbiddenHint +
             ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` +
             `\n\nMANDATORY VISUAL DIVERSITY RULES:\n` +
             `- Use the specified visual style EXACTLY as described above\n` +
@@ -621,8 +640,8 @@ Deno.serve(async (req) => {
             `- Each image must feel like it belongs to a completely different photo series\n` +
             `- Ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram`;
 
-          console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
-          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
+          console.log(`🎨 Pixel: Generating image for slot ${slot.slot} with style #${selectedStyleIndex}: ${selectedStyle}...`);
+          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex });
 
           // Only show imageTextFa line if it has actual content
           const hasImageText = dynContent.imageTextFa && dynContent.imageTextFa.trim() !== "" && dynContent.imageTextFa.trim() !== "-";
