@@ -180,7 +180,7 @@ export default function TimeClock() {
     (p) => p.email?.toLowerCase().endsWith("@rebar.shop") && p.full_name !== "Kourosh Zand"
   );
   const shopProfiles = activeProfiles.filter(
-    (p) => !p.email?.toLowerCase().endsWith("@rebar.shop") || p.full_name === "Kourosh Zand"
+    (p) => p.user_id && (!p.email?.toLowerCase().endsWith("@rebar.shop") || p.full_name === "Kourosh Zand")
   );
 
   // Shared team status card renderer
