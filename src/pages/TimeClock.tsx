@@ -177,10 +177,10 @@ export default function TimeClock() {
   );
 
   const officeProfiles = activeProfiles.filter(
-    (p) => p.email?.toLowerCase().endsWith("@rebar.shop")
+    (p) => p.email?.toLowerCase().endsWith("@rebar.shop") && p.full_name !== "Kourosh Zand"
   );
   const shopProfiles = activeProfiles.filter(
-    (p) => !p.email?.toLowerCase().endsWith("@rebar.shop")
+    (p) => !p.email?.toLowerCase().endsWith("@rebar.shop") || p.full_name === "Kourosh Zand"
   );
 
   // Shared team status card renderer
