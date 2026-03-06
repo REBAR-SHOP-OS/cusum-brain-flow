@@ -176,6 +176,51 @@ export default function TimeClock() {
     (p) => !["General Labour", "Ryle Lachini"].includes(p.full_name)
   );
 
+  const officeProfiles = activeProfiles.filter(
+    (p) => p.email?.toLowerCase().endsWith("@rebar.shop")
+  );
+  const shopProfiles = activeProfiles.filter(
+    (p) => !p.email?.toLowerCase().endsWith("@rebar.shop")
+  );
+
+  // Shared team status card renderer
+  const renderProfileCard = (profile: typeof profiles[0]) => {
+    const status = statusMap.get(profile.id);
+    const isClockedIn = status?.clocked_in ?? false;
+    const clockInTime = status?.clock_in;
+    const elapsed = isClockedIn && clockInTime ? differenceInMinutes(now, new Date(clockInTime)) : null;
+    const profileEntries = allEntries.filter((e) => e.profile_id === profile.id);
+    const totalMins = profileEntries.reduce((sum, e) => {
+      const end = e.clock_out ? new Date(e.clock_out) : (isClockedIn ? now : new Date(e.clock_in));
+      return sum + differenceInMinutes(end, new Date(e.clock_in));
+    }, 0);
+
+    return (
+      <Card key={profile.id} className={cn("transition-colors", isClockedIn && "border-green-500/30 bg-green-500/5")}>
+        <CardContent className="p-4 flex items-center gap-3">
+          <div className="relative">
+            <Avatar className="w-10 h-10">
+              <AvatarImage src={profile.avatar_url || ""} />
+              <AvatarFallback className="text-xs font-bold bg-muted text-foreground">{getInitials(profile.full_name)}</AvatarFallback>
+            </Avatar>
+            <div className={cn("absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card", isClockedIn ? "bg-green-500" : "bg-muted-foreground/40")} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">{profile.full_name}</p>
+            <p className="text-xs text-muted-foreground">
+              {isClockedIn
+                ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}`
+                : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
+            </p>
+          </div>
+          <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
+            {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
+          </Badge>
+        </CardContent>
+      </Card>
+    );
+  };
+
   // Kiosk mode - full screen face scanning
   if (kioskMode) {
     const matchedIsClockedIn = face.matchResult
