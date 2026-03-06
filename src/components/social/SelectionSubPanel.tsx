@@ -83,22 +83,23 @@ export function SelectionSubPanel(props: SelectionSubPanelProps) {
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <h3 className="text-base font-semibold flex-1 text-center pr-6">{title}</h3>
-        {isMulti && (
-          <button
-            onClick={toggleAll}
-            className={`p-1.5 rounded-md transition-colors ${
-              allSelected ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-muted"
-            }`}
-            title={allSelected ? "Deselect all" : "Select all"}
-          >
-            <CheckCheck className="w-5 h-5" />
-          </button>
-        )}
+        <h3 className="text-base font-semibold flex-1 text-center">{title}</h3>
       </div>
 
       {/* Options */}
       <div className="flex-1 overflow-y-auto p-4">
+        {isMulti && (
+          <button
+            onClick={toggleAll}
+            className={`flex items-center gap-1.5 mb-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              allSelected ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+            title={allSelected ? "Deselect all" : "Select all"}
+          >
+            <CheckCheck className="w-4 h-4" />
+            <span>{allSelected ? "Deselect All" : "Select All"}</span>
+          </button>
+        )}
         <div className="rounded-lg border bg-card overflow-hidden">
           {options.map((opt, idx) => {
             const isSelected = isMulti
