@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2 } from "lucide-react";
+import { Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2, Download, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getPublicFileUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks } from "@/lib/chatFileUtils";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
