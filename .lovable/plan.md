@@ -1,45 +1,34 @@
 
 
-# Fix: Scheduled Posts Never Publish — Cron Auth 401
+# Fix: Cron Job Authentication for Scheduled Post Publishing
 
-## Root Cause (Critical)
+## Problem
+The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
 
-The `social-cron-publish` cron job has been **failing with 401 Unauthorized on EVERY invocation**. Looking at `net._http_response`, every 2-minute cron call returns `{"error":"Unauthorized"}`. **No scheduled post has ever been auto-published by the cron.**
+**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
 
-The auth logic in the edge function compares the Authorization header against `Deno.env.get("SUPABASE_ANON_KEY")` using strict string equality. This comparison is failing — likely because the env var value doesn't exactly match the hardcoded anon key in the cron SQL, or there's a header encoding difference.
+## Fix
+Two options — the simplest and most reliable:
 
-Additionally, the post from the screenshot (id `03f399fa`) is still `status: draft` / `qa_status: needs_review` — meaning the earlier "Set Date" action also failed (because the trigger was blocking it before our last fix). So even if the cron worked, this post wouldn't have been picked up.
+**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
 
-## Two-Part Fix
+Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
 
-### Part 1: Fix edge function auth (the main blocker)
-
-**File: `supabase/functions/social-cron-publish/index.ts`**
-
-Replace the fragile string-comparison auth with a robust approach:
-- Create a Supabase client using the provided auth header
-- If the client can successfully query the database, the request is authorized
-- This works for both cron (anon key) and manual calls (user JWT)
-
-Simplified auth approach:
 ```typescript
-// Instead of exact string matching, just verify the key is valid
-// by attempting to create a client. Since verify_jwt = false,
-// all requests reach the function — we just need to ensure
-// it's a legitimate Supabase key.
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
-// Remove the auth gate entirely — the function is already 
-// protected by verify_jwt=false and only called via cron
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+const isAnonCron = authHeader === `Bearer ${anonKey}`;
+
+if (!isServiceRole && !isAnonCron) {
+  // check x-cron-secret fallback...
+}
 ```
 
-### Part 2: Re-register cron with service role key (database)
+This is the safest approach because:
+- We cannot put the service role key in a migration file (it would be visible in version control)
+- The anon key is already in the cron job and working
+- The function only processes pre-approved scheduled posts
 
-Drop the old cron and create a new one that uses the service role key from `current_setting('app.settings.service_role_key')` or a dedicated secret. Actually, the simpler fix: just remove the auth check from the edge function since it's a server-side cron function not exposed to end users.
-
-### Files Changed
-- `supabase/functions/social-cron-publish/index.ts` — remove broken auth gate, keep service role client for DB access
-- No cron change needed if we remove the auth gate
+### File to edit
+1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
 
