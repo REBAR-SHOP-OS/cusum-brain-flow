@@ -38,26 +38,11 @@ const VISUAL_STYLES_POOL = [
 ];
 
 const PIXEL_SLOTS = [
-  {
-    slot: 1, time: "06:30 AM", theme: "Motivational / start of work day", product: "Rebar Stirrups",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
-  {
-    slot: 2, time: "07:30 AM", theme: "Creative promotional", product: "Rebar Cages",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
-  {
-    slot: 3, time: "08:00 AM", theme: "Strength & scale", product: "Fiberglass Rebar (GFRP)",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
-  {
-    slot: 4, time: "12:30 PM", theme: "Innovation & efficiency", product: "Wire Mesh",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
-  {
-    slot: 5, time: "02:30 PM", theme: "Product promotional", product: "Rebar Dowels",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
+  { slot: 1, theme: "Motivational / Strength", product: "Rebar Stirrups", imageStyles: VISUAL_STYLES_POOL },
+  { slot: 2, theme: "Creative promotional", product: "Rebar Cages", imageStyles: VISUAL_STYLES_POOL },
+  { slot: 3, theme: "Strength & scale", product: "Fiberglass Rebar (GFRP)", imageStyles: VISUAL_STYLES_POOL },
+  { slot: 4, theme: "Innovation & efficiency", product: "Wire Mesh", imageStyles: VISUAL_STYLES_POOL },
+  { slot: 5, theme: "Product promotional", product: "Rebar Dowels", imageStyles: VISUAL_STYLES_POOL },
 ];
 
 interface DynamicContent {
@@ -111,7 +96,7 @@ CRITICAL RULES:
 - NEVER use generic phrases like "Building strong" or "Engineering excellence"
 - Be creative, bold, and specific to the product
 - The image slogan must be short enough to be readable when printed on an image
-- NEVER mention any posting time, schedule time, or clock time in the caption or slogan
+- ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM, morning, afternoon, evening, dawn, sunrise, sunset, or any time-related phrases in the caption, slogan, or translations. This is a STRICT RULE with ZERO exceptions.
 - Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
 - SESSION CREATIVE SEED: ${sessionSeed || crypto.randomUUID()} — You MUST use this seed to drive a COMPLETELY UNIQUE creative direction. No two sessions should ever produce similar styles, angles, metaphors, or visual concepts. Treat this seed as your creative DNA for this specific session.
 ${brainContext ? "- You MUST follow any brand guidelines, tone, or language preferences from the Brain Context above" : ""}
@@ -502,15 +487,15 @@ Deno.serve(async (req) => {
 
         const scheduleReply = `📅 **Content Schedule — ${scheduleDate}**
 
-| # | Time (EST) | Theme | Product |
-|---|-----------|-------|---------|
-| 1 | 06:30 AM | Motivational / start of work day | Rebar Stirrups |
-| 2 | 07:30 AM | Creative promotional | Rebar Cages |
-| 3 | 08:00 AM | Strength & scale | Fiberglass Rebar (GFRP) |
-| 4 | 12:30 PM | Innovation & efficiency | Wire Mesh |
-| 5 | 02:30 PM | Product promotional | Rebar Dowels |
+| # | Theme | Product |
+|---|-------|---------|
+| 1 | Motivational / Strength | Rebar Stirrups |
+| 2 | Creative promotional | Rebar Cages |
+| 3 | Strength & scale | Fiberglass Rebar (GFRP) |
+| 4 | Innovation & efficiency | Wire Mesh |
+| 5 | Product promotional | Rebar Dowels |
 
-**Which slot? (Enter 1-5, a time, or "all")**`;
+**Which slot? (Enter 1-5 or "all")**`;
 
         return new Response(
           JSON.stringify({ reply: scheduleReply, context: mergedContext, modelUsed: "deterministic" }),
@@ -530,15 +515,7 @@ Deno.serve(async (req) => {
       const regenMatch = msgLower.match(/regenerate\s*(?:slot\s*)?([1-5])/i);
       const isRegenerate = !!regenMatch;
 
-      // Also match time-based inputs
-      const TIME_TO_SLOT: Record<string, number> = {
-        "06:30": 1, "6:30": 1, "6:30 am": 1, "06:30 am": 1,
-        "07:30": 2, "7:30": 2, "7:30 am": 2, "07:30 am": 2,
-        "08:00": 3, "8:00": 3, "8:00 am": 3, "08:00 am": 3,
-        "12:30": 4, "12:30 pm": 4,
-        "14:30": 5, "2:30 pm": 5, "02:30 pm": 5, "02:30": 5,
-      };
-      const timeSlotNum = TIME_TO_SLOT[msgLower];
+      const timeSlotNum: number | undefined = undefined; // time-based input removed
 
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
