@@ -314,10 +314,48 @@ function CutPlanRow({ plan, machines }: { plan: CutPlanForBarlist; machines: Mac
         .eq("cut_plan_id", plan.id);
 
       const barCodes = (items || []).map(i => i.bar_code).filter(Boolean);
-      const allSmall = barCodes.length > 0 && barCodes.every(bc => SMALL_BAR_CODES.has(bc));
-      const targetMachineId = allSmall ? CUTTER_01_ID : CUTTER_02_ID;
+      const uniqueBarCodes = [...new Set(barCodes)];
+      const smallCodes = uniqueBarCodes.filter(bc => SMALL_BAR_CODES.has(bc));
+      const largeCodes = uniqueBarCodes.filter(bc => !SMALL_BAR_CODES.has(bc));
 
-      await handleAssign(targetMachineId);
+      const isMixed = smallCodes.length > 0 && largeCodes.length > 0;
+
+      if (isMixed) {
+        // Split: move small items to a new plan assigned to CUTTER-01
+        const { data: newPlan } = await supabase
+          .from("cut_plans")
+          .insert({
+            name: `${plan.name} (Small)`,
+            company_id: companyId!,
+            project_id: plan.project_id,
+            machine_id: CUTTER_01_ID,
+            status: "queued",
+          })
+          .select("id")
+          .single();
+
+        if (newPlan) {
+          // Move small bar items to the new plan
+          const smallItemIds = (items || [])
+            .filter(i => SMALL_BAR_CODES.has(i.bar_code))
+            .map(i => i.id);
+
+          if (smallItemIds.length > 0) {
+            await supabase
+              .from("cut_plan_items")
+              .update({ cut_plan_id: newPlan.id })
+              .in("id", smallItemIds);
+          }
+        }
+
+        // Assign the original plan (now only large items) to CUTTER-02
+        await handleAssign(CUTTER_02_ID);
+        queryClient.invalidateQueries({ queryKey: ["cut-plans-for-shopfloor-queue"] });
+      } else {
+        const allSmall = barCodes.length > 0 && barCodes.every(bc => SMALL_BAR_CODES.has(bc));
+        const targetMachineId = allSmall ? CUTTER_01_ID : CUTTER_02_ID;
+        await handleAssign(targetMachineId);
+      }
     })();
   }, [plan.machine_id, plan.machine_name]); // eslint-disable-line react-hooks/exhaustive-deps
 
