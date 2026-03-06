@@ -1,34 +1,56 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Fix: Image Display, Download & Copy Icons in Floating Team Chat
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## Root Cause
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+The DockChatBox (floating chat popup) has three problems:
 
-## Fix
-Two options — the simplest and most reliable:
+1. **Images stored as expiring signed URLs**: Files are uploaded to the private `team-chat-files` bucket and a 7-day signed URL is stored in `original_text` and `attachments`. After 7 days, URLs expire and images break permanently.
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+2. **Images not rendered visually**: Both `DockChatBox.tsx` and `MessageThread.tsx` display file attachments as text links, not inline images. The `DockChatBox` doesn't even parse the markdown-style links in `original_text`.
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+3. **No download/copy actions**: No download icon under images, no copy icon under text messages.
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+## Fix Plan
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
+### 1. Make the storage bucket public (Database Migration)
+
+Change `team-chat-files` bucket from private to public so URLs never expire:
+
+```sql
+UPDATE storage.buckets SET public = true WHERE id = 'team-chat-files';
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+### 2. Switch uploads to use public URLs (2 files)
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+**`src/components/teamhub/MessageThread.tsx`** (lines 186-199) and **`src/components/chat/DockChatBox.tsx`** (lines 184-194):
+
+Replace `createSignedUrl()` with `getPublicUrl()` after upload. This gives permanent, non-expiring URLs.
+
+### 3. Add image rendering, download & copy icons to DockChatBox (1 file)
+
+**`src/components/chat/DockChatBox.tsx`** (lines 408-424):
+
+- Parse `original_text` for image URLs (markdown `![](url)` or `📎 [name](url)`) and attachment objects
+- Render image attachments as `<img>` with a download button underneath
+- Render text messages with a small copy icon underneath
+- Add `Download` and `Copy` icons from lucide-react
+
+### 4. Add image rendering + download/copy to MessageThread (1 file)
+
+**`src/components/teamhub/MessageThread.tsx`** (lines 468-488):
+
+- For image-type attachments, render inline `<img>` preview instead of just a link
+- Add a download icon button under each image
+- The copy icon already exists via `ContentActions` component (line 521), so text copy is already working in the full TeamHub view
+
+### 5. Fix existing messages with expired signed URLs
+
+Create a small utility that, when rendering a message, detects if an attachment URL contains `token=` (signed URL pattern) and regenerates a public URL by extracting the storage path from the URL.
+
+## Files Changed
+- `src/components/chat/DockChatBox.tsx` — image rendering + download/copy icons
+- `src/components/teamhub/MessageThread.tsx` — inline image preview + download icon, public URL uploads
+- Database migration — make `team-chat-files` bucket public
 
