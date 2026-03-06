@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor } from "lucide-react";
+import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { format, differenceInMinutes } from "date-fns";
@@ -175,6 +175,51 @@ export default function TimeClock() {
   const activeProfiles = profiles.filter(
     (p) => !["General Labour", "Ryle Lachini"].includes(p.full_name)
   );
+
+  const officeProfiles = activeProfiles.filter(
+    (p) => p.email?.toLowerCase().endsWith("@rebar.shop")
+  );
+  const shopProfiles = activeProfiles.filter(
+    (p) => !p.email?.toLowerCase().endsWith("@rebar.shop")
+  );
+
+  // Shared team status card renderer
+  const renderProfileCard = (profile: typeof profiles[0]) => {
+    const status = statusMap.get(profile.id);
+    const isClockedIn = status?.clocked_in ?? false;
+    const clockInTime = status?.clock_in;
+    const elapsed = isClockedIn && clockInTime ? differenceInMinutes(now, new Date(clockInTime)) : null;
+    const profileEntries = allEntries.filter((e) => e.profile_id === profile.id);
+    const totalMins = profileEntries.reduce((sum, e) => {
+      const end = e.clock_out ? new Date(e.clock_out) : (isClockedIn ? now : new Date(e.clock_in));
+      return sum + differenceInMinutes(end, new Date(e.clock_in));
+    }, 0);
+
+    return (
+      <Card key={profile.id} className={cn("transition-colors", isClockedIn && "border-green-500/30 bg-green-500/5")}>
+        <CardContent className="p-4 flex items-center gap-3">
+          <div className="relative">
+            <Avatar className="w-10 h-10">
+              <AvatarImage src={profile.avatar_url || ""} />
+              <AvatarFallback className="text-xs font-bold bg-muted text-foreground">{getInitials(profile.full_name)}</AvatarFallback>
+            </Avatar>
+            <div className={cn("absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card", isClockedIn ? "bg-green-500" : "bg-muted-foreground/40")} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">{profile.full_name}</p>
+            <p className="text-xs text-muted-foreground">
+              {isClockedIn
+                ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}`
+                : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
+            </p>
+          </div>
+          <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
+            {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
+          </Badge>
+        </CardContent>
+      </Card>
+    );
+  };
 
   // Kiosk mode - full screen face scanning
   if (kioskMode) {
@@ -350,7 +395,10 @@ export default function TimeClock() {
         <Tabs defaultValue="team-status">
           <TabsList className="w-full">
             <TabsTrigger value="team-status" className="flex-1 gap-1.5">
-              <Users className="w-3.5 h-3.5" /> Team Status
+              <Users className="w-3.5 h-3.5" /> Team Status Office
+            </TabsTrigger>
+            <TabsTrigger value="team-status-shop" className="flex-1 gap-1.5">
+              <Factory className="w-3.5 h-3.5" /> Team Status Shop
             </TabsTrigger>
             <TabsTrigger value="my-leave" className="flex-1 gap-1.5">
               <Palmtree className="w-3.5 h-3.5" /> My Leave
@@ -371,43 +419,24 @@ export default function TimeClock() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {loading ? (
                   <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
+                ) : officeProfiles.length === 0 ? (
+                  <p className="text-muted-foreground text-sm col-span-2 text-center py-8">No office team members</p>
                 ) : (
-                  activeProfiles.map((profile) => {
-                    const status = statusMap.get(profile.id);
-                    const isClockedIn = status?.clocked_in ?? false;
-                    const clockInTime = status?.clock_in;
-                    const elapsed = isClockedIn && clockInTime ? differenceInMinutes(now, new Date(clockInTime)) : null;
-                    const profileEntries = allEntries.filter((e) => e.profile_id === profile.id);
-                    const totalMins = profileEntries.reduce((sum, e) => {
-                      const end = e.clock_out ? new Date(e.clock_out) : (isClockedIn ? now : new Date(e.clock_in));
-                      return sum + differenceInMinutes(end, new Date(e.clock_in));
-                    }, 0);
+                  officeProfiles.map(renderProfileCard)
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
 
-                    return (
-                      <Card key={profile.id} className={cn("transition-colors", isClockedIn && "border-green-500/30 bg-green-500/5")}>
-                        <CardContent className="p-4 flex items-center gap-3">
-                          <div className="relative">
-                            <Avatar className="w-10 h-10">
-                              <AvatarImage src={profile.avatar_url || ""} />
-                              <AvatarFallback className="text-xs font-bold bg-muted text-foreground">{getInitials(profile.full_name)}</AvatarFallback>
-                            </Avatar>
-                            <div className={cn("absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card", isClockedIn ? "bg-green-500" : "bg-muted-foreground/40")} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{profile.full_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {isClockedIn
-                                ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}`
-                                : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
-                            </p>
-                          </div>
-                          <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
-                            {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
-                          </Badge>
-                        </CardContent>
-                      </Card>
-                    );
-                  })
+          <TabsContent value="team-status-shop">
+            <ScrollArea className="h-[calc(100vh-480px)]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {loading ? (
+                  <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
+                ) : shopProfiles.length === 0 ? (
+                  <p className="text-muted-foreground text-sm col-span-2 text-center py-8">No shop team members</p>
+                ) : (
+                  shopProfiles.map(renderProfileCard)
                 )}
               </div>
             </ScrollArea>
