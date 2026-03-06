@@ -62,6 +62,7 @@ async function generateDynamicContent(
   isRegenerate: boolean,
   brainContext?: string,
   preferredModel?: string,
+  sessionSeed?: string,
 ): Promise<DynamicContent> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
