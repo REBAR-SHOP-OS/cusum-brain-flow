@@ -38,26 +38,11 @@ const VISUAL_STYLES_POOL = [
 ];
 
 const PIXEL_SLOTS = [
-  {
-    slot: 1, time: "06:30 AM", theme: "Motivational / start of work day", product: "Rebar Stirrups",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
-  {
-    slot: 2, time: "07:30 AM", theme: "Creative promotional", product: "Rebar Cages",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
-  {
-    slot: 3, time: "08:00 AM", theme: "Strength & scale", product: "Fiberglass Rebar (GFRP)",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
-  {
-    slot: 4, time: "12:30 PM", theme: "Innovation & efficiency", product: "Wire Mesh",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
-  {
-    slot: 5, time: "02:30 PM", theme: "Product promotional", product: "Rebar Dowels",
-    imageStyles: VISUAL_STYLES_POOL,
-  },
+  { slot: 1, theme: "Motivational / Strength", product: "Rebar Stirrups", imageStyles: VISUAL_STYLES_POOL },
+  { slot: 2, theme: "Creative promotional", product: "Rebar Cages", imageStyles: VISUAL_STYLES_POOL },
+  { slot: 3, theme: "Strength & scale", product: "Fiberglass Rebar (GFRP)", imageStyles: VISUAL_STYLES_POOL },
+  { slot: 4, theme: "Innovation & efficiency", product: "Wire Mesh", imageStyles: VISUAL_STYLES_POOL },
+  { slot: 5, theme: "Product promotional", product: "Rebar Dowels", imageStyles: VISUAL_STYLES_POOL },
 ];
 
 interface DynamicContent {
