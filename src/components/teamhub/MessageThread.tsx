@@ -19,6 +19,7 @@ import {
   FileText,
   Image as ImageIcon,
   X,
+  Download,
 } from "lucide-react";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
 import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
@@ -32,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { primeMobileAudio } from "@/lib/audioPlayer";
+import { getPublicFileUrl, fixChatFileUrl } from "@/lib/chatFileUtils";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
   en: { name: "English", flag: "🇬🇧" },
@@ -183,19 +185,11 @@ export function MessageThread({
         continue;
       }
 
-      // Private bucket — use signed URL (7-day expiry)
-      const { data: signedData, error: signError } = await supabase.storage
-        .from("team-chat-files")
-        .createSignedUrl(path, 604800);
-
-      if (signError || !signedData?.signedUrl) {
-        toast.error(`Failed to get URL for ${file.name}`);
-        continue;
-      }
+      const publicUrl = getPublicFileUrl(path);
 
       newAttachments.push({
         name: file.name,
-        url: signedData.signedUrl,
+        url: publicUrl,
         type: file.type,
         size: file.size,
       });
@@ -468,22 +462,45 @@ export function MessageThread({
                           {/* Attachments */}
                           {attachments.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-2">
-                              {attachments.map((att, i) => (
-                                <a
-                                  key={i}
-                                  href={att.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80"
-                                >
-                                  {isImageFile(att.type) ? (
-                                    <ImageIcon className="w-3.5 h-3.5 text-primary" />
-                                  ) : (
+                              {attachments.map((att, i) => {
+                                const fixedUrl = fixChatFileUrl(att.url);
+                                if (isImageFile(att.type)) {
+                                  return (
+                                    <div key={i} className="flex flex-col gap-1">
+                                      <img
+                                        src={fixedUrl}
+                                        alt={att.name}
+                                        className="rounded-lg border border-border max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                        onClick={() => window.open(fixedUrl, "_blank")}
+                                      />
+                                      <a
+                                        href={fixedUrl}
+                                        download={att.name}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors w-fit"
+                                        title="Download"
+                                      >
+                                        <Download className="w-3 h-3" />
+                                        <span>Download</span>
+                                      </a>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <a
+                                    key={i}
+                                    href={fixedUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80"
+                                  >
                                     <FileText className="w-3.5 h-3.5 text-primary" />
-                                  )}
-                                  <span className="truncate max-w-[120px]">{att.name}</span>
-                                </a>
-                              ))}
+                                    <span className="truncate max-w-[120px]">{att.name}</span>
+                                    <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                                  </a>
+                                );
+                              })}
                             </div>
                           )}
 
