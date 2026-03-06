@@ -1,68 +1,34 @@
 
 
-# تنظیم صحیح تاریخ و ساعت پست‌های Pixel در تقویم سوشیال مدیا
+# Fix: Cron Job Authentication for Scheduled Post Publishing
 
-## مشکل
-وقتی پست در ایجنت Pixel ساخته/تأیید می‌شود، `scheduled_date` نادرست ذخیره می‌شود (مثلاً 12:00 AM به جای ساعت واقعی اسلات). دلیل: فیلد `time` از PIXEL_SLOTS حذف شد اما کد کلاینت هنوز سعی می‌کند ساعت را از آن بخواند.
+## Problem
+The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
 
-## راه‌حل
-ساعت‌های انتشار هر اسلات را در کلاینت تعریف کنیم (بدون نمایش در کپشن) و هنگام ذخیره پست، ساعت صحیح را روی `scheduled_date` اعمال کنیم.
+**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
 
-## تغییرات
+## Fix
+Two options — the simplest and most reliable:
 
-### ۱. فایل: `src/lib/agent.ts` — اضافه کردن `slotNumber` به `PixelPost`
+**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+
+Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+
 ```typescript
-export interface PixelPost {
-  caption: string;
-  hashtags: string;
-  imageUrl: string;
-  platform: string;
-  slot: string;
-  theme: string;
-  product: string;
-  slotNumber?: number; // 1-5
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+const isAnonCron = authHeader === `Bearer ${anonKey}`;
+
+if (!isServiceRole && !isAnonCron) {
+  // check x-cron-secret fallback...
 }
 ```
 
-### ۲. فایل: `src/pages/AgentWorkspace.tsx`
+This is the safest approach because:
+- We cannot put the service role key in a migration file (it would be visible in version control)
+- The anon key is already in the cron job and working
+- The function only processes pre-approved scheduled posts
 
-**الف) تعریف mapping ساعت اسلات‌ها (ثابت):**
-```typescript
-const SLOT_TIMES = [
-  { hour: 6, minute: 30 },   // slot 1
-  { hour: 7, minute: 30 },   // slot 2
-  { hour: 8, minute: 0 },    // slot 3
-  { hour: 12, minute: 30 },  // slot 4
-  { hour: 14, minute: 30 },  // slot 5
-];
-```
-
-**ب) اصلاح `handleApprovePixelSlot` (خط ~309-332):**
-به جای parse کردن ساعت از `lastPixelPost.slot`، از `SLOT_TIMES` و شماره اسلات استفاده شود:
-```typescript
-const scheduledDate = new Date(selectedDate);
-const slotIdx = (lastPixelPost.slotNumber || 1) - 1;
-const slotTime = SLOT_TIMES[slotIdx] || SLOT_TIMES[0];
-scheduledDate.setHours(slotTime.hour, slotTime.minute, 0, 0);
-```
-
-**ج) اصلاح `handleApprovePost` (خط ~401-408):**
-شماره اسلات را از `post.id` استخراج کرده و ساعت صحیح اعمال شود:
-```typescript
-const scheduledDate = new Date(selectedDate);
-const idMatch = post.id?.match(/^post-(\d+)/);
-const slotIdx = idMatch ? parseInt(idMatch[1]) : 0;
-const slotTime = SLOT_TIMES[slotIdx] || SLOT_TIMES[0];
-scheduledDate.setHours(slotTime.hour, slotTime.minute, 0, 0);
-// ...
-scheduled_date: scheduledDate.toISOString(),
-```
-
-### ۳. فایل: `supabase/functions/ai-agent/index.ts` — ارسال `slotNumber` در response
-در بخش تولید تصویر (خط ~625-655)، شماره اسلات را در metadata برگردانیم تا کلاینت بتواند از آن استفاده کند. اسلات از `slot.slot` (عدد ۱-۵) گرفته می‌شود.
-
-## فایل‌های تغییر
-1. `src/lib/agent.ts` — اضافه کردن `slotNumber` به interface
-2. `src/pages/AgentWorkspace.tsx` — اصلاح ساعت‌گذاری در هر دو تابع approve
-3. `supabase/functions/ai-agent/index.ts` — ارسال شماره اسلات در پاسخ
+### File to edit
+1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
 

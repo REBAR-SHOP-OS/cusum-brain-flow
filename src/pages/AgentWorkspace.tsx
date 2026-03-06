@@ -31,6 +31,15 @@ const RESTRICTED_AGENTS: Record<string, AppRole[]> = {
   accounting: ["admin", "accounting"],
 };
 
+// Pixel slot publish times (matches PIXEL_SLOTS 1-5)
+const SLOT_TIMES = [
+  { hour: 6, minute: 30 },   // slot 1
+  { hour: 7, minute: 30 },   // slot 2
+  { hour: 8, minute: 0 },    // slot 3
+  { hour: 12, minute: 30 },  // slot 4
+  { hour: 14, minute: 30 },  // slot 5
+];
+
 export default function AgentWorkspace() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
@@ -311,16 +320,10 @@ export default function AgentWorkspace() {
     if (lastPixelPost && user) {
       try {
         const scheduledDate = new Date(selectedDate);
-        // Parse slot time (e.g. "06:30 AM") and set on date
-        const timeMatch = lastPixelPost.slot.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-        if (timeMatch) {
-          let hours = parseInt(timeMatch[1]);
-          const minutes = parseInt(timeMatch[2]);
-          const ampm = timeMatch[3].toUpperCase();
-          if (ampm === "PM" && hours !== 12) hours += 12;
-          if (ampm === "AM" && hours === 12) hours = 0;
-          scheduledDate.setHours(hours, minutes, 0, 0);
-        }
+        // Use SLOT_TIMES mapping for accurate scheduling
+        const slotIdx = (lastPixelPost.slotNumber || 1) - 1;
+        const slotTime = SLOT_TIMES[slotIdx] || SLOT_TIMES[0];
+        scheduledDate.setHours(slotTime.hour, slotTime.minute, 0, 0);
 
         const { error } = await supabase.from("social_posts").insert({
           platform: lastPixelPost.platform || "instagram",
@@ -398,6 +401,13 @@ export default function AgentWorkspace() {
       const titleLine = lines[0] || "Pixel Post";
       const title = titleLine.replace(/^[\p{Emoji}\s]+/u, "").slice(0, 50) || "Pixel Post";
       const content = cleanCaption;
+      // Extract slot index from post id (format: "post-{index}-{hash}")
+      const scheduledDate = new Date(selectedDate);
+      const idMatch = post.id?.match(/^post-(\d+)/);
+      const slotIdx = idMatch ? parseInt(idMatch[1]) : 0;
+      const slotTime = SLOT_TIMES[slotIdx] || SLOT_TIMES[0];
+      scheduledDate.setHours(slotTime.hour, slotTime.minute, 0, 0);
+
       const { error } = await supabase.from("social_posts").insert({
         platform: post.platform || "instagram",
         status: "draft",
@@ -405,7 +415,7 @@ export default function AgentWorkspace() {
         content,
         image_url: post.imageUrl || null,
         hashtags,
-        scheduled_date: selectedDate.toISOString(),
+        scheduled_date: scheduledDate.toISOString(),
         user_id: user.id,
       });
       if (error) {
