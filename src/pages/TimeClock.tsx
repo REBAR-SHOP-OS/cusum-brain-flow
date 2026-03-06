@@ -395,7 +395,10 @@ export default function TimeClock() {
         <Tabs defaultValue="team-status">
           <TabsList className="w-full">
             <TabsTrigger value="team-status" className="flex-1 gap-1.5">
-              <Users className="w-3.5 h-3.5" /> Team Status
+              <Users className="w-3.5 h-3.5" /> Team Status Office
+            </TabsTrigger>
+            <TabsTrigger value="team-status-shop" className="flex-1 gap-1.5">
+              <Factory className="w-3.5 h-3.5" /> Team Status Shop
             </TabsTrigger>
             <TabsTrigger value="my-leave" className="flex-1 gap-1.5">
               <Palmtree className="w-3.5 h-3.5" /> My Leave
