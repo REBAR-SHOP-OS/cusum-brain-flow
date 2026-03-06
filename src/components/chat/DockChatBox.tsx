@@ -407,16 +407,93 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                         )}
 
                         {/* Bubble */}
-                        <div
-                          className={cn(
-                            "px-3 py-1.5 text-xs leading-relaxed break-words",
-                            isMe
-                              ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm"
-                              : "bg-muted text-foreground rounded-2xl rounded-bl-sm"
-                          )}
-                        >
-                          {displayText}
-                        </div>
+                        {(() => {
+                          const { cleanText, parsedAttachments } = parseAttachmentLinks(displayText);
+                          const allAttachments = [
+                            ...parsedAttachments,
+                            ...(msg.attachments || []).map((a: any) => ({ name: a.name, url: fixChatFileUrl(a.url) })),
+                          ];
+                          // Deduplicate by URL
+                          const seen = new Set<string>();
+                          const uniqueAttachments = allAttachments.filter((a) => {
+                            if (seen.has(a.url)) return false;
+                            seen.add(a.url);
+                            return true;
+                          });
+                          const hasText = !!cleanText && cleanText !== "📎";
+
+                          return (
+                            <>
+                              {hasText && (
+                                <div
+                                  className={cn(
+                                    "px-3 py-1.5 text-xs leading-relaxed break-words",
+                                    isMe
+                                      ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm"
+                                      : "bg-muted text-foreground rounded-2xl rounded-bl-sm"
+                                  )}
+                                >
+                                  {cleanText}
+                                </div>
+                              )}
+
+                              {/* Inline images */}
+                              {uniqueAttachments.filter((a) => isImageUrl(a.url)).map((att, ai) => (
+                                <div key={ai} className="mt-1">
+                                  <img
+                                    src={att.url}
+                                    alt={att.name}
+                                    className="rounded-lg border border-border max-w-[200px] max-h-[160px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => window.open(att.url, "_blank")}
+                                  />
+                                  <a
+                                    href={att.url}
+                                    download={att.name}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                                    title="Download"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              ))}
+
+                              {/* Non-image file links */}
+                              {uniqueAttachments.filter((a) => !isImageUrl(a.url)).map((att, ai) => (
+                                <a
+                                  key={ai}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-md border border-border bg-muted/30 text-[10px] text-foreground/80 hover:bg-muted/60 transition-colors"
+                                >
+                                  <FileIcon className="w-3 h-3 text-primary" />
+                                  <span className="truncate max-w-[120px]">{att.name}</span>
+                                  <Download className="w-3 h-3 ml-1 text-muted-foreground" />
+                                </a>
+                              ))}
+
+                              {/* Copy button for text messages */}
+                              {hasText && (
+                                <button
+                                  className="inline-flex items-center gap-0.5 mt-0.5 px-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(cleanText);
+                                      toast.success("Copied!");
+                                    } catch {
+                                      toast.error("Failed to copy");
+                                    }
+                                  }}
+                                  title="Copy"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
 
                         {/* Timestamp */}
                         <span className="text-[9px] text-muted-foreground mt-0.5 px-1">
