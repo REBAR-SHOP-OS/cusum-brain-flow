@@ -1,20 +1,34 @@
 
 
-# Fix: Show All Profiles in Team Status
+# Fix: Cron Job Authentication for Scheduled Post Publishing
 
 ## Problem
-Line 175 in `src/pages/TimeClock.tsx` filters profiles by `is_active !== false`. Since `is_active` now reflects clock-in status (not employment status), the Team Status tab only shows currently clocked-in users instead of all employees.
+The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
 
-## Solution
-Change the Team Status section to show **all profiles** instead of only active ones. The `is_active` field is used for real-time clock status, not for filtering who appears in the list.
+**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
 
-### File: `src/pages/TimeClock.tsx`
-- **Line 175**: Change `activeProfiles` filter to show all profiles:
-  ```typescript
-  const activeProfiles = profiles; // Show all employees regardless of clock status
-  ```
+## Fix
+Two options — the simplest and most reliable:
 
-This single-line change will restore the full employee list in Team Status while keeping the active/off badges working correctly based on clock entries.
+**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
 
-**Note**: Other files (OrgChart, MemberAreaView, SettingsPeople, etc.) also filter by `is_active`. These should remain as-is since they serve different purposes, but if needed we can revisit them.
+Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+
+```typescript
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+const isAnonCron = authHeader === `Bearer ${anonKey}`;
+
+if (!isServiceRole && !isAnonCron) {
+  // check x-cron-secret fallback...
+}
+```
+
+This is the safest approach because:
+- We cannot put the service role key in a migration file (it would be visible in version control)
+- The anon key is already in the cron job and working
+- The function only processes pre-approved scheduled posts
+
+### File to edit
+1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
 

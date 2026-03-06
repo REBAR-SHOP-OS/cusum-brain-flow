@@ -172,7 +172,7 @@ export default function TimeClock() {
     }
   }
 
-  const activeProfiles = profiles.filter((p) => p.is_active !== false);
+  const activeProfiles = profiles; // Show all employees regardless of clock status
 
   // Kiosk mode - full screen face scanning
   if (kioskMode) {
