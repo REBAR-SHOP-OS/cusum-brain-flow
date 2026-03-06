@@ -246,10 +246,10 @@ export function QueueToMachineDialog({
 
           {/* Incompatible items warning */}
           {hasIncompat && !loadingCaps && (
-            <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 space-y-2">
+            <div className="rounded-md border border-accent/30 bg-accent/10 p-3 space-y-2">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" />
-                <div className="text-xs text-yellow-200">
+                <AlertTriangle className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+                <div className="text-xs text-accent-foreground">
                   <strong>{incompatibleItems.length}</strong> item(s) ({[...new Set(incompatibleItems.map(i => i.bar_code))].join(", ")}) are <strong>not compatible</strong> with this machine.
                 </div>
               </div>
