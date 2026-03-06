@@ -12,7 +12,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory } from "lucide-react";
+import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory, Trash2 } from "lucide-react";
+import { useProfiles } from "@/hooks/useProfiles";
+import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { Link, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { format, differenceInMinutes } from "date-fns";
@@ -41,6 +43,8 @@ export default function TimeClock() {
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
   const face = useFaceRecognition();
+  const { deleteProfile } = useProfiles();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [searchParams] = useSearchParams();
 
   const [faceMode, setFaceMode] = useState(false);
@@ -283,6 +287,7 @@ export default function TimeClock() {
   }
 
   return (
+    <>
     <div className="relative flex flex-col items-center min-h-screen bg-background overflow-hidden">
       <canvas ref={face.canvasRef} className="hidden" />
       <div className="absolute inset-0 pointer-events-none z-0">
@@ -522,9 +527,21 @@ export default function TimeClock() {
                                         : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
                                     </p>
                                   </div>
-                                  <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
-                                    {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
-                                  </Badge>
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
+                                      {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
+                                    </Badge>
+                                    {isAdmin && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        onClick={() => setDeleteTarget({ id: profile.id, name: profile.full_name })}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    )}
+                                  </div>
                                 </CardContent>
                               </Card>
                             );
@@ -540,5 +557,23 @@ export default function TimeClock() {
         </Tabs>
       </div>
     </div>
+
+      <ConfirmActionDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Kiosk Profile"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This will remove their profile and all associated data.`}
+        variant="destructive"
+        confirmLabel="Yes, Delete"
+        loading={deleteProfile.isPending}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteProfile.mutate(deleteTarget.id, {
+              onSuccess: () => setDeleteTarget(null),
+            });
+          }
+        }}
+      />
+    </>
   );
 }
