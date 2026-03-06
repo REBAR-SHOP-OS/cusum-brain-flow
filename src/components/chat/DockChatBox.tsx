@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2, Download, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { downloadFile } from "@/lib/downloadUtils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -446,32 +447,27 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                     className="rounded-lg border border-border max-w-[200px] max-h-[160px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                     onClick={() => window.open(att.url, "_blank")}
                                   />
-                                  <a
-                                    href={att.url}
-                                    download={att.name}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                  <button
+                                    onClick={() => downloadFile(att.url, att.name)}
                                     className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
                                     title="Download"
                                   >
                                     <Download className="w-3 h-3" />
-                                  </a>
+                                  </button>
                                 </div>
                               ))}
 
                               {/* Non-image file links */}
                               {uniqueAttachments.filter((a) => !isImageUrl(a.url)).map((att, ai) => (
-                                <a
+                              <button
                                   key={ai}
-                                  href={att.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-md border border-border bg-muted/30 text-[10px] text-foreground/80 hover:bg-muted/60 transition-colors"
+                                  onClick={() => downloadFile(att.url, att.name)}
+                                  className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-md border border-border bg-muted/30 text-[10px] text-foreground/80 hover:bg-muted/60 transition-colors cursor-pointer"
                                 >
                                   <FileIcon className="w-3 h-3 text-primary" />
                                   <span className="truncate max-w-[120px]">{att.name}</span>
                                   <Download className="w-3 h-3 ml-1 text-muted-foreground" />
-                                </a>
+                                </button>
                               ))}
 
                               {/* Copy button for text messages */}

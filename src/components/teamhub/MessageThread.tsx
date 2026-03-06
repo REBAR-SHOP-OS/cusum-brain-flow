@@ -30,6 +30,7 @@ import type { TeamMessage, ChatAttachment } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { cn } from "@/lib/utils";
+import { downloadFile } from "@/lib/downloadUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { primeMobileAudio } from "@/lib/audioPlayer";
@@ -473,32 +474,27 @@ export function MessageThread({
                                         className="rounded-lg border border-border max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                         onClick={() => window.open(fixedUrl, "_blank")}
                                       />
-                                      <a
-                                        href={fixedUrl}
-                                        download={att.name}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                      <button
+                                        onClick={() => downloadFile(fixedUrl, att.name)}
                                         className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors w-fit"
                                         title="Download"
                                       >
                                         <Download className="w-3 h-3" />
                                         <span>Download</span>
-                                      </a>
+                                      </button>
                                     </div>
                                   );
                                 }
                                 return (
-                                  <a
+                                  <button
                                     key={i}
-                                    href={fixedUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80"
+                                    onClick={() => downloadFile(fixedUrl, att.name)}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80 cursor-pointer"
                                   >
                                     <FileText className="w-3.5 h-3.5 text-primary" />
                                     <span className="truncate max-w-[120px]">{att.name}</span>
                                     <Download className="w-3.5 h-3.5 text-muted-foreground" />
-                                  </a>
+                                  </button>
                                 );
                               })}
                             </div>
