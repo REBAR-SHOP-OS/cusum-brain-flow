@@ -59,7 +59,7 @@ export function CutEngine({
   useEffect(() => {
     if (isRunning || operatorOverride) return;
     if (runPlan?.feasible) {
-      setBars(runPlan.barsThisRun);
+      setBars(Math.min(runPlan.barsThisRun, maxBars));
     } else if (suggestedBars && suggestedBars > 0) {
       setBars(Math.min(suggestedBars, maxBars));
     }
