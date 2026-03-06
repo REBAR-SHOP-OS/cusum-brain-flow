@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor } from "lucide-react";
+import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { format, differenceInMinutes } from "date-fns";
