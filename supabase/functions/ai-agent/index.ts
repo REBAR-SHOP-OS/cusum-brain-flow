@@ -604,13 +604,28 @@ Deno.serve(async (req) => {
             ? `\n\nPREVIOUSLY GENERATED (MUST NOT resemble any of these — use completely different composition, angle, color scheme): ${recentImageNames.slice(0, 15).join(", ")}`
             : "";
 
-          // Randomly select a visual style, avoiding recently used ones
-          const usedStyleHints = recentImageNames.join(" ").toLowerCase();
-          const availableStyles = slot.imageStyles.filter(
-            (s) => !usedStyleHints.includes(s.slice(0, 20).toLowerCase())
-          );
-          const stylePool = availableStyles.length > 0 ? availableStyles : slot.imageStyles;
-          const selectedStyle = stylePool[Math.floor(Math.random() * stylePool.length)];
+          // Extract style indices from recent filenames (format: timestamp-sINDEX-random.png)
+          const usedStyleIndices = new Set<number>();
+          for (const name of recentImageNames) {
+            const match = name.match(/-s(\d+)-/);
+            if (match) usedStyleIndices.add(parseInt(match[1]));
+          }
+          const availableStyles = slot.imageStyles
+            .map((s, idx) => ({ style: s, idx }))
+            .filter(({ idx }) => !usedStyleIndices.has(idx));
+          const stylePool = availableStyles.length > 0 ? availableStyles : slot.imageStyles.map((s, idx) => ({ style: s, idx }));
+          const selected = stylePool[Math.floor(Math.random() * stylePool.length)];
+          const selectedStyle = selected.style;
+          const selectedStyleIndex = selected.idx;
+
+          // Build forbidden styles hint from recently used indices
+          const forbiddenStyles = [...usedStyleIndices]
+            .map(i => slot.imageStyles[i])
+            .filter(Boolean)
+            .slice(0, 5);
+          const forbiddenHint = forbiddenStyles.length > 0
+            ? `\nFORBIDDEN STYLES (already used recently, DO NOT use): ${forbiddenStyles.join("; ")}`
+            : "";
 
           const imagePrompt = `VISUAL STYLE: ${selectedStyle}. ` +
             `PRODUCT FOCUS: ${slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
