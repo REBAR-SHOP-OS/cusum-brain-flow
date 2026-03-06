@@ -172,7 +172,9 @@ export default function TimeClock() {
     }
   }
 
-  const activeProfiles = profiles; // Show all employees regardless of clock status
+  const activeProfiles = profiles.filter(
+    (p) => !["General Labour", "Ryle Lachini"].includes(p.full_name)
+  );
 
   // Kiosk mode - full screen face scanning
   if (kioskMode) {
