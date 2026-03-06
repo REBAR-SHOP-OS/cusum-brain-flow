@@ -1,34 +1,43 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Fix: Route cutter items by bar_code capability, not by plan assignment
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## Root Cause
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+`useStationData` (cutter path, line 86-91) fetches plans using `.eq("machine_id", machineId)`, then filters items by capability. If a plan assigned to Cutter-01 contains 20M items, those items are:
+- Hidden on Cutter-01 (capability filter removes them)
+- Invisible on Cutter-02 (plan isn't assigned there)
 
-## Fix
-Two options — the simplest and most reliable:
+Items disappear silently.
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+## Fix — 2 changes
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+### 1. `src/hooks/useStationData.ts` — Cutter query: fetch by capability, not plan assignment
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+Replace the cutter query logic (lines 85-135). Instead of fetching plans by `machine_id` then filtering items, directly query `cut_plan_items` where `bar_code` is in this machine's capabilities:
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
+```
+1. Fetch machine_capabilities for this machine (process=cut) → get allowed bar_codes
+2. Fetch ALL cut_plan_items where bar_code IN allowed_bar_codes 
+   AND phase IN (queued, cutting)
+   AND cut_plan.company_id = companyId
+   AND cut_plan.status IN (draft, queued, running)
+3. No plan.machine_id filter at all
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+This ensures every item automatically appears on the correct station based purely on bar_code.
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+### 2. Remove the DB trigger `trg_validate_machine_capability`
+
+Create a migration to drop the trigger and function. The routing is handled at the query level — no need for a trigger that blocks operations.
+
+```sql
+DROP TRIGGER IF EXISTS trg_validate_machine_capability ON public.cut_plans;
+DROP FUNCTION IF EXISTS public.validate_cut_plan_machine_capability();
+```
+
+### What stays the same
+- `QueueToMachineDialog` auto-split logic stays (nice-to-have for plan organization)
+- `machineRegistry.ts` — untouched
+- Bender query path — untouched
 
