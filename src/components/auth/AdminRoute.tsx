@@ -5,18 +5,22 @@ import { toast } from "sonner";
 
 interface AdminRouteProps {
   children: React.ReactNode;
+  allowedEmails?: string[];
 }
 
-export function AdminRoute({ children }: AdminRouteProps) {
+export function AdminRoute({ children, allowedEmails }: AdminRouteProps) {
   const { isAdmin, isLoading } = useUserRole();
   const toasted = useRef(false);
+  const { user } = useAuth();
+  const email = user?.email?.toLowerCase() ?? "";
+  const isAllowed = isAdmin || (allowedEmails?.some(e => e.toLowerCase() === email) ?? false);
 
   useEffect(() => {
-    if (!isLoading && !isAdmin && !toasted.current) {
+    if (!isLoading && !isAllowed && !toasted.current) {
       toasted.current = true;
       toast.error("Access Restricted", { description: "This module is admin-only." });
     }
-  }, [isLoading, isAdmin]);
+  }, [isLoading, isAllowed]);
 
   if (isLoading) {
     return (
