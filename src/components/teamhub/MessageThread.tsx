@@ -473,17 +473,14 @@ export function MessageThread({
                                         className="rounded-lg border border-border max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                         onClick={() => window.open(fixedUrl, "_blank")}
                                       />
-                                      <a
-                                        href={fixedUrl}
-                                        download={att.name}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                      <button
+                                        onClick={() => downloadFile(fixedUrl, att.name)}
                                         className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors w-fit"
                                         title="Download"
                                       >
                                         <Download className="w-3 h-3" />
                                         <span>Download</span>
-                                      </a>
+                                      </button>
                                     </div>
                                   );
                                 }
