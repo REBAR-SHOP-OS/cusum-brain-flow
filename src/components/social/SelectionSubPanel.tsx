@@ -88,6 +88,18 @@ export function SelectionSubPanel(props: SelectionSubPanelProps) {
 
       {/* Options */}
       <div className="flex-1 overflow-y-auto p-4">
+        {isMulti && (
+          <button
+            onClick={toggleAll}
+            className={`flex items-center gap-1.5 mb-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              allSelected ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+            title={allSelected ? "Deselect all" : "Select all"}
+          >
+            <CheckCheck className="w-4 h-4" />
+            <span>{allSelected ? "Deselect All" : "Select All"}</span>
+          </button>
+        )}
         <div className="rounded-lg border bg-card overflow-hidden">
           {options.map((opt, idx) => {
             const isSelected = isMulti
