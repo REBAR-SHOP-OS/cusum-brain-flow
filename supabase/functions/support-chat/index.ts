@@ -176,6 +176,58 @@ async function handleSend(req: Request, supabase: any) {
   });
 }
 
+// ── Upload Image (visitor) ──
+async function handleUpload(req: Request, supabase: any) {
+  const { conversation_id, visitor_token, image_data, file_name } = await req.json();
+  if (!conversation_id || !visitor_token || !image_data) {
+    return new Response(JSON.stringify({ error: "Missing fields" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: convo } = await supabase
+    .from("support_conversations").select("id")
+    .eq("id", conversation_id).eq("visitor_token", visitor_token).single();
+  if (!convo) return new Response(JSON.stringify({ error: "Invalid" }), {
+    status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+  try {
+    // Decode base64 image
+    const base64 = image_data.includes(",") ? image_data.split(",")[1] : image_data;
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    const ext = (file_name || "image.png").split(".").pop() || "png";
+    const path = `${conversation_id}/${crypto.randomUUID()}.${ext}`;
+
+    const { error: upErr } = await supabase.storage
+      .from("support-attachments").upload(path, bytes, { contentType: `image/${ext}` });
+    if (upErr) throw upErr;
+
+    const { data: urlData } = supabase.storage.from("support-attachments").getPublicUrl(path);
+    const imageUrl = urlData.publicUrl;
+
+    const { data: msg, error } = await supabase.from("support_messages").insert({
+      conversation_id, sender_type: "visitor", content: imageUrl, content_type: "image",
+    }).select("id, created_at").single();
+    if (error) throw error;
+
+    await supabase.from("support_conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation_id);
+
+    return new Response(JSON.stringify({ message_id: msg.id, image_url: imageUrl }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Upload failed";
+    console.error("Upload error:", err);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+}
+
 // ── Poll Messages (visitor) ──
 async function handlePoll(url: URL, supabase: any) {
   const conversationId = url.searchParams.get("conversation_id");
