@@ -1,34 +1,36 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Fix: Enforce 10M/15M → Cutter-01 and 20M+ → Cutter-02
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## Current State
+- **`machine_capabilities` table** already has correct data: Cutter-01 handles 10M/15M, Cutter-02 handles 20M/25M/30M/35M
+- **`useStationData`** already filters displayed items by machine capabilities (lines 110-133) — so the station view correctly hides incompatible items
+- **Problem**: `QueueToMachineDialog` has **zero validation** — users can queue any plan (with any bar codes) to any machine. If a plan contains mixed sizes (e.g. 10M + 20M), it gets assigned entirely to one machine, and the capability filter silently hides incompatible items
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## Changes
 
-## Fix
-Two options — the simplest and most reliable:
+### 1. `src/components/cutter/QueueToMachineDialog.tsx` — Add validation + auto-split
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+When the user selects a machine:
+- Fetch that machine's capabilities from `machine_capabilities`
+- Compare each item's `bar_code` against allowed codes
+- If **all items match** → queue normally
+- If **some items don't match** → show a warning: "X items (10M, 15M) are not compatible with this machine and will be skipped" with option to auto-split them into a separate plan for the correct machine
+- If **no items match** → disable the Queue button with explanation
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+### 2. `src/components/cutter/QueueToMachineDialog.tsx` — Auto-split logic
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+When a plan has mixed sizes and user confirms:
+1. Create a new `cut_plan` (name = original + " (Auto-Split)") assigned to the compatible machine
+2. Move incompatible `cut_plan_items` to the new plan (update `cut_plan_id`)
+3. Queue the remaining compatible items to the selected machine
+4. Queue the split plan to the correct machine automatically
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
+### 3. Database trigger — `trg_validate_machine_capability`
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+Add a BEFORE UPDATE trigger on `cut_plans` that validates when `machine_id` changes:
+- For each item in the plan, check if `bar_code` exists in `machine_capabilities` for the target machine
+- RAISE EXCEPTION if any item is incompatible (fail-safe at DB level)
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+This provides defense-in-depth: UI warns and auto-splits, DB blocks any remaining violations.
 
