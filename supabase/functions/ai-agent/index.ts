@@ -323,7 +323,9 @@ async function generatePixelImage(
         imageBytes = new Uint8Array(buf);
       }
 
-      const imagePath = `pixel/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+      // Encode styleIndex in filename for dedup tracking (set by caller via options)
+      const styleTag = (options as any)?.styleIndex ?? "x";
+      const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
       const { error: uploadError } = await svcClient.storage
         .from("social-images")
         .upload(imagePath, imageBytes, { contentType: "image/png", upsert: false });
