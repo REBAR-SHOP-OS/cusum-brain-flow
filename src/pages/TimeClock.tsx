@@ -526,9 +526,21 @@ export default function TimeClock() {
                                         : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
                                     </p>
                                   </div>
-                                  <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
-                                    {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
-                                  </Badge>
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
+                                      {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
+                                    </Badge>
+                                    {isAdmin && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        onClick={() => setDeleteTarget({ id: profile.id, name: profile.full_name })}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    )}
+                                  </div>
                                 </CardContent>
                               </Card>
                             );
