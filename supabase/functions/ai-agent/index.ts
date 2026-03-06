@@ -487,15 +487,15 @@ Deno.serve(async (req) => {
 
         const scheduleReply = `📅 **Content Schedule — ${scheduleDate}**
 
-| # | Time (EST) | Theme | Product |
-|---|-----------|-------|---------|
-| 1 | 06:30 AM | Motivational / start of work day | Rebar Stirrups |
-| 2 | 07:30 AM | Creative promotional | Rebar Cages |
-| 3 | 08:00 AM | Strength & scale | Fiberglass Rebar (GFRP) |
-| 4 | 12:30 PM | Innovation & efficiency | Wire Mesh |
-| 5 | 02:30 PM | Product promotional | Rebar Dowels |
+| # | Theme | Product |
+|---|-------|---------|
+| 1 | Motivational / Strength | Rebar Stirrups |
+| 2 | Creative promotional | Rebar Cages |
+| 3 | Strength & scale | Fiberglass Rebar (GFRP) |
+| 4 | Innovation & efficiency | Wire Mesh |
+| 5 | Product promotional | Rebar Dowels |
 
-**Which slot? (Enter 1-5, a time, or "all")**`;
+**Which slot? (Enter 1-5 or "all")**`;
 
         return new Response(
           JSON.stringify({ reply: scheduleReply, context: mergedContext, modelUsed: "deterministic" }),
