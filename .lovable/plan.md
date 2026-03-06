@@ -1,34 +1,45 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# بررسی مدل‌های تولید تصویر و مسئله تکراری بودن
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## مدل‌های مورد استفاده
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+ایجنت Pixel از این مدل‌ها برای تولید تصویر استفاده می‌کند (به ترتیب اولویت):
 
-## Fix
-Two options — the simplest and most reliable:
+| اولویت | مدل | توضیح |
+|--------|------|-------|
+| ۱ (اول) | `google/gemini-2.5-flash-image` | سریع و اقتصادی |
+| ۲ (تکرار) | `google/gemini-2.5-flash-image` | تلاش دوم با همان مدل |
+| ۳ (fallback) | `google/gemini-3-pro-image-preview` | کیفیت بالاتر، کندتر |
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+همه از طریق Lovable AI Gateway فراخوانی می‌شوند.
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+## وضعیت فعلی ضد تکرار
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+سیستم فعلی این اقدامات را انجام می‌دهد:
+1. **نام فایل‌های اخیر** — ۳۰ فایل آخر از bucket خوانده شده و نامشان به prompt تزریق می‌شود
+2. **فیلتر سبک** — ۱۲ سبک بصری تعریف شده و سبک‌هایی که نامشان در نام فایل‌های اخیر وجود دارد فیلتر می‌شوند
+3. **Session seed** — UUID + timestamp به prompt اضافه می‌شود
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
+### مشکلات:
+- **فیلتر سبک ضعیف است** — نام فایل‌ها فقط timestamp + random هستند (مثل `1772812000-abc123.png`) و هیچ اطلاعاتی از سبک استفاده‌شده ندارند. پس `usedStyleHints.includes(s.slice(0, 20))` هرگز `true` نمی‌شود و فیلتر عملاً غیرفعال است
+- **هیچ ذخیره‌ای از prompt یا سبک قبلی وجود ندارد** — بدون ذخیره‌سازی متادیتا، سیستم نمی‌تواند بداند قبلاً چه سبکی استفاده شده
+- **نام فایل‌ها بی‌معنی هستند** — `1772812000-abc123.png` هیچ کمکی به dedup نمی‌کند
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+## راه‌حل پیشنهادی
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+### ۱. ذخیره سبک در نام فایل
+نام فایل تصویر را از `{timestamp}-{random}.png` به `{timestamp}-{styleIndex}-{random}.png` تغییر دهیم تا ایندکس سبک استفاده‌شده قابل استخراج باشد.
+
+### ۲. فیلتر هوشمند سبک‌های استفاده‌شده
+هنگام انتخاب سبک، ایندکس سبک‌های اخیر را از نام فایل‌ها استخراج کنیم و آنها را از pool حذف کنیم.
+
+### ۳. تقویت prompt ضد تکرار
+به جای فقط نام فایل، **سبک انتخاب‌شده قبلی** را (بر اساس ایندکس) به عنوان "FORBIDDEN styles" به prompt تزریق کنیم.
+
+## فایل‌های تغییر
+- `supabase/functions/ai-agent/index.ts`:
+  - خط ۳۲۶: نام فایل شامل ایندکس سبک شود
+  - خط ۶۰۰-۶۱۰: فیلتر سبک بر اساس ایندکس واقعی از نام فایل‌ها
+  - خط ۶۱۲-۶۲۲: تقویت dedupHint با سبک‌های واقعی استفاده‌شده
 
