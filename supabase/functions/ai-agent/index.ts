@@ -515,15 +515,7 @@ Deno.serve(async (req) => {
       const regenMatch = msgLower.match(/regenerate\s*(?:slot\s*)?([1-5])/i);
       const isRegenerate = !!regenMatch;
 
-      // Also match time-based inputs
-      const TIME_TO_SLOT: Record<string, number> = {
-        "06:30": 1, "6:30": 1, "6:30 am": 1, "06:30 am": 1,
-        "07:30": 2, "7:30": 2, "7:30 am": 2, "07:30 am": 2,
-        "08:00": 3, "8:00": 3, "8:00 am": 3, "08:00 am": 3,
-        "12:30": 4, "12:30 pm": 4,
-        "14:30": 5, "2:30 pm": 5, "02:30 pm": 5, "02:30": 5,
-      };
-      const timeSlotNum = TIME_TO_SLOT[msgLower];
+      const timeSlotNum: number | undefined = undefined; // time-based input removed
 
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
