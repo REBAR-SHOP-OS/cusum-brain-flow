@@ -185,19 +185,11 @@ export function MessageThread({
         continue;
       }
 
-      // Private bucket — use signed URL (7-day expiry)
-      const { data: signedData, error: signError } = await supabase.storage
-        .from("team-chat-files")
-        .createSignedUrl(path, 604800);
-
-      if (signError || !signedData?.signedUrl) {
-        toast.error(`Failed to get URL for ${file.name}`);
-        continue;
-      }
+      const publicUrl = getPublicFileUrl(path);
 
       newAttachments.push({
         name: file.name,
-        url: signedData.signedUrl,
+        url: publicUrl,
         type: file.type,
         size: file.size,
       });
