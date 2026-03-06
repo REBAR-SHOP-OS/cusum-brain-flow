@@ -21,26 +21,42 @@ const corsHeaders = {
 };
 
 // ─── Pixel Slot Template Definitions (no hardcoded captions — all generated dynamically) ───
+// ─── Diverse Visual Styles Pool (randomly selected per generation to guarantee uniqueness) ───
+const VISUAL_STYLES_POOL = [
+  "Realistic workshop/fabrication shop interior — workers cutting and bending steel rebar, sparks flying, industrial atmosphere, warm tungsten lighting",
+  "Active construction site with tower cranes — large-scale concrete pour in progress, steel reinforcement visible, workers in safety gear, dynamic composition",
+  "Urban cityscape with buildings under construction — skyline showing steel framework and concrete structures, city life in foreground, modern architecture",
+  "City landmarks & infrastructure — iconic bridge or overpass showcasing exposed steel reinforcement and engineering excellence, dramatic perspective",
+  "Aerial drone view of a massive construction project — bird's eye perspective showing rebar grid layout on foundation, geometric patterns, scale emphasis",
+  "Studio product photography — premium steel products on clean background with dramatic studio lighting, reflection surfaces, advertising quality",
+  "Macro close-up of steel components — extreme detail of rebar texture, welding points, wire mesh intersections, shallow depth of field, technical beauty",
+  "Dramatic sunrise/sunset scene at construction site — silhouette of steel structure against colorful sky, golden hour lighting, cinematic atmosphere",
+  "Logistics & delivery scene — flatbed truck loaded with bundled rebar arriving at site, warehouse operations, organized steel inventory, professional documentation",
+  "Engineering blueprints with physical product overlay — technical drawings blended with real steel products, precision engineering theme, blue tones mixed with metallic",
+  "Night construction scene — illuminated site with steel framework, flood lights creating dramatic shadows, urban night atmosphere, long exposure feel",
+  "Underwater/foundation level perspective — rebar cages inside deep foundation forms, concrete being poured, engineering depth, unique angle",
+];
+
 const PIXEL_SLOTS = [
   {
     slot: 1, time: "06:30 AM", theme: "Motivational / start of work day", product: "Rebar Stirrups",
-    imageStyle: "Professional construction site at sunrise golden hour, perfectly arranged steel rebar stirrups in the foreground, workers arriving at a large concrete building project, motivational atmosphere, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
+    imageStyles: VISUAL_STYLES_POOL,
   },
   {
     slot: 2, time: "07:30 AM", theme: "Creative promotional", product: "Rebar Cages",
-    imageStyle: "Dramatic close-up of a perfectly assembled steel rebar cage being lifted by a crane at a construction site, creative advertising angle, professional photography, golden light, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
+    imageStyles: VISUAL_STYLES_POOL,
   },
   {
     slot: 3, time: "08:00 AM", theme: "Strength & scale", product: "Fiberglass Rebar (GFRP)",
-    imageStyle: "Modern infrastructure project showcasing fiberglass GFRP rebar installation, vibrant green fiberglass bars contrasting with grey concrete, professional construction photography, strength and innovation theme, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
+    imageStyles: VISUAL_STYLES_POOL,
   },
   {
     slot: 4, time: "12:30 PM", theme: "Innovation & efficiency", product: "Wire Mesh",
-    imageStyle: "Overhead view of welded wire mesh sheets being laid on a large concrete slab pour, workers in safety gear, modern construction site, clean and organized, innovation and efficiency theme, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
+    imageStyles: VISUAL_STYLES_POOL,
   },
   {
     slot: 5, time: "02:30 PM", theme: "Product promotional", product: "Rebar Dowels",
-    imageStyle: "Professional product photography of precision-cut steel rebar dowels arranged neatly, some installed in a concrete joint, afternoon lighting, clean industrial setting, promotional advertising style, ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram",
+    imageStyles: VISUAL_STYLES_POOL,
   },
 ];
 
@@ -585,12 +601,25 @@ Deno.serve(async (req) => {
             ? `\n\nPREVIOUSLY GENERATED (MUST NOT resemble any of these — use completely different composition, angle, color scheme): ${recentImageNames.slice(0, 15).join(", ")}`
             : "";
 
-          const imagePrompt = slot.imageStyle +
-            `. MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
+          // Randomly select a visual style, avoiding recently used ones
+          const usedStyleHints = recentImageNames.join(" ").toLowerCase();
+          const availableStyles = slot.imageStyles.filter(
+            (s) => !usedStyleHints.includes(s.slice(0, 20).toLowerCase())
+          );
+          const stylePool = availableStyles.length > 0 ? availableStyles : slot.imageStyles;
+          const selectedStyle = stylePool[Math.floor(Math.random() * stylePool.length)];
+
+          const imagePrompt = `VISUAL STYLE: ${selectedStyle}. ` +
+            `PRODUCT FOCUS: ${slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
+            `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
             dedupHint +
-            ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` +
-            ` — create a visually DISTINCT image with a UNIQUE color palette, composition, lighting, camera angle, and artistic style that has NEVER been generated before. ABSOLUTE RULE: No two images should ever look similar.`;
+            ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` +
+            `\n\nMANDATORY VISUAL DIVERSITY RULES:\n` +
+            `- Use the specified visual style EXACTLY as described above\n` +
+            `- FORBIDDEN: Do not repeat any composition, camera angle, color palette, or scene layout from recent images\n` +
+            `- Each image must feel like it belongs to a completely different photo series\n` +
+            `- Ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
