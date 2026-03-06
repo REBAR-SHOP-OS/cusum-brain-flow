@@ -54,6 +54,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Enforce 8 AM ET clock-in restriction for @rebar.shop users
+    const { data: profileData } = await svc
+      .from("profiles")
+      .select("email")
+      .eq("id", profileId)
+      .single();
+
+    const profileEmail = (profileData?.email || "").toLowerCase();
+    const isRebarUser = profileEmail.endsWith("@rebar.shop") && profileEmail !== "kourosh@rebar.shop";
+
     // Check for open shift
     const { data: openShifts } = await svc
       .from("time_clock_entries")
