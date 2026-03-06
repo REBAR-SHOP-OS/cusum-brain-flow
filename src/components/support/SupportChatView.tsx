@@ -372,7 +372,38 @@ export function SupportChatView({ conversationId }: Props) {
                       <StickyNote className="w-3 h-3" /> Internal Note
                     </div>
                   )}
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.content_type === "image" ? (
+                    <div>
+                      <img
+                        src={msg.content}
+                        alt="Shared image"
+                        className="max-w-[200px] rounded-lg cursor-pointer"
+                        onClick={() => window.open(msg.content, "_blank")}
+                      />
+                      <button
+                        onClick={() => handleDownloadImage(msg.content)}
+                        className={cn(
+                          "mt-1.5 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors",
+                          isAgent ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <Download className="w-3 h-3" /> Download
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      <button
+                        onClick={() => handleCopyText(msg.id, msg.content)}
+                        className={cn(
+                          "mt-1.5 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors",
+                          isAgent ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        {copiedId === msg.id ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                      </button>
+                    </div>
+                  )}
                   <p className={cn(
                     "text-[10px] mt-1",
                     isAgent ? "text-primary-foreground/60" : "text-muted-foreground/60"
