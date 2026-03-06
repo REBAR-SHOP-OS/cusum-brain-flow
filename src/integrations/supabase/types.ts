@@ -12739,6 +12739,7 @@ export type Database = {
           id: string
           notes: string | null
           profile_id: string
+          source: string | null
         }
         Insert: {
           break_minutes?: number | null
@@ -12748,6 +12749,7 @@ export type Database = {
           id?: string
           notes?: string | null
           profile_id: string
+          source?: string | null
         }
         Update: {
           break_minutes?: number | null
@@ -12757,6 +12759,7 @@ export type Database = {
           id?: string
           notes?: string | null
           profile_id?: string
+          source?: string | null
         }
         Relationships: [
           {

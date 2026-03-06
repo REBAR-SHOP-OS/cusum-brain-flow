@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
       // Clock in
       const { error } = await svc
         .from("time_clock_entries")
-        .insert({ profile_id: profileId });
+        .insert({ profile_id: profileId, source: "kiosk" });
 
       if (error) {
         console.error("[kiosk-punch] clock in error:", error);
