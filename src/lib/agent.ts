@@ -15,6 +15,7 @@ export interface PixelPost {
   slot: string;
   theme: string;
   product: string;
+  slotNumber?: number; // 1-5
 }
 
 export interface AgentResponse {

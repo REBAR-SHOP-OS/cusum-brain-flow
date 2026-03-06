@@ -31,6 +31,15 @@ const RESTRICTED_AGENTS: Record<string, AppRole[]> = {
   accounting: ["admin", "accounting"],
 };
 
+// Pixel slot publish times (matches PIXEL_SLOTS 1-5)
+const SLOT_TIMES = [
+  { hour: 6, minute: 30 },   // slot 1
+  { hour: 7, minute: 30 },   // slot 2
+  { hour: 8, minute: 0 },    // slot 3
+  { hour: 12, minute: 30 },  // slot 4
+  { hour: 14, minute: 30 },  // slot 5
+];
+
 export default function AgentWorkspace() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
