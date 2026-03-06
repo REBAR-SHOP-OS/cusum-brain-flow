@@ -446,16 +446,13 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                     className="rounded-lg border border-border max-w-[200px] max-h-[160px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                     onClick={() => window.open(att.url, "_blank")}
                                   />
-                                  <a
-                                    href={att.url}
-                                    download={att.name}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                  <button
+                                    onClick={() => downloadFile(att.url, att.name)}
                                     className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
                                     title="Download"
                                   >
                                     <Download className="w-3 h-3" />
-                                  </a>
+                                  </button>
                                 </div>
                               ))}
 
