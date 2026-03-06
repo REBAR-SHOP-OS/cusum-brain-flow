@@ -52,7 +52,26 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
 
   const loadLogo = async () => {
     const { data } = await supabase.storage.from(LOGO_BUCKET).createSignedUrl(LOGO_PATH, 3600);
-    setLogoUrl(data?.signedUrl ?? null);
+    if (data?.signedUrl) {
+      setLogoUrl(data.signedUrl);
+    } else {
+      // Auto-seed: upload bundled logo if missing
+      try {
+        const resp = await fetch("/brand-logo.png");
+        if (resp.ok) {
+          const blob = await resp.blob();
+          await supabase.storage
+            .from(LOGO_BUCKET)
+            .upload(LOGO_PATH, blob, { upsert: true, contentType: "image/png" });
+          const { data: d2 } = await supabase.storage
+            .from(LOGO_BUCKET)
+            .createSignedUrl(LOGO_PATH, 3600);
+          setLogoUrl(d2?.signedUrl ?? null);
+        }
+      } catch (err) {
+        console.warn("Failed to auto-seed logo:", err);
+      }
+    }
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
