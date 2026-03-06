@@ -1,34 +1,27 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# No Code Change Needed — CUTTER-02 is Empty Because All 20M+ Items Are Already Complete
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## Database Reality
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+| bar_code | phase    | count |
+|----------|----------|-------|
+| 10M      | queued   | 4     |
+| 10M      | cut_done | 2     |
+| 10M      | complete | 9     |
+| 15M      | complete | 2     |
+| 20M      | complete | 2     |
 
-## Fix
-Two options — the simplest and most reliable:
+- **CUTTER-01** capabilities: 10M, 15M → shows the 4 queued 10M items (correct)
+- **CUTTER-02** capabilities: 20M, 25M, 30M, 35M → shows nothing because all 20M items are already `complete`
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+There are **no 15M, 20M, 25M, 30M, or 35M items** left to cut. The routing logic is working as designed.
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+## What You Need To Do
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+To see items on CUTTER-02, you need to create/upload a new plan that contains 20M+ bar code items and queue it. Those items will automatically appear on CUTTER-02.
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
+Similarly, to see 15M items on CUTTER-01, create a plan with 15M items.
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
-
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+No code changes are required.
 
