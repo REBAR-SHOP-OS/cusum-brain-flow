@@ -225,6 +225,15 @@ async function generatePixelImage(
     return { imageUrl: null, error: "LOVABLE_API_KEY not configured" };
   }
 
+  // MANDATORY: Company logo is required — never generate without it
+  if (!logoUrl) {
+    console.error("🚫 Logo is REQUIRED but not found. Blocking image generation.");
+    return {
+      imageUrl: null,
+      error: "Company logo is REQUIRED but not found in storage. Upload it to social-images/brand/company-logo.png before generating images.",
+    };
+  }
+
   const fullPrompt = prompt +
     "\n\nMANDATORY: The attached company logo image MUST be placed EXACTLY as-is in the generated image, " +
     "without ANY modification, distortion, or recreation. Place it in a visible corner as a watermark. " +
