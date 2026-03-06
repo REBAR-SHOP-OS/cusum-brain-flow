@@ -92,7 +92,7 @@ export function CutEngine({
   const isFeasible = runPlan?.feasible ?? true;
 
   // Allow LOCK & START if plan is feasible OR supervisor can confirm
-  const canStart = canWrite && !isRunning && !isDone && (isFeasible || runPlan?.stockSource === "manual");
+  const canStart = canWrite && !isRunning && !isDone && bars <= maxBars && (isFeasible || runPlan?.stockSource === "manual");
 
   return (
     <div className={cn("space-y-4", baseClasses)}>
