@@ -1,31 +1,15 @@
 
 
-# بررسی سیستم ساعت‌کاری کارمندان Office — همه چیز فعال است
+# حذف یوزر "Ai" از لیست Team Status
 
-## وضعیت فعلی
+## تغییر
+در فایل `src/pages/TimeClock.tsx` خط 176، نام "Ai" به لیست حذف‌شده‌ها اضافه شود:
 
-### ✅ محدودیت clock-in قبل از ۸ صبح
-- در `useTimeClock.ts` خط ۱۱۴-۱۲۲: کاربران `@rebar.shop` (به جز `kourosh@rebar.shop`) قبل از ساعت ۸ صبح ET نمی‌توانند clock in کنند
+```typescript
+const activeProfiles = profiles.filter(
+  (p) => !["General Labour", "Ryle Lachini", "Ai"].includes(p.full_name)
+);
+```
 
-### ✅ Auto clock-out ساعت ۵ عصر
-- Edge function `auto-clockout` هر روز ساعت ۵ عصر ET تمام شیفت‌های باز کاربران `@rebar.shop` (به جز kourosh) را می‌بندد
-- Cron job فعال و تنظیم شده
-
-### ✅ قابلیت clock in/out بین ۸ صبح تا ۵ عصر
-- کاربران می‌توانند چندین بار در طول روز clock out و مجدداً clock in کنند
-
-### ✅ محاسبه دقیق ساعات کاری
-- در `renderProfileCard` (خطوط ۱۹۲-۱۹۶) مجموع تمام ورودی‌های روز محاسبه می‌شود:
-  - هر entry از `clock_in` تا `clock_out` (یا الان اگر هنوز باز باشد) جمع زده می‌شود
-  - اگر کسی ۸ تا ۱۲ کار کند، بعد ۱ تا ۵ — مجموع = ۸ ساعت (نه ۹ ساعت)
-
-## نتیجه
-**تمام قوانین مورد نظر شما در حال حاضر پیاده‌سازی شده و فعال است.** هیچ تغییر کدی لازم نیست.
-
-| قانون | وضعیت |
-|-------|--------|
-| Clock-in فقط از ۸ صبح ET | ✅ فعال |
-| Auto clock-out ساعت ۵ عصر ET | ✅ فعال |
-| Clock in/out دستی بین ۸-۵ | ✅ فعال |
-| محاسبه دقیق ساعات (مجموع segments) | ✅ فعال |
+این تغییر باعث می‌شود یوزر "Ai" از هر دو تب Team Status Office و Team Status Shop حذف شود.
 
