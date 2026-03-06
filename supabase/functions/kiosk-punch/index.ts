@@ -114,6 +114,7 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      await svc.from("profiles").update({ is_active: true }).eq("id", profileId);
       action = "clock_in";
     }
 

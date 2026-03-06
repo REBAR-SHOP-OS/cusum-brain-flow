@@ -195,6 +195,8 @@ export function useTimeClock() {
         // Revert optimistic update on failure
         await fetchEntries();
       } else {
+        // Set profile inactive
+        await supabase.from("profiles").update({ is_active: false } as any).eq("id", myProfile.id);
         toast.success("Clocked out!");
         // Confirm from DB
         await fetchEntries();

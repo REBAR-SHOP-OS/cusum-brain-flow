@@ -78,6 +78,13 @@ serve(async (req) => {
 
     if (updateErr) throw updateErr;
 
+    // Set profiles inactive
+    const profileIds = toClose.map((e: any) => e.profile_id);
+    await supabase
+      .from("profiles")
+      .update({ is_active: false })
+      .in("id", profileIds);
+
     console.log(`Auto clock-out: closed ${idsToClose.length} shifts at ${clockOutTime}`);
 
     return new Response(
