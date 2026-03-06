@@ -811,7 +811,11 @@ function startPolling(){
       if(d.messages && d.messages.length){
         d.messages.forEach(function(m){
           if(m.sender_type !== 'visitor' && m.sender_type !== 'system' && m.content_type !== 'system'){
-            addMsg(m.sender_type, m.content);
+            if(m.content_type === 'image'){
+              addMsg(m.sender_type, null, m.content);
+            } else {
+              addMsg(m.sender_type, m.content);
+            }
           }
           state.lastTs = m.created_at;
         });
