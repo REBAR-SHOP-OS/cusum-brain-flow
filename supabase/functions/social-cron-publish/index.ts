@@ -93,11 +93,13 @@ serve(async (req) => {
               if (post.platform === "facebook") {
                 publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
               } else {
-                const igAccounts = (tokenData.instagram_accounts as Array<{ id: string }>) || [];
+                const igAccounts = (tokenData.instagram_accounts as Array<{ id: string; pageId?: string }>) || [];
                 if (igAccounts.length === 0) {
                   publishResult = { error: "No Instagram Business Account found" };
                 } else {
-                  publishResult = await publishToInstagram(igAccounts[0].id, pageAccessToken, message, post.image_url);
+                  // Match IG account to the selected Facebook page
+                  const matchedIg = igAccounts.find(ig => ig.pageId === pageId) || igAccounts[0];
+                  publishResult = await publishToInstagram(matchedIg.id, pageAccessToken, message, post.image_url);
                 }
               }
             }
