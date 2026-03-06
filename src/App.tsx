@@ -180,7 +180,7 @@ const App = () => (
                     <Route path="/settings" element={<P><Settings /></P>} />
 
                     {/* Social / Comms */}
-                    <Route path="/social-media-manager" element={<P><AdminRoute><SocialMediaManager /></AdminRoute></P>} />
+                    <Route path="/social-media-manager" element={<P><AdminRoute allowedEmails={["zahra@rebar.shop"]}><SocialMediaManager /></AdminRoute></P>} />
                     <Route path="/email-marketing" element={<P><AdminRoute><EmailMarketing /></AdminRoute></P>} />
                     <Route path="/daily-summarizer" element={<P><DailySummarizer /></P>} />
                     <Route path="/facebook-commenter" element={<P><AdminRoute><FacebookCommenter /></AdminRoute></P>} />

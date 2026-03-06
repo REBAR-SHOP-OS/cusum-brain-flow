@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export interface Automation {
@@ -185,12 +186,15 @@ const ADMIN_ONLY_IDS = new Set([
 export const AutomationsSection = React.forwardRef<HTMLElement, {}>(function AutomationsSection(_props, ref) {
   const navigate = useNavigate();
   const { isAdmin } = useUserRole();
+  const { user } = useAuth();
   const [automations, setAutomations] = useState(defaultAutomations);
 
-  const visibleAutomations = useMemo(
-    () => isAdmin ? automations : automations.filter((a) => !ADMIN_ONLY_IDS.has(a.id)),
-    [automations, isAdmin]
-  );
+  const visibleAutomations = useMemo(() => {
+    if (isAdmin) return automations;
+    const email = user?.email?.toLowerCase() ?? "";
+    const extraAllowed = email === "zahra@rebar.shop" ? new Set(["social-media-manager"]) : new Set<string>();
+    return automations.filter((a) => !ADMIN_ONLY_IDS.has(a.id) || extraAllowed.has(a.id));
+  }, [automations, isAdmin, user?.email]);
 
   const handleToggle = (id: string, enabled: boolean) => {
     setAutomations((prev) =>
