@@ -1,34 +1,36 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# الزام سبک واقع‌گرایانه (Photorealistic) برای تمام تصاویر Pixel
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## مشکل
+برخی سبک‌ها در `VISUAL_STYLES_POOL` ممکن است تصاویر تخیلی یا غیرواقعی تولید کنند (مثل "Underwater/foundation level perspective" یا استودیویی). نیاز است تمام سبک‌ها به‌صورت الزامی واقع‌گرایانه باشند.
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## تغییرات
 
-## Fix
-Two options — the simplest and most reliable:
+### ۱. فایل: `supabase/functions/ai-agent/index.ts`
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+**VISUAL_STYLES_POOL** — هر سبک عبارت `PHOTOREALISTIC, real-world photography, NOT CGI/fantasy/illustration` را دریافت کند و سبک‌های غیرواقعی اصلاح شوند:
+- "Studio product photography" → "Real product photography in actual warehouse/shop environment"
+- "Underwater/foundation level perspective" → "Ground-level real photography inside deep foundation"
+- هر آیتم پیشوند `PHOTOREALISTIC real-world photography —` بگیرد
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
-
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
+**imagePrompt** (خط ۶۳۰-۶۴۱) — اضافه کردن دستور صریح:
+```
+MANDATORY REALISM RULE: ALL images MUST be photorealistic — real-world photography style. 
+ABSOLUTELY FORBIDDEN: CGI, 3D renders, illustrations, cartoons, fantasy, surreal, abstract art.
+Every image must look like it was taken by a professional photographer with a real camera on a real location.
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+### ۲. فایل: `supabase/functions/_shared/agents/marketing.ts`
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+بخش `IMAGE RULES` (خط ۴۹) — تقویت قانون واقع‌گرایی:
+```
+- ALL images MUST be PHOTOREALISTIC — real-world professional photography style ONLY. 
+  ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, AI-looking art.
+  Every image must look like a real photo taken with a professional camera at a real construction site, workshop, or urban location.
+```
+
+## فایل‌های تغییر
+1. `supabase/functions/ai-agent/index.ts` — تقویت VISUAL_STYLES_POOL + imagePrompt
+2. `supabase/functions/_shared/agents/marketing.ts` — تقویت IMAGE RULES
 
