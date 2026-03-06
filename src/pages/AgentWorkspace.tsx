@@ -320,16 +320,10 @@ export default function AgentWorkspace() {
     if (lastPixelPost && user) {
       try {
         const scheduledDate = new Date(selectedDate);
-        // Parse slot time (e.g. "06:30 AM") and set on date
-        const timeMatch = lastPixelPost.slot.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-        if (timeMatch) {
-          let hours = parseInt(timeMatch[1]);
-          const minutes = parseInt(timeMatch[2]);
-          const ampm = timeMatch[3].toUpperCase();
-          if (ampm === "PM" && hours !== 12) hours += 12;
-          if (ampm === "AM" && hours === 12) hours = 0;
-          scheduledDate.setHours(hours, minutes, 0, 0);
-        }
+        // Use SLOT_TIMES mapping for accurate scheduling
+        const slotIdx = (lastPixelPost.slotNumber || 1) - 1;
+        const slotTime = SLOT_TIMES[slotIdx] || SLOT_TIMES[0];
+        scheduledDate.setHours(slotTime.hour, slotTime.minute, 0, 0);
 
         const { error } = await supabase.from("social_posts").insert({
           platform: lastPixelPost.platform || "instagram",
