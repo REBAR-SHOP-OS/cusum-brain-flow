@@ -139,7 +139,9 @@ export function PostReviewPanel({
   const { updatePost, deletePost } = useSocialPosts();
   const { publishPost, publishing } = usePublishPost();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editHashtags, setEditHashtags] = useState("");
