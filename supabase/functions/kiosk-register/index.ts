@@ -70,22 +70,37 @@ Deno.serve(async (req) => {
 
     const trimmedName = name.trim();
 
-    // 1. Create profile
-    const { data: profile, error: profileErr } = await svc
+    // 1. Try to match existing profile by name (case-insensitive) in same company
+    const { data: existingProfile } = await svc
       .from("profiles")
-      .insert({ full_name: trimmedName, is_active: true, company_id: callerProfile.company_id })
       .select("id")
-      .single();
+      .eq("company_id", callerProfile.company_id)
+      .ilike("full_name", trimmedName)
+      .maybeSingle();
 
-    if (profileErr || !profile) {
-      console.error("[kiosk-register] profile insert error:", profileErr);
-      return new Response(JSON.stringify({ error: profileErr?.message || "Failed to create profile" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let profileId: string;
+
+    if (existingProfile) {
+      // Use existing profile
+      profileId = existingProfile.id;
+      console.log("[kiosk-register] matched existing profile:", profileId, trimmedName);
+    } else {
+      // Create new profile
+      const { data: profile, error: profileErr } = await svc
+        .from("profiles")
+        .insert({ full_name: trimmedName, is_active: true, company_id: callerProfile.company_id })
+        .select("id")
+        .single();
+
+      if (profileErr || !profile) {
+        console.error("[kiosk-register] profile insert error:", profileErr);
+        return new Response(JSON.stringify({ error: profileErr?.message || "Failed to create profile" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      profileId = profile.id;
     }
-
-    const profileId = profile.id;
 
     // 2. Upload face photo & create enrollment
     if (faceBase64) {
