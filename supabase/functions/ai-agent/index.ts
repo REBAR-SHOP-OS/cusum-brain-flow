@@ -225,6 +225,15 @@ async function generatePixelImage(
     return { imageUrl: null, error: "LOVABLE_API_KEY not configured" };
   }
 
+  // MANDATORY: Company logo is required — never generate without it
+  if (!logoUrl) {
+    console.error("🚫 Logo is REQUIRED but not found. Blocking image generation.");
+    return {
+      imageUrl: null,
+      error: "Company logo is REQUIRED but not found in storage. Upload it to social-images/brand/company-logo.png before generating images.",
+    };
+  }
+
   const fullPrompt = prompt +
     "\n\nMANDATORY: The attached company logo image MUST be placed EXACTLY as-is in the generated image, " +
     "without ANY modification, distortion, or recreation. Place it in a visible corner as a watermark. " +
@@ -517,8 +526,30 @@ Deno.serve(async (req) => {
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
 
-        // Resolve company logo — proceed without if missing
+        // Resolve company logo — MANDATORY, block if missing
         const logoUrl = await resolveLogoUrl();
+        if (!logoUrl) {
+          return new Response(
+            JSON.stringify({
+              reply: "🚫 **Company logo not found!**\n\nThe company logo is **required** for all image generation. Please upload it to `social-images/brand/company-logo.png` in storage, then try again.",
+              context: mergedContext,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Fetch recent image file names to prevent duplicates
+        let recentImageNames: string[] = [];
+        try {
+          const { data: recentFiles } = await svcClient.storage
+            .from("social-images")
+            .list("pixel", { limit: 30, sortBy: { column: "created_at", order: "desc" } });
+          if (recentFiles) {
+            recentImageNames = recentFiles.map((f: any) => f.name);
+          }
+        } catch (e) {
+          console.warn("Could not fetch recent images for dedup:", e);
+        }
 
         const resolvedSlotNum = isRegenerate
           ? parseInt(regenMatch![1])
@@ -549,10 +580,17 @@ Deno.serve(async (req) => {
             ? `\nReference brand images for style inspiration: ${brainImageRefs.slice(0, 3).join(", ")}`
             : "";
 
+          // Build anti-duplicate context from recent images
+          const dedupHint = recentImageNames.length > 0
+            ? `\n\nPREVIOUSLY GENERATED (MUST NOT resemble any of these — use completely different composition, angle, color scheme): ${recentImageNames.slice(0, 15).join(", ")}`
+            : "";
+
           const imagePrompt = slot.imageStyle +
             `. MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
-            ` — unique session seed: ${sessionSeed} — create a visually DISTINCT image with a unique color palette, composition, lighting, and artistic style that has never been generated before`;
+            dedupHint +
+            ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` +
+            ` — create a visually DISTINCT image with a UNIQUE color palette, composition, lighting, camera angle, and artistic style that has NEVER been generated before. ABSOLUTE RULE: No two images should ever look similar.`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
