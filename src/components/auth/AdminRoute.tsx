@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/lib/auth";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
