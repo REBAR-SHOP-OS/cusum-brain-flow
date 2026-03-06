@@ -19,6 +19,7 @@ import {
   FileText,
   Image as ImageIcon,
   X,
+  Download,
 } from "lucide-react";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
 import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
