@@ -167,6 +167,56 @@ export function SupportChatView({ conversationId }: Props) {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !conversationId || !profileId) return;
+    if (!file.type.startsWith("image/")) { toast.error("Only images are supported"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
+
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${conversationId}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("support-attachments").upload(path, file);
+      if (upErr) throw upErr;
+
+      const { data: urlData } = supabase.storage.from("support-attachments").getPublicUrl(path);
+      const imageUrl = urlData.publicUrl;
+
+      const { error } = await supabase.from("support_messages").insert({
+        conversation_id: conversationId,
+        sender_type: "agent",
+        sender_id: profileId,
+        content: imageUrl,
+        content_type: "image",
+        is_internal_note: false,
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      toast.error("Failed to upload image");
+      console.error(err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleCopyText = async (msgId: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(msgId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch { toast.error("Failed to copy"); }
+  };
+
+  const handleDownloadImage = (url: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = url.split("/").pop() || "image.png";
+    a.target = "_blank";
+    a.click();
+  };
+
   const suggestReply = async () => {
     if (!conversationId || suggesting) return;
     setSuggesting(true);
