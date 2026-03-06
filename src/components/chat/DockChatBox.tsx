@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2, Download, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { downloadFile } from "@/lib/downloadUtils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
