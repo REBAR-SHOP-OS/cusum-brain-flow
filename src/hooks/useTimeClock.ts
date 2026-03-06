@@ -145,6 +145,8 @@ export function useTimeClock() {
         console.error("[TimeClock] clockIn insert error:", error);
         toast.error("Failed to clock in");
       } else {
+        // Set profile active
+        await supabase.from("profiles").update({ is_active: true } as any).eq("id", myProfile.id);
         // Optimistic: immediately add the new entry
         if (data) {
           const newEntry = data as unknown as TimeClockEntry;
