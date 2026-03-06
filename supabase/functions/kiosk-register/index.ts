@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
     // 3. Clock in
     const { error: clockErr } = await svc
       .from("time_clock_entries")
-      .insert({ profile_id: profileId });
+      .insert({ profile_id: profileId, source: "kiosk" });
 
     if (clockErr) {
       console.error("[kiosk-register] clock in error:", clockErr);
