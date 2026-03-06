@@ -112,7 +112,8 @@ Output ONLY a valid JSON object with this structure:
 
 Rules:
 - Extract ALL rows/items from the document
-- Dimensions (A,B,C,...) are in millimeters
+- Keep ALL numerical values EXACTLY as they appear in the source document. Do NOT convert units. If the document shows inches, keep inches. If it shows millimeters, keep millimeters.
+- Dimensions (A,B,C,...) and total_length should be the exact numbers from the source, with no unit conversion
 - If a dimension column is empty, use null
 - "type" is the ASA shape code (1-32, S1-S15, T1-T17, COIL, X, Y, etc.)
 - Items with no shape type are straight bars
