@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, Check } from "lucide-react";
+import { ChevronLeft, Check, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export interface SelectionOption {
