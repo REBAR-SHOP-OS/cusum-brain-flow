@@ -601,12 +601,25 @@ Deno.serve(async (req) => {
             ? `\n\nPREVIOUSLY GENERATED (MUST NOT resemble any of these — use completely different composition, angle, color scheme): ${recentImageNames.slice(0, 15).join(", ")}`
             : "";
 
-          const imagePrompt = slot.imageStyle +
-            `. MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
+          // Randomly select a visual style, avoiding recently used ones
+          const usedStyleHints = recentImageNames.join(" ").toLowerCase();
+          const availableStyles = slot.imageStyles.filter(
+            (s) => !usedStyleHints.includes(s.slice(0, 20).toLowerCase())
+          );
+          const stylePool = availableStyles.length > 0 ? availableStyles : slot.imageStyles;
+          const selectedStyle = stylePool[Math.floor(Math.random() * stylePool.length)];
+
+          const imagePrompt = `VISUAL STYLE: ${selectedStyle}. ` +
+            `PRODUCT FOCUS: ${slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
+            `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
             dedupHint +
-            ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` +
-            ` — create a visually DISTINCT image with a UNIQUE color palette, composition, lighting, camera angle, and artistic style that has NEVER been generated before. ABSOLUTE RULE: No two images should ever look similar.`;
+            ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` +
+            `\n\nMANDATORY VISUAL DIVERSITY RULES:\n` +
+            `- Use the specified visual style EXACTLY as described above\n` +
+            `- FORBIDDEN: Do not repeat any composition, camera angle, color palette, or scene layout from recent images\n` +
+            `- Each image must feel like it belongs to a completely different photo series\n` +
+            `- Ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
