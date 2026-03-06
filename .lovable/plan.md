@@ -1,34 +1,19 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# وضعیت فعلی — همه چیز درست است
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+بررسی کد نشان می‌دهد که سیستم **دقیقاً همان چیزی که می‌خواهید** را انجام می‌دهد:
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+1. **پروفایل‌ها حذف نشده‌اند** — فقط `is_active = false` شده‌اند. اسم همه کارمندان در لیست هست و نمایش داده می‌شوند.
 
-## Fix
-Two options — the simplest and most reliable:
+2. **Clock-in از ساعت ۸ صبح** — محدودیت ۸ صبح ET برای `@rebar.shop` در سه لایه اعمال شده:
+   - فرانت‌اند (`useTimeClock.ts` خط ۱۱۴-۱۲۲)
+   - کیوسک (`kiosk-punch/index.ts`)
+   - دیتابیس (trigger `trg_validate_clockin_time`)
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+3. **Clock-out دستی** — هر زمان که کارمند بخواهد می‌تواند clock out کند و `is_active` به `false` تغییر می‌کند.
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+4. **Auto clock-out ساعت ۵ عصر** — `auto-clockout` edge function شیفت‌های باز `@rebar.shop` را می‌بندد و `is_active = false` می‌کند.
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
-
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
-
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+**نتیجه**: نیازی به تغییر کد نیست. سیستم فعلی دقیقاً مطابق خواسته شما کار می‌کند — کارمندان لیست هستند، صبح ۸ clock in می‌کنند، هر وقت خواستند clock out می‌کنند، و ساعت ۵ اتوماتیک بسته می‌شوند.
 
