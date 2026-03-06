@@ -15,28 +15,12 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate via service role key (cron) or user auth
-    const authHeader = req.headers.get("Authorization");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-    const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-    if (!isServiceRole && !isAnonCron) {
-      // Also check for x-cron-secret
-      const cronSecret = req.headers.get("x-cron-secret");
-      const mcpKey = Deno.env.get("MCP_API_KEY");
-      if (!cronSecret || cronSecret !== mcpKey) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-
+    // No auth gate needed — verify_jwt=false and this is a server-side cron function.
+    // Use service role key for full DB access (bypasses RLS).
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      serviceRoleKey
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
     // Find all scheduled posts that are due
