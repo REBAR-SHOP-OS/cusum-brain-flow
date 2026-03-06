@@ -84,7 +84,7 @@ function DateSchedulePopover({
   };
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="p-3 space-y-3 pointer-events-auto">
       <Calendar
         mode="single"
         selected={selectedDate}
