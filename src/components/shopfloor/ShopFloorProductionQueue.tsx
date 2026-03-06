@@ -278,6 +278,7 @@ const CUTTER_02_ID = "b0000000-0000-0000-0000-000000000002";
 const SMALL_BAR_CODES = new Set(["10M", "15M"]);
 
 function CutPlanRow({ plan, machines }: { plan: CutPlanForBarlist; machines: MachineOption[] }) {
+  const { companyId } = useCompanyId();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [assigning, setAssigning] = useState(false);
