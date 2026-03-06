@@ -184,10 +184,10 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
       const path = `chat-uploads/${channelId}/${Date.now()}-${pf.name}`;
       const { error } = await supabase.storage.from("team-chat-files").upload(path, pf.file);
       if (error) throw new Error(`Upload failed: ${pf.name}`);
-      const { data: signed } = await supabase.storage.from("team-chat-files").createSignedUrl(path, 7 * 24 * 3600);
+      const publicUrl = getPublicFileUrl(path);
       results.push({
         name: pf.name,
-        url: signed?.signedUrl || "",
+        url: publicUrl,
         type: pf.file.type,
         size: pf.size,
       });
