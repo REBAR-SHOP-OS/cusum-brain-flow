@@ -311,7 +311,7 @@ function CutPlanRow({ plan, machines }: { plan: CutPlanForBarlist; machines: Mac
       setAssigning(true);
       const { data: items } = await supabase
         .from("cut_plan_items")
-        .select("bar_code")
+        .select("id, bar_code")
         .eq("cut_plan_id", plan.id);
 
       const barCodes = (items || []).map(i => i.bar_code).filter(Boolean);
