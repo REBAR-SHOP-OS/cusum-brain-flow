@@ -1,34 +1,43 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Smart Fuzzy Name Matching in Kiosk Registration
 
 ## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+Currently, when a new person types their name in the kiosk registration, it does an exact case-insensitive match (`ilike`). If someone types "Kourosh" instead of "Kourosh Zand", or "Ali" instead of "Ali Reza", the system creates a duplicate profile instead of linking to the existing one.
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## Solution
+Add a two-step flow: **fuzzy search → confirm/choose → register**
 
-## Fix
-Two options — the simplest and most reliable:
+### 1. Backend: New edge function `kiosk-lookup` (lightweight, no clock-in)
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+A new edge function that takes a partial name and returns fuzzy matches from existing company profiles:
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
-
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
+```sql
+-- Uses ILIKE with wildcards: '%name%' pattern
+-- Returns top 5 matches with id, full_name, avatar_url
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+The function will:
+- Accept `{ name: string }` 
+- Query `profiles` where `full_name ILIKE '%trimmedName%'` in the caller's company
+- Also try splitting input and matching any word: e.g. "Kourosh" matches "Kourosh Zand"
+- Return `{ candidates: [{ id, full_name, avatar_url }] }`
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+### 2. Frontend: `FirstTimeRegistration.tsx` — Add candidate selection step
+
+**Flow change:**
+1. User types name → clicks "Search" (or auto-search on 2+ chars)
+2. Call `kiosk-lookup` → get candidates
+3. **If candidates found**: Show cards: "Are you one of these people?" with each name + avatar, plus a "No, I'm new" button
+4. **If user picks an existing profile**: Call `kiosk-register` with `{ name, faceBase64, existingProfileId: candidate.id }`
+5. **If no candidates or "I'm new"**: Call `kiosk-register` as before (creates new profile)
+
+### 3. Backend: Update `kiosk-register` to accept `existingProfileId`
+
+If `existingProfileId` is provided, skip the name-matching logic and directly use that profile ID. This ensures the user's explicit choice is respected.
+
+### Files Changed
+- **New**: `supabase/functions/kiosk-lookup/index.ts` — fuzzy name search
+- **Edit**: `supabase/functions/kiosk-register/index.ts` — accept optional `existingProfileId`
+- **Edit**: `src/components/timeclock/FirstTimeRegistration.tsx` — add candidate selection UI step
 
