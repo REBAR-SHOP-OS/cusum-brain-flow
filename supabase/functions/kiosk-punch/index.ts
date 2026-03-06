@@ -54,6 +54,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Enforce 8 AM ET clock-in restriction for @rebar.shop users
+    const { data: profileData } = await svc
+      .from("profiles")
+      .select("email")
+      .eq("id", profileId)
+      .single();
+
+    const profileEmail = (profileData?.email || "").toLowerCase();
+    const isRebarUser = profileEmail.endsWith("@rebar.shop") && profileEmail !== "kourosh@rebar.shop";
+
     // Check for open shift
     const { data: openShifts } = await svc
       .from("time_clock_entries")
@@ -80,6 +90,17 @@ Deno.serve(async (req) => {
       }
       action = "clock_out";
     } else {
+      // Enforce 8 AM ET restriction for @rebar.shop users
+      if (isRebarUser) {
+        const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+        if (nowET.getHours() < 8) {
+          return new Response(JSON.stringify({ error: "Clock-in is available from 8:00 AM" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       // Clock in
       const { error } = await svc
         .from("time_clock_entries")
