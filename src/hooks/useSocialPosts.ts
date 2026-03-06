@@ -35,6 +35,21 @@ export function useSocialPosts() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Realtime: auto-refresh when any team member changes posts
+  useEffect(() => {
+    const channel = supabase
+      .channel("social_posts_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "social_posts" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
+
   const { data: posts, isLoading } = useQuery({
     queryKey: ["social_posts"],
     queryFn: async () => {
