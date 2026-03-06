@@ -1,34 +1,64 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# تقویت دو قانون الزامی ایجنت Pixel: لوگو اجباری + تصویر غیرتکراری
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## وضعیت فعلی
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+### ۱. لوگو
+- تابع `resolveLogoUrl()` لوگو را از `social-images/brand/company-logo.png` می‌خواند
+- اگر فایل لوگو وجود نداشته باشد، **بدون لوگو ادامه می‌دهد** (خط ۲۰۳-۲۰۴)
+- در `generatePixelImage` هم اگر `logoUrl` خالی باشد، تصویر بدون لوگو تولید می‌شود (خط ۲۴۸)
 
-## Fix
-Two options — the simplest and most reliable:
+### ۲. تکراری نبودن
+- از `sessionSeed` (UUID) استفاده می‌شود ولی فقط به صورت متنی در prompt تزریق می‌شود — هیچ بررسی واقعی با تصاویر قبلی انجام نمی‌شود
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+---
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+## تغییرات پیشنهادی
 
+### فایل: `supabase/functions/ai-agent/index.ts`
+
+**تغییر ۱ — لوگو اجباری:**
+- در `generatePixelImage`: اگر `logoUrl` خالی یا `null` باشد، **بلافاصله خطا برگرداند** و تصویر تولید نشود
+- پیام خطا: `"Company logo is required but not found in storage. Upload logo to social-images/brand/company-logo.png"`
+- حذف حالت‌های `useLogo: false` از آرایه `attempts` (هر سه attempt باید `useLogo: true` باشند — که الان هست)
+
+**تغییر ۲ — جلوگیری از تکرار:**
+- قبل از تولید تصویر، prompt‌های تصاویر قبلی همان روز را از جدول `social_posts` یا از bucket `social-images/pixel/` بخوانیم
+- لیست prompt‌های قبلی را به prompt جدید تزریق کنیم با دستور "MUST NOT resemble any of these previous images"
+- همچنین هش prompt نهایی را ذخیره کنیم تا prompt دقیقاً یکسان هرگز اجرا نشود
+
+**تغییر ۳ — تقویت prompt سیستم در `marketing.ts`:**
+- اضافه کردن قانون صریح: "If company logo cannot be loaded, STOP and report error — never generate without logo"
+- اضافه کردن قانون: "Every image must be visually unique — check previous prompts and ensure completely different composition, colors, angles"
+
+### فایل: `supabase/functions/_shared/agents/marketing.ts`
+- افزودن دو قانون جدید به بخش `IMAGE RULES`
+
+---
+
+## جزئیات فنی
+
+### لوگو اجباری — `generatePixelImage` (خط ۲۱۸-۲۲۲)
 ```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
+// Add at the start of the function, after LOVABLE_API_KEY check:
+if (!logoUrl) {
+  return { 
+    imageUrl: null, 
+    error: "Company logo is REQUIRED. Upload it to social-images/brand/company-logo.png" 
+  };
 }
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+### ضد تکرار — قبل از حلقه تولید تصویر (خط ~۵۳۰)
+- خواندن ۲۰ تصویر آخر از bucket `social-images/pixel/` 
+- استخراج نام فایل‌ها و تزریق به prompt به عنوان "previously generated — avoid similar themes"
+- افزودن تایم‌استمپ دقیق و شماره تصادفی به prompt برای اطمینان بیشتر
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+### تقویت prompt سیستم
+```
+## IMAGE RULES (additions)
+- LOGO IS MANDATORY — if the logo cannot be loaded, DO NOT generate any image. Report error immediately.
+- EVERY image MUST be visually UNIQUE — different composition, color palette, camera angle, and layout from ALL previous generations. NEVER produce a similar-looking image.
+```
 
