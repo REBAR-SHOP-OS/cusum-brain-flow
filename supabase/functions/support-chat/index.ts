@@ -743,6 +743,22 @@ bubble.onclick = async function(){
 document.getElementById('sw-send').onclick = sendMsg;
 document.getElementById('sw-input').oninput = function(){ document.getElementById('sw-send').disabled = !this.value.trim(); };
 document.getElementById('sw-input').onkeydown = function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} };
+document.getElementById('sw-attach').onclick = function(){ document.getElementById('sw-file').click(); };
+document.getElementById('sw-file').onchange = async function(){
+  var file = this.files[0];
+  if(!file||!state.convoId) return;
+  if(!file.type.startsWith('image/')){alert('Only images');return;}
+  if(file.size>5*1024*1024){alert('Max 5MB');return;}
+  var reader = new FileReader();
+  reader.onload = async function(){
+    addMsg('visitor', null, reader.result);
+    try {
+      await fetch(cfg.chatUrl+'?action=upload', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, image_data:reader.result, file_name:file.name}) });
+    } catch(e){}
+  };
+  reader.readAsDataURL(file);
+  this.value='';
+};
 
 async function sendMsg(){
   var inp = document.getElementById('sw-input');
@@ -755,10 +771,31 @@ async function sendMsg(){
   } catch(e){}
 }
 
-function addMsg(type, text){
+function addMsg(type, text, imageUrl){
   var el = document.createElement('div');
   el.className = 'sw-msg ' + type;
-  el.textContent = text;
+  if(imageUrl){
+    var img = document.createElement('img');
+    img.src = imageUrl;
+    img.onclick = function(){ window.open(imageUrl,'_blank'); };
+    el.appendChild(img);
+    var actions = document.createElement('div');
+    actions.className = 'sw-msg-actions';
+    var dlBtn = document.createElement('button');
+    dlBtn.innerHTML = '⬇ Download';
+    dlBtn.onclick = function(){ var a=document.createElement('a');a.href=imageUrl;a.download='image';a.target='_blank';a.click(); };
+    actions.appendChild(dlBtn);
+    el.appendChild(actions);
+  } else {
+    el.textContent = text;
+    var actions = document.createElement('div');
+    actions.className = 'sw-msg-actions';
+    var cpBtn = document.createElement('button');
+    cpBtn.innerHTML = '📋 Copy';
+    cpBtn.onclick = function(){ navigator.clipboard.writeText(text).then(function(){cpBtn.innerHTML='✅ Copied';setTimeout(function(){cpBtn.innerHTML='📋 Copy';},2000);}); };
+    actions.appendChild(cpBtn);
+    el.appendChild(actions);
+  }
   var container = document.getElementById('sw-messages');
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
