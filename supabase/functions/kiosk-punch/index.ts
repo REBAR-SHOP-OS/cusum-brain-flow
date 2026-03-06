@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      await svc.from("profiles").update({ is_active: false }).eq("id", profileId);
       action = "clock_out";
     } else {
       // Enforce 8 AM ET restriction for @rebar.shop users
@@ -113,6 +114,7 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      await svc.from("profiles").update({ is_active: true }).eq("id", profileId);
       action = "clock_in";
     }
 

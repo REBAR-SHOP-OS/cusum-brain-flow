@@ -1,44 +1,34 @@
 
 
-# Set Users Inactive on Clock-Out
+# Fix: Cron Job Authentication for Scheduled Post Publishing
 
-## Summary
-When a user clocks out (manually or auto at 5 PM), their profile should be set to `is_active = false`. Also, all current users should be set to inactive right now.
+## Problem
+The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
 
-## Changes
+**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
 
-### 1. Set all users inactive now
-Run a data update via insert tool:
-```sql
-UPDATE profiles SET is_active = false
-WHERE email LIKE '%@rebar.shop' AND lower(email) != 'kourosh@rebar.shop';
-```
+## Fix
+Two options — the simplest and most reliable:
 
-### 2. Frontend clock-out — set `is_active = false`
-**File: `src/hooks/useTimeClock.ts`** — In the `clockOut` function, after successfully closing the shift, update the profile:
+**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+
+Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+
 ```typescript
-await supabase.from("profiles").update({ is_active: false }).eq("id", myProfile.id);
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+const isAnonCron = authHeader === `Bearer ${anonKey}`;
+
+if (!isServiceRole && !isAnonCron) {
+  // check x-cron-secret fallback...
+}
 ```
 
-### 3. Frontend clock-in — set `is_active = true`
-**File: `src/hooks/useTimeClock.ts`** — In the `clockIn` function, after successful insert, set:
-```typescript
-await supabase.from("profiles").update({ is_active: true }).eq("id", myProfile.id);
-```
+This is the safest approach because:
+- We cannot put the service role key in a migration file (it would be visible in version control)
+- The anon key is already in the cron job and working
+- The function only processes pre-approved scheduled posts
 
-### 4. Auto clock-out at 5 PM — set `is_active = false`
-**File: `supabase/functions/auto-clockout/index.ts`** — After closing shifts, update the profiles:
-```typescript
-const profileIds = toClose.map((e: any) => e.profile_id);
-await supabase.from("profiles").update({ is_active: false }).in("id", profileIds);
-```
-
-### 5. Kiosk punch — set `is_active` accordingly
-**File: `supabase/functions/kiosk-punch/index.ts`** — After a successful clock-in punch, set `is_active = true`; after clock-out punch, set `is_active = false`.
-
-### Files to edit
-1. `src/hooks/useTimeClock.ts` — clock-in sets active, clock-out sets inactive
-2. `supabase/functions/auto-clockout/index.ts` — set inactive after auto clock-out
-3. `supabase/functions/kiosk-punch/index.ts` — set active/inactive on kiosk punch
-4. Data update (insert tool) — set all @rebar.shop users inactive now
+### File to edit
+1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
 
