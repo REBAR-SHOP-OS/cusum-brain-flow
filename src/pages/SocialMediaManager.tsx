@@ -374,11 +374,21 @@ export default function SocialMediaManager() {
             </div>
           </div>
         ) : (
-          <SocialCalendar
-            posts={filteredPosts}
-            weekStart={weekStart}
-            onPostClick={setSelectedPost}
-          />
+          <>
+            <SocialCalendar
+              posts={filteredPosts}
+              weekStart={weekStart}
+              onPostClick={setSelectedPost}
+            />
+            {weekPosts.length === 0 && filteredPosts.length > 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <p className="text-sm mb-2">No posts scheduled this week</p>
+                <Button variant="outline" size="sm" onClick={jumpToLatestPost}>
+                  Jump to latest post
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
