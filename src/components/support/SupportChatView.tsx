@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2, MapPin, Globe, ExternalLink } from "lucide-react";
+import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2, MapPin, Globe, ExternalLink, Paperclip, Download, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
@@ -44,7 +44,10 @@ export function SupportChatView({ conversationId }: Props) {
   const [isNote, setIsNote] = useState(false);
   const [sending, setSending] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [teamMembers, setTeamMembers] = useState<{ id: string; full_name: string }[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -162,6 +165,56 @@ export function SupportChatView({ conversationId }: Props) {
       toast.success("Assigned to you");
       setConvo((prev) => prev ? { ...prev, assigned_to: profileId, status: "assigned" } : null);
     }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !conversationId || !profileId) return;
+    if (!file.type.startsWith("image/")) { toast.error("Only images are supported"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
+
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${conversationId}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("support-attachments").upload(path, file);
+      if (upErr) throw upErr;
+
+      const { data: urlData } = supabase.storage.from("support-attachments").getPublicUrl(path);
+      const imageUrl = urlData.publicUrl;
+
+      const { error } = await supabase.from("support_messages").insert({
+        conversation_id: conversationId,
+        sender_type: "agent",
+        sender_id: profileId,
+        content: imageUrl,
+        content_type: "image",
+        is_internal_note: false,
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      toast.error("Failed to upload image");
+      console.error(err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleCopyText = async (msgId: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(msgId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch { toast.error("Failed to copy"); }
+  };
+
+  const handleDownloadImage = (url: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = url.split("/").pop() || "image.png";
+    a.target = "_blank";
+    a.click();
   };
 
   const suggestReply = async () => {
@@ -319,7 +372,38 @@ export function SupportChatView({ conversationId }: Props) {
                       <StickyNote className="w-3 h-3" /> Internal Note
                     </div>
                   )}
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.content_type === "image" ? (
+                    <div>
+                      <img
+                        src={msg.content}
+                        alt="Shared image"
+                        className="max-w-[200px] rounded-lg cursor-pointer"
+                        onClick={() => window.open(msg.content, "_blank")}
+                      />
+                      <button
+                        onClick={() => handleDownloadImage(msg.content)}
+                        className={cn(
+                          "mt-1.5 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors",
+                          isAgent ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <Download className="w-3 h-3" /> Download
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      <button
+                        onClick={() => handleCopyText(msg.id, msg.content)}
+                        className={cn(
+                          "mt-1.5 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors",
+                          isAgent ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        {copiedId === msg.id ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                      </button>
+                    </div>
+                  )}
                   <p className={cn(
                     "text-[10px] mt-1",
                     isAgent ? "text-primary-foreground/60" : "text-muted-foreground/60"
@@ -369,6 +453,22 @@ export function SupportChatView({ conversationId }: Props) {
           </div>
         </div>
         <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageUpload}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="self-end h-10 w-10 p-0 shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+          </Button>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -23,7 +23,9 @@ Deno.serve(async (req) => {
     if (action === "widget.js") return handleWidgetJs(url, supabase, supabaseUrl);
     if (action === "start") return handleStart(req, supabase);
     if (action === "send") return handleSend(req, supabase);
+    if (action === "upload") return handleUpload(req, supabase);
     if (action === "poll") return handlePoll(url, supabase);
+    if (action === "heartbeat") return handleHeartbeat(req, supabase);
     if (action === "heartbeat") return handleHeartbeat(req, supabase);
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
@@ -172,6 +174,58 @@ async function handleSend(req: Request, supabase: any) {
   return new Response(JSON.stringify({ message_id: msg.id, created_at: msg.created_at }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+// ── Upload Image (visitor) ──
+async function handleUpload(req: Request, supabase: any) {
+  const { conversation_id, visitor_token, image_data, file_name } = await req.json();
+  if (!conversation_id || !visitor_token || !image_data) {
+    return new Response(JSON.stringify({ error: "Missing fields" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: convo } = await supabase
+    .from("support_conversations").select("id")
+    .eq("id", conversation_id).eq("visitor_token", visitor_token).single();
+  if (!convo) return new Response(JSON.stringify({ error: "Invalid" }), {
+    status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+  try {
+    // Decode base64 image
+    const base64 = image_data.includes(",") ? image_data.split(",")[1] : image_data;
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    const ext = (file_name || "image.png").split(".").pop() || "png";
+    const path = `${conversation_id}/${crypto.randomUUID()}.${ext}`;
+
+    const { error: upErr } = await supabase.storage
+      .from("support-attachments").upload(path, bytes, { contentType: `image/${ext}` });
+    if (upErr) throw upErr;
+
+    const { data: urlData } = supabase.storage.from("support-attachments").getPublicUrl(path);
+    const imageUrl = urlData.publicUrl;
+
+    const { data: msg, error } = await supabase.from("support_messages").insert({
+      conversation_id, sender_type: "visitor", content: imageUrl, content_type: "image",
+    }).select("id, created_at").single();
+    if (error) throw error;
+
+    await supabase.from("support_conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation_id);
+
+    return new Response(JSON.stringify({ message_id: msg.id, image_url: imageUrl }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Upload failed";
+    console.error("Upload error:", err);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 }
 
 // ── Poll Messages (visitor) ──
@@ -653,7 +707,7 @@ setInterval(function(){ state.currentPage = getCurrentPage(); }, 2000);
 window.addEventListener('popstate', function(){ state.currentPage = getCurrentPage(); });
 
 var style = document.createElement('style');
-style.textContent = '#sw-bubble{position:fixed;bottom:20px;right:20px;z-index:99999;width:56px;height:56px;border-radius:50%;background:'+cfg.brandColor+';color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:transform 0.2s}#sw-bubble:hover{transform:scale(1.1)}#sw-bubble svg{width:24px;height:24px;fill:currentColor}#sw-panel{position:fixed;bottom:84px;right:20px;z-index:99999;width:360px;max-height:500px;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.15);display:none;flex-direction:column;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif}#sw-panel.open{display:flex;animation:sw-slide-in 0.2s ease-out}@keyframes sw-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}#sw-header{padding:14px 16px;background:'+cfg.brandColor+';color:#fff;display:flex;align-items:center;justify-content:space-between}#sw-header h3{margin:0;font-size:15px;font-weight:600}#sw-header button{background:none;border:none;color:#fff;cursor:pointer;font-size:20px;line-height:1}#sw-messages{flex:1;overflow-y:auto;padding:12px;max-height:320px;min-height:200px}.sw-msg{margin-bottom:8px;max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.4;word-wrap:break-word}.sw-msg.visitor{margin-left:auto;background:'+cfg.brandColor+';color:#fff;border-bottom-right-radius:4px}.sw-msg.agent,.sw-msg.bot{background:#f0f0f0;color:#333;border-bottom-left-radius:4px}#sw-input-area{padding:10px;border-top:1px solid #eee;display:flex;gap:6px}#sw-input{flex:1;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-size:13px;outline:none;resize:none;font-family:inherit}#sw-input:focus{border-color:'+cfg.brandColor+'}#sw-send{background:'+cfg.brandColor+';color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:500}#sw-send:disabled{opacity:0.5;cursor:not-allowed}@media(max-width:420px){#sw-panel{width:calc(100vw - 24px);right:12px;bottom:80px}}';
+style.textContent = '#sw-bubble{position:fixed;bottom:20px;right:20px;z-index:99999;width:56px;height:56px;border-radius:50%;background:'+cfg.brandColor+';color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:transform 0.2s}#sw-bubble:hover{transform:scale(1.1)}#sw-bubble svg{width:24px;height:24px;fill:currentColor}#sw-panel{position:fixed;bottom:84px;right:20px;z-index:99999;width:360px;max-height:500px;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.15);display:none;flex-direction:column;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif}#sw-panel.open{display:flex;animation:sw-slide-in 0.2s ease-out}@keyframes sw-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}#sw-header{padding:14px 16px;background:'+cfg.brandColor+';color:#fff;display:flex;align-items:center;justify-content:space-between}#sw-header h3{margin:0;font-size:15px;font-weight:600}#sw-header button{background:none;border:none;color:#fff;cursor:pointer;font-size:20px;line-height:1}#sw-messages{flex:1;overflow-y:auto;padding:12px;max-height:320px;min-height:200px}.sw-msg{margin-bottom:8px;max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.4;word-wrap:break-word}.sw-msg.visitor{margin-left:auto;background:'+cfg.brandColor+';color:#fff;border-bottom-right-radius:4px}.sw-msg.agent,.sw-msg.bot{background:#f0f0f0;color:#333;border-bottom-left-radius:4px}.sw-msg img{max-width:200px;border-radius:8px;display:block;margin:4px 0;cursor:pointer}.sw-msg-actions{display:flex;gap:6px;margin-top:4px}.sw-msg-actions button{background:none;border:none;cursor:pointer;font-size:11px;color:#888;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px}.sw-msg-actions button:hover{background:#e8e8e8;color:#333}#sw-input-area{padding:10px;border-top:1px solid #eee;display:flex;gap:6px;align-items:end}#sw-input{flex:1;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-size:13px;outline:none;resize:none;font-family:inherit}#sw-input:focus{border-color:'+cfg.brandColor+'}#sw-send{background:'+cfg.brandColor+';color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:500}#sw-send:disabled{opacity:0.5;cursor:not-allowed}#sw-attach{background:none;border:1px solid #ddd;border-radius:8px;padding:8px;cursor:pointer;font-size:16px;color:#666;line-height:1}#sw-attach:hover{background:#f5f5f5}@media(max-width:420px){#sw-panel{width:calc(100vw - 24px);right:12px;bottom:80px}}';
 document.head.appendChild(style);
 
 var bubble = document.createElement('button');
@@ -664,7 +718,7 @@ document.body.appendChild(bubble);
 
 var panel = document.createElement('div');
 panel.id = 'sw-panel';
-panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+'</h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div><div id="sw-messages"></div><div id="sw-input-area"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
+panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+'</h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div><div id="sw-messages"></div><div id="sw-input-area"><button id="sw-attach" title="Send image">📎</button><input type="file" id="sw-file" accept="image/*" style="display:none"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
 document.body.appendChild(panel);
 
 var started = false;
@@ -689,6 +743,22 @@ bubble.onclick = async function(){
 document.getElementById('sw-send').onclick = sendMsg;
 document.getElementById('sw-input').oninput = function(){ document.getElementById('sw-send').disabled = !this.value.trim(); };
 document.getElementById('sw-input').onkeydown = function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} };
+document.getElementById('sw-attach').onclick = function(){ document.getElementById('sw-file').click(); };
+document.getElementById('sw-file').onchange = async function(){
+  var file = this.files[0];
+  if(!file||!state.convoId) return;
+  if(!file.type.startsWith('image/')){alert('Only images');return;}
+  if(file.size>5*1024*1024){alert('Max 5MB');return;}
+  var reader = new FileReader();
+  reader.onload = async function(){
+    addMsg('visitor', null, reader.result);
+    try {
+      await fetch(cfg.chatUrl+'?action=upload', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, image_data:reader.result, file_name:file.name}) });
+    } catch(e){}
+  };
+  reader.readAsDataURL(file);
+  this.value='';
+};
 
 async function sendMsg(){
   var inp = document.getElementById('sw-input');
@@ -701,10 +771,31 @@ async function sendMsg(){
   } catch(e){}
 }
 
-function addMsg(type, text){
+function addMsg(type, text, imageUrl){
   var el = document.createElement('div');
   el.className = 'sw-msg ' + type;
-  el.textContent = text;
+  if(imageUrl){
+    var img = document.createElement('img');
+    img.src = imageUrl;
+    img.onclick = function(){ window.open(imageUrl,'_blank'); };
+    el.appendChild(img);
+    var actions = document.createElement('div');
+    actions.className = 'sw-msg-actions';
+    var dlBtn = document.createElement('button');
+    dlBtn.innerHTML = '⬇ Download';
+    dlBtn.onclick = function(){ var a=document.createElement('a');a.href=imageUrl;a.download='image';a.target='_blank';a.click(); };
+    actions.appendChild(dlBtn);
+    el.appendChild(actions);
+  } else {
+    el.textContent = text;
+    var actions = document.createElement('div');
+    actions.className = 'sw-msg-actions';
+    var cpBtn = document.createElement('button');
+    cpBtn.innerHTML = '📋 Copy';
+    cpBtn.onclick = function(){ navigator.clipboard.writeText(text).then(function(){cpBtn.innerHTML='✅ Copied';setTimeout(function(){cpBtn.innerHTML='📋 Copy';},2000);}); };
+    actions.appendChild(cpBtn);
+    el.appendChild(actions);
+  }
   var container = document.getElementById('sw-messages');
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
@@ -720,7 +811,11 @@ function startPolling(){
       if(d.messages && d.messages.length){
         d.messages.forEach(function(m){
           if(m.sender_type !== 'visitor' && m.sender_type !== 'system' && m.content_type !== 'system'){
-            addMsg(m.sender_type, m.content);
+            if(m.content_type === 'image'){
+              addMsg(m.sender_type, null, m.content);
+            } else {
+              addMsg(m.sender_type, m.content);
+            }
           }
           state.lastTs = m.created_at;
         });
