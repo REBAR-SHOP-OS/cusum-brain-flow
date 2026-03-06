@@ -428,7 +428,13 @@ export function PostReviewPanel({
                             }}
                             publishing={publishing}
                             onSetDate={(date) => {
-                              updatePost.mutate({ id: post.id, scheduled_date: date.toISOString(), status: "scheduled" });
+                              updatePost.mutate({
+                                id: post.id,
+                                scheduled_date: date.toISOString(),
+                                status: "scheduled",
+                                qa_status: "scheduled",
+                                page_name: post.page_name || localPages[0] || null,
+                              });
                             }}
                           />
                         </PopoverContent>

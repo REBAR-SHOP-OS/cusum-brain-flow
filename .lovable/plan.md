@@ -1,71 +1,34 @@
 
 
-# بررسی عمیق مشکلات زمان‌بندی و انتشار پست‌های سوشیال مدیا
+# Fix: Cron Job Authentication for Scheduled Post Publishing
 
-## مشکلات شناسایی‌شده
+## Problem
+The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
 
-### ۱. مشکل بحرانی: Cron Publish صفحه (`page_name`) را نادیده می‌گیرد
-**فایل:** `supabase/functions/social-cron-publish/index.ts` (خط 94)
-- همیشه `pages[0]` را انتخاب می‌کند — حتی اگر پست برای صفحه دیگری (مثلاً Rebar.shop) باشد
-- `social-publish` این مشکل را ندارد چون `page_name` را دریافت و match می‌کند
-- **نتیجه:** پست‌های زمان‌بندی‌شده همیشه روی اولین صفحه منتشر می‌شوند
+**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
 
-### ۲. مشکل بحرانی: SchedulePopover صفحه را ذخیره نمی‌کند
-**فایل:** `src/components/social/SchedulePopover.tsx` (خط 51-58)
-- هنگام schedule کردن، `page_name` در update ارسال نمی‌شود
-- وقتی cron اجرا شود، `page_name` خالی است و به `pages[0]` fallback می‌کند
+## Fix
+Two options — the simplest and most reliable:
 
-### ۳. مشکل: DateSchedulePopover هم `page_name` ذخیره نمی‌کند
-**فایل:** `src/components/social/PostReviewPanel.tsx` (خط 430-432)
-- `onSetDate` فقط `scheduled_date` و `status` را آپدیت می‌کند
-- `page_name` و `qa_status` ذخیره نمی‌شوند
+**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
 
-### ۴. مشکل: انتخاب چند پلتفرم فقط اولی ذخیره می‌شود
-**فایل:** `src/components/social/SchedulePopover.tsx` (خط 57)
-- `platform: selectedPlatforms[0]` — اگر کاربر 3 پلتفرم انتخاب کند، فقط اولی ذخیره می‌شود
-- برای بقیه پلتفرم‌ها پست duplicate ساخته نمی‌شود
+Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
 
-### ۵. مشکل جزئی: `qa_status` ناسازگار
-- `SchedulePopover` مقدار `qa_status: "approved"` ست می‌کند
-- `DateSchedulePopover` اصلاً `qa_status` ست نمی‌کند
-
----
-
-## راه‌حل‌ها
-
-### ۱. اصلاح `social-cron-publish` — استفاده از `page_name` پست
 ```typescript
-// به جای pages[0]، page_name پست را match کن
-let selectedPage = pages[0];
-if (post.page_name) {
-  const matched = pages.find((p) => p.name === post.page_name);
-  if (matched) selectedPage = matched;
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+const isAnonCron = authHeader === `Bearer ${anonKey}`;
+
+if (!isServiceRole && !isAnonCron) {
+  // check x-cron-secret fallback...
 }
 ```
 
-### ۲. اصلاح `SchedulePopover` — ارسال `page_name` هنگام schedule
-در `handleConfirm`، مقدار `page_name` فعلی پست را نیز شامل کنیم.
+This is the safest approach because:
+- We cannot put the service role key in a migration file (it would be visible in version control)
+- The anon key is already in the cron job and working
+- The function only processes pre-approved scheduled posts
 
-### ۳. اصلاح `PostReviewPanel` — ارسال `page_name` و `qa_status` در `onSetDate`
-```typescript
-onSetDate={(date) => {
-  updatePost.mutate({
-    id: post.id,
-    scheduled_date: date.toISOString(),
-    status: "scheduled",
-    qa_status: "scheduled",
-  });
-}}
-```
-و `localPages` را به `SchedulePopover` پاس بدهیم.
-
-### ۴. اصلاح `SchedulePopover` — ساخت پست‌های duplicate برای چند پلتفرم
-اگر بیش از یک پلتفرم انتخاب شود، برای هر پلتفرم اضافی یک پست جدید (کپی) ایجاد شود.
-
----
-
-## فایل‌های تغییر
-1. `supabase/functions/social-cron-publish/index.ts` — match کردن `page_name`
-2. `src/components/social/SchedulePopover.tsx` — ذخیره `page_name` + ساخت duplicate برای multi-platform
-3. `src/components/social/PostReviewPanel.tsx` — پاس دادن `localPages` و اصلاح `qa_status`
+### File to edit
+1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
 

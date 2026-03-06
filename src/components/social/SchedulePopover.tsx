@@ -42,22 +42,46 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
     );
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedDate || selectedPlatforms.length === 0) return;
 
     const scheduledDateTime = new Date(selectedDate);
     scheduledDateTime.setHours(parseInt(hour), parseInt(minute), 0, 0);
 
+    const primaryPlatform = selectedPlatforms[0] as SocialPost["platform"];
+
+    // Update the original post with the first platform
     updatePost.mutate(
       {
         id: post.id,
-        qa_status: "approved",
+        qa_status: "scheduled",
         status: "scheduled",
         scheduled_date: scheduledDateTime.toISOString(),
-        platform: selectedPlatforms[0] as SocialPost["platform"],
+        platform: primaryPlatform,
+        page_name: post.page_name,
       },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
+          // Create duplicate posts for additional platforms
+          if (selectedPlatforms.length > 1) {
+            const { supabase } = await import("@/integrations/supabase/client");
+            for (let i = 1; i < selectedPlatforms.length; i++) {
+              await supabase.from("social_posts").insert({
+                user_id: post.user_id,
+                platform: selectedPlatforms[i],
+                status: "scheduled",
+                qa_status: "scheduled",
+                title: post.title,
+                content: post.content,
+                image_url: post.image_url,
+                scheduled_date: scheduledDateTime.toISOString(),
+                hashtags: post.hashtags,
+                page_name: post.page_name,
+                content_type: post.content_type,
+              });
+            }
+          }
+
           toast({
             title: "Post scheduled",
             description: `Scheduled for ${format(scheduledDateTime, "PPP")} at ${hour}:${minute} on ${selectedPlatforms.join(", ")}`,
