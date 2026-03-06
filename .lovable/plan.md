@@ -1,34 +1,60 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# نمایش تصاویر + دکمه دانلود + دکمه کپی در چت ساپورت
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## وضعیت فعلی
+- جدول `support_messages` فیلد `content_type` و `metadata` دارد (آماده برای پشتیبانی تصویر)
+- پیام‌ها فقط به صورت متن ساده نمایش داده می‌شوند (هم در پنل ادمین، هم در ویجت)
+- هیچ قابلیت آپلود تصویر وجود ندارد
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## تغییرات
 
-## Fix
-Two options — the simplest and most reliable:
+### ۱. ساخت Storage Bucket: `support-attachments`
+Migration برای ایجاد باکت عمومی و RLS policies مناسب.
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+### ۲. فایل: `src/components/support/SupportChatView.tsx`
+- **آپلود تصویر**: اضافه کردن دکمه آپلود (آیکون Paperclip) کنار textarea. فایل به `support-attachments/{conversation_id}/{uuid}.{ext}` آپلود و پیام با `content_type: "image"` و URL تصویر در `content` ذخیره می‌شود.
+- **نمایش تصویر**: اگر `content_type === "image"` یا content شامل URL تصویر باشد، به جای متن، تصویر render شود با `<img>` و `max-width: 200px`.
+- **دکمه دانلود**: زیر تصاویر، آیکون `Download` برای دانلود تصویر.
+- **دکمه کپی**: زیر پیام‌های متنی، آیکون `Copy` که محتوا را به clipboard کپی کند.
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+### ۳. Edge Function: `supabase/functions/support-chat/index.ts`
+- **اکشن جدید `upload`**: ویزیتور تصویر را به صورت base64 ارسال → سرور آن را در storage آپلود → پیام با `content_type: "image"` ذخیره.
+- **ویجت JS**: 
+  - دکمه آپلود (📎) اضافه شود
+  - تصاویر دریافتی به صورت `<img>` نمایش داده شوند (نه متن)
+  - دکمه دانلود زیر تصاویر
+  - دکمه کپی زیر پیام‌های متنی
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+### ۴. جزییات فنی
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
+**Admin Side (SupportChatView):**
+```tsx
+// Image message rendering
+{msg.content_type === "image" ? (
+  <div>
+    <img src={msg.content} className="max-w-[200px] rounded-lg cursor-pointer" />
+    <button onClick={() => downloadImage(msg.content)}>
+      <Download className="w-3.5 h-3.5" />
+    </button>
+  </div>
+) : (
+  <div>
+    <p>{msg.content}</p>
+    <button onClick={() => navigator.clipboard.writeText(msg.content)}>
+      <Copy className="w-3.5 h-3.5" />
+    </button>
+  </div>
+)}
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+**Widget Side (generateWidgetJs):**
+- `addMsg` تابع بررسی می‌کند آیا پیام تصویر است → `<img>` + دکمه دانلود
+- برای متن → متن + دکمه کپی
+- دکمه 📎 برای ارسال تصویر توسط ویزیتور
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+## فایل‌ها
+1. DB Migration — ساخت باکت `support-attachments` + RLS
+2. `src/components/support/SupportChatView.tsx` — آپلود + نمایش تصویر + دانلود + کپی
+3. `supabase/functions/support-chat/index.ts` — اکشن upload + به‌روزرسانی ویجت JS
 
