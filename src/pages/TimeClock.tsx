@@ -556,5 +556,22 @@ export default function TimeClock() {
         </Tabs>
       </div>
     </div>
+
+      <ConfirmActionDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Kiosk Profile"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This will remove their profile and all associated data.`}
+        variant="destructive"
+        confirmLabel="Yes, Delete"
+        loading={deleteProfile.isPending}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteProfile.mutate(deleteTarget.id, {
+              onSuccess: () => setDeleteTarget(null),
+            });
+          }
+        }}
+      />
   );
 }
