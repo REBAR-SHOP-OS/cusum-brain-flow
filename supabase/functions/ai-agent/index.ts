@@ -535,7 +535,10 @@ Deno.serve(async (req) => {
           // Step A: Generate unique, non-repeating caption + slogan + hashtags via LLM
           // Inject brain knowledge block into content generation
           const brainKnowledge = (mergedContext.brainKnowledgeBlock as string) || "";
-          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel);
+          // Generate a session-unique seed to ensure every chat produces distinct creative output
+          const sessionSeed = `${(mergedContext.sessionId as string) || "anon"}-${crypto.randomUUID()}`;
+
+          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel, sessionSeed);
 
           // Step B: Build image prompt with MANDATORY advertising text on image
           // If brain has image references, append them to inspire generation
@@ -549,7 +552,7 @@ Deno.serve(async (req) => {
           const imagePrompt = slot.imageStyle +
             `. MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
-            ` — variation timestamp: ${Date.now()}`;
+            ` — unique session seed: ${sessionSeed} — create a visually DISTINCT image with a unique color palette, composition, lighting, and artistic style that has never been generated before`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl);
