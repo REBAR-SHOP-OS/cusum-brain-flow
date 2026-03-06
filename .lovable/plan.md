@@ -1,34 +1,26 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# افزودن بخش آپلود لوگو به Pixel Brain و رفع خطای لوگو
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## تغییرات
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+### ۱. فایل: `src/components/social/PixelBrainDialog.tsx`
 
-## Fix
-Two options — the simplest and most reliable:
+یک بخش جدید **Logo** به بالای دیالوگ اضافه شود (قبل از Custom Instructions):
+- آیکون `Image` با عنوان "Logo"
+- اگر لوگو در `social-images/brand/company-logo.png` موجود باشد → پیش‌نمایش تصویر نشان دهد
+- دکمه آپلود (input file) برای انتخاب فایل PNG/JPG
+- آپلود مستقیم به `social-images/brand/company-logo.png` در storage (upsert)
+- پس از آپلود موفق → toast success و رفرش پیش‌نمایش
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+### ۲. فایل: `supabase/functions/ai-agent/index.ts`
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+خطای بلاک‌کننده را به **هشدار** تبدیل کن — اگر لوگو پیدا نشد، تصویر بدون لوگو تولید شود (به جای بلاک کامل):
+- خط ۲۴۵-۲۵۲: به جای return error، فقط `logoUrl = null` بماند و ادامه دهد
+- خط ۵۴۸-۵۵۸: حذف بلاک و اجازه ادامه بدون لوگو
+- لاگ warning بماند ولی تولید تصویر متوقف نشود
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
-
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
-
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+## فایل‌های تغییر
+1. `src/components/social/PixelBrainDialog.tsx` — بخش آپلود لوگو
+2. `supabase/functions/ai-agent/index.ts` — تبدیل خطای لوگو به هشدار (soft-fail)
 
