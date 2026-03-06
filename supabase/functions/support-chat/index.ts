@@ -23,7 +23,9 @@ Deno.serve(async (req) => {
     if (action === "widget.js") return handleWidgetJs(url, supabase, supabaseUrl);
     if (action === "start") return handleStart(req, supabase);
     if (action === "send") return handleSend(req, supabase);
+    if (action === "upload") return handleUpload(req, supabase);
     if (action === "poll") return handlePoll(url, supabase);
+    if (action === "heartbeat") return handleHeartbeat(req, supabase);
     if (action === "heartbeat") return handleHeartbeat(req, supabase);
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
