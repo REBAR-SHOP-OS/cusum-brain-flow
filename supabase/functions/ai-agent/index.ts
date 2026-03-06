@@ -242,20 +242,18 @@ async function generatePixelImage(
     return { imageUrl: null, error: "LOVABLE_API_KEY not configured" };
   }
 
-  // MANDATORY: Company logo is required — never generate without it
+  // Logo is optional — warn if missing but continue generation
   if (!logoUrl) {
-    console.error("🚫 Logo is REQUIRED but not found. Blocking image generation.");
-    return {
-      imageUrl: null,
-      error: "Company logo is REQUIRED but not found in storage. Upload it to social-images/brand/company-logo.png before generating images.",
-    };
+    console.warn("⚠️ Company logo not found. Generating image without logo overlay.");
   }
 
-  const fullPrompt = prompt +
-    "\n\nMANDATORY: The attached company logo image MUST be placed EXACTLY as-is in the generated image, " +
-    "without ANY modification, distortion, or recreation. Place it in a visible corner as a watermark. " +
-    "Do NOT create or draw any other logo — ONLY use the provided logo image. " +
-    "Do NOT add text-based watermarks.";
+  const fullPrompt = logoUrl
+    ? prompt +
+      "\n\nMANDATORY: The attached company logo image MUST be placed EXACTLY as-is in the generated image, " +
+      "without ANY modification, distortion, or recreation. Place it in a visible corner as a watermark. " +
+      "Do NOT create or draw any other logo — ONLY use the provided logo image. " +
+      "Do NOT add text-based watermarks."
+    : prompt;
 
   // Build attempts: model + whether to include logo
   const attempts: { model: string; useLogo: boolean }[] = [
