@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.social-cron-publish]
 verify_jwt = false
+
+[functions.kiosk-lookup]
+verify_jwt = false

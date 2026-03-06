@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { name, faceBase64 } = await req.json();
+    const { name, faceBase64, existingProfileId } = await req.json();
     if (!name || name.trim().length < 2) {
       return new Response(JSON.stringify({ error: "Name is required (min 2 chars)" }), {
         status: 400,
@@ -69,37 +69,41 @@ Deno.serve(async (req) => {
     }
 
     const trimmedName = name.trim();
-
-    // 1. Try to match existing profile by name (case-insensitive) in same company
-    const { data: existingProfile } = await svc
-      .from("profiles")
-      .select("id")
-      .eq("company_id", callerProfile.company_id)
-      .ilike("full_name", trimmedName)
-      .maybeSingle();
-
     let profileId: string;
 
-    if (existingProfile) {
-      // Use existing profile
-      profileId = existingProfile.id;
-      console.log("[kiosk-register] matched existing profile:", profileId, trimmedName);
+    if (existingProfileId) {
+      // User explicitly selected an existing profile from kiosk-lookup
+      profileId = existingProfileId;
+      console.log("[kiosk-register] user selected existing profile:", profileId, trimmedName);
     } else {
-      // Create new profile
-      const { data: profile, error: profileErr } = await svc
+      // Try to match existing profile by name (case-insensitive) in same company
+      const { data: existingProfile } = await svc
         .from("profiles")
-        .insert({ full_name: trimmedName, is_active: true, company_id: callerProfile.company_id })
         .select("id")
-        .single();
+        .eq("company_id", callerProfile.company_id)
+        .ilike("full_name", trimmedName)
+        .maybeSingle();
 
-      if (profileErr || !profile) {
-        console.error("[kiosk-register] profile insert error:", profileErr);
-        return new Response(JSON.stringify({ error: profileErr?.message || "Failed to create profile" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (existingProfile) {
+        profileId = existingProfile.id;
+        console.log("[kiosk-register] matched existing profile:", profileId, trimmedName);
+      } else {
+        // Create new profile
+        const { data: profile, error: profileErr } = await svc
+          .from("profiles")
+          .insert({ full_name: trimmedName, is_active: true, company_id: callerProfile.company_id })
+          .select("id")
+          .single();
+
+        if (profileErr || !profile) {
+          console.error("[kiosk-register] profile insert error:", profileErr);
+          return new Response(JSON.stringify({ error: profileErr?.message || "Failed to create profile" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        profileId = profile.id;
       }
-      profileId = profile.id;
     }
 
     // 2. Upload face photo & create enrollment
