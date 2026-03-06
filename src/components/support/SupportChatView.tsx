@@ -44,7 +44,10 @@ export function SupportChatView({ conversationId }: Props) {
   const [isNote, setIsNote] = useState(false);
   const [sending, setSending] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [teamMembers, setTeamMembers] = useState<{ id: string; full_name: string }[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
