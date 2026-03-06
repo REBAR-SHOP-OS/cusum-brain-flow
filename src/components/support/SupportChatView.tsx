@@ -453,6 +453,22 @@ export function SupportChatView({ conversationId }: Props) {
           </div>
         </div>
         <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageUpload}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="self-end h-10 w-10 p-0 shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+          </Button>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
