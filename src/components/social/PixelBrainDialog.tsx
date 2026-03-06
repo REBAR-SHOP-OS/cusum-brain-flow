@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Plus, Brain, Loader2, Paperclip, Save, FileText } from "lucide-react";
+import { X, Plus, Brain, Loader2, Paperclip, Save, FileText, ImageIcon, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +31,9 @@ const categoryIcons: Record<string, string> = {
   document: "📄",
 };
 
+const LOGO_BUCKET = "social-images";
+const LOGO_PATH = "brand/company-logo.png";
+
 export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,6 +44,35 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
   const [instructionsLoaded, setInstructionsLoaded] = useState(false);
   const instructionsIdRef = useRef<string | null>(null);
   const { companyId } = useCompanyId();
+
+  // Logo state
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const loadLogo = async () => {
+    const { data } = await supabase.storage.from(LOGO_BUCKET).createSignedUrl(LOGO_PATH, 3600);
+    setLogoUrl(data?.signedUrl ?? null);
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const { error } = await supabase.storage
+        .from(LOGO_BUCKET)
+        .upload(LOGO_PATH, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      toast.success("Logo uploaded!");
+      await loadLogo();
+    } catch (err: any) {
+      toast.error("Failed to upload logo: " + err.message);
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  };
 
   const fetchItems = async () => {
     if (!companyId) return;
@@ -53,7 +85,6 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
         .order("created_at", { ascending: false });
 
       const all = (data || []) as KnowledgeItem[];
-      // Separate instructions item from regular items
       const instrItem = all.find(
         (item) => (item.metadata as any)?.agent === "social" && (item.metadata as any)?.type === "instructions"
       );
@@ -86,6 +117,7 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
     if (open) {
       setInstructionsLoaded(false);
       fetchItems();
+      loadLogo();
     }
   }, [open, companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -94,14 +126,12 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
     setInstructionsSaving(true);
     try {
       if (instructionsIdRef.current) {
-        // Update existing
         const { error } = await supabase
           .from("knowledge")
           .update({ content: instructions.trim(), updated_at: new Date().toISOString() })
           .eq("id", instructionsIdRef.current);
         if (error) throw error;
       } else if (instructions.trim()) {
-        // Create new
         const { data, error } = await supabase
           .from("knowledge")
           .insert({
@@ -146,6 +176,49 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Logo Section */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold">Logo</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt="Company logo"
+                    className="w-16 h-16 rounded-lg border border-border object-contain bg-muted/30"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/30">
+                    <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={handleLogoUpload}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2 w-full"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={logoUploading}
+                  >
+                    {logoUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    {logoUrl ? "Change Logo" : "Upload Logo"}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground mt-1">Used as watermark on generated images</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-px bg-border" />
+
             {/* Instructions Section */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
