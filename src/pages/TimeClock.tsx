@@ -440,6 +440,57 @@ export default function TimeClock() {
               profiles={profiles as any}
             />
           </TabsContent>
+
+          <TabsContent value="kiosk-status">
+            <ScrollArea className="h-[calc(100vh-480px)]">
+              {(() => {
+                const presentProfiles = activeProfiles.filter((p) => {
+                  const status = statusMap.get(p.id);
+                  return status?.clocked_in;
+                });
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Monitor className="w-4 h-4" />
+                      <span>{presentProfiles.length} نفر حاضر در شرکت</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {presentProfiles.length === 0 ? (
+                        <p className="text-muted-foreground text-sm col-span-2 text-center py-8">هیچ‌کس در حال حاضر حضور ندارد</p>
+                      ) : (
+                        presentProfiles.map((profile) => {
+                          const status = statusMap.get(profile.id)!;
+                          const elapsed = differenceInMinutes(now, new Date(status.clock_in));
+                          return (
+                            <Card key={profile.id} className="border-green-500/30 bg-green-500/5">
+                              <CardContent className="p-4 flex items-center gap-3">
+                                <div className="relative">
+                                  <Avatar className="w-10 h-10">
+                                    <AvatarImage src={profile.avatar_url || ""} />
+                                    <AvatarFallback className="text-xs font-bold bg-muted text-foreground">{getInitials(profile.full_name)}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card bg-green-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm truncate">{profile.full_name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    ورود: {format(new Date(status.clock_in), "h:mm a")} · {formatDuration(elapsed)}
+                                  </p>
+                                </div>
+                                <Badge variant="secondary" className="text-[10px] uppercase tracking-wider bg-green-500/15 text-green-500">
+                                  حاضر
+                                </Badge>
+                              </CardContent>
+                            </Card>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </ScrollArea>
+          </TabsContent>
         </Tabs>
       </div>
     </div>
