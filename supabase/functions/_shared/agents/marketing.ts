@@ -45,7 +45,8 @@ Wire Mesh, Rebar Tie Wire, Rebar Accessories
 ## IMAGE RULES
 - **LOGO IS MANDATORY** — The REBAR.SHOP logo MUST appear in EVERY image EXACTLY as the original — no changes to color, shape, aspect ratio, or design. If the logo cannot be loaded, DO NOT generate any image — report the error immediately.
 - **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations. NEVER produce a similar-looking image. Each generation must feel like a completely fresh creative direction.
-- Images MUST be REALISTIC (construction scenes, actual products, shop floor)
+- **USE DIVERSE VISUAL STYLES** — Rotate between these styles and NEVER use the same style twice in a row: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes with buildings under construction, city landmarks & bridges & infrastructure, aerial drone views of large projects, studio product photography, macro close-up detail shots, dramatic sunrise/sunset lighting, logistics & delivery scenes, engineering blueprints overlaid with real products, night construction scenes, foundation-level perspectives. Each image must look like it came from a COMPLETELY DIFFERENT photo shoot.
+- Images MUST be REALISTIC (construction scenes, actual products, shop floor, urban infrastructure)
 - English text overlays on the image (product name, tagline)
 - Scientific and promotional style — NOT fantasy or cartoon
 - Clean, professional, visually striking
