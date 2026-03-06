@@ -1,34 +1,30 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Kiosk Status: Show Only Kiosk-Scanned Attendance
 
 ## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+Currently, the Kiosk Status tab mirrors Team Status and shows all employees. The user wants it to only show people whose attendance was registered through the kiosk face scan (by ai@rebar.shop), not manual clock-ins.
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## Solution
+Add a `source` column to `time_clock_entries` to distinguish kiosk punches from manual ones, then filter the Kiosk Status tab accordingly.
 
-## Fix
-Two options — the simplest and most reliable:
+## Changes
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
-
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
-
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
+### 1. Database Migration
+Add a `source` column to `time_clock_entries`:
+```sql
+ALTER TABLE public.time_clock_entries 
+ADD COLUMN source text DEFAULT 'manual';
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+### 2. Edge Functions — Mark kiosk punches
+**`supabase/functions/kiosk-punch/index.ts`**: Set `source: 'kiosk'` on clock-in insert.
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+**`supabase/functions/kiosk-register/index.ts`**: Set `source: 'kiosk'` on the initial clock-in insert.
+
+### 3. Frontend — `src/hooks/useTimeClock.ts`
+No changes needed — `allEntries` already fetches all entries including the new `source` field.
+
+### 4. Frontend — `src/pages/TimeClock.tsx`
+Update the Kiosk Status `TabsContent` to filter `allEntries` where `source === 'kiosk'` for today, then display only profiles that have a kiosk punch today with their status (Active/Off), clock-in time, and duration.
 
