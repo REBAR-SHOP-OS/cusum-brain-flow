@@ -43,6 +43,8 @@ export default function TimeClock() {
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
   const face = useFaceRecognition();
+  const { deleteProfile } = useProfiles();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [searchParams] = useSearchParams();
 
   const [faceMode, setFaceMode] = useState(false);
