@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export interface Automation {
