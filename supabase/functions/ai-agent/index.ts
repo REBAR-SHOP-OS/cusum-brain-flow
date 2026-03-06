@@ -23,18 +23,18 @@ const corsHeaders = {
 // ─── Pixel Slot Template Definitions (no hardcoded captions — all generated dynamically) ───
 // ─── Diverse Visual Styles Pool (randomly selected per generation to guarantee uniqueness) ───
 const VISUAL_STYLES_POOL = [
-  "Realistic workshop/fabrication shop interior — workers cutting and bending steel rebar, sparks flying, industrial atmosphere, warm tungsten lighting",
-  "Active construction site with tower cranes — large-scale concrete pour in progress, steel reinforcement visible, workers in safety gear, dynamic composition",
-  "Urban cityscape with buildings under construction — skyline showing steel framework and concrete structures, city life in foreground, modern architecture",
-  "City landmarks & infrastructure — iconic bridge or overpass showcasing exposed steel reinforcement and engineering excellence, dramatic perspective",
-  "Aerial drone view of a massive construction project — bird's eye perspective showing rebar grid layout on foundation, geometric patterns, scale emphasis",
-  "Studio product photography — premium steel products on clean background with dramatic studio lighting, reflection surfaces, advertising quality",
-  "Macro close-up of steel components — extreme detail of rebar texture, welding points, wire mesh intersections, shallow depth of field, technical beauty",
-  "Dramatic sunrise/sunset scene at construction site — silhouette of steel structure against colorful sky, golden hour lighting, cinematic atmosphere",
-  "Logistics & delivery scene — flatbed truck loaded with bundled rebar arriving at site, warehouse operations, organized steel inventory, professional documentation",
-  "Engineering blueprints with physical product overlay — technical drawings blended with real steel products, precision engineering theme, blue tones mixed with metallic",
-  "Night construction scene — illuminated site with steel framework, flood lights creating dramatic shadows, urban night atmosphere, long exposure feel",
-  "Underwater/foundation level perspective — rebar cages inside deep foundation forms, concrete being poured, engineering depth, unique angle",
+  "PHOTOREALISTIC real-world photography — Realistic workshop/fabrication shop interior, real workers cutting and bending steel rebar, sparks flying, industrial atmosphere, warm tungsten lighting, shot with professional DSLR camera",
+  "PHOTOREALISTIC real-world photography — Active construction site with tower cranes, large-scale concrete pour in progress, steel reinforcement visible, workers in safety gear, dynamic composition, real location",
+  "PHOTOREALISTIC real-world photography — Urban cityscape with buildings under construction, skyline showing steel framework and concrete structures, city life in foreground, real urban environment",
+  "PHOTOREALISTIC real-world photography — Real city landmarks & infrastructure, iconic bridge or overpass showcasing exposed steel reinforcement and engineering excellence, dramatic perspective, real-world location",
+  "PHOTOREALISTIC real-world photography — Aerial drone view of a massive real construction project, bird's eye perspective showing rebar grid layout on foundation, geometric patterns, real drone footage style",
+  "PHOTOREALISTIC real-world photography — Real product photography in actual warehouse/shop environment, steel products on real industrial surface with natural lighting, authentic workshop setting",
+  "PHOTOREALISTIC real-world photography — Macro close-up of real steel components, extreme detail of actual rebar texture, welding points, wire mesh intersections, shallow depth of field, real camera macro lens",
+  "PHOTOREALISTIC real-world photography — Dramatic sunrise/sunset at real construction site, silhouette of steel structure against real colorful sky, golden hour natural lighting, cinematic real photography",
+  "PHOTOREALISTIC real-world photography — Real logistics & delivery scene, flatbed truck loaded with bundled rebar arriving at actual site, real warehouse operations, professional documentary photography",
+  "PHOTOREALISTIC real-world photography — Engineering blueprints laid on real workbench with physical steel products on top, real office/workshop environment, natural lighting, documentary style",
+  "PHOTOREALISTIC real-world photography — Night construction scene at real site, illuminated with actual flood lights creating dramatic shadows, real urban night atmosphere, long exposure real camera",
+  "PHOTOREALISTIC real-world photography — Ground-level real photography inside deep foundation excavation, rebar cages inside actual foundation forms, real concrete work, authentic construction site",
 ];
 
 const PIXEL_SLOTS = [
@@ -627,7 +627,10 @@ Deno.serve(async (req) => {
             ? `\nFORBIDDEN STYLES (already used recently, DO NOT use): ${forbiddenStyles.join("; ")}`
             : "";
 
-          const imagePrompt = `VISUAL STYLE: ${selectedStyle}. ` +
+          const imagePrompt = `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
+            `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
+            `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
+            `VISUAL STYLE: ${selectedStyle}. ` +
             `PRODUCT FOCUS: ${slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
@@ -638,7 +641,8 @@ Deno.serve(async (req) => {
             `- Use the specified visual style EXACTLY as described above\n` +
             `- FORBIDDEN: Do not repeat any composition, camera angle, color palette, or scene layout from recent images\n` +
             `- Each image must feel like it belongs to a completely different photo series\n` +
-            `- Ultra high resolution, photorealistic, 1:1 square aspect ratio, perfect for Instagram`;
+            `- Ultra high resolution, PHOTOREALISTIC ONLY, 1:1 square aspect ratio, perfect for Instagram\n` +
+            `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot} with style #${selectedStyleIndex}: ${selectedStyle}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex });
