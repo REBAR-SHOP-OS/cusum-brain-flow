@@ -31,7 +31,7 @@ export function AdminRoute({ children, allowedEmails }: AdminRouteProps) {
     );
   }
 
-  if (!isAdmin) {
+  if (!isAllowed) {
     return <Navigate to="/home" replace />;
   }
 
