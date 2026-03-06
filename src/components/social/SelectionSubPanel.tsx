@@ -63,6 +63,16 @@ export function SelectionSubPanel(props: SelectionSubPanelProps) {
     }
   };
 
+  const allSelected = isMulti && currentMulti.length === options.length;
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setCurrentMulti([]);
+    } else {
+      setCurrentMulti(options.map((o) => o.value));
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -74,6 +84,17 @@ export function SelectionSubPanel(props: SelectionSubPanelProps) {
           <ChevronLeft className="w-5 h-5" />
         </button>
         <h3 className="text-base font-semibold flex-1 text-center pr-6">{title}</h3>
+        {isMulti && (
+          <button
+            onClick={toggleAll}
+            className={`p-1.5 rounded-md transition-colors ${
+              allSelected ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-muted"
+            }`}
+            title={allSelected ? "Deselect all" : "Select all"}
+          >
+            <CheckCheck className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Options */}
