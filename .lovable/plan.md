@@ -1,34 +1,30 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Fix: CutEngine allows bars beyond maxBars
 
 ## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+In `CutEngine.tsx` line 62, when `runPlan.feasible` is true, bars are set to `runPlan.barsThisRun` **without clamping** to `maxBars`. This causes the UI to display 10 bars when max capacity is 8, which is confusing even though `handleLockAndStart` clamps server-side.
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## Fix — 1 file
 
-## Fix
-Two options — the simplest and most reliable:
+### `src/components/shopfloor/CutEngine.tsx`
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+**Line 62** — Clamp `runPlan.barsThisRun` to `maxBars`:
+```tsx
+// Before:
+setBars(runPlan.barsThisRun);
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
-
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
+// After:
+setBars(Math.min(runPlan.barsThisRun, maxBars));
 ```
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+**Line 248 (canStart)** — Add guard to prevent starting when bars exceed max:
+```tsx
+const canStart = canWrite && !isRunning && !isDone && bars <= maxBars && (isFeasible || runPlan?.stockSource === "manual");
+```
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+This ensures:
+1. The UI never displays a bar count exceeding machine capacity
+2. The "LOCK & START" button is disabled if bars somehow exceed max
+3. The server-side clamp in `handleLockAndStart` remains as a safety net
 
