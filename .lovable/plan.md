@@ -1,34 +1,34 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# اصلاح فیلتر CUTTER-02: فقط ≥ 20M
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## مشکل شناسایی‌شده
+پلن "Ashok Leyland" شامل آیتم‌های 10M، 15M و 20M است که همگی به CUTTER-02 اختصاص داده شده. فیلتر UI آیتم‌های 10M/15M را مخفی می‌کند، اما مشکل اصلی در **مسیریابی خودکار** است:
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+- خط ۳۱۷-۳۱۸ در `ShopFloorProductionQueue.tsx`: اگر یک پلن ترکیبی (10M + 20M) باشد، `allSmall = false` → همه به CUTTER-02 می‌رود
+- آیتم‌های 10M/15M باید به CUTTER-01 بروند، نه CUTTER-02
 
-## Fix
-Two options — the simplest and most reliable:
+## راه‌حل — ۳ تغییر
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+### ۱. اصلاح Auto-Routing: تقسیم پلن‌های ترکیبی
+**فایل:** `src/components/shopfloor/ShopFloorProductionQueue.tsx`
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+به جای ارسال کل پلن به یک دستگاه، اگر پلن ترکیبی باشد:
+- آیتم‌های 10M/15M → تغییر `machine_id` به CUTTER-01 (در سطح آیتم یا ساخت پلن جداگانه)
+- آیتم‌های ≥20M → CUTTER-02
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+چون `cut_plans` فقط یک `machine_id` دارد، بهترین راه: **split the plan** — یک پلن جدید برای آیتم‌های کوچک ایجاد شود.
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
+### ۲. اصلاح `useStationData.ts` — فیلتر plans به machine_id فعلی
+**فایل:** `src/hooks/useStationData.ts` (خط ۹۱)
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+تغییر `.not("machine_id", "is", null)` به `.eq("machine_id", machineId)` تا فقط پلن‌های اختصاص‌یافته به همین دستگاه نمایش داده شوند.
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+### ۳. اصلاح داده فعلی — انتقال آیتم‌های نادرست
+Migration برای تصحیح پلن "Ashok Leyland": آیتم‌های 10M و 15M باید به یک پلن جدید منتقل و به CUTTER-01 اختصاص داده شوند.
+
+## فایل‌ها
+1. `src/components/shopfloor/ShopFloorProductionQueue.tsx` — اصلاح auto-routing برای split پلن‌های ترکیبی
+2. `src/hooks/useStationData.ts` — فیلتر دقیق‌تر plans
+3. DB migration — تصحیح داده فعلی
 
