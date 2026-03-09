@@ -62,7 +62,6 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
       },
       {
         onSuccess: async () => {
-          // Create duplicate posts for additional platforms
           if (selectedPlatforms.length > 1) {
             const { supabase } = await import("@/integrations/supabase/client");
             for (let i = 1; i < selectedPlatforms.length; i++) {
@@ -83,12 +82,19 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
           }
 
           toast({
-            title: "Post scheduled",
+            title: "Post scheduled ✅",
             description: `Scheduled for ${format(scheduledDateTime, "PPP")} at ${hour}:${minute} on ${selectedPlatforms.join(", ")}`,
           });
           setOpen(false);
           setStep("datetime");
           onScheduled?.();
+        },
+        onError: (err: Error) => {
+          toast({
+            title: "خطا در زمان‌بندی",
+            description: err.message || "پست ذخیره نشد. دوباره تلاش کنید.",
+            variant: "destructive",
+          });
         },
       }
     );
