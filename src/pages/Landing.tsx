@@ -75,8 +75,8 @@ export default function Landing() {
       <header className="border-b border-border sticky top-0 z-50 bg-background/95 backdrop-blur" role="banner">
         <nav className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between" aria-label="Main navigation">
           <div className="flex items-center gap-2">
-            <img src={logoCoin} alt="LOVABLE logo" className="w-8 h-8 rounded-lg" width={32} height={32} />
-            <span className="text-xl font-bold text-foreground">LOVABLE</span>
+            <img src={logoCoin} alt="REBAR SHOP OS logo" className="w-8 h-8 rounded-lg" width={32} height={32} />
+            <span className="text-xl font-bold text-foreground">REBAR SHOP OS</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             <Link to="/login">
