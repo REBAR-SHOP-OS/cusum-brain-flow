@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { detectRtl } from "@/utils/textDirection";
 import { useNavigate } from "react-router-dom";
 import { Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2, Download, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -431,8 +432,10 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                     "px-3 py-1.5 text-xs leading-relaxed break-words",
                                     isMe
                                       ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm"
-                                      : "bg-muted text-foreground rounded-2xl rounded-bl-sm"
+                                      : "bg-muted text-foreground rounded-2xl rounded-bl-sm",
+                                    detectRtl(cleanText) && "text-right"
                                   )}
+                                  dir={detectRtl(cleanText) ? "rtl" : "ltr"}
                                 >
                                   {cleanText}
                                 </div>
@@ -535,6 +538,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
           </button>
           <input
             className="flex-1 bg-transparent text-xs placeholder:text-muted-foreground focus:outline-none text-foreground min-w-0"
+            dir="auto"
             placeholder={`Message ${channelName}…`}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { detectRtl } from "@/utils/textDirection";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -453,9 +454,9 @@ export function MessageThread({
                           <p
                             className={cn(
                               "text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed",
-                              isRtl(displayLang) && "text-right"
+                              detectRtl(displayText) && "text-right"
                             )}
-                            dir={isRtl(displayLang) ? "rtl" : "ltr"}
+                            dir={detectRtl(displayText) ? "rtl" : "ltr"}
                           >
                             {displayText}
                           </p>
@@ -570,7 +571,7 @@ export function MessageThread({
             placeholder={`Message #${channelName}...`}
             className="min-h-[40px] md:min-h-[44px] max-h-32 resize-none border-0 focus-visible:ring-0 bg-transparent px-3 py-2 md:py-2.5 text-sm"
             rows={1}
-            dir={isRtl(myLang) ? "rtl" : "ltr"}
+            dir="auto"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
