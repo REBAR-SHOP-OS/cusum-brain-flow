@@ -508,7 +508,57 @@ export function PostReviewPanel({
                     <Button variant="outline" className="flex-1" onClick={onDecline}>
                       Decline
                     </Button>
-                    <SchedulePopover post={post} onScheduled={onClose} />
+                    <Button
+                      className="flex-1"
+                      onClick={async () => {
+                        if (!post.scheduled_date) {
+                          toast({ title: "No date set", description: "Please set a publish date first.", variant: "destructive" });
+                          return;
+                        }
+                        if (localPages.length === 0) {
+                          toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
+                          return;
+                        }
+                        const primaryPage = localPages[0];
+                        updatePost.mutate(
+                          {
+                            id: post.id,
+                            status: "scheduled",
+                            qa_status: "scheduled",
+                            page_name: primaryPage,
+                          },
+                          {
+                            onSuccess: async () => {
+                              if (localPages.length > 1) {
+                                for (let i = 1; i < localPages.length; i++) {
+                                  await supabase.from("social_posts").insert({
+                                    user_id: post.user_id,
+                                    platform: post.platform,
+                                    status: "scheduled",
+                                    qa_status: "scheduled",
+                                    title: post.title,
+                                    content: post.content,
+                                    image_url: post.image_url,
+                                    scheduled_date: post.scheduled_date,
+                                    hashtags: post.hashtags,
+                                    page_name: localPages[i],
+                                    content_type: post.content_type,
+                                  });
+                                }
+                              }
+                              toast({
+                                title: "Post scheduled",
+                                description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPages.join(", ")}`,
+                              });
+                              onClose();
+                            },
+                          }
+                        );
+                      }}
+                    >
+                      <CalendarDays className="w-4 h-4" />
+                      Schedule
+                    </Button>
                   </div>
                   <Button
                     variant="ghost"
