@@ -218,6 +218,21 @@ function bestFitCut(
   return bars;
 }
 
+/**
+ * Manual (no optimization): each piece gets its own stock bar.
+ * Supervisor decides cutting order on the shop floor.
+ */
+function manualCut(
+  pieces: { mark: string; lengthMm: number }[],
+  stockLengthMm: number,
+): StockBar[] {
+  return pieces.map((piece) => ({
+    stockLengthMm,
+    cuts: [{ mark: piece.mark, lengthMm: piece.lengthMm }],
+    remainderMm: stockLengthMm - piece.lengthMm,
+  }));
+}
+
 /** Count stopper moves (distinct cut lengths) */
 function countStopperMoves(bars: StockBar[]): number {
   const uniqueLengths = new Set<number>();
