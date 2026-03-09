@@ -154,6 +154,7 @@ export function PostReviewPanel({
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
   const [localContentType, setLocalContentType] = useState("post");
   const [localPages, setLocalPages] = useState<string[]>(["Ontario Steel Detailing"]);
+  const [localPlatforms, setLocalPlatforms] = useState<string[]>([post?.platform || "facebook"]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
@@ -202,19 +203,23 @@ export function PostReviewPanel({
     onClose();
   };
 
-  const handlePlatformSave = (value: string) => {
-    // Map compound values back to DB platform values
-    const platformMap: Record<string, string> = {
-      facebook: "facebook",
-      instagram: "instagram",
-      instagram_fb: "instagram",
-      linkedin: "linkedin",
-      linkedin_org: "linkedin",
-      youtube: "youtube",
-      tiktok: "tiktok",
-    };
-    const dbPlatform = platformMap[value] || value;
-    updatePost.mutate({ id: post.id, platform: dbPlatform as SocialPost["platform"] });
+  const platformMap: Record<string, string> = {
+    facebook: "facebook",
+    instagram: "instagram",
+    instagram_fb: "instagram",
+    linkedin: "linkedin",
+    linkedin_org: "linkedin",
+    youtube: "youtube",
+    tiktok: "tiktok",
+  };
+
+  const handlePlatformsSaveMulti = (values: string[]) => {
+    setLocalPlatforms(values);
+    // Update the primary post's platform to the first selected
+    if (values.length > 0) {
+      const dbPlatform = platformMap[values[0]] || values[0];
+      updatePost.mutate({ id: post.id, platform: dbPlatform as SocialPost["platform"] });
+    }
     setSubPanel(null);
   };
 
@@ -231,7 +236,7 @@ export function PostReviewPanel({
   const isVideo = post.image_url?.endsWith(".mp4");
 
   // Derive display values
-  const platformDisplay = PLATFORM_OPTIONS.find((o) => o.value === post.platform)?.label || post.platform;
+  const platformsDisplay = localPlatforms.map(p => PLATFORM_OPTIONS.find(o => o.value === p)?.label || p).join(", ");
   const contentTypeDisplay = CONTENT_TYPE_OPTIONS.find((o) => o.value === localContentType)?.label || "Post";
 
   return (
@@ -252,10 +257,11 @@ export function PostReviewPanel({
 
           {subPanel === "platform" && (
             <SelectionSubPanel
-              title="Platform"
+              title="Platforms"
               options={PLATFORM_OPTIONS}
-              selected={post.platform}
-              onSave={handlePlatformSave}
+              multiSelect
+              selectedMulti={localPlatforms}
+              onSaveMulti={handlePlatformsSaveMulti}
               onBack={() => setSubPanel(null)}
             />
           )}
@@ -452,15 +458,15 @@ export function PostReviewPanel({
                         </div>
                       </button>
 
-                      {/* Platform – clickable */}
+                      {/* Platform – clickable (multi) */}
                       <button
                         onClick={() => setSubPanel("platform")}
                         className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors"
                       >
-                        <p className="text-xs text-muted-foreground mb-1">Platform</p>
+                        <p className="text-xs text-muted-foreground mb-1">Platforms ({localPlatforms.length})</p>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium capitalize">{platformDisplay}</span>
-                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium truncate">{platformsDisplay}</span>
+                          <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         </div>
                       </button>
 
@@ -483,27 +489,32 @@ export function PostReviewPanel({
               {/* ── Footer Actions ── */}
               {!editing && (
                 <div className="p-4 border-t space-y-2">
-                  {(post.platform === "facebook" || post.platform === "instagram" || post.platform === "linkedin") && (
-                   <Button
-                      className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-                      onClick={async () => {
-                        let allSuccess = true;
+                  <Button
+                    className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={async () => {
+                      if (localPlatforms.length === 0) {
+                        toast({ title: "No platforms selected", description: "Please select at least one platform.", variant: "destructive" });
+                        return;
+                      }
+                      let allSuccess = true;
+                      for (const plat of localPlatforms) {
+                        const dbPlat = platformMap[plat] || plat;
                         for (const pageName of localPages) {
-                          const success = await publishPost({ ...post, page_name: pageName });
+                          const success = await publishPost({ ...post, platform: dbPlat, page_name: pageName });
                           if (!success) allSuccess = false;
                         }
-                        if (allSuccess) onClose();
-                      }}
-                      disabled={publishing}
-                    >
-                      {publishing ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
-                      {publishing ? "Publishing..." : `Publish to ${localPages.length} page${localPages.length > 1 ? "s" : ""}`}
-                    </Button>
-                  )}
+                      }
+                      if (allSuccess) onClose();
+                    }}
+                    disabled={publishing}
+                  >
+                    {publishing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                    {publishing ? "Publishing..." : `Publish to ${localPlatforms.length} platform${localPlatforms.length > 1 ? "s" : ""} × ${localPages.length} page${localPages.length > 1 ? "s" : ""}`}
+                  </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={onDecline}>
                       Decline
@@ -519,36 +530,50 @@ export function PostReviewPanel({
                           toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
                           return;
                         }
-                        const primaryPage = localPages[0];
+                        if (localPlatforms.length === 0) {
+                          toast({ title: "No platforms selected", description: "Please select at least one platform.", variant: "destructive" });
+                          return;
+                        }
+
+                        // Build all platform×page combos
+                        const combos: { platform: string; page: string }[] = [];
+                        for (const plat of localPlatforms) {
+                          const dbPlat = platformMap[plat] || plat;
+                          for (const page of localPages) {
+                            combos.push({ platform: dbPlat, page });
+                          }
+                        }
+
+                        // Primary post gets first combo
+                        const [primary, ...rest] = combos;
                         updatePost.mutate(
                           {
                             id: post.id,
                             status: "scheduled",
                             qa_status: "scheduled",
-                            page_name: primaryPage,
+                            platform: primary.platform as SocialPost["platform"],
+                            page_name: primary.page,
                           },
                           {
                             onSuccess: async () => {
-                              if (localPages.length > 1) {
-                                for (let i = 1; i < localPages.length; i++) {
-                                  await supabase.from("social_posts").insert({
-                                    user_id: post.user_id,
-                                    platform: post.platform,
-                                    status: "scheduled",
-                                    qa_status: "scheduled",
-                                    title: post.title,
-                                    content: post.content,
-                                    image_url: post.image_url,
-                                    scheduled_date: post.scheduled_date,
-                                    hashtags: post.hashtags,
-                                    page_name: localPages[i],
-                                    content_type: post.content_type,
-                                  });
-                                }
+                              for (const combo of rest) {
+                                await supabase.from("social_posts").insert({
+                                  user_id: post.user_id,
+                                  platform: combo.platform,
+                                  status: "scheduled",
+                                  qa_status: "scheduled",
+                                  title: post.title,
+                                  content: post.content,
+                                  image_url: post.image_url,
+                                  scheduled_date: post.scheduled_date,
+                                  hashtags: post.hashtags,
+                                  page_name: combo.page,
+                                  content_type: post.content_type,
+                                });
                               }
                               toast({
                                 title: "Post scheduled",
-                                description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPages.join(", ")}`,
+                                description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPlatforms.length} platform(s) × ${localPages.length} page(s)`,
                               });
                               onClose();
                             },
