@@ -34,16 +34,7 @@ export function usePublishPost() {
         },
       });
 
-      if (error) {
-        let serverMsg = error.message;
-        try {
-          if ((error as any).context?.body) {
-            const body = await new Response((error as any).context.body).json();
-            if (body?.error) serverMsg = body.error;
-          }
-        } catch {}
-        throw new Error(serverMsg);
-      }
+      if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
       toast({
