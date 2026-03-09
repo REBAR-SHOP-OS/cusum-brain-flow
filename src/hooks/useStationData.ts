@@ -101,7 +101,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
       // 2. Fetch ALL cut_plan_items matching this machine's bar_codes
       let cutterQuery = supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, status, projects(status, customers(name)))")
+        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, status, optimization_mode, projects(status, customers(name)))")
         .in("bar_code", allowedBarCodes)
         .or("phase.eq.queued,phase.eq.cutting")
         .eq("cut_plans.company_id", companyId!)
