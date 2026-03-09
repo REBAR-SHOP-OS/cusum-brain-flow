@@ -112,7 +112,7 @@ function extractPostData(content: string): ExtractedPost[] {
   });
   textContent = textContent.replace(/\[⬇️ Download\]\([^)]*social-images[^)]*\)/g, "");
   textContent = textContent.replace(/🔄\s*Regenerate/g, "");
-  textContent = textContent.replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-]\s*(\d{1,2}:\d{2}\s*(AM|PM)\s*\|?\s*)?.*/gm, "");
+  textContent = textContent.replace(/^#{1,4}\s*Slot\s*[\d:]+\s*[—\-].*/gm, "");
   // Remove contact info lines from caption
   for (const pattern of contactPatterns) {
     textContent = textContent.replace(pattern, "");
