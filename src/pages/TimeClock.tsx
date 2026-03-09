@@ -38,13 +38,14 @@ function formatDuration(mins: number) {
 }
 
 export default function TimeClock() {
-  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, myProfile, profiles } = useTimeClock();
+  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, myProfile, profiles } = useTimeClock();
   const leave = useLeaveManagement();
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
   const face = useFaceRecognition();
   const { deleteProfile } = useProfiles();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [clockOutTarget, setClockOutTarget] = useState<{ id: string; name: string } | null>(null);
   const [searchParams] = useSearchParams();
 
   const [faceMode, setFaceMode] = useState(false);
