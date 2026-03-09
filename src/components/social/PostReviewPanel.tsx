@@ -551,6 +551,7 @@ export function PostReviewPanel({
                             id: post.id,
                             status: "scheduled",
                             qa_status: "scheduled",
+                            scheduled_date: post.scheduled_date,
                             platform: primary.platform as SocialPost["platform"],
                             page_name: primary.page,
                           },

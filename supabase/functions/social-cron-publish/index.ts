@@ -45,7 +45,10 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Found ${duePosts.length} posts due for publishing`);
+    console.log(`Found ${duePosts.length} posts due for publishing. Current UTC: ${now}`);
+    for (const p of duePosts) {
+      console.log(`  Post ${p.id}: platform=${p.platform}, scheduled_date=${p.scheduled_date}, status=${p.status}`);
+    }
 
     const results: { postId: string; platform: string; success: boolean; error?: string }[] = [];
 
