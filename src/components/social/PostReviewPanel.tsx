@@ -203,19 +203,23 @@ export function PostReviewPanel({
     onClose();
   };
 
-  const handlePlatformSave = (value: string) => {
-    // Map compound values back to DB platform values
-    const platformMap: Record<string, string> = {
-      facebook: "facebook",
-      instagram: "instagram",
-      instagram_fb: "instagram",
-      linkedin: "linkedin",
-      linkedin_org: "linkedin",
-      youtube: "youtube",
-      tiktok: "tiktok",
-    };
-    const dbPlatform = platformMap[value] || value;
-    updatePost.mutate({ id: post.id, platform: dbPlatform as SocialPost["platform"] });
+  const platformMap: Record<string, string> = {
+    facebook: "facebook",
+    instagram: "instagram",
+    instagram_fb: "instagram",
+    linkedin: "linkedin",
+    linkedin_org: "linkedin",
+    youtube: "youtube",
+    tiktok: "tiktok",
+  };
+
+  const handlePlatformsSaveMulti = (values: string[]) => {
+    setLocalPlatforms(values);
+    // Update the primary post's platform to the first selected
+    if (values.length > 0) {
+      const dbPlatform = platformMap[values[0]] || values[0];
+      updatePost.mutate({ id: post.id, platform: dbPlatform as SocialPost["platform"] });
+    }
     setSubPanel(null);
   };
 
