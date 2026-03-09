@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, Send, ImageIcon, Video, ChevronDown } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { usePublishPost } from "@/hooks/usePublishPost";
+
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,13 +60,9 @@ type SubPanelView = null | "content_type" | "platform" | "pages";
 /* ── Date Schedule Popover ── */
 function DateSchedulePopover({
   post,
-  onPublishNow,
-  publishing,
   onSetDate,
 }: {
   post: SocialPost;
-  onPublishNow: () => void;
-  publishing: boolean;
   onSetDate: (date: Date) => void;
 }) {
   const initDate = post.scheduled_date ? new Date(post.scheduled_date) : new Date();
@@ -110,21 +106,10 @@ function DateSchedulePopover({
           {minutes.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
       </div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1 gap-1.5"
-          onClick={onPublishNow}
-          disabled={publishing}
-        >
-          {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          Post Now
-        </Button>
-        <Button size="sm" className="flex-1" onClick={handleSetDate}>
-          Set Date
-        </Button>
-      </div>
+      <Button size="sm" className="w-full" onClick={handleSetDate}>
+        <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
+        Set Date
+      </Button>
     </div>
   );
 }
@@ -137,7 +122,6 @@ export function PostReviewPanel({
   onDecline,
 }: PostReviewPanelProps) {
   const { updatePost, deletePost } = useSocialPosts();
-  const { publishPost, publishing } = usePublishPost();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -149,6 +133,7 @@ export function PostReviewPanel({
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
 
   // Sub-panel state
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
@@ -407,7 +392,7 @@ export function PostReviewPanel({
                     {/* ── Fields Section ── */}
                     <div className="px-4 pt-4 pb-4 space-y-3">
                       {/* Publish date */}
-                      <Popover>
+                      <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
                         <PopoverTrigger asChild>
                           <button className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors">
                             <p className="text-xs text-muted-foreground mb-1">Publish date</p>
@@ -424,15 +409,6 @@ export function PostReviewPanel({
                         <PopoverContent className="w-auto p-0" align="start" side="left">
                           <DateSchedulePopover
                             post={post}
-                           onPublishNow={async () => {
-                              let allSuccess = true;
-                              for (const pageName of localPages) {
-                                const success = await publishPost({ ...post, page_name: pageName });
-                                if (!success) allSuccess = false;
-                              }
-                              if (allSuccess) onClose();
-                            }}
-                            publishing={publishing}
                             onSetDate={(date) => {
                               updatePost.mutate({
                                 id: post.id,
@@ -441,6 +417,7 @@ export function PostReviewPanel({
                                 qa_status: "scheduled",
                                 page_name: post.page_name || localPages[0] || null,
                               });
+                              setDatePopoverOpen(false);
                             }}
                           />
                         </PopoverContent>
@@ -489,32 +466,6 @@ export function PostReviewPanel({
               {/* ── Footer Actions ── */}
               {!editing && (
                 <div className="p-4 border-t space-y-2">
-                  <Button
-                    className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-                    onClick={async () => {
-                      if (localPlatforms.length === 0) {
-                        toast({ title: "No platforms selected", description: "Please select at least one platform.", variant: "destructive" });
-                        return;
-                      }
-                      let allSuccess = true;
-                      for (const plat of localPlatforms) {
-                        const dbPlat = platformMap[plat] || plat;
-                        for (const pageName of localPages) {
-                          const success = await publishPost({ ...post, platform: dbPlat, page_name: pageName });
-                          if (!success) allSuccess = false;
-                        }
-                      }
-                      if (allSuccess) onClose();
-                    }}
-                    disabled={publishing}
-                  >
-                    {publishing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                    {publishing ? "Publishing..." : `Publish to ${localPlatforms.length} platform${localPlatforms.length > 1 ? "s" : ""} × ${localPages.length} page${localPages.length > 1 ? "s" : ""}`}
-                  </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={onDecline}>
                       Decline
