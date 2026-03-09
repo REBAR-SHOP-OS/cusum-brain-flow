@@ -1,23 +1,52 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Glasses Capture — Cross-Platform Web Page
 
-## Webhook URL
-```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+## Problem
+iOS Shortcuts only work on iPhone. User needs Android and iOS Chrome support.
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+## Solution
+Build a **`/glasses`** page inside the existing PWA that:
+1. Opens the phone camera (using `<input type="file" capture="environment">`)
+2. Lets user snap a photo or pick from gallery (Meta View album)
+3. Sends it to `vizzy-glasses-webhook` for Gemini analysis
+4. Shows the AI analysis result inline
+5. Lists recent captures from `glasses_captures` table
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+Since the app is already a PWA, users on **any device** (Android, iOS Chrome, Samsung Internet) can install it to their home screen and use camera capture.
+
+## Implementation
+
+### 1. Create `src/pages/GlassesCapture.tsx`
+- Camera capture button (native file input with `accept="image/*"`)
+- Optional text prompt field
+- Submit → convert to base64 → call webhook
+- Display analysis result
+- List of recent captures from DB
+
+### 2. Create `src/components/glasses/GlassesCaptureForm.tsx`
+- Camera/gallery picker
+- Base64 conversion utility
+- POST to webhook with `GLASSES_WEBHOOK_KEY` header
+
+### 3. Create `src/components/glasses/GlassesCaptureHistory.tsx`
+- Query `glasses_captures` table
+- Show image thumbnails + analysis text
+- Realtime subscription for new captures
+
+### 4. Add route to `App.tsx`
+- `/glasses` → `GlassesCapture` page
+
+### 5. Store webhook key approach
+- The webhook key is a secret — we'll call the webhook via a thin edge function proxy (`vizzy-glasses-submit`) that adds the key server-side, so the web client never exposes it
+- OR: since the user is authenticated in the PWA, we create an authenticated version that bypasses the webhook key
+
+**Recommended**: Create a simple authenticated wrapper — if user is logged in, the edge function trusts the JWT instead of the webhook key. This is cleaner for in-app usage.
+
+### Files to create/edit
+- `src/pages/GlassesCapture.tsx` — main page
+- `src/components/glasses/GlassesCaptureForm.tsx` — capture form
+- `src/components/glasses/GlassesCaptureHistory.tsx` — history list
+- `src/App.tsx` — add route
+- Update `vizzy-glasses-webhook` to also accept JWT auth (not just webhook key)
+
