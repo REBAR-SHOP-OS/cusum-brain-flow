@@ -134,6 +134,7 @@ export function PostReviewPanel({
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
 
   // Sub-panel state
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
