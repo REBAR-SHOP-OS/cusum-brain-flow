@@ -177,9 +177,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     ? localCompletedOverride[currentItem.id]
     : completedAtRunStart != null
       ? completedAtRunStart + slotTracker.totalCutsDone
-      : slotTracker.slots.length > 0
-        ? completedPieces + slotTracker.totalCutsDone
-        : completedPieces;
+      : completedPieces; // DB value already includes increments — never double-add local cuts
 
   const remainingPieces = totalPieces - effectiveCompleted;
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
