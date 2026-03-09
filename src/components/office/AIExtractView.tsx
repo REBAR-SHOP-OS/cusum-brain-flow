@@ -442,7 +442,7 @@ export function AIExtractView() {
         }));
 
       // Pre-compute all three modes for comparison
-      const modes: OptimizerConfig["mode"][] = ["standard", "optimized", "best-fit"];
+      const modes: OptimizerConfig["mode"][] = ["manual", "standard", "optimized", "best-fit"];
       const modeResults: Record<string, OptimizationSummary> = {};
       for (const mode of modes) {
         modeResults[mode] = runOptimization(cutItems, { ...optimizerConfig, mode });
