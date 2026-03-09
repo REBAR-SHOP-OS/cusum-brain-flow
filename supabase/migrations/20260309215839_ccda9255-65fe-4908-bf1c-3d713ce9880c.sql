@@ -1,0 +1,1 @@
+ALTER TABLE public.cut_plans ADD COLUMN optimization_mode text DEFAULT 'best-fit';
