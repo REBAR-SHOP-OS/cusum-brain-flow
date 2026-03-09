@@ -300,11 +300,13 @@ export function runOptimization(
   for (const [barSize, pieces] of bySize) {
     const { valid, skipped } = partitionPieces(pieces, stockLengthMm);
 
-    const bars = mode === "best-fit"
-      ? bestFitCut(valid, stockLengthMm, kerfMm)
-      : mode === "optimized"
-        ? optimizedCut(valid, stockLengthMm, kerfMm)
-        : standardCut(valid, stockLengthMm, kerfMm);
+    const bars = mode === "manual"
+      ? manualCut(valid, stockLengthMm)
+      : mode === "best-fit"
+        ? bestFitCut(valid, stockLengthMm, kerfMm)
+        : mode === "optimized"
+          ? optimizedCut(valid, stockLengthMm, kerfMm)
+          : standardCut(valid, stockLengthMm, kerfMm);
 
     results.push(buildResult(barSize, stockLengthMm, bars, skipped, minRemnantMm));
   }

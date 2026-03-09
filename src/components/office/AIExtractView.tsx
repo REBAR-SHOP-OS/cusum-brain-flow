@@ -1518,8 +1518,9 @@ export function AIExtractView() {
               </div>
 
               {/* Mode cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 {([
+                  { mode: "manual" as const, label: "Manual", desc: "No optimization — supervisor picks order" },
                   { mode: "standard" as const, label: "Standard", desc: "Sequential, fewer stopper moves" },
                   { mode: "optimized" as const, label: "Optimized (FFD)", desc: "First Fit Decreasing bin-pack" },
                   { mode: "best-fit" as const, label: "Best Fit (BFD)", desc: "Tightest fit, least waste" },
