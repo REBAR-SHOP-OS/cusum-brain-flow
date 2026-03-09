@@ -1,40 +1,29 @@
 
 
-# Plan: Immediate Production Reset + Auto Clock-Out Cron Setup
+# Plan: Add Admin Clock-Out Button for Other Users
 
-## Current Production State
-- **15 open shifts** (some going back 600+ hours — e.g., Ryle Lachini 619h, Kourosh Zand 409h, Zahra Zokaei 119h, Saurabh/Ben 72h+)
-- **13 active profiles** all stuck as `is_active: true`
-- **Zero auto-clockout cron jobs** exist in production — the function was deployed but never scheduled
+## What
+Add a "Clock Out" button on each team member's card in the Team Status tabs, visible only to admin users. Clicking it will close that user's open shift and set their profile to inactive.
 
-## Root Cause
-The `auto-clockout` edge function exists but no `cron.schedule()` jobs were ever created in production to call it. All previous attempts only modified the Test environment.
+## How
 
-## Steps
+### 1. Add `adminClockOut` function to `useTimeClock.ts`
+- New async function that takes a `profileId` parameter
+- Closes all open `time_clock_entries` for that profile (`UPDATE ... SET clock_out = NOW() WHERE profile_id = X AND clock_out IS NULL`)
+- Sets `profiles.is_active = false` for that profile
+- Calls `fetchEntries()` to refresh
 
-### 1. Immediate Reset (Live SQL)
-Run two UPDATE statements directly on **production** to close all 15 open shifts and deactivate all 13 profiles:
+### 2. Update `TimeClock.tsx` — `renderProfileCard`
+- Import `useSuperAdmin` (already available) or use existing `isAdmin` from `useUserRole`
+- For clocked-in users, show a small "Clock Out" button (LogOut icon) next to the Active badge — only when `isAdmin` is true
+- On click, call `adminClockOut(profile.id)` with a confirmation dialog
+- Reuse existing `ConfirmActionDialog` component
 
-```sql
-UPDATE time_clock_entries 
-SET clock_out = NOW(), notes = '[auto-closed: manual reset]' 
-WHERE clock_out IS NULL;
+### 3. Wire up state
+- Add `adminClockOut` to the return of `useTimeClock`
+- Add a `clockOutTarget` state in `TimeClock.tsx` for the confirmation dialog
 
-UPDATE profiles SET is_active = false WHERE is_active = true;
-```
-
-### 2. Create Two Cron Jobs (Live SQL)
-Using the production anon key (already visible in existing cron jobs):
-
-- **8 AM ET daily** (`0 12 * * *` UTC): `auto-clockout` with `{"mode": "morning"}` — closes all shifts, resets all profiles to inactive
-- **5 PM ET daily** (`0 21 * * *` UTC): `auto-clockout` with `{"mode": "evening"}` — closes any remaining open shifts
-
-### 3. No Code Changes Needed
-The edge function already handles both modes correctly. No file modifications required.
-
-## Expected Result
-- All users immediately see themselves as "Not Clocked In"
-- Every day at 8 AM ET: automatic full reset (clean slate)
-- Every day at 5 PM ET: auto clock-out for anyone who forgot
-- Users must manually clock in (or use Face ID kiosk) to appear active
+### Files Changed
+- `src/hooks/useTimeClock.ts` — add `adminClockOut` function
+- `src/pages/TimeClock.tsx` — add clock-out button to profile cards + confirmation dialog
 
