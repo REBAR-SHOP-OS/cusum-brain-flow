@@ -122,7 +122,6 @@ export function PostReviewPanel({
   onDecline,
 }: PostReviewPanelProps) {
   const { updatePost, deletePost } = useSocialPosts();
-  const { publishPost, publishing } = usePublishPost();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
