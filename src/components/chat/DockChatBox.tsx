@@ -431,8 +431,10 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                     "px-3 py-1.5 text-xs leading-relaxed break-words",
                                     isMe
                                       ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm"
-                                      : "bg-muted text-foreground rounded-2xl rounded-bl-sm"
+                                      : "bg-muted text-foreground rounded-2xl rounded-bl-sm",
+                                    detectRtl(cleanText) && "text-right"
                                   )}
+                                  dir={detectRtl(cleanText) ? "rtl" : "ltr"}
                                 >
                                   {cleanText}
                                 </div>
