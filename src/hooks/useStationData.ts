@@ -52,7 +52,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
         // Bender: show ALL bend items that are cut_done or bending (regardless of machine assignment)
       let benderQuery = supabase
           .from("cut_plan_items")
-          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(status, customers(name)))")
+          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, optimization_mode, projects(status, customers(name)))")
           .eq("bend_type", "bend")
           .eq("cut_plans.company_id", companyId!)
           .or("phase.eq.cut_done,phase.eq.bending");
