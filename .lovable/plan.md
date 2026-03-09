@@ -1,34 +1,22 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Fix: Auto Clock-Out Function Not Deployed + Immediate Reset
 
 ## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+The `auto-clockout` edge function returns 404 — it was never deployed. This means the 8 AM morning reset cron has been firing but failing silently. Users who clocked in days ago may still appear as "clocked in" if the page hasn't refreshed after manual cleanup.
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+The DB currently shows **no open shifts** (they may have been manually closed), but the function must be deployed for the daily 8 AM reset to work going forward.
 
-## Fix
-Two options — the simplest and most reliable:
+## Plan
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+### 1. Deploy the `auto-clockout` edge function
+Deploy the updated function that supports `mode: "morning"` and `mode: "evening"`.
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+### 2. Manually trigger the morning reset
+Call the function with `{"mode": "morning"}` to ensure any remaining stale state (like `is_active: true` on profiles) is cleaned up.
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+### 3. Verify all profiles are set to inactive
+After the function runs, confirm that `is_active` is false for all profiles (they must clock in manually to become active).
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
-
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
-
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+No code changes needed — just deployment and execution of the existing edge function.
 
