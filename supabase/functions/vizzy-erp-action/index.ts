@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
         const { id, updates } = params;
         const safeUpdates: any = {};
         if (updates.phase) safeUpdates.phase = updates.phase;
-        if (updates.completed_pieces !== undefined) safeUpdates.completed_pieces = updates.completed_pieces;
+        // completed_pieces is guarded — only atomic increment RPC may modify it
         if (updates.notes) safeUpdates.notes = updates.notes;
         if (updates.needs_fix !== undefined) safeUpdates.needs_fix = updates.needs_fix;
         const { data, error } = await supabaseAdmin.from("cut_plan_items").update(safeUpdates).eq("id", id).select().single();
