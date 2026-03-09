@@ -530,36 +530,50 @@ export function PostReviewPanel({
                           toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
                           return;
                         }
-                        const primaryPage = localPages[0];
+                        if (localPlatforms.length === 0) {
+                          toast({ title: "No platforms selected", description: "Please select at least one platform.", variant: "destructive" });
+                          return;
+                        }
+
+                        // Build all platform×page combos
+                        const combos: { platform: string; page: string }[] = [];
+                        for (const plat of localPlatforms) {
+                          const dbPlat = platformMap[plat] || plat;
+                          for (const page of localPages) {
+                            combos.push({ platform: dbPlat, page });
+                          }
+                        }
+
+                        // Primary post gets first combo
+                        const [primary, ...rest] = combos;
                         updatePost.mutate(
                           {
                             id: post.id,
                             status: "scheduled",
                             qa_status: "scheduled",
-                            page_name: primaryPage,
+                            platform: primary.platform as SocialPost["platform"],
+                            page_name: primary.page,
                           },
                           {
                             onSuccess: async () => {
-                              if (localPages.length > 1) {
-                                for (let i = 1; i < localPages.length; i++) {
-                                  await supabase.from("social_posts").insert({
-                                    user_id: post.user_id,
-                                    platform: post.platform,
-                                    status: "scheduled",
-                                    qa_status: "scheduled",
-                                    title: post.title,
-                                    content: post.content,
-                                    image_url: post.image_url,
-                                    scheduled_date: post.scheduled_date,
-                                    hashtags: post.hashtags,
-                                    page_name: localPages[i],
-                                    content_type: post.content_type,
-                                  });
-                                }
+                              for (const combo of rest) {
+                                await supabase.from("social_posts").insert({
+                                  user_id: post.user_id,
+                                  platform: combo.platform,
+                                  status: "scheduled",
+                                  qa_status: "scheduled",
+                                  title: post.title,
+                                  content: post.content,
+                                  image_url: post.image_url,
+                                  scheduled_date: post.scheduled_date,
+                                  hashtags: post.hashtags,
+                                  page_name: combo.page,
+                                  content_type: post.content_type,
+                                });
                               }
                               toast({
                                 title: "Post scheduled",
-                                description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPages.join(", ")}`,
+                                description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPlatforms.length} platform(s) × ${localPages.length} page(s)`,
                               });
                               onClose();
                             },
