@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
 import { SelectionSubPanel, type SelectionOption } from "./SelectionSubPanel";
 import { uploadSocialMediaAsset } from "@/lib/socialMediaStorage";
 import { useToast } from "@/hooks/use-toast";
+import { usePublishPost } from "@/hooks/usePublishPost";
 
 interface PostReviewPanelProps {
   post: SocialPost | null;
@@ -123,6 +124,7 @@ export function PostReviewPanel({
 }: PostReviewPanelProps) {
   const { updatePost, deletePost } = useSocialPosts();
   const { toast } = useToast();
+  const { publishPost, publishing } = usePublishPost();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -466,6 +468,48 @@ export function PostReviewPanel({
               {/* ── Footer Actions ── */}
               {!editing && (
                 <div className="p-4 border-t space-y-2">
+                  {/* Publish Now */}
+                  <Button
+                    className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
+                    disabled={publishing}
+                    onClick={async () => {
+                      if (localPages.length === 0) {
+                        toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
+                        return;
+                      }
+                      if (localPlatforms.length === 0) {
+                        toast({ title: "No platforms selected", description: "Please select at least one platform.", variant: "destructive" });
+                        return;
+                      }
+
+                      const combos: { platform: string; page: string }[] = [];
+                      for (const plat of localPlatforms) {
+                        const dbPlat = platformMap[plat] || plat;
+                        for (const page of localPages) {
+                          combos.push({ platform: dbPlat, page });
+                        }
+                      }
+
+                      let allOk = true;
+                      for (const combo of combos) {
+                        const ok = await publishPost({
+                          id: post.id,
+                          platform: combo.platform,
+                          content: post.content,
+                          title: post.title,
+                          hashtags: post.hashtags,
+                          image_url: post.image_url,
+                          page_name: combo.page,
+                        });
+                        if (!ok) allOk = false;
+                      }
+                      if (allOk) onClose();
+                    }}
+                  >
+                    {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {publishing ? "Publishing..." : "Publish Now"}
+                  </Button>
+
                   <div className="flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={onDecline}>
                       Decline
