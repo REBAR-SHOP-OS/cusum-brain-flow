@@ -130,7 +130,13 @@ export function useStationData(machineId: string | null, machineType?: string, p
           customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
           project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
         }))
-        .filter((item: StationItem) => allowedBarCodes.includes(item.bar_code)) as StationItem[];
+        .filter((item: StationItem) => allowedBarCodes.includes(item.bar_code))
+        .filter((item: StationItem) => {
+          const CUTTER_02_ID = "b0000000-0000-0000-0000-000000000002";
+          const BLOCKED_ON_CUTTER_02 = new Set(["10M", "15M"]);
+          if (machineId === CUTTER_02_ID && BLOCKED_ON_CUTTER_02.has(item.bar_code)) return false;
+          return true;
+        }) as StationItem[];
     },
   });
 
