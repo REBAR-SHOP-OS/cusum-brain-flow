@@ -489,27 +489,32 @@ export function PostReviewPanel({
               {/* ── Footer Actions ── */}
               {!editing && (
                 <div className="p-4 border-t space-y-2">
-                  {(post.platform === "facebook" || post.platform === "instagram" || post.platform === "linkedin") && (
-                   <Button
-                      className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-                      onClick={async () => {
-                        let allSuccess = true;
+                  <Button
+                    className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={async () => {
+                      if (localPlatforms.length === 0) {
+                        toast({ title: "No platforms selected", description: "Please select at least one platform.", variant: "destructive" });
+                        return;
+                      }
+                      let allSuccess = true;
+                      for (const plat of localPlatforms) {
+                        const dbPlat = platformMap[plat] || plat;
                         for (const pageName of localPages) {
-                          const success = await publishPost({ ...post, page_name: pageName });
+                          const success = await publishPost({ ...post, platform: dbPlat, page_name: pageName });
                           if (!success) allSuccess = false;
                         }
-                        if (allSuccess) onClose();
-                      }}
-                      disabled={publishing}
-                    >
-                      {publishing ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
-                      {publishing ? "Publishing..." : `Publish to ${localPages.length} page${localPages.length > 1 ? "s" : ""}`}
-                    </Button>
-                  )}
+                      }
+                      if (allSuccess) onClose();
+                    }}
+                    disabled={publishing}
+                  >
+                    {publishing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                    {publishing ? "Publishing..." : `Publish to ${localPlatforms.length} platform${localPlatforms.length > 1 ? "s" : ""} × ${localPages.length} page${localPages.length > 1 ? "s" : ""}`}
+                  </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={onDecline}>
                       Decline
