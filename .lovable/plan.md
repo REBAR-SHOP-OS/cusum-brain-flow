@@ -1,28 +1,34 @@
 
 
-# فیلتر سخت‌گیرانه برای Cutter-01 — فقط 10M و 15M
+# Fix: Cron Job Authentication for Scheduled Post Publishing
 
-## مشکل
-دیتابیس درست است (Cutter-01 فقط 10M و 15M دارد)، اما فیلتر امنیتی client-side فقط برای Cutter-02 نوشته شده. باید همین محافظت برای Cutter-01 هم اضافه شود.
+## Problem
+The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
 
-## تغییرات — یک فایل: `src/hooks/useStationData.ts`
+**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
 
-فیلتر موجود در خطوط 134-138 را گسترش می‌دهیم تا Cutter-01 هم شامل شود:
+## Fix
+Two options — the simplest and most reliable:
+
+**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+
+Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
 
 ```typescript
-.filter((item: StationItem) => {
-  const CUTTER_01_ID = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";
-  const CUTTER_02_ID = "b0000000-0000-0000-0000-000000000002";
-  const ALLOWED_ON_CUTTER_01 = new Set(["10M", "15M"]);
-  const BLOCKED_ON_CUTTER_02 = new Set(["10M", "15M"]);
-  
-  if (machineId === CUTTER_01_ID && !ALLOWED_ON_CUTTER_01.has(item.bar_code)) return false;
-  if (machineId === CUTTER_02_ID && BLOCKED_ON_CUTTER_02.has(item.bar_code)) return false;
-  return true;
-})
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+const isAnonCron = authHeader === `Bearer ${anonKey}`;
+
+if (!isServiceRole && !isAnonCron) {
+  // check x-cron-secret fallback...
+}
 ```
 
-### بدون تغییر
-- سایر فایل‌ها، دیتابیس، و منطق سایر ماشین‌ها بدون تغییر
-- این فیلتر روی تمام سه قسمت (Machine Card، Project Picker counts، Item list) اعمال می‌شود چون همه از همین hook تغذیه می‌شوند
+This is the safest approach because:
+- We cannot put the service role key in a migration file (it would be visible in version control)
+- The anon key is already in the cron job and working
+- The function only processes pre-approved scheduled posts
+
+### File to edit
+1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
 
