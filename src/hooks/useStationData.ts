@@ -132,8 +132,11 @@ export function useStationData(machineId: string | null, machineType?: string, p
         }))
         .filter((item: StationItem) => allowedBarCodes.includes(item.bar_code))
         .filter((item: StationItem) => {
+          const CUTTER_01_ID = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";
           const CUTTER_02_ID = "b0000000-0000-0000-0000-000000000002";
+          const ALLOWED_ON_CUTTER_01 = new Set(["10M", "15M"]);
           const BLOCKED_ON_CUTTER_02 = new Set(["10M", "15M"]);
+          if (machineId === CUTTER_01_ID && !ALLOWED_ON_CUTTER_01.has(item.bar_code)) return false;
           if (machineId === CUTTER_02_ID && BLOCKED_ON_CUTTER_02.has(item.bar_code)) return false;
           return true;
         }) as StationItem[];
