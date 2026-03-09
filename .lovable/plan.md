@@ -1,21 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Fix 404 on Published URL
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Problem
-Visiting `https://cusum-brain-flow.lovable.app/glasses` directly returns a 404 because the hosting server doesn't know to serve `index.html` for all routes. The app uses client-side routing (React Router), so all paths need to fall back to `index.html`.
-
-## Solution
-Add a `public/_redirects` file with a catch-all rule. Lovable's hosting uses the same convention as Netlify:
-
+## Webhook URL
 ```
-/*    /index.html   200
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
 ```
 
-This single line tells the server: "For any path that doesn't match a real file, serve `index.html` with a 200 status." React Router then handles the route on the client side.
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
-## Files
-- **Create**: `public/_redirects` — one-line SPA fallback rule
-
-After this change, the user needs to **publish** again for it to take effect on the live URL. The preview should already work since Vite handles SPA routing in dev mode.
-
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
