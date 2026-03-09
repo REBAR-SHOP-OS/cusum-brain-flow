@@ -210,6 +210,31 @@ export function useTimeClock() {
     }
   };
 
+  const adminClockOut = async (profileId: string) => {
+    setPunching(true);
+    try {
+      const { error } = await supabase
+        .from("time_clock_entries")
+        .update({ clock_out: new Date().toISOString(), notes: "[admin clock-out]" } as any)
+        .eq("profile_id", profileId)
+        .is("clock_out", null);
+
+      if (error) {
+        console.error("[TimeClock] adminClockOut error:", error);
+        toast.error("Failed to clock out user");
+      } else {
+        await supabase.from("profiles").update({ is_active: false } as any).eq("id", profileId);
+        toast.success("User clocked out successfully");
+        await fetchEntries();
+      }
+    } catch (err) {
+      console.error("[TimeClock] adminClockOut exception:", err);
+      toast.error("Failed to clock out user");
+    } finally {
+      setPunching(false);
+    }
+  };
+
   return {
     entries,
     allEntries,
@@ -218,6 +243,7 @@ export function useTimeClock() {
     punching,
     clockIn,
     clockOut,
+    adminClockOut,
     myProfile,
     profiles,
   };
