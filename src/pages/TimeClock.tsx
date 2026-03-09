@@ -38,13 +38,14 @@ function formatDuration(mins: number) {
 }
 
 export default function TimeClock() {
-  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, myProfile, profiles } = useTimeClock();
+  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, myProfile, profiles } = useTimeClock();
   const leave = useLeaveManagement();
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
   const face = useFaceRecognition();
   const { deleteProfile } = useProfiles();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [clockOutTarget, setClockOutTarget] = useState<{ id: string; name: string } | null>(null);
   const [searchParams] = useSearchParams();
 
   const [faceMode, setFaceMode] = useState(false);
@@ -217,9 +218,21 @@ export default function TimeClock() {
                 : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
             </p>
           </div>
-          <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
-            {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
+              {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
+            </Badge>
+            {isAdmin && isClockedIn && profile.id !== myProfile?.id && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => setClockOutTarget({ id: profile.id, name: profile.full_name })}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
     );
@@ -571,6 +584,22 @@ export default function TimeClock() {
             deleteProfile.mutate(deleteTarget.id, {
               onSuccess: () => setDeleteTarget(null),
             });
+          }
+        }}
+      />
+
+      <ConfirmActionDialog
+        open={!!clockOutTarget}
+        onOpenChange={(open) => !open && setClockOutTarget(null)}
+        title="Clock Out User"
+        description={`Are you sure you want to clock out "${clockOutTarget?.name}"?`}
+        variant="destructive"
+        confirmLabel="Yes, Clock Out"
+        loading={punching}
+        onConfirm={async () => {
+          if (clockOutTarget) {
+            await adminClockOut(clockOutTarget.id);
+            setClockOutTarget(null);
           }
         }}
       />

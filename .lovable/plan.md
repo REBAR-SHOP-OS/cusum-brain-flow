@@ -1,29 +1,34 @@
 
 
-# Plan: Add Admin Clock-Out Button for Other Users
+# Fix: Cron Job Authentication for Scheduled Post Publishing
 
-## What
-Add a "Clock Out" button on each team member's card in the Team Status tabs, visible only to admin users. Clicking it will close that user's open shift and set their profile to inactive.
+## Problem
+The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
 
-## How
+**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
 
-### 1. Add `adminClockOut` function to `useTimeClock.ts`
-- New async function that takes a `profileId` parameter
-- Closes all open `time_clock_entries` for that profile (`UPDATE ... SET clock_out = NOW() WHERE profile_id = X AND clock_out IS NULL`)
-- Sets `profiles.is_active = false` for that profile
-- Calls `fetchEntries()` to refresh
+## Fix
+Two options — the simplest and most reliable:
 
-### 2. Update `TimeClock.tsx` — `renderProfileCard`
-- Import `useSuperAdmin` (already available) or use existing `isAdmin` from `useUserRole`
-- For clocked-in users, show a small "Clock Out" button (LogOut icon) next to the Active badge — only when `isAdmin` is true
-- On click, call `adminClockOut(profile.id)` with a confirmation dialog
-- Reuse existing `ConfirmActionDialog` component
+**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
 
-### 3. Wire up state
-- Add `adminClockOut` to the return of `useTimeClock`
-- Add a `clockOutTarget` state in `TimeClock.tsx` for the confirmation dialog
+Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
 
-### Files Changed
-- `src/hooks/useTimeClock.ts` — add `adminClockOut` function
-- `src/pages/TimeClock.tsx` — add clock-out button to profile cards + confirmation dialog
+```typescript
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+const isAnonCron = authHeader === `Bearer ${anonKey}`;
+
+if (!isServiceRole && !isAnonCron) {
+  // check x-cron-secret fallback...
+}
+```
+
+This is the safest approach because:
+- We cannot put the service role key in a migration file (it would be visible in version control)
+- The anon key is already in the cron job and working
+- The function only processes pre-approved scheduled posts
+
+### File to edit
+1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
 
