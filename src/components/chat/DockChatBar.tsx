@@ -79,7 +79,7 @@ export function DockChatBar() {
   // Filter profiles based on domain
   const visibleProfiles = profiles.filter((p) => {
     if (p.id === myProfile?.id) return false;
-    if (p.is_active === false) return false;
+    
     if (isInternal) return p.email?.endsWith("@rebar.shop");
     return true;
   });
