@@ -166,6 +166,7 @@ const App = () => (
                     <Route path="/shopfloor/delivery/:stopId" element={<P><DeliveryTerminal /></P>} />
                     
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
+                    <Route path="/glasses" element={<P><GlassesCapture /></P>} />
                     <Route path="/transcribe" element={<P><Transcribe /></P>} />
                     <Route path="/transcribe/watch" element={<ProtectedRoute><TranscribeWatch /></ProtectedRoute>} />
                     <Route path="/team-hub" element={<P><TeamHub /></P>} />
