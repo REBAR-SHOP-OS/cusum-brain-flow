@@ -1,34 +1,21 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# دیباگ مشکل ثبت نشدن قطعات در Cutter Station
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## مشکل یافت‌شده
+بررسی دیتابیس نشان می‌دهد آیتم مورد نظر (mark `x`, 10M, 710mm, 12 قطعه) هنوز `completed_pieces = 0` دارد. یعنی RPC اتمیک `increment_completed_pieces` یا اصلا فراخوانی نشده یا بی‌صدا فِیل شده.
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## علت احتمالی
+در `handleRecordStroke` (خط 337-347) فراخوانی RPC به صورت **fire-and-forget** انجام می‌شود — خطاها فقط به `console.error` می‌روند و هیچ toast یا UI feedback به اپراتور نمایش داده نمی‌شود. اگر RPC فِیل شود، اپراتور متوجه نمی‌شود.
 
-## Fix
-Two options — the simplest and most reliable:
+## راه‌حل — `src/components/shopfloor/CutterStationView.tsx`
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+### تغییر ۱: تبدیل fire-and-forget به await با toast خطا
+در `handleRecordStroke`، فراخوانی RPC را از `.then()` به `await` تبدیل می‌کنیم و در صورت خطا toast نمایش داده شود تا اپراتور بداند ثبت ناموفق بوده.
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+### تغییر ۲: اضافه کردن console.log برای دیباگ
+لاگ کردن `activeBars`, `currentItem.id`, و `completedAtRunStart` قبل از فراخوانی RPC تا بتوانیم ببینیم آیا مقادیر درست هستند.
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
-
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
-
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+### تغییر ۳: حذف شرط `completedAtRunStart !== null` 
+این شرط ممکن است در برخی حالات مانع فراخوانی RPC شود. فقط `currentItem` کافی است.
 
