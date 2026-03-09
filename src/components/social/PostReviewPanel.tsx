@@ -552,6 +552,22 @@ export function PostReviewPanel({
                           },
                           {
                             onSuccess: async () => {
+                              // Verify the post was actually saved
+                              const { data: verified } = await supabase
+                                .from("social_posts")
+                                .select("status")
+                                .eq("id", post.id)
+                                .single();
+                              
+                              if (!verified || verified.status !== "scheduled") {
+                                toast({
+                                  title: "خطا در ذخیره‌سازی",
+                                  description: "پست در دیتابیس ذخیره نشد. لطفاً دوباره تلاش کنید یا با ادمین تماس بگیرید.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+
                               for (const combo of rest) {
                                 await supabase.from("social_posts").insert({
                                   user_id: post.user_id,
@@ -568,10 +584,18 @@ export function PostReviewPanel({
                                 });
                               }
                               toast({
-                                title: "Post scheduled",
+                                title: "Post scheduled ✅",
                                 description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPlatforms.length} platform(s) × ${localPages.length} page(s)`,
                               });
                               onClose();
+                            },
+                            onError: (err: Error) => {
+                              console.error("Schedule mutation failed:", err);
+                              toast({
+                                title: "خطا در زمان‌بندی پست",
+                                description: err.message || "دسترسی شما برای زمان‌بندی پست کافی نیست. با ادمین تماس بگیرید.",
+                                variant: "destructive",
+                              });
                             },
                           }
                         );
