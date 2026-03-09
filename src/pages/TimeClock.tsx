@@ -587,6 +587,22 @@ export default function TimeClock() {
           }
         }}
       />
+
+      <ConfirmActionDialog
+        open={!!clockOutTarget}
+        onOpenChange={(open) => !open && setClockOutTarget(null)}
+        title="Clock Out User"
+        description={`Are you sure you want to clock out "${clockOutTarget?.name}"?`}
+        variant="destructive"
+        confirmLabel="Yes, Clock Out"
+        loading={punching}
+        onConfirm={async () => {
+          if (clockOutTarget) {
+            await adminClockOut(clockOutTarget.id);
+            setClockOutTarget(null);
+          }
+        }}
+      />
     </>
   );
 }
