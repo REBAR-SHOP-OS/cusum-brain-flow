@@ -129,9 +129,10 @@ export function useStationData(machineId: string | null, machineType?: string, p
           plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
           project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
           project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
-          customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
-          project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
-        }))
+            customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
+            project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
+            optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
+          }))
         .filter((item: StationItem) => allowedBarCodes.includes(item.bar_code))
         .filter((item: StationItem) => {
           const CUTTER_01_ID = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";
