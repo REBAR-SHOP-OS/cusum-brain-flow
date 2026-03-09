@@ -29,6 +29,7 @@ export interface StationItem {
   project_id: string | null;
   customer_name: string | null;
   project_status: string | null;
+  optimization_mode: string | null;
 }
 
 export interface BarSizeGroup {
@@ -51,7 +52,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
         // Bender: show ALL bend items that are cut_done or bending (regardless of machine assignment)
       let benderQuery = supabase
           .from("cut_plan_items")
-          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(status, customers(name)))")
+          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, optimization_mode, projects(status, customers(name)))")
           .eq("bend_type", "bend")
           .eq("cut_plans.company_id", companyId!)
           .or("phase.eq.cut_done,phase.eq.bending");
@@ -79,6 +80,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
             project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
             customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
             project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
+            optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
           })) as StationItem[];
       }
 
@@ -100,7 +102,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
       // 2. Fetch ALL cut_plan_items matching this machine's bar_codes
       let cutterQuery = supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, status, projects(status, customers(name)))")
+        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, status, optimization_mode, projects(status, customers(name)))")
         .in("bar_code", allowedBarCodes)
         .or("phase.eq.queued,phase.eq.cutting")
         .eq("cut_plans.company_id", companyId!)
@@ -127,9 +129,10 @@ export function useStationData(machineId: string | null, machineType?: string, p
           plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
           project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
           project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
-          customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
-          project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
-        }))
+            customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
+            project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
+            optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
+          }))
         .filter((item: StationItem) => allowedBarCodes.includes(item.bar_code))
         .filter((item: StationItem) => {
           const CUTTER_01_ID = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";

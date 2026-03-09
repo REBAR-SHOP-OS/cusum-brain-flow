@@ -222,15 +222,16 @@ function bestFitCut(
  * Manual (no optimization): each piece gets its own stock bar.
  * Supervisor decides cutting order on the shop floor.
  */
+/**
+ * Manual: same packing as standard (normal pcs/bar), but workflow means
+ * "no jumping" — the station stays on each item until fully complete.
+ */
 function manualCut(
   pieces: { mark: string; lengthMm: number }[],
   stockLengthMm: number,
+  kerfMm: number,
 ): StockBar[] {
-  return pieces.map((piece) => ({
-    stockLengthMm,
-    cuts: [{ mark: piece.mark, lengthMm: piece.lengthMm }],
-    remainderMm: stockLengthMm - piece.lengthMm,
-  }));
+  return standardCut(pieces, stockLengthMm, kerfMm);
 }
 
 /** Count stopper moves (distinct cut lengths) */
@@ -301,7 +302,7 @@ export function runOptimization(
     const { valid, skipped } = partitionPieces(pieces, stockLengthMm);
 
     const bars = mode === "manual"
-      ? manualCut(valid, stockLengthMm)
+      ? manualCut(valid, stockLengthMm, kerfMm)
       : mode === "best-fit"
         ? bestFitCut(valid, stockLengthMm, kerfMm)
         : mode === "optimized"

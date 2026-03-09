@@ -2674,6 +2674,7 @@ export type Database = {
           id: string
           machine_id: string | null
           name: string
+          optimization_mode: string | null
           project_id: string | null
           project_name: string | null
           status: string
@@ -2686,6 +2687,7 @@ export type Database = {
           id?: string
           machine_id?: string | null
           name: string
+          optimization_mode?: string | null
           project_id?: string | null
           project_name?: string | null
           status?: string
@@ -2698,6 +2700,7 @@ export type Database = {
           id?: string
           machine_id?: string | null
           name?: string
+          optimization_mode?: string | null
           project_id?: string | null
           project_name?: string | null
           status?: string
