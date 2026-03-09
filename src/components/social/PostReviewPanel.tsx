@@ -458,15 +458,15 @@ export function PostReviewPanel({
                         </div>
                       </button>
 
-                      {/* Platform – clickable */}
+                      {/* Platform – clickable (multi) */}
                       <button
                         onClick={() => setSubPanel("platform")}
                         className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors"
                       >
-                        <p className="text-xs text-muted-foreground mb-1">Platform</p>
+                        <p className="text-xs text-muted-foreground mb-1">Platforms ({localPlatforms.length})</p>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium capitalize">{platformDisplay}</span>
-                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium truncate">{platformsDisplay}</span>
+                          <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         </div>
                       </button>
 
