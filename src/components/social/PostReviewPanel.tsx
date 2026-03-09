@@ -154,6 +154,7 @@ export function PostReviewPanel({
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
   const [localContentType, setLocalContentType] = useState("post");
   const [localPages, setLocalPages] = useState<string[]>(["Ontario Steel Detailing"]);
+  const [localPlatforms, setLocalPlatforms] = useState<string[]>([post?.platform || "facebook"]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
