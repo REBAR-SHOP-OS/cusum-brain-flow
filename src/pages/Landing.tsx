@@ -238,7 +238,7 @@ export default function Landing() {
         {/* Competitive Positioning */}
         <section className="py-20 px-6 bg-muted/30" aria-label="Competitive positioning">
           <div className="max-w-5xl mx-auto">
-            <h2 className="text-3xl font-bold text-foreground text-center mb-4">Why LOVABLE Is Different</h2>
+            <h2 className="text-3xl font-bold text-foreground text-center mb-4">Why REBAR SHOP OS Is Different</h2>
             <p className="text-muted-foreground text-center mb-14 max-w-2xl mx-auto">No one else owns production intelligence for rebar factories.</p>
             <div className="grid md:grid-cols-3 gap-6 mb-10">
               {COMPETITORS.map((c) => (
