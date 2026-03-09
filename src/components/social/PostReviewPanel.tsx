@@ -392,7 +392,7 @@ export function PostReviewPanel({
                     {/* ── Fields Section ── */}
                     <div className="px-4 pt-4 pb-4 space-y-3">
                       {/* Publish date */}
-                      <Popover>
+                      <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
                         <PopoverTrigger asChild>
                           <button className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors">
                             <p className="text-xs text-muted-foreground mb-1">Publish date</p>
@@ -409,15 +409,6 @@ export function PostReviewPanel({
                         <PopoverContent className="w-auto p-0" align="start" side="left">
                           <DateSchedulePopover
                             post={post}
-                           onPublishNow={async () => {
-                              let allSuccess = true;
-                              for (const pageName of localPages) {
-                                const success = await publishPost({ ...post, page_name: pageName });
-                                if (!success) allSuccess = false;
-                              }
-                              if (allSuccess) onClose();
-                            }}
-                            publishing={publishing}
                             onSetDate={(date) => {
                               updatePost.mutate({
                                 id: post.id,
@@ -426,6 +417,7 @@ export function PostReviewPanel({
                                 qa_status: "scheduled",
                                 page_name: post.page_name || localPages[0] || null,
                               });
+                              setDatePopoverOpen(false);
                             }}
                           />
                         </PopoverContent>
