@@ -481,12 +481,17 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       }
 
       // ── Auto-advance to next item if mark is complete ──
-      // Bug fix #3: Don't clear justCompletedItemId here — let the useEffect
-      // at line 55-66 handle it when the item actually leaves the list
-      if (isMarkComplete && currentIndex < items.length - 1) {
+      // In manual mode: do NOT auto-advance — supervisor controls navigation
+      const isManualMode = currentItem.optimization_mode === "manual";
+      if (isMarkComplete && !isManualMode && currentIndex < items.length - 1) {
         setTimeout(() => {
           setCurrentIndex((i) => i + 1);
         }, 1200);
+      } else if (isMarkComplete && isManualMode) {
+        toast({
+          title: "✅ Mark complete",
+          description: "Manual mode — use arrows to navigate to next item when ready.",
+        });
       }
     } catch (err: any) {
       toast({ title: "Complete failed", description: err.message, variant: "destructive" });
