@@ -92,38 +92,24 @@ serve(async (req) => {
       );
 
     } else {
-      // Evening mode: existing behavior — close only @rebar.shop office users (except kourosh)
-      const etOffset = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/New_York",
-        timeZoneName: "shortOffset",
-      }).formatToParts(now).find(p => p.type === "timeZoneName")?.value;
-
-      const offsetMatch = etOffset?.match(/GMT([+-]\d+)/);
-      const offsetHours = offsetMatch ? parseInt(offsetMatch[1]) : -5;
-      const fivePmUTC = new Date(`${todayET}T17:00:00.000Z`);
-      fivePmUTC.setHours(fivePmUTC.getHours() - offsetHours);
-      const clockOutTime = fivePmUTC.toISOString();
+      // Evening mode: close ALL open shifts for all users at 5 PM ET
+      const clockOutTime = new Date().toISOString();
 
       const { data: openShifts, error: fetchErr } = await supabase
         .from("time_clock_entries")
-        .select("id, profile_id, profiles!inner(email)")
+        .select("id, profile_id")
         .is("clock_out", null);
 
       if (fetchErr) throw fetchErr;
 
-      const toClose = (openShifts || []).filter((entry: any) => {
-        const email = entry.profiles?.email?.toLowerCase() || "";
-        return email.endsWith("@rebar.shop") && email !== "kourosh@rebar.shop";
-      });
-
-      if (toClose.length === 0) {
+      if (!openShifts || openShifts.length === 0) {
         return new Response(
           JSON.stringify({ ok: true, mode: "evening", closed: 0, message: "No open shifts to auto-close" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const idsToClose = toClose.map((e: any) => e.id);
+      const idsToClose = openShifts.map((e: any) => e.id);
 
       const { error: updateErr } = await supabase
         .from("time_clock_entries")
@@ -135,7 +121,7 @@ serve(async (req) => {
 
       if (updateErr) throw updateErr;
 
-      const profileIds = toClose.map((e: any) => e.profile_id);
+      const profileIds = [...new Set(openShifts.map((e: any) => e.profile_id))];
       await supabase
         .from("profiles")
         .update({ is_active: false })
