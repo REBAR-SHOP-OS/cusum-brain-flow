@@ -44,12 +44,9 @@ serve(async (req) => {
     const currentETHour = parseInt(etHourFormatter.format(now));
 
     if (mode === "morning") {
-      // Morning mode: verify it's actually ~8 AM ET (allow 7-9 range for DST safety)
+      // Morning mode: close ALL open shifts (no hour guard — works for cron and manual calls)
       if (currentETHour < 7 || currentETHour > 9) {
-        return new Response(
-          JSON.stringify({ ok: true, skipped: true, message: `Skipped: current ET hour is ${currentETHour}, not 8 AM` }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.log(`Warning: morning reset called at ET hour ${currentETHour} (expected ~8 AM)`);
       }
 
       // Close ALL open shifts for everyone
