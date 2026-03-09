@@ -1,34 +1,25 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# حذف Post Now و بهبود عملکرد Set Date و Schedule
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## تغییرات — یک فایل: `src/components/social/PostReviewPanel.tsx`
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+### ۱. حذف دکمه "Post Now" از DateSchedulePopover
+- دکمه "Post Now" (خطوط ۱۱۴-۱۲۳) کامل حذف می‌شود
+- prop های `onPublishNow` و `publishing` از کامپوننت حذف می‌شوند
+- دکمه "Set Date" تمام عرض را می‌گیرد
 
-## Fix
-Two options — the simplest and most reliable:
+### ۲. بستن Popover بعد از Set Date
+- الان وقتی Set Date زده می‌شود تاریخ ذخیره می‌شود ولی popover باز می‌ماند
+- با اضافه کردن state برای کنترل open/close، بعد از Set Date پاپاور بسته شود
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+### ۳. Schedule — بدون تغییر
+- منطق Schedule در فوتر از قبل درست کار می‌کند: تاریخ و پلتفرم و صفحه‌ها را می‌خواند و برای هر ترکیب یک رکورد scheduled ایجاد می‌کند
+- cron job موجود (`social-cron-publish`) هر دقیقه چک می‌کند و پست‌های scheduled که زمانشان رسیده را publish می‌کند
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
-
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
-
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
-
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
-
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+### خلاصه تغییرات کد
+1. حذف `onPublishNow` و `publishing` از `DateSchedulePopover`
+2. حذف دکمه "Post Now" از JSX
+3. اضافه کردن state `datePopoverOpen` برای بستن popover بعد از Set Date
+4. دکمه "Set Date" بعد از ذخیره تاریخ، popover را ببندد
 
