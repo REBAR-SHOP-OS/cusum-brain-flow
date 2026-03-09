@@ -257,10 +257,11 @@ export function PostReviewPanel({
 
           {subPanel === "platform" && (
             <SelectionSubPanel
-              title="Platform"
+              title="Platforms"
               options={PLATFORM_OPTIONS}
-              selected={post.platform}
-              onSave={handlePlatformSave}
+              multiSelect
+              selectedMulti={localPlatforms}
+              onSaveMulti={handlePlatformsSaveMulti}
               onBack={() => setSubPanel(null)}
             />
           )}
