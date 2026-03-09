@@ -4713,6 +4713,39 @@ export type Database = {
           },
         ]
       }
+      glasses_captures: {
+        Row: {
+          analysis: string | null
+          company_id: string
+          created_at: string
+          id: string
+          image_url: string | null
+          metadata: Json | null
+          prompt: string | null
+          source: string
+        }
+        Insert: {
+          analysis?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          metadata?: Json | null
+          prompt?: string | null
+          source?: string
+        }
+        Update: {
+          analysis?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          metadata?: Json | null
+          prompt?: string | null
+          source?: string
+        }
+        Relationships: []
+      }
       goods_receipt_items: {
         Row: {
           created_at: string
