@@ -1,34 +1,59 @@
 
 
-# Fix: Cron Job Authentication for Scheduled Post Publishing
+# Redesign Landing Page: The Industrial Brain for Rebar Factories
 
-## Problem
-The cron job is running every 2 minutes (confirmed by edge function boot logs), but the scheduled post from 21:05 is **still in `scheduled` status** — it was never published.
+## Overview
+Complete rewrite of `src/pages/Landing.tsx` to reflect the new positioning as an industrial AI production intelligence platform. Keep existing sub-components (footer, chat widget) but replace all hero, features, stats, and CTA content.
 
-**Root cause**: The cron job SQL sends the **anon key** in the `Authorization` header, but the `social-cron-publish` function checks for the **service role key**. The anon key fails the auth check → 401 Unauthorized → posts never get published.
+## Changes
 
-## Fix
-Two options — the simplest and most reliable:
+### `src/pages/Landing.tsx` — Full content rewrite
 
-**Update the edge function** to also accept the anon key when called from the cron context. Since `verify_jwt = false` is already set and the function is not publicly dangerous (it only publishes posts that are already approved and scheduled), we can add the anon key as a valid auth method.
+**Hero Section**
+- Badge: "Industrial AI for Rebar Manufacturing"
+- H1: "The Industrial Brain for Rebar Factories"
+- Subtitle: "AI-powered production intelligence that eliminates waste, prevents errors, and turns workshops into data-driven smart factories."
+- Stats updated to: 30% waste reduction, Near-zero deviation, 4 core modules, Odoo-ready
 
-Specifically, in `supabase/functions/social-cron-publish/index.ts`, modify the auth check (lines 19-33) to also accept the anon key:
+**Problem Section** (new)
+- "The Hidden Cost of Manual Production" — grid of 6 pain points (10-25% waste, counting errors, no Waste Bank, poor inventory, ignored leftovers, no real-time intelligence)
 
-```typescript
-const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-const isAnonCron = authHeader === `Bearer ${anonKey}`;
+**4 Core Modules** (replaces old 6-feature grid)
+1. AI Waste Optimization Engine — system-level optimization prioritizing Waste Bank
+2. Loop Control System — sensor + AI hybrid for cutter/bender count control
+3. Digital Waste Bank — classified, tagged, searchable leftover inventory
+4. Production Intelligence Dashboard — real-time KPIs and analytics
 
-if (!isServiceRole && !isAnonCron) {
-  // check x-cron-secret fallback...
-}
-```
+**How It Works** — 3 phases: Deploy (hardware + software setup) → Optimize (AI learns your production) → Scale (multi-site expansion)
 
-This is the safest approach because:
-- We cannot put the service role key in a migration file (it would be visible in version control)
-- The anon key is already in the cron job and working
-- The function only processes pre-approved scheduled posts
+**Competitive Positioning Section** (new)
+- Visual comparison: Machine manufacturers = hardware, ERP vendors = accounting, Optimization software = cut-plans, LOVABLE = full production intelligence
 
-### File to edit
-1. `supabase/functions/social-cron-publish/index.ts` — Accept anon key as valid auth for cron calls
+**Revenue/Pricing Tiers** (new)
+- Tier 1: Optimization Only
+- Tier 2: Optimization + Waste Bank  
+- Tier 3: Full AI Production Control
+
+**Hardware + Software Architecture** (new visual section)
+- Edge layer (sensors, controllers, tablets) ↔ Cloud layer (AI engine, optimization, analytics)
+
+**Why Now / Vision CTA**
+- "AI + low-cost sensors + ERP APIs make industrial intelligence affordable"
+- Final CTA: "Request a Pilot" + "Watch Demo"
+
+### Keep unchanged
+- `LandingFooter` component
+- `PublicChatWidget` component
+- Header navigation structure (logo, sign in, get started)
+
+### Remove from Landing.tsx
+- `TestimonialSection` (not relevant to new positioning)
+- `ProductShowcase` (product catalog doesn't fit industrial brain narrative)
+- `ServicesGrid` (services listing replaced by modules)
+- `QuoteRequestBanner` (replaced by pilot request CTA)
+- `TrustBadges` (replaced by new competitive positioning)
+
+### Update `ServicesGrid.tsx` → keep file but no longer imported in Landing
+
+No new files needed — all changes contained in `Landing.tsx`.
 
