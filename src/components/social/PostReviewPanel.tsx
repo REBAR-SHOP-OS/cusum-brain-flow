@@ -411,14 +411,25 @@ export function PostReviewPanel({
                         <PopoverContent className="w-auto p-0" align="start" side="left">
                           <DateSchedulePopover
                             post={post}
-                            onSetDate={(date) => {
-                              updatePost.mutate({
-                                id: post.id,
-                                scheduled_date: date.toISOString(),
-                                status: "scheduled",
-                                qa_status: "scheduled",
-                                page_name: post.page_name || localPages[0] || null,
-                              });
+                           onSetDate={(date) => {
+                              updatePost.mutate(
+                                {
+                                  id: post.id,
+                                  scheduled_date: date.toISOString(),
+                                  status: "scheduled",
+                                  qa_status: "scheduled",
+                                  page_name: post.page_name || localPages[0] || null,
+                                },
+                                {
+                                  onError: (err: Error) => {
+                                    toast({
+                                      title: "خطا در ذخیره تاریخ",
+                                      description: err.message || "تاریخ ذخیره نشد. دوباره تلاش کنید.",
+                                      variant: "destructive",
+                                    });
+                                  },
+                                }
+                              );
                               setDatePopoverOpen(false);
                             }}
                           />
