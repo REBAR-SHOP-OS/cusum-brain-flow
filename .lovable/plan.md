@@ -1,25 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Fix: Work Orders Not Updating After Deletion
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Root Cause
-The `StationDashboard` subscribes to realtime changes on `work_orders`, but the table was never added to the `supabase_realtime` publication. So delete/update events are silently ignored -- the cache shows stale data.
-
-## Confirmed
-- All 4 work orders (WO-MMDOOEBU, WO-MMJGCW9L, WO-MMF8QQ92, WO-MMDPX5T2) are **deleted from the database**
-- The UI shows stale React Query cache
-
-## Fix
-
-### 1. Database Migration
-Enable realtime for `work_orders`:
-```sql
-ALTER PUBLICATION supabase_realtime ADD TABLE public.work_orders;
+## Webhook URL
+```
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
 ```
 
-### 2. No Code Changes Needed
-The realtime subscription in `StationDashboard.tsx` already correctly invalidates the `work-orders` query cache on any postgres change event. Once the table is published, deletes will trigger cache invalidation automatically.
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
-## Immediate Workaround
-Refreshing the page will clear the stale cache right now.
-
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
