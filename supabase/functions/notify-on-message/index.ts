@@ -88,43 +88,35 @@ async function handleTeamMessage(
   const preview = (original_text || "").slice(0, 120);
   const titleEn = `${senderName} in #${channelName}`;
 
-  // Group by language and translate once per language group
-  const byLang = groupByLanguage(profiles);
-
+  // Always use English for team chat notifications — no translation
   const notifRows: any[] = [];
   const pushPromises: Promise<any>[] = [];
 
-  for (const [lang, langProfiles] of Object.entries(byLang)) {
-    const { title: localTitle, body: localBody } = await translateNotification(
-      supabaseUrl, anonKey, titleEn, preview, lang
+  for (const p of profiles) {
+    notifRows.push({
+      user_id: p.user_id,
+      type: "notification",
+      title: titleEn,
+      description: preview,
+      link_to: "/team-hub",
+      agent_name: "Team Chat",
+      priority: "normal",
+      metadata: { channel_id, sender_profile_id },
+    });
+
+    pushPromises.push(
+      fetch(sendPushUrl, {
+        method: "POST",
+        headers: pushHeaders,
+        body: JSON.stringify({
+          user_id: p.user_id,
+          title: titleEn,
+          body: preview,
+          linkTo: "/team-hub",
+          tag: `team-${channel_id}`,
+        }),
+      }).catch(() => {})
     );
-
-    for (const p of langProfiles) {
-      notifRows.push({
-        user_id: p.user_id,
-        type: "notification",
-        title: localTitle,
-        description: localBody,
-        link_to: "/team-hub",
-        agent_name: "Team Chat",
-        priority: "normal",
-        metadata: { channel_id, sender_profile_id },
-      });
-
-      pushPromises.push(
-        fetch(sendPushUrl, {
-          method: "POST",
-          headers: pushHeaders,
-          body: JSON.stringify({
-            user_id: p.user_id,
-            title: localTitle,
-            body: localBody,
-            linkTo: "/team-hub",
-            tag: `team-${channel_id}`,
-          }),
-        }).catch(() => {})
-      );
-    }
   }
 
   if (notifRows.length > 0) {
