@@ -537,6 +537,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
           </button>
           <input
             className="flex-1 bg-transparent text-xs placeholder:text-muted-foreground focus:outline-none text-foreground min-w-0"
+            dir="auto"
             placeholder={`Message ${channelName}…`}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
