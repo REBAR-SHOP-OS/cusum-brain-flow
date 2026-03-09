@@ -263,7 +263,7 @@ export default function Landing() {
               ))}
             </div>
             <div className="p-6 rounded-xl border-2 border-primary bg-primary/5 text-center">
-              <h3 className="text-lg font-bold text-primary mb-1">LOVABLE</h3>
+              <h3 className="text-lg font-bold text-primary mb-1">REBAR SHOP OS</h3>
               <p className="text-sm text-foreground/80">The operating system for rebar fabrication — full production intelligence.</p>
             </div>
           </div>
