@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const RC_SERVER = "https://platform.ringcentral.com";
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"];
+const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop"];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
