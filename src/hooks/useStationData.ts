@@ -29,6 +29,7 @@ export interface StationItem {
   project_id: string | null;
   customer_name: string | null;
   project_status: string | null;
+  optimization_mode: string | null;
 }
 
 export interface BarSizeGroup {

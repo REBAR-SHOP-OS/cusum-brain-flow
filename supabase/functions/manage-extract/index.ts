@@ -558,6 +558,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
       project_name: session.name,
       project_id: projectId,
       status: "draft",
+      optimization_mode: optimizerConfig?.selectedMode || "best-fit",
     })
     .select("id")
     .single();

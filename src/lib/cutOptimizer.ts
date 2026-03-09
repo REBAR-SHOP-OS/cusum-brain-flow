@@ -302,7 +302,7 @@ export function runOptimization(
     const { valid, skipped } = partitionPieces(pieces, stockLengthMm);
 
     const bars = mode === "manual"
-      ? manualCut(valid, stockLengthMm)
+      ? manualCut(valid, stockLengthMm, kerfMm)
       : mode === "best-fit"
         ? bestFitCut(valid, stockLengthMm, kerfMm)
         : mode === "optimized"
