@@ -60,13 +60,9 @@ type SubPanelView = null | "content_type" | "platform" | "pages";
 /* ── Date Schedule Popover ── */
 function DateSchedulePopover({
   post,
-  onPublishNow,
-  publishing,
   onSetDate,
 }: {
   post: SocialPost;
-  onPublishNow: () => void;
-  publishing: boolean;
   onSetDate: (date: Date) => void;
 }) {
   const initDate = post.scheduled_date ? new Date(post.scheduled_date) : new Date();
@@ -110,21 +106,10 @@ function DateSchedulePopover({
           {minutes.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
       </div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1 gap-1.5"
-          onClick={onPublishNow}
-          disabled={publishing}
-        >
-          {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          Post Now
-        </Button>
-        <Button size="sm" className="flex-1" onClick={handleSetDate}>
-          Set Date
-        </Button>
-      </div>
+      <Button size="sm" className="w-full" onClick={handleSetDate}>
+        <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
+        Set Date
+      </Button>
     </div>
   );
 }
