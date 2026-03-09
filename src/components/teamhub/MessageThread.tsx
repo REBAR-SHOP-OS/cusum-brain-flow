@@ -453,9 +453,9 @@ export function MessageThread({
                           <p
                             className={cn(
                               "text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed",
-                              isRtl(displayLang) && "text-right"
+                              detectRtl(displayText) && "text-right"
                             )}
-                            dir={isRtl(displayLang) ? "rtl" : "ltr"}
+                            dir={detectRtl(displayText) ? "rtl" : "ltr"}
                           >
                             {displayText}
                           </p>
