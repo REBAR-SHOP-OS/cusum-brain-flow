@@ -3,17 +3,39 @@ import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-key",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-key, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // Authenticate via x-webhook-key header
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Auth: accept either webhook key OR JWT
+    let userId: string | null = null;
     const webhookKey = req.headers.get("x-webhook-key");
     const expectedKey = Deno.env.get("GLASSES_WEBHOOK_KEY");
-    if (!expectedKey || webhookKey !== expectedKey) {
+    const authHeader = req.headers.get("Authorization");
+
+    if (webhookKey && expectedKey && webhookKey === expectedKey) {
+      // Webhook key auth — external device (iOS Shortcut, etc.)
+    } else if (authHeader?.startsWith("Bearer ")) {
+      // JWT auth — in-app usage
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error } = await userClient.auth.getUser();
+      if (error || !user) {
+        return new Response(JSON.stringify({ error: "Invalid token" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
+    } else {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -35,11 +57,9 @@ Deno.serve(async (req) => {
 
     if (imageBase64) {
       imageData = imageBase64;
-      // Try to detect mime from base64 header
       if (imageBase64.startsWith("/9j/")) mimeType = "image/jpeg";
       else if (imageBase64.startsWith("iVBOR")) mimeType = "image/png";
     } else {
-      // Download from URL
       const imgRes = await fetch(imageUrl);
       if (!imgRes.ok) throw new Error(`Failed to fetch image: ${imgRes.status}`);
       const imgBuffer = await imgRes.arrayBuffer();
@@ -80,12 +100,8 @@ If the user included a specific question, answer it directly.`;
     const analysis = result.content || "Could not analyze image.";
 
     // Store in database
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabase = createClient(supabaseUrl, serviceKey);
 
-    // If we got base64, upload to storage first
     let storedImageUrl = imageUrl || null;
     if (imageBase64 && !imageUrl) {
       const fileName = `glasses/${Date.now()}.jpg`;
@@ -105,9 +121,9 @@ If the user included a specific question, answer it directly.`;
     const { error: dbErr } = await supabase.from("glasses_captures").insert({
       image_url: storedImageUrl,
       analysis,
-      source: "glasses",
+      source: userId ? "app" : "glasses",
       prompt: prompt || null,
-      metadata: { mimeType, hasBase64: !!imageBase64, hasUrl: !!imageUrl },
+      metadata: { mimeType, hasBase64: !!imageBase64, hasUrl: !!imageUrl, userId },
     });
 
     if (dbErr) console.error("Failed to store capture:", dbErr);

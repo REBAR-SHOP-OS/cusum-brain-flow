@@ -85,6 +85,7 @@ import EmailMarketing from "./pages/EmailMarketing";
 import Unsubscribe from "./pages/Unsubscribe";
 import InboxManager from "./pages/InboxManager";
 import OrgChart from "./pages/OrgChart";
+import GlassesCapture from "./pages/GlassesCapture";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -165,6 +166,7 @@ const App = () => (
                     <Route path="/shopfloor/delivery/:stopId" element={<P><DeliveryTerminal /></P>} />
                     
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
+                    <Route path="/glasses" element={<P><GlassesCapture /></P>} />
                     <Route path="/transcribe" element={<P><Transcribe /></P>} />
                     <Route path="/transcribe/watch" element={<ProtectedRoute><TranscribeWatch /></ProtectedRoute>} />
                     <Route path="/team-hub" element={<P><TeamHub /></P>} />
