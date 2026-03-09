@@ -335,15 +335,21 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     slotTracker.recordStroke();
 
     // ── Persist progress to DB after every stroke (atomic increment) ──
-    if (currentItem && completedAtRunStart !== null) {
+    if (currentItem) {
+      console.log("[CutterStation] RPC call:", { itemId: currentItem.id, activeBars, completedAtRunStart });
       supabase
         .rpc("increment_completed_pieces", {
           p_item_id: currentItem.id,
           p_increment: activeBars,
         })
         .then(({ error }) => {
-          if (error) console.error("[CutterStation] Stroke persist failed:", error.message);
+          if (error) {
+            console.error("[CutterStation] Stroke persist failed:", error.message);
+            toast({ title: "⚠️ Stroke save failed", description: error.message, variant: "destructive" });
+          }
         });
+    } else {
+      console.warn("[CutterStation] No currentItem — stroke NOT persisted!");
     }
 
     toast({
