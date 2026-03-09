@@ -23,7 +23,7 @@ export interface OptimizerConfig {
   stockLengthMm: number;
   kerfMm: number;          // blade width, default 5
   minRemnantMm: number;    // below this = scrap, default 300
-  mode: "standard" | "optimized" | "best-fit";
+  mode: "manual" | "standard" | "optimized" | "best-fit";
 }
 
 export interface StockBar {
@@ -218,6 +218,21 @@ function bestFitCut(
   return bars;
 }
 
+/**
+ * Manual (no optimization): each piece gets its own stock bar.
+ * Supervisor decides cutting order on the shop floor.
+ */
+function manualCut(
+  pieces: { mark: string; lengthMm: number }[],
+  stockLengthMm: number,
+): StockBar[] {
+  return pieces.map((piece) => ({
+    stockLengthMm,
+    cuts: [{ mark: piece.mark, lengthMm: piece.lengthMm }],
+    remainderMm: stockLengthMm - piece.lengthMm,
+  }));
+}
+
 /** Count stopper moves (distinct cut lengths) */
 function countStopperMoves(bars: StockBar[]): number {
   const uniqueLengths = new Set<number>();
@@ -285,11 +300,13 @@ export function runOptimization(
   for (const [barSize, pieces] of bySize) {
     const { valid, skipped } = partitionPieces(pieces, stockLengthMm);
 
-    const bars = mode === "best-fit"
-      ? bestFitCut(valid, stockLengthMm, kerfMm)
-      : mode === "optimized"
-        ? optimizedCut(valid, stockLengthMm, kerfMm)
-        : standardCut(valid, stockLengthMm, kerfMm);
+    const bars = mode === "manual"
+      ? manualCut(valid, stockLengthMm)
+      : mode === "best-fit"
+        ? bestFitCut(valid, stockLengthMm, kerfMm)
+        : mode === "optimized"
+          ? optimizedCut(valid, stockLengthMm, kerfMm)
+          : standardCut(valid, stockLengthMm, kerfMm);
 
     results.push(buildResult(barSize, stockLengthMm, bars, skipped, minRemnantMm));
   }
