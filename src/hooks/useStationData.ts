@@ -80,6 +80,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
             project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
             customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
             project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
+            optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
           })) as StationItem[];
       }
 
