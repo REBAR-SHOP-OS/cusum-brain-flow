@@ -130,8 +130,10 @@ export function AIExtractView() {
   const [savingEdits, setSavingEdits] = useState(false);
   
   // Duplicate detection state
-  const [dedupeResult, setDedupeResult] = useState<{ duplicates_found: number; rows_merged: number; total_active_rows: number } | null>(null);
+  const [dedupeResult, setDedupeResult] = useState<DedupeResult | null>(null);
   const [showMergedRows, setShowMergedRows] = useState(false);
+  const [dedupePreview, setDedupePreview] = useState<DuplicatePreviewItem[] | null>(null);
+  const [pendingDedupeSessionId, setPendingDedupeSessionId] = useState<string | null>(null);
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, refresh: refreshRows } = useExtractRows(activeSessionId);
