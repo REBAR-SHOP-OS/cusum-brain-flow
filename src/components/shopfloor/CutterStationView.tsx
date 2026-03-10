@@ -573,20 +573,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         });
       }
 
-      // ── Auto-advance to next item if mark is complete ──
-      const isRawMode = currentItem.optimization_mode === "raw" || currentItem.optimization_mode === "manual";
-      if (isMarkComplete && !isRawMode && currentIndex < items.length - 1) {
-        setTimeout(() => {
-          const nextIdx = currentIndex + 1;
-          setCurrentIndex(nextIdx);
-          if (items[nextIdx]) setTrackedItemId(items[nextIdx].id);
-        }, 1200);
-      } else if (isMarkComplete && isRawMode) {
-        toast({
-          title: "✅ Mark complete",
-          description: "RAW mode — use arrows to navigate to next item when ready.",
-        });
-      }
+      // ── Return to pool after completion ──
+      setTimeout(() => {
+        onBack?.();
+      }, 1500);
     } catch (err: any) {
       toast({ title: "Complete failed", description: err.message, variant: "destructive" });
     }
