@@ -4221,6 +4221,7 @@ export type Database = {
           dim_k: number | null
           dim_o: number | null
           dim_r: number | null
+          duplicate_key: string | null
           dwg: string | null
           file_id: string | null
           grade: string | null
@@ -4228,6 +4229,8 @@ export type Database = {
           id: string
           item_number: string | null
           mark: string | null
+          merged_into_id: string | null
+          original_quantity: number | null
           quantity: number | null
           reference: string | null
           row_index: number
@@ -4256,6 +4259,7 @@ export type Database = {
           dim_k?: number | null
           dim_o?: number | null
           dim_r?: number | null
+          duplicate_key?: string | null
           dwg?: string | null
           file_id?: string | null
           grade?: string | null
@@ -4263,6 +4267,8 @@ export type Database = {
           id?: string
           item_number?: string | null
           mark?: string | null
+          merged_into_id?: string | null
+          original_quantity?: number | null
           quantity?: number | null
           reference?: string | null
           row_index?: number
@@ -4291,6 +4297,7 @@ export type Database = {
           dim_k?: number | null
           dim_o?: number | null
           dim_r?: number | null
+          duplicate_key?: string | null
           dwg?: string | null
           file_id?: string | null
           grade?: string | null
@@ -4298,6 +4305,8 @@ export type Database = {
           id?: string
           item_number?: string | null
           mark?: string | null
+          merged_into_id?: string | null
+          original_quantity?: number | null
           quantity?: number | null
           reference?: string | null
           row_index?: number
@@ -4314,6 +4323,13 @@ export type Database = {
             columns: ["file_id"]
             isOneToOne: false
             referencedRelation: "extract_raw_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extract_rows_merged_into_id_fkey"
+            columns: ["merged_into_id"]
+            isOneToOne: false
+            referencedRelation: "extract_rows"
             referencedColumns: ["id"]
           },
           {
