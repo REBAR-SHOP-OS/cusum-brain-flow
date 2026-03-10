@@ -371,8 +371,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       }
       slotTracker.reset();
       setIsRunning(false);
+      setCompletedLocally(true);
       setActiveRunId(null);
       setCompletedAtRunStart(null);
+      setOperatorBars(null);
       toast({ title: "Run aborted", description: "You can adjust settings and restart." });
     } catch (err: any) {
       toast({ title: "Abort failed", description: err.message, variant: "destructive" });
