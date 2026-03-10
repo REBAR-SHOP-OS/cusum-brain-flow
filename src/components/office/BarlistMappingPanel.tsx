@@ -321,22 +321,24 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
           </div>
         )}
 
-        {/* Confirm Button */}
-        <div className="flex items-center justify-end gap-2">
-          {!canConfirm && rows.length > 0 && (
-            <span className="text-xs text-destructive">
-              Fix mapping issues above before confirming
-            </span>
-          )}
-          <Button
-            onClick={handleConfirm}
-            disabled={!canConfirm || disabled || confirmed}
-            size="sm"
-            className="gap-1.5"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            {confirmed ? "Mapping Confirmed" : "Confirm Mapping"}
-          </Button>
+        {/* Confirm Button — sticky for iOS accessibility */}
+        <div className="sticky bottom-0 bg-card pt-3 pb-4 -mx-4 px-4 border-t border-border shadow-[0_-2px_8px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 1rem))' }}>
+          <div className="flex items-center justify-end gap-2">
+            {!canConfirm && rows.length > 0 && (
+              <span className="text-xs text-destructive">
+                Fix mapping issues above before confirming
+              </span>
+            )}
+            <Button
+              onClick={handleConfirm}
+              disabled={!canConfirm || disabled || confirmed}
+              size="sm"
+              className="gap-1.5"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {confirmed ? "Mapping Confirmed" : "Confirm Mapping"}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
