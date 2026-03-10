@@ -44,6 +44,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const queryClient = useQueryClient();
   const { isAdmin, isShopSupervisor } = useUserRole();
   const canCorrectCount = isAdmin || isShopSupervisor;
+  const [isSupervisor, setIsSupervisor] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [trackedItemId, setTrackedItemId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
