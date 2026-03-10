@@ -1,23 +1,32 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Supervisor Button Not Working in Cutter Station
 
-## Webhook URL
-```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+## Problem
+The Supervisor button in `CutterStationView.tsx` is rendered as a **static badge** (not clickable) because `isSupervisor` and `onToggleSupervisor` props are never passed to `StationHeader`. Compare with `StationView.tsx` (bender station) which correctly passes both props and has a working toggle.
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+In `StationHeader.tsx` logic (line 125-148):
+- If `canWrite && onToggleSupervisor` → renders a **clickable Button** (toggle)
+- If `canWrite` only → renders a **static Badge** saying "SUPERVISOR" (this is what's happening)
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+## Fix — `CutterStationView.tsx`
+
+1. **Add local state** for supervisor mode toggle:
+   ```typescript
+   const [isSupervisor, setIsSupervisor] = useState(false);
+   ```
+
+2. **Pass props to both `StationHeader` instances** (lines 588 and 604):
+   ```typescript
+   isSupervisor={isSupervisor}
+   onToggleSupervisor={() => setIsSupervisor(v => !v)}
+   ```
+
+3. **Gate the toggle** so only users with `isShopSupervisor` or `isAdmin` role can see the toggle (non-supervisors should not see the button at all). The existing `canWrite` check in StationHeader already handles this partially, but we should only pass `onToggleSupervisor` when the user actually has supervisor privileges:
+   ```typescript
+   onToggleSupervisor={canCorrectCount ? () => setIsSupervisor(v => !v) : undefined}
+   ```
+   (`canCorrectCount` is already defined as `isAdmin || isShopSupervisor` at line 46)
+
+**One file changed:** `src/components/shopfloor/CutterStationView.tsx`
+
