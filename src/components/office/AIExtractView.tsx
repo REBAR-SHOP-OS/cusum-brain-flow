@@ -400,10 +400,23 @@ export function AIExtractView() {
           });
         } else {
           setDedupeResult(dryRunRes);
+          // No duplicates found — auto-mark dedupe as done
+          try {
+            await supabase
+              .from("extract_sessions")
+              .update({ dedupe_status: "none" } as any)
+              .eq("id", session.id);
+          } catch (_) { /* best-effort */ }
         }
       } catch (dedupeErr: any) {
         console.error("Dedupe scan failed:", dedupeErr);
-        // Non-fatal — extraction still succeeded
+        // Non-fatal — auto-skip dedupe so pipeline isn't blocked
+        try {
+          await supabase
+            .from("extract_sessions")
+            .update({ dedupe_status: "none" } as any)
+            .eq("id", session.id);
+        } catch (_) { /* best-effort */ }
       }
 
       await refreshRows();
