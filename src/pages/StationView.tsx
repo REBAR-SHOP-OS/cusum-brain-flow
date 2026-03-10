@@ -163,33 +163,6 @@ export default function StationView() {
     return [...projMap.values()];
   }, [filteredGroups, selectedProjectId, projects]);
 
-  // Group filteredGroups by project for cutter display
-  const projectGroupedData = useMemo(() => {
-    if (selectedProjectId) return null;
-    const projMap = new Map<string, { id: string; name: string; groups: typeof filteredGroups }>();
-    for (const group of filteredGroups) {
-      const itemsByProj = new Map<string, { bend: typeof group.bendItems; straight: typeof group.straightItems }>();
-      for (const item of [...group.bendItems, ...group.straightItems]) {
-        const pid = item.project_id || "__unassigned__";
-        if (!itemsByProj.has(pid)) itemsByProj.set(pid, { bend: [], straight: [] });
-        const bucket = itemsByProj.get(pid)!;
-        if (item.bend_type === "bend") bucket.bend.push(item);
-        else bucket.straight.push(item);
-      }
-      for (const [pid, bucket] of itemsByProj) {
-        if (!projMap.has(pid)) {
-          const proj = projects.find(p => p.id === pid);
-          projMap.set(pid, { id: pid, name: proj?.name || "Unassigned", groups: [] });
-        }
-        projMap.get(pid)!.groups.push({
-          barCode: group.barCode,
-          bendItems: bucket.bend,
-          straightItems: bucket.straight,
-        });
-      }
-    }
-    return [...projMap.values()];
-  }, [filteredGroups, selectedProjectId, projects]);
 
   if (!machineId) return <Navigate to="/shopfloor/station" replace />;
 
