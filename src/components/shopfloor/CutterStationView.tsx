@@ -884,7 +884,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             isRunning={machineIsRunning}
             canWrite={effectiveCanWrite}
             isDone={isDone}
-            isSupervisor={isAdmin || isShopSupervisor}
+            isSupervisor={isSupervisor}
             darkMode
             lockedBars={machineIsRunning ? slotTracker.slots.length : undefined}
             strokesDone={slotTracker.slots.length > 0 ? Math.max(...slotTracker.slots.map(s => s.cutsDone)) : 0}
