@@ -191,16 +191,11 @@ export async function runExtract(params: {
     address: string;
     type: string;
   };
-}): Promise<{ items: any[]; summary: any }> {
-  // Update session status
-  await supabase
-    .from("extract_sessions")
-    .update({ status: "extracting" } as any)
-    .eq("id", params.sessionId);
-
-  // Call AI extraction
+}): Promise<void> {
+  // Fire-and-forget: edge function handles extraction in background
   const { data, error } = await supabase.functions.invoke("extract-manifest", {
     body: {
+      sessionId: params.sessionId,
       fileUrl: params.fileUrl,
       fileName: params.fileName,
       manifestContext: params.manifestContext,
@@ -209,53 +204,8 @@ export async function runExtract(params: {
 
   if (error) throw new Error(error.message || "Extraction failed");
   if (data?.error) throw new Error(data.error);
-
-  const items = data?.items || [];
-
-  // Save extracted rows to DB
-  if (items.length > 0) {
-    const rows = items.map((item: any, idx: number) => ({
-      session_id: params.sessionId,
-      row_index: idx + 1,
-      dwg: item.dwg || null,
-      item_number: String(item.item || idx + 1),
-      grade: item.grade || null,
-      mark: item.mark || null,
-      quantity: item.quantity || 0,
-      bar_size: item.size || null,
-      shape_type: item.type || null,
-      total_length_mm: item.total_length || null,
-      dim_a: item.A || null,
-      dim_b: item.B || null,
-      dim_c: item.C || null,
-      dim_d: item.D || null,
-      dim_e: item.E || null,
-      dim_f: item.F || null,
-      dim_g: item.G || null,
-      dim_h: item.H || null,
-      dim_j: item.J || null,
-      dim_k: item.K || null,
-      dim_o: item.O || null,
-      dim_r: item.R || null,
-      weight_kg: item.weight || null,
-      customer: item.customer || null,
-      reference: item.ref || null,
-      address: item.address || null,
-      status: "raw",
-    }));
-
-    const { error: insertErr } = await supabase.from("extract_rows").insert(rows as any);
-    if (insertErr) throw new Error(`Failed to save rows: ${insertErr.message}`);
-  }
-
-  // Update session status
-  const { error: statusErr } = await supabase
-    .from("extract_sessions")
-    .update({ status: "extracted" } as any)
-    .eq("id", params.sessionId);
-  if (statusErr) throw new Error(`Failed to update session: ${statusErr.message}`);
-
-  return { items, summary: data?.summary };
+  // Edge function returns immediately with { status: "processing" }
+  // Client should poll extract_sessions for status updates
 }
 
 export interface DuplicatePreviewItem {

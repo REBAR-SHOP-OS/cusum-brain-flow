@@ -372,19 +372,37 @@ export function AIExtractView() {
         file: uploadedFile,
       });
 
-      // 3. Run AI extraction
-      setProcessingStep("AI extracting...");
-      const result = await runExtract({
+      // 3. Run AI extraction (fire-and-forget — edge fn processes in background)
+      setProcessingStep("AI extracting... (processing in background)");
+      await runExtract({
         sessionId: session.id,
         fileUrl,
         fileName: uploadedFile.name,
         manifestContext: { name: manifestName, customer, address: siteAddress, type: manifestType },
       });
 
-      if (result.summary) {
-        if (!customer && result.summary.customer) setCustomer(result.summary.customer);
-        if (!manifestName && result.summary.project) setManifestName(result.summary.project);
-      }
+      // Poll for completion — realtime subscription will also trigger refresh
+      const pollForCompletion = async (): Promise<string> => {
+        const maxAttempts = 120; // 6 minutes max
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise(r => setTimeout(r, 3000));
+          const { data: sess } = await supabase
+            .from("extract_sessions")
+            .select("status, progress, error_message")
+            .eq("id", session.id)
+            .single();
+          if (!sess) continue;
+          const s = sess as any;
+          if (s.progress) {
+            setProcessingStep(`AI extracting... ${s.progress}%`);
+          }
+          if (s.status === "extracted") return "extracted";
+          if (s.status === "error") throw new Error(s.error_message || "Extraction failed");
+        }
+        throw new Error("Extraction timed out");
+      };
+
+      await pollForCompletion();
 
       // Dry-run duplicate detection — show preview before merging
       setProcessingStep("Scanning for duplicates...");
@@ -393,14 +411,12 @@ export function AIExtractView() {
         if (dryRunRes.duplicates_found > 0 && dryRunRes.preview?.length) {
           setDedupePreview(dryRunRes.preview);
           setPendingDedupeSessionId(session.id);
-          // Don't auto-merge — let user review the preview first
           toast({
             title: `${dryRunRes.duplicates_found} duplicate groups detected`,
             description: "Review and confirm merge in the Duplicates panel below.",
           });
         } else {
           setDedupeResult(dryRunRes);
-          // No duplicates found — persist dedupe as complete so pipeline unlocks Mapping
           const { error: dedupeUpErr } = await supabase
             .from("extract_sessions")
             .update({ dedupe_status: "complete" } as any)
@@ -409,7 +425,6 @@ export function AIExtractView() {
         }
       } catch (dedupeErr: any) {
         console.error("Dedupe scan failed:", dedupeErr);
-        // Non-fatal — auto-skip dedupe so pipeline isn't blocked
         const { error: dedupeFallbackErr } = await supabase
           .from("extract_sessions")
           .update({ dedupe_status: "complete" } as any)
@@ -422,7 +437,7 @@ export function AIExtractView() {
 
       toast({
         title: "Extraction complete",
-        description: `Found ${result.items.length} items`,
+        description: "Items extracted and saved successfully",
       });
     } catch (err: any) {
       toast({ title: "Extraction failed", description: err.message, variant: "destructive" });

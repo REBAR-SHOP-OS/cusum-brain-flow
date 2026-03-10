@@ -4609,12 +4609,14 @@ export type Database = {
           created_by: string | null
           customer: string | null
           dedupe_status: string
+          error_message: string | null
           id: string
           invoice_date: string | null
           invoice_number: string | null
           manifest_type: string
           name: string
           optimization_mode: string | null
+          progress: number | null
           site_address: string | null
           status: string
           target_eta: string | null
@@ -4626,12 +4628,14 @@ export type Database = {
           created_by?: string | null
           customer?: string | null
           dedupe_status?: string
+          error_message?: string | null
           id?: string
           invoice_date?: string | null
           invoice_number?: string | null
           manifest_type?: string
           name: string
           optimization_mode?: string | null
+          progress?: number | null
           site_address?: string | null
           status?: string
           target_eta?: string | null
@@ -4643,12 +4647,14 @@ export type Database = {
           created_by?: string | null
           customer?: string | null
           dedupe_status?: string
+          error_message?: string | null
           id?: string
           invoice_date?: string | null
           invoice_number?: string | null
           manifest_type?: string
           name?: string
           optimization_mode?: string | null
+          progress?: number | null
           site_address?: string | null
           status?: string
           target_eta?: string | null
