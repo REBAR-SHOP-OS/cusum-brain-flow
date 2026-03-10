@@ -136,6 +136,7 @@ export default function StationView() {
     : groups;
 
   // Group filteredGroups by customer → barlist for cutter display
+  // Also merge active work orders so all active projects appear even with 0 compatible items
   const customerGroupedData = useMemo(() => {
     const allItemsFlat = filteredGroups.flatMap(g => [...g.bendItems, ...g.straightItems]);
     // Build: customer → barlist → items
@@ -153,6 +154,17 @@ export default function StationView() {
       }
       cust.barlists.get(planId)!.items.push(item);
     }
+
+    // Merge active work orders — add customers with no compatible items
+    const activeStatuses = new Set(["in_progress", "pending", "on_hold"]);
+    for (const wo of activeWorkOrders) {
+      if (!wo.status || !activeStatuses.has(wo.status)) continue;
+      const custKey = wo.customer_name || "Unknown Customer";
+      if (!custMap.has(custKey)) {
+        custMap.set(custKey, { name: custKey, barlists: new Map() });
+      }
+    }
+
     // Convert to array and build BarSizeGroups per barlist
     return [...custMap.entries()].map(([custKey, cust]) => ({
       customerName: cust.name,
@@ -184,7 +196,7 @@ export default function StationView() {
       }),
       totalItems: [...cust.barlists.values()].reduce((s, bl) => s + bl.items.length, 0),
     }));
-  }, [filteredGroups, selectedProjectId]);
+  }, [filteredGroups, selectedProjectId, activeWorkOrders]);
 
 
   if (!machineId) return <Navigate to="/shopfloor/station" replace />;
