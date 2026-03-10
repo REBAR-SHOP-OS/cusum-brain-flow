@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 
@@ -112,7 +112,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
         cutterQuery = cutterQuery.eq("cut_plans.project_id", projectId);
       }
 
-      const { data: items, error: itemsError } = await cutterQuery;
+      const { data: items, error: itemsError } = await cutterQuery.order("created_at", { ascending: true });
 
       if (itemsError) throw itemsError;
 
@@ -146,25 +146,34 @@ export function useStationData(machineId: string | null, machineType?: string, p
     },
   });
 
-  // Realtime subscription
+  // Realtime subscription with debounce to prevent jumping
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
     if (!user || !machineId) return;
+
+    const debouncedInvalidate = () => {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["station-data", machineId] });
+      }, 500);
+    };
 
     const channel = supabase
       .channel(`station-${machineId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plan_items" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId] })
+        debouncedInvalidate
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plans" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId] })
+        debouncedInvalidate
       )
       .subscribe();
 
     return () => {
+      clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
   }, [user, machineId, machineType, companyId, queryClient]);

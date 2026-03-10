@@ -45,6 +45,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const { isAdmin, isShopSupervisor } = useUserRole();
   const canCorrectCount = isAdmin || isShopSupervisor;
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [trackedItemId, setTrackedItemId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedStockLength, setSelectedStockLength] = useState(12000);
   const [operatorBars, setOperatorBars] = useState<number | null>(null);
@@ -72,6 +73,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const lockedIndex = items.findIndex(i => i.id === machine.active_job_id);
       if (lockedIndex >= 0) {
         setCurrentIndex(lockedIndex);
+        setTrackedItemId(machine.active_job_id!);
         setIsRunning(true);
         setActiveRunId(machine.current_run_id);
         // Fetch fresh completed count for snapshot
@@ -87,14 +89,21 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       }
     }
     setRestoredFromBackend(true);
-  }, [machine.cut_session_status, machine.active_job_id, machine.machine_lock, items.length, restoredFromBackend]);
+  }, [machine.cut_session_status, machine.active_job_id, machine.machine_lock, restoredFromBackend]);
 
-  // Keep currentIndex in bounds when items change (e.g. completed item removed by realtime)
+  // ID-based reconciliation: after items refresh, find the tracked item and fix index
   useEffect(() => {
-    if (items.length > 0 && currentIndex >= items.length) {
-      setCurrentIndex(items.length - 1);
+    if (!trackedItemId || items.length === 0) return;
+    const newIdx = items.findIndex(i => i.id === trackedItemId);
+    if (newIdx >= 0 && newIdx !== currentIndex) {
+      setCurrentIndex(newIdx);
+    } else if (newIdx < 0) {
+      // Item removed from list — clamp index
+      if (currentIndex >= items.length) {
+        setCurrentIndex(Math.max(0, items.length - 1));
+      }
     }
-  }, [items.length, currentIndex]);
+  }, [items, trackedItemId]);
 
   // Clear justCompleted guard when the item leaves the list or we switch items
   useEffect(() => {
@@ -127,6 +136,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   // Reset run state when switching to a different item (Bug #12)
   const currentItem = items[currentIndex] || null;
+
+  // Initialize trackedItemId on first valid item
+  useEffect(() => {
+    if (currentItem && !trackedItemId) {
+      setTrackedItemId(currentItem.id);
+    }
+  }, [currentItem, trackedItemId]);
+
   const [prevItemId, setPrevItemId] = useState<string | null>(null);
   useEffect(() => {
     if (currentItem && prevItemId !== currentItem.id) {
@@ -531,7 +548,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const isRawMode = currentItem.optimization_mode === "raw" || currentItem.optimization_mode === "manual";
       if (isMarkComplete && !isRawMode && currentIndex < items.length - 1) {
         setTimeout(() => {
-          setCurrentIndex((i) => i + 1);
+          const nextIdx = currentIndex + 1;
+          setCurrentIndex(nextIdx);
+          if (items[nextIdx]) setTrackedItemId(items[nextIdx].id);
         }, 1200);
       } else if (isMarkComplete && isRawMode) {
         toast({
@@ -806,7 +825,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
               disabled={currentIndex <= 0 || machineIsRunning}
-              onClick={() => { setCurrentIndex((i) => Math.max(0, i - 1)); setManualFloorConfirmed(false); setOperatorBars(null); slotTracker.reset(); }}
+              onClick={() => { const ni = Math.max(0, currentIndex - 1); setCurrentIndex(ni); if (items[ni]) setTrackedItemId(items[ni].id); setManualFloorConfirmed(false); setOperatorBars(null); slotTracker.reset(); }}
             >
               ‹
             </button>
@@ -816,7 +835,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
               disabled={currentIndex >= items.length - 1 || machineIsRunning}
-              onClick={() => { setCurrentIndex((i) => Math.min(items.length - 1, i + 1)); setManualFloorConfirmed(false); setOperatorBars(null); slotTracker.reset(); }}
+              onClick={() => { const ni = Math.min(items.length - 1, currentIndex + 1); setCurrentIndex(ni); if (items[ni]) setTrackedItemId(items[ni].id); setManualFloorConfirmed(false); setOperatorBars(null); slotTracker.reset(); }}
             >
               ›
             </button>
