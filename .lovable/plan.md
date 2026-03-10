@@ -1,32 +1,44 @@
 
 
-# Fix: Supervisor Button Not Working in Cutter Station
+# Fix: manage-machine Edge Function Returning Non-2xx
 
-## Problem
-The Supervisor button in `CutterStationView.tsx` is rendered as a **static badge** (not clickable) because `isSupervisor` and `onToggleSupervisor` props are never passed to `StationHeader`. Compare with `StationView.tsx` (bender station) which correctly passes both props and has a working toggle.
+## Root Cause
 
-In `StationHeader.tsx` logic (line 125-148):
-- If `canWrite && onToggleSupervisor` → renders a **clickable Button** (toggle)
-- If `canWrite` only → renders a **static Badge** saying "SUPERVISOR" (this is what's happening)
+**Primary:** The `manage-machine` edge function uses the **deprecated `auth.getClaims(token)`** method (line 29 of index.ts). Per project memory, this causes **intermittent token validation failures** returning 401. The fix is to use `auth.getUser()` instead, which is stable and reliable.
 
-## Fix — `CutterStationView.tsx`
+**Secondary:** The edge function uses **subfolders** (`handlers/`, `lib/`) which can cause deployment issues with Lovable Cloud. All code must be in a single `index.ts`.
 
-1. **Add local state** for supervisor mode toggle:
-   ```typescript
-   const [isSupervisor, setIsSupervisor] = useState(false);
-   ```
+## Evidence
+- Edge function logs show **zero entries** for `manage-machine` — the function may not even be booting correctly due to subfolder import resolution failures.
+- The `schedule-post` function (recently created, single file) works fine.
+- Memory note explicitly states: *"use `getUser()` instead of `getClaims()` to avoid intermittent token validation failures"*.
 
-2. **Pass props to both `StationHeader` instances** (lines 588 and 604):
-   ```typescript
-   isSupervisor={isSupervisor}
-   onToggleSupervisor={() => setIsSupervisor(v => !v)}
-   ```
+## Fix
 
-3. **Gate the toggle** so only users with `isShopSupervisor` or `isAdmin` role can see the toggle (non-supervisors should not see the button at all). The existing `canWrite` check in StationHeader already handles this partially, but we should only pass `onToggleSupervisor` when the user actually has supervisor privileges:
-   ```typescript
-   onToggleSupervisor={canCorrectCount ? () => setIsSupervisor(v => !v) : undefined}
-   ```
-   (`canCorrectCount` is already defined as `isAdmin || isShopSupervisor` at line 46)
+Consolidate the entire `manage-machine` edge function into a single `index.ts` file with these changes:
 
-**One file changed:** `src/components/shopfloor/CutterStationView.tsx`
+1. **Replace `getClaims()`** with `getUser()`:
+```typescript
+// OLD (broken)
+const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
+const userId = claimsData.claims.sub;
+
+// NEW (stable)
+const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
+const userId = user.id;
+```
+
+2. **Inline all handler code** from `handlers/*.ts` and `lib/helpers.ts` directly into `index.ts` — eliminating subfolders entirely.
+
+3. **Delete subfolder files**: `handlers/`, `lib/` directories.
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `supabase/functions/manage-machine/index.ts` | Rewrite: inline all handlers + helpers, replace `getClaims` with `getUser` |
+| `supabase/functions/manage-machine/handlers/*` | Delete all 6 files |
+| `supabase/functions/manage-machine/lib/helpers.ts` | Delete |
+
+No frontend changes needed — `manageMachineService.ts` calls the same function name with the same payload.
 
