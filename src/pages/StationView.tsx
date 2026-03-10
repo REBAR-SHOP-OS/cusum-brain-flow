@@ -55,10 +55,12 @@ export default function StationView() {
     return [...map.values()];
   }, [allItems]);
 
-  // Auto-select if only one project
+  // Auto-select if only one project; show all grouped if multiple
   useEffect(() => {
     if (projects.length === 1) {
       setSelectedProjectId(projects[0].id);
+    } else if (projects.length > 1 && selectedProjectId && !projects.some(p => p.id === selectedProjectId)) {
+      setSelectedProjectId(null);
     }
   }, [projects]);
 
