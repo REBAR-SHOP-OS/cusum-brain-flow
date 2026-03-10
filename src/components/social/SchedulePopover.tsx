@@ -7,8 +7,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { type SocialPost } from "@/hooks/useSocialPosts";
 import { useToast } from "@/hooks/use-toast";
+import { schedulePost } from "@/lib/schedulePost";
+import { useQueryClient } from "@tanstack/react-query";
 
 const PLATFORMS = [
   { value: "instagram", label: "Instagram" },
