@@ -807,7 +807,7 @@ export function AIExtractView() {
       `}</style>
 
       <ScrollArea className="h-full">
-        <div className="p-6 space-y-6 w-full max-w-full overflow-x-hidden">
+        <div className="p-6 space-y-6 w-full max-w-[100vw] overflow-x-hidden min-w-0">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-y-2">
           <div className="flex items-center gap-3">
@@ -1838,7 +1838,7 @@ export function AIExtractView() {
                   </div>
                 </div>
               )}
-              <div className="h-[55vh] overflow-auto max-w-full">
+              <div className="h-[55vh] overflow-auto min-w-0 w-full" style={{ maxWidth: '100%' }}>
                 <div className="min-w-[1400px]">
                   <Table>
                     <TableHeader>
