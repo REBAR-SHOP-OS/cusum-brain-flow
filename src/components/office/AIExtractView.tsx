@@ -1001,8 +1001,11 @@ export function AIExtractView() {
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
                   Scope <span className="text-destructive">*</span>
                 </label>
-                <Input value={manifestName} onChange={(e) => setManifestName(e.target.value)}
-                  className="bg-card border-border" placeholder="e.g. 23 HALFORD ROAD - HAB (3)" />
+                 <Input value={manifestName} onChange={(e) => setManifestName(e.target.value)}
+                  className={`bg-card border-border ${!nameValidation.valid && manifestName.trim() ? "border-destructive" : ""}`} placeholder="e.g. 23 HALFORD ROAD - HAB (3)" />
+                {!nameValidation.valid && manifestName.trim() && (
+                  <p className="text-[10px] text-destructive mt-1">{nameValidation.reason}</p>
+                )}
               </div>
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
