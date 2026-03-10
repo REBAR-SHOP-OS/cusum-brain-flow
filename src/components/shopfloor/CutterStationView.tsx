@@ -73,6 +73,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const lockedIndex = items.findIndex(i => i.id === machine.active_job_id);
       if (lockedIndex >= 0) {
         setCurrentIndex(lockedIndex);
+        setTrackedItemId(machine.active_job_id!);
         setIsRunning(true);
         setActiveRunId(machine.current_run_id);
         // Fetch fresh completed count for snapshot
