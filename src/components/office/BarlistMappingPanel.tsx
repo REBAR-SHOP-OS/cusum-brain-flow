@@ -317,7 +317,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                   })}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </div>
         )}
 
