@@ -165,13 +165,13 @@ async function detectDuplicates(sb: any, sessionId: string, userId: string, dryR
     .neq("status", "merged")
     .order("row_index");
 
-  if (!rows?.length) return jsonResponse({ duplicates_found: 0, rows_merged: 0 });
+  if (!rows?.length) return jsonResponse({ duplicates_found: 0, rows_merged: 0, preview: [] });
 
   // Compute duplicate_key for all rows
   const keyMap = new Map<string, any[]>();
   for (const row of rows) {
     const key = computeDuplicateKey(row, session.name);
-    // Update duplicate_key in DB
+    // Always update duplicate_key in DB (even dry-run, for visibility)
     await sb.from("extract_rows").update({ duplicate_key: key }).eq("id", row.id);
     if (!keyMap.has(key)) keyMap.set(key, []);
     keyMap.get(key)!.push(row);
@@ -179,15 +179,43 @@ async function detectDuplicates(sb: any, sessionId: string, userId: string, dryR
 
   let duplicatesFound = 0;
   let rowsMerged = 0;
+  const preview: Array<{
+    duplicate_key: string;
+    survivor_mark: string;
+    survivor_row_index: number;
+    absorbed_count: number;
+    original_qty: number;
+    new_qty: number;
+    absorbed_rows: Array<{ row_index: number; mark: string; quantity: number }>;
+  }> = [];
 
   for (const [key, group] of keyMap.entries()) {
     if (group.length <= 1) continue;
 
     duplicatesFound++;
-    // Keep first row as survivor, merge rest into it
     const survivor = group[0];
     const absorbed = group.slice(1);
     const totalQty = group.reduce((s: number, r: any) => s + (r.quantity || 0), 0);
+
+    // Build preview entry for both dry-run and real merge
+    preview.push({
+      duplicate_key: key,
+      survivor_mark: survivor.mark || `Row ${survivor.row_index}`,
+      survivor_row_index: survivor.row_index,
+      absorbed_count: absorbed.length,
+      original_qty: survivor.quantity || 0,
+      new_qty: totalQty,
+      absorbed_rows: absorbed.map((r: any) => ({
+        row_index: r.row_index,
+        mark: r.mark || "",
+        quantity: r.quantity || 0,
+      })),
+    });
+
+    if (dryRun) {
+      rowsMerged += absorbed.length;
+      continue;
+    }
 
     // Save original quantity on survivor if not already set
     if (survivor.original_quantity == null) {
@@ -229,16 +257,20 @@ async function detectDuplicates(sb: any, sessionId: string, userId: string, dryR
     }
   }
 
-  // Update session status to indicate dedup completed
-  await sb.from("extract_sessions")
-    .update({ status: "extracted" })
-    .eq("id", sessionId);
+  if (!dryRun) {
+    // Update session status to indicate dedup completed
+    await sb.from("extract_sessions")
+      .update({ status: "extracted" })
+      .eq("id", sessionId);
+  }
 
   return jsonResponse({
     success: true,
+    dry_run: dryRun,
     duplicates_found: duplicatesFound,
     rows_merged: rowsMerged,
     total_active_rows: rows.length - rowsMerged,
+    preview,
   });
 }
 
