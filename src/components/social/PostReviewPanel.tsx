@@ -574,65 +574,32 @@ export function PostReviewPanel({
 
                         // Primary post gets first combo
                         const [primary, ...rest] = combos;
-                        console.log(`[PostReviewPanel] Scheduling post ${post.id} — platform: ${primary.platform}, page: ${primary.page}, date: ${post.scheduled_date}`);
-                        updatePost.mutate(
-                          {
-                            id: post.id,
-                            status: "scheduled",
-                            qa_status: "scheduled",
-                            scheduled_date: post.scheduled_date,
-                            platform: primary.platform as SocialPost["platform"],
-                            page_name: primary.page,
-                          },
-                          {
-                            onSuccess: async () => {
-                              // Verify the post was actually saved
-                              const { data: verified } = await supabase
-                                .from("social_posts")
-                                .select("status")
-                                .eq("id", post.id)
-                                .single();
-                              
-                              if (!verified || verified.status !== "scheduled") {
-                                toast({
-                                  title: "خطا در ذخیره‌سازی",
-                                  description: "پست در دیتابیس ذخیره نشد. لطفاً دوباره تلاش کنید یا با ادمین تماس بگیرید.",
-                                  variant: "destructive",
-                                });
-                                return;
-                              }
-
-                              for (const combo of rest) {
-                                await supabase.from("social_posts").insert({
-                                  user_id: post.user_id,
-                                  platform: combo.platform,
-                                  status: "scheduled",
-                                  qa_status: "scheduled",
-                                  title: post.title,
-                                  content: post.content,
-                                  image_url: post.image_url,
-                                  scheduled_date: post.scheduled_date,
-                                  hashtags: post.hashtags,
-                                  page_name: combo.page,
-                                  content_type: post.content_type,
-                                });
-                              }
-                              toast({
-                                title: "Post scheduled ✅",
-                                description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPlatforms.length} platform(s) × ${localPages.length} page(s)`,
-                              });
-                              onClose();
-                            },
-                            onError: (err: Error) => {
-                              console.error("Schedule mutation failed:", err);
-                              toast({
-                                title: "خطا در زمان‌بندی پست",
-                                description: err.message || "دسترسی شما برای زمان‌بندی پست کافی نیست. با ادمین تماس بگیرید.",
-                                variant: "destructive",
-                              });
-                            },
-                          }
-                        );
+                        const postId = post.id;
+                        console.log(`[PostReviewPanel] Schedule button — post=${postId} platform=${primary.platform} page=${primary.page} date=${post.scheduled_date}`);
+                        const result = await schedulePost({
+                          post_id: postId,
+                          scheduled_date: post.scheduled_date!,
+                          status: "scheduled",
+                          qa_status: "scheduled",
+                          platform: primary.platform,
+                          page_name: primary.page,
+                          extra_combos: rest.length > 0 ? rest.map(c => ({ platform: c.platform, page: c.page })) : undefined,
+                        });
+                        if (!result.success) {
+                          console.error("[PostReviewPanel] Schedule FAILED:", result.error, result.details);
+                          toast({
+                            title: "Scheduling failed",
+                            description: result.error || "Post could not be scheduled. Check permissions and try again.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                        toast({
+                          title: "Post scheduled ✅",
+                          description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPlatforms.length} platform(s) × ${localPages.length} page(s)`,
+                        });
+                        onClose();
                       }}
                     >
                       <CalendarDays className="w-4 h-4" />
