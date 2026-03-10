@@ -202,12 +202,12 @@ Rules:
         }
 
         const model = isSpreadsheet
-          ? "gemini-2.5-flash"
+          ? "gemini-2.5-pro"
           : (isImage || isPdf)
             ? "gemini-2.5-pro"
             : "gemini-2.5-flash";
 
-        const maxTokens = isSpreadsheet ? 16000 : 32000;
+        const maxTokens = isSpreadsheet ? 65000 : 32000;
 
         console.log(`Using model: ${model} for file: ${fileName}`);
 
