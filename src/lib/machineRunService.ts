@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import type { MachineRun, MachineRunProcess, MachineRunStatus } from "@/types/machineRun";
 
 export interface LogMachineRunParams {
