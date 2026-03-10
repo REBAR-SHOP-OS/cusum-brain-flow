@@ -1346,7 +1346,17 @@ export function AIExtractView() {
           </div>
         )}
 
-        
+
+        {/* Barlist Mapping Panel — shown at Dedupe→Mapped stage */}
+        {activeSession && currentStepIndex >= 2 && currentStepIndex < 3 && activeRows.length > 0 && (
+          <BarlistMappingPanel
+            rows={activeRows}
+            sessionId={activeSession.id}
+            onConfirmMapping={handleMappingConfirmed}
+            disabled={processing}
+          />
+        )}
+
 
         {activeSession?.status === "approved" && (
           <div className="flex items-center gap-2 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
