@@ -422,6 +422,10 @@ export function PostReviewPanel({
                           <DateSchedulePopover
                             post={post}
                            onSetDate={(date) => {
+                              if ((post.content || "").length < 20) {
+                                toast({ title: "Content too short", description: "Post content must be at least 20 characters to schedule.", variant: "destructive" });
+                                return;
+                              }
                               updatePost.mutate(
                                 {
                                   id: post.id,
@@ -431,6 +435,23 @@ export function PostReviewPanel({
                                   page_name: post.page_name || localPages[0] || null,
                                 },
                                 {
+                                  onSuccess: async () => {
+                                    const { data: verified } = await supabase
+                                      .from("social_posts")
+                                      .select("status")
+                                      .eq("id", post.id)
+                                      .single();
+                                    if (!verified || verified.status !== "scheduled") {
+                                      toast({
+                                        title: "خطا در ذخیره‌سازی",
+                                        description: "پست در دیتابیس ذخیره نشد. محتوا باید حداقل ۲۰ کاراکتر باشد.",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+                                    setDatePopoverOpen(false);
+                                    toast({ title: "Date scheduled ✅", description: `Scheduled for ${format(date, "PPP p")}` });
+                                  },
                                   onError: (err: Error) => {
                                     toast({
                                       title: "خطا در ذخیره تاریخ",
@@ -440,7 +461,6 @@ export function PostReviewPanel({
                                   },
                                 }
                               );
-                              setDatePopoverOpen(false);
                             }}
                           />
                         </PopoverContent>
