@@ -1,23 +1,46 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Group Cutter Queue by Customer → Barlist
 
-## Webhook URL
+## Current State
+Items are grouped by `project_id` with `BarSizeGroup` inside each project. The user wants grouping by **customer name** first, then by **barlist** (cut plan) within each customer.
+
+## Data Available on StationItem
+- `customer_name` — from joined `projects.customers.name`
+- `cut_plan_id` / `plan_name` — the barlist identity
+- `project_name` — work order / project label
+
+## Changes: `src/pages/StationView.tsx`
+
+### Replace `projectGroupedData` with `customerGroupedData`
+
+New hierarchy:
+```text
+┌─────────────────────────────────────┐
+│ 🏢 BRONTE CONSTRUCTION          ▼  │
+│  ├─ 📋 Barlist: CUT-PLAN-A         │
+│  │   └─ 10M [card] [card]          │
+│  │   └─ 15M [card]                 │
+│  ├─ 📋 Barlist: CUT-PLAN-B         │
+│  │   └─ 10M [card]                 │
+├─────────────────────────────────────┤
+│ 🏢 ALAIN DUBREUIL               ▼  │
+│  ├─ 📋 Barlist: CUT-PLAN-C         │
+│  │   └─ 10M [card] [card] [card]   │
+└─────────────────────────────────────┘
 ```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+### Logic
+1. `useMemo` iterates `filteredGroups`, splits items by `customer_name` → then by `cut_plan_id`
+2. Each customer is a `Collapsible` (defaultOpen)
+3. Inside each customer, each barlist is a sub-`Collapsible` with `plan_name` as header
+4. Inside each barlist, render `BarSizeGroup` components filtered to that barlist's items
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+### Rendering Structure
+- Customer header: company icon + customer name + item count + chevron
+- Barlist header: list icon + plan name + project name badge + item count
+- Bar size groups: existing `BarSizeGroup` component unchanged
+
+### Single file edit
+Only `src/pages/StationView.tsx` changes. No hook, component, or backend changes needed.
+
