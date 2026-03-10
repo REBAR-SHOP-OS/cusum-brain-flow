@@ -3,6 +3,7 @@ import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useStationData } from "@/hooks/useStationData";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useTabletPin } from "@/hooks/useTabletPin";
+import { useSupabaseWorkOrders } from "@/hooks/useSupabaseWorkOrders";
 import { CutterStationView } from "@/components/shopfloor/CutterStationView";
 import { BenderStationView } from "@/components/shopfloor/BenderStationView";
 import { BarSizeGroup } from "@/components/shopfloor/BarSizeGroup";
