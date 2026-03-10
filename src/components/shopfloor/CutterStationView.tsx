@@ -19,7 +19,7 @@ import { useInventoryData } from "@/hooks/useInventoryData";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { useSlotTracker } from "@/hooks/useSlotTracker";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle, Edit3, Lock, Unlock } from "lucide-react";
+import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle, Edit3, Lock, Unlock, Trash2, Recycle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
@@ -58,6 +58,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [correctCountOpen, setCorrectCountOpen] = useState(false);
   const [correctCountValue, setCorrectCountValue] = useState("");
   const [restoredFromBackend, setRestoredFromBackend] = useState(false);
+  const [remnantPromptOpen, setRemnantPromptOpen] = useState(false);
+  const [remnantInfo, setRemnantInfo] = useState<{ lengthMm: number; isWasteBank: boolean } | null>(null);
 
   // ── REFRESH-SAFE STATE RESTORATION ──
   // On mount, if machine has an active locked job, restore state from backend
@@ -230,7 +232,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   const remainingPieces = totalPieces - effectiveCompleted;
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
-  const barsForThisRun = operatorBars ?? runPlan?.barsThisRun ?? barsStillNeeded;
+  const autoBarsToLoad = Math.max(1, Math.min(barsStillNeeded, maxBars));
+  const barsForThisRun = operatorBars != null ? Math.max(1, Math.min(operatorBars, maxBars)) : (runPlan?.barsThisRun ?? autoBarsToLoad);
   const isDone = remainingPieces <= 0;
 
   // ── Alternative action handler ──
@@ -266,7 +269,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
     // Supervisors can exceed maxBars; operators are still clamped
-    const finalBars = (isAdmin || isShopSupervisor) ? bars : Math.min(bars, maxBars);
+    const finalBars = Math.max(1, Math.min(bars, maxBars));
     try {
       setIsRunning(true);
       // Fetch fresh completed_pieces from DB to avoid stale realtime data
@@ -402,11 +405,35 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       console.warn("[CutterStation] No currentItem — stroke NOT persisted!");
     }
 
+    // ── Check for remnant/waste prompt after stroke ──
+    // Check if ALL slots are now completed/removed (run is done)
+    const updatedSlots = slotTracker.slots; // slots updated synchronously in recordStroke
+    const allSlotsFinished = updatedSlots.length > 0 && updatedSlots.every(
+      s => s.status === "completed" || s.status === "removed" || s.status === "removable"
+    );
+    
+    if (allSlotsFinished && currentItem) {
+      // Calculate average remnant from completed bars
+      const completedSlots = updatedSlots.filter(s => s.status === "completed" || s.status === "removable");
+      if (completedSlots.length > 0) {
+        const avgRemnant = Math.round(
+          completedSlots.reduce((sum, s) => sum + (selectedStockLength - s.cutsDone * currentItem.cut_length_mm), 0) / completedSlots.length
+        );
+        if (avgRemnant > 0) {
+          setRemnantInfo({
+            lengthMm: avgRemnant,
+            isWasteBank: avgRemnant >= REMNANT_THRESHOLD_MM,
+          });
+          setRemnantPromptOpen(true);
+        }
+      }
+    }
+
     toast({
       title: "Cut recorded",
       description: `${newCutsDone} total cuts done`,
     });
-  }, [slotTracker, toast, currentItem, completedAtRunStart, totalPieces]);
+  }, [slotTracker, toast, currentItem, completedAtRunStart, totalPieces, selectedStockLength]);
 
   // ── Remove bar ──
   const handleRemoveBar = useCallback(async (slotIndex: number) => {
@@ -529,6 +556,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       setOperatorBars(null);
       setManualFloorConfirmed(false);
       setCompletedAtRunStart(null);
+      setRemnantPromptOpen(false);
+      setRemnantInfo(null);
 
       // ── Routing toast based on bend type ──
       if (currentItem.bend_type === "bend") {
@@ -847,7 +876,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           <CutEngine
             barCode={currentItem.bar_code}
             maxBars={maxBars}
-            suggestedBars={Math.min(barsStillNeeded, maxBars)}
+            suggestedBars={autoBarsToLoad}
             runPlan={runPlan}
             onLockAndStart={handleLockAndStart}
             onStockLengthChange={setSelectedStockLength}
@@ -867,6 +896,65 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           />
         </div>
       </div>
+      {/* ── Remnant / Waste Prompt Dialog ── */}
+      <Dialog open={remnantPromptOpen} onOpenChange={() => { /* block dismiss — must use buttons */ }}>
+        <DialogContent className="max-w-sm" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {remnantInfo?.isWasteBank ? (
+                <><Recycle className="w-5 h-5 text-primary" /> Remove Remnant</>
+              ) : (
+                <><Trash2 className="w-5 h-5 text-destructive" /> Remove Waste</>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {remnantInfo?.isWasteBank
+                ? "The remaining stock qualifies for the waste bank."
+                : "The remaining stock is too short to reuse."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Remaining Length</p>
+              <p className="text-4xl font-black font-mono text-foreground">{remnantInfo?.lengthMm ?? 0}<span className="text-lg text-muted-foreground ml-1">mm</span></p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">
+                {remnantInfo?.isWasteBank
+                  ? `≥ ${REMNANT_THRESHOLD_MM}mm — eligible for waste bank`
+                  : `< ${REMNANT_THRESHOLD_MM}mm — discard as scrap`}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            {remnantInfo?.isWasteBank && (
+              <Button
+                className="w-full gap-2"
+                onClick={() => {
+                  setRemnantPromptOpen(false);
+                  setRemnantInfo(null);
+                  toast({ title: "Remnant noted", description: "Will be saved to waste bank on run complete." });
+                }}
+              >
+                <Recycle className="w-4 h-4" />
+                Save Remnant to Waste Bank
+              </Button>
+            )}
+            <Button
+              variant={remnantInfo?.isWasteBank ? "outline" : "default"}
+              className="w-full gap-2"
+              onClick={() => {
+                setRemnantPromptOpen(false);
+                setRemnantInfo(null);
+                toast({ title: "Waste acknowledged", description: "Remove scrap from machine." });
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+              {remnantInfo?.isWasteBank ? "Discard as Scrap" : "Remove Waste — Continue"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* ── Correct Count Dialog (supervisor only) ── */}
       <Dialog open={correctCountOpen} onOpenChange={setCorrectCountOpen}>
         <DialogContent className="max-w-sm">

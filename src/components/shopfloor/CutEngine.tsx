@@ -215,41 +215,57 @@ export function CutEngine({
             darkMode ? "bg-slate-800 border border-slate-700" : "bg-muted border border-border"
           )}
         >
-          <Button
-            variant="outline"
-            size="icon"
-            className={cn(
-              "h-9 w-9 rounded-md",
-              darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
-            )}
-            onClick={() => { const n = Math.max(1, bars - 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
-            disabled={bars <= 1 || isRunning}
-          >
-            <ChevronDown className="w-4 h-4" />
-          </Button>
+          {isSupervisor ? (
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(
+                "h-9 w-9 rounded-md",
+                darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
+              )}
+              onClick={() => { const n = Math.max(1, bars - 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
+              disabled={bars <= 1 || isRunning}
+            >
+              <ChevronDown className="w-4 h-4" />
+            </Button>
+          ) : (
+            <div className="h-9 w-9" />
+          )}
           <div className="text-center">
             <span className={cn("text-3xl font-black font-mono", isOverCapacity && "text-amber-400")}>{isRunning && lockedBars != null ? lockedBars : bars}</span>
             <span className={cn("text-xs ml-1.5 uppercase tracking-wider", mutedClasses)}>
               Bars
             </span>
           </div>
-          <Button
-            variant="outline"
-            size="icon"
-            className={cn(
-              "h-9 w-9 rounded-md",
-              darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
-            )}
-            onClick={() => { const upperLimit = isSupervisor ? 99 : maxBars; const n = Math.min(upperLimit, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
-            disabled={(!isSupervisor && bars >= maxBars) || isRunning}
-          >
-            <ChevronUp className="w-4 h-4" />
-          </Button>
+          {isSupervisor ? (
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(
+                "h-9 w-9 rounded-md",
+                darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
+              )}
+              onClick={() => { const upperLimit = 99; const n = Math.min(upperLimit, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
+              disabled={bars >= 99 || isRunning}
+            >
+              <ChevronUp className="w-4 h-4" />
+            </Button>
+          ) : (
+            <div className="h-9 w-9" />
+          )}
         </div>
         <p className={cn("text-[10px] text-center", mutedClasses)}>
           {runPlan?.totalBarsNeeded
             ? `Need ${runPlan.totalBarsNeeded} total · Max capacity: ${maxBars}`
             : `Max capacity: ${maxBars} bars`}
+        </p>
+        {/* Role-based helper text */}
+        <p className={cn("text-[10px] text-center font-medium", operatorOverride && isSupervisor ? "text-amber-400" : mutedClasses)}>
+          {operatorOverride && isSupervisor
+            ? "⚡ Supervisor override active"
+            : isSupervisor
+              ? "Supervisor can override"
+              : "Auto-set to max safe load"}
         </p>
 
         {/* ── GPS-STYLE OVER CAPACITY WARNING ── */}
