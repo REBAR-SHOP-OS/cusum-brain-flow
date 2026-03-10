@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 export type ManageMachineAction =
   | "update-status"
@@ -20,23 +20,14 @@ export interface ManageMachineParams {
   notes?: string;
   outputQty?: number;
   scrapQty?: number;
-  /** RSIC Canada bar code (e.g. '10M', '25M', '55M'). Required for capability validation. */
   barCode?: string;
-  /** Number of bars to process. Validated against machine_capabilities.max_bars. */
   qty?: number;
-  /** ID of an existing queued run to start */
   runId?: string;
-  /** ID of the active cut_plan_item — used for job lock and batch tracking */
   cutPlanItemId?: string;
-  /** ID of the cut_plan being worked on */
   cutPlanId?: string;
-  /** Who assigned this job: 'manual' | 'optimizer' | 'supervisor' */
   assignedBy?: string;
-  /** Expected output quantity for batch variance tracking */
   plannedQty?: number;
-  /** Remnant length in mm — if >= 300mm, creates a waste bank piece */
   remnantLengthMm?: number;
-  /** Bar code for the remnant piece */
   remnantBarCode?: string;
 }
 
@@ -61,17 +52,5 @@ export async function manageMachine(
     throw new Error("scrapQty cannot be negative");
   }
 
-  const { data, error } = await supabase.functions.invoke("manage-machine", {
-    body: params,
-  });
-
-  if (error) {
-    // In supabase-js v2, non-2xx responses populate BOTH data and error.
-    // The body stream in error.context is already consumed, so data holds the real message.
-    const serverMessage = (data as any)?.error ?? null;
-    throw new Error(serverMessage || error.message || "Failed to manage machine");
-  }
-  if (data?.error) throw new Error(data.error);
-
-  return data as { success: boolean; machineId: string; action: string; machineRunId?: string };
+  return invokeEdgeFunction("manage-machine", params as any);
 }

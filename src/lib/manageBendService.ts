@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 export type ManageBendAction =
   | "create-bend-queue"
@@ -21,7 +21,6 @@ export interface ManageBendParams {
   size?: string;
   companyId?: string;
   actualQty?: number;
-  // delivery fields
   bundleIds?: string[];
   deliveryNumber?: string;
   orderId?: string;
@@ -31,10 +30,5 @@ export interface ManageBendParams {
 }
 
 export async function manageBend(params: ManageBendParams) {
-  const { data, error } = await supabase.functions.invoke("manage-bend", {
-    body: params,
-  });
-  if (error) throw new Error(error.message || "Failed to manage bend");
-  if (data?.error) throw new Error(data.error);
-  return data;
+  return invokeEdgeFunction("manage-bend", params as any);
 }
