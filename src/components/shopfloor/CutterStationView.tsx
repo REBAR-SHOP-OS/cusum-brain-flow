@@ -817,7 +817,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
               disabled={currentIndex <= 0 || machineIsRunning}
-              onClick={() => { setCurrentIndex((i) => Math.max(0, i - 1)); setManualFloorConfirmed(false); setOperatorBars(null); slotTracker.reset(); }}
+              onClick={() => { const ni = Math.max(0, currentIndex - 1); setCurrentIndex(ni); if (items[ni]) setTrackedItemId(items[ni].id); setManualFloorConfirmed(false); setOperatorBars(null); slotTracker.reset(); }}
             >
               ‹
             </button>
