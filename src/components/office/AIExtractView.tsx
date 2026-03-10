@@ -393,8 +393,20 @@ export function AIExtractView() {
     }
   };
 
+  const handleMappingConfirmed = useCallback((mappedRows: MappedRow[]) => {
+    setMappingConfirmed(true);
+    toast({
+      title: "Mapping confirmed",
+      description: `${mappedRows.length} rows mapped to canonical fields`,
+    });
+  }, [toast]);
+
   const handleApplyMapping = async () => {
     if (!activeSessionId) return;
+    if (!mappingConfirmed) {
+      toast({ title: "Mapping not confirmed", description: "Please confirm the column mapping before applying.", variant: "destructive" });
+      return;
+    }
     setProcessing(true);
     setProcessingStep("Applying mapping...");
     try {
@@ -407,6 +419,7 @@ export function AIExtractView() {
     } finally {
       setProcessing(false);
       setProcessingStep("");
+    }
     }
   };
 
