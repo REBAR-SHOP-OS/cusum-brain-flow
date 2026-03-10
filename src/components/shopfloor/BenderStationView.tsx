@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useInventoryData } from "@/hooks/useInventoryData";
 import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
+import { useBenderBatches } from "@/hooks/useBenderBatches";
+import { BenderBatchPanel } from "./BenderBatchPanel";
 import { recordCompletion } from "@/lib/foremanLearningService";
 import { Check, ChevronLeft, ChevronRight, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
