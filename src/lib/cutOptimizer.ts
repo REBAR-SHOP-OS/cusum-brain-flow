@@ -23,7 +23,7 @@ export interface OptimizerConfig {
   stockLengthMm: number;
   kerfMm: number;          // blade width, default 5
   minRemnantMm: number;    // below this = scrap, default 300
-  mode: "manual" | "standard" | "optimized" | "best-fit";
+  mode: "raw" | "long_to_short" | "combination";
 }
 
 export interface StockBar {
