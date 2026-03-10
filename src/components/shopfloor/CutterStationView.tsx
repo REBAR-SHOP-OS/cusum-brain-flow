@@ -60,6 +60,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [restoredFromBackend, setRestoredFromBackend] = useState(false);
   const [remnantPromptOpen, setRemnantPromptOpen] = useState(false);
   const [remnantInfo, setRemnantInfo] = useState<{ lengthMm: number; isWasteBank: boolean } | null>(null);
+  const remnantDecisionRef = useRef<"save" | "discard" | null>(null);
 
   // ── REFRESH-SAFE STATE RESTORATION ──
   // On mount, if machine has an active locked job, restore state from backend
