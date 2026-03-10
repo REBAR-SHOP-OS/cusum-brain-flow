@@ -94,8 +94,11 @@ export function CutEngine({
   const expectedScrap = runPlan?.expectedScrapBars || 0;
   const isFeasible = runPlan?.feasible ?? true;
 
+  const isOverCapacity = bars > maxBars;
+
   // Allow LOCK & START if plan is feasible OR supervisor can confirm
-  const canStart = canWrite && !isRunning && !isDone && bars <= maxBars && (isFeasible || runPlan?.stockSource === "manual");
+  // Supervisors can start above capacity; operators cannot
+  const canStart = canWrite && !isRunning && !isDone && (!isOverCapacity || isSupervisor) && (isFeasible || runPlan?.stockSource === "manual");
 
   return (
     <div className={cn("space-y-4", baseClasses)}>
