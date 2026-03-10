@@ -44,6 +44,8 @@ import {
   rejectExtract,
   detectDuplicates,
   validateSessionName,
+  type DuplicatePreviewItem,
+  type DedupeResult,
 } from "@/lib/extractService";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
