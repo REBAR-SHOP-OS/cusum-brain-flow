@@ -281,7 +281,7 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
             Breakdown by Bar Size
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {(activeResult || optimizedResult).results.map((r) => (
+            {(activeResult || combinationResult).results.map((r) => (
               <Card key={r.barSize} className="border-border">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
