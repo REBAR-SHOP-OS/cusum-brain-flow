@@ -1,35 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Fix: Consistent Shopfloor Access for ai@rebar.shop
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Problem
-`ai@rebar.shop` still has the `admin` role in the database (the previous deletion didn't take effect). This causes:
-- The Home page shows the full admin dashboard instead of the shopfloor-only dashboard
-- Admin-only UI panels (CEO Portal, Accounting, Office dashboards) render and fire data fetches that fail with access errors
-- Inconsistent behavior: supervisor controls work (they check `isAdmin || isShopSupervisor`) but the whole app treats it as a full admin
-
-## Fix
-
-### 1. Database: Remove `admin` role from ai@rebar.shop
-Re-run the deletion properly — keep only `workshop` and `shop_supervisor` roles.
-
-```sql
-DELETE FROM public.user_roles
-WHERE user_id = (
-  SELECT user_id FROM public.profiles WHERE email = 'ai@rebar.shop'
-)
-AND role = 'admin';
+## Webhook URL
+```
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
 ```
 
-### 2. No code changes needed
-- `canWrite = isAdmin || isWorkshop` — already works because `isWorkshop` includes `shop_supervisor`
-- `canCorrectCount = isAdmin || isShopSupervisor` — already works with `shop_supervisor` alone
-- Home page `isWorkshop && !isAdmin` check will now correctly show the shopfloor dashboard
-- RoleGuard device-email whitelist is unchanged — route restriction stays
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
-## Result
-- Shopfloor supervisor controls: still work (via `shop_supervisor` role)
-- Write access on all stations: still works (via `isWorkshop`)
-- No more admin-only UI rendering or failed data fetches
-- Home page shows shopfloor dashboard cards instead of full admin view
-
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
