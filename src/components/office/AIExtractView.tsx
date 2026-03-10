@@ -61,7 +61,6 @@ const PIPELINE_STEPS = [
   { key: "uploaded", label: "Uploaded", icon: Upload },
   { key: "extracting", label: "Extracting", icon: Sparkles },
   { key: "strategy", label: "Strategy", icon: Scissors },
-  { key: "extracted", label: "Dedupe", icon: GitBranch },
   { key: "mapping", label: "Mapped", icon: Globe },
   { key: "validated", label: "Validated", icon: Shield },
   { key: "optimizing", label: "Optimized", icon: Zap },
