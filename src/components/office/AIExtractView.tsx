@@ -577,7 +577,41 @@ export function AIExtractView() {
     setSelectedOptMode(null);
     setAllModeResults({});
     setDedupeResult(null);
+    setDedupePreview(null);
+    setPendingDedupeSessionId(null);
+    setShowMergedRows(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleConfirmMerge = async () => {
+    if (!pendingDedupeSessionId) return;
+    setProcessing(true);
+    setProcessingStep("Merging duplicates...");
+    try {
+      const mergeRes = await detectDuplicates(pendingDedupeSessionId, false);
+      setDedupeResult(mergeRes);
+      setDedupePreview(null);
+      setPendingDedupeSessionId(null);
+      await refreshRows();
+      await refreshSessions();
+      if (mergeRes.rows_merged > 0) {
+        toast({
+          title: "Duplicates merged",
+          description: `${mergeRes.rows_merged} rows merged into ${mergeRes.total_active_rows} active rows`,
+        });
+      }
+    } catch (err: any) {
+      toast({ title: "Merge failed", description: err.message, variant: "destructive" });
+    } finally {
+      setProcessing(false);
+      setProcessingStep("");
+    }
+  };
+
+  const handleDismissPreview = () => {
+    setDedupePreview(null);
+    setPendingDedupeSessionId(null);
+    toast({ title: "Merge skipped", description: "Duplicates were not merged." });
   };
 
   const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
