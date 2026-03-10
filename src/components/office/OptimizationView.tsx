@@ -254,9 +254,9 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
 
         {/* Three-way Comparison */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <PlanCard mode="standard" result={standardResult} selected={selectedPlan === "standard"} onSelect={() => setSelectedPlan("standard")} />
-          <PlanCard mode="optimized" result={optimizedResult} selected={selectedPlan === "optimized"} onSelect={() => setSelectedPlan("optimized")} />
-          <PlanCard mode="best-fit" result={bestFitResult} selected={selectedPlan === "best-fit"} onSelect={() => setSelectedPlan("best-fit")} />
+          <PlanCard mode="raw" result={rawResult} selected={selectedPlan === "raw"} onSelect={() => setSelectedPlan("raw")} />
+          <PlanCard mode="long_to_short" result={longToShortResult} selected={selectedPlan === "long_to_short"} onSelect={() => setSelectedPlan("long_to_short")} />
+          <PlanCard mode="combination" result={combinationResult} selected={selectedPlan === "combination"} onSelect={() => setSelectedPlan("combination")} />
         </div>
 
         {/* Apply Button */}
