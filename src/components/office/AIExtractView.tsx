@@ -97,6 +97,10 @@ function getStepIndex(status: string, optimizationMode?: string | null) {
   if (status === "extracted" && optimizationMode) {
     return PIPELINE_STEPS.findIndex((s) => s.key === "mapping");
   }
+  // "mapped" means mapping is done → advance to validated step (ready to validate/optimize)
+  if (status === "mapped") {
+    return PIPELINE_STEPS.findIndex((s) => s.key === "validated");
+  }
   const idx = PIPELINE_STEPS.findIndex((s) => s.key === status);
   return idx >= 0 ? idx : -1;
 }

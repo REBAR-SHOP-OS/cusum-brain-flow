@@ -390,7 +390,7 @@ async function applyMapping(sb: any, sessionId: string) {
   // Update session status
   await sb
     .from("extract_sessions")
-    .update({ status: "mapping" })
+    .update({ status: "mapped" })
     .eq("id", sessionId);
 
   return jsonResponse({
