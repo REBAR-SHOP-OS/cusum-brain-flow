@@ -1518,7 +1518,7 @@ export function AIExtractView() {
         )}
 
         {activeSession && currentStepIndex >= 3 && currentStepIndex < 4 && dedupeResolved && (
-          rowsLoading ? (
+          (rowsLoading || !rowsHasFetched) ? (
             <Card className="border-border/50">
               <CardContent className="flex items-center gap-3 py-6">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
