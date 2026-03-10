@@ -67,10 +67,14 @@ const PIPELINE_STEPS = [
   { key: "approved", label: "Approved", icon: CheckCircle2 },
 ] as const;
 
-function getStepIndex(status: string, optimizationMode?: string | null, dedupeStatus?: string | null) {
+function getStepIndex(status: string, optimizationMode?: string | null) {
   // When status is "extracted" but no optimization_mode chosen yet, park at "strategy"
   if (status === "extracted" && !optimizationMode) {
     return PIPELINE_STEPS.findIndex((s) => s.key === "strategy");
+  }
+  // "extracted" with mode set → mapping step (dedupe no longer blocks)
+  if (status === "extracted" && optimizationMode) {
+    return PIPELINE_STEPS.findIndex((s) => s.key === "mapping");
   }
   const idx = PIPELINE_STEPS.findIndex((s) => s.key === status);
   return idx >= 0 ? idx : -1;
