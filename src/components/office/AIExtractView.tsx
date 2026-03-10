@@ -589,7 +589,7 @@ export function AIExtractView() {
     });
     setEditingRows(edits);
     setIsEditing(true);
-  }, [rows]);
+  }, [activeRows]);
 
   const cancelEditing = () => {
     setEditingRows({});
