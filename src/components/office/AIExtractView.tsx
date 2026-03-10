@@ -1145,7 +1145,7 @@ export function AIExtractView() {
                     </div>
                     <div className="flex items-center gap-2">
                       {!processing && (
-                        <Button onClick={handleExtract} className="gap-1.5" disabled={!uploadedFile || !profile?.company_id || !manifestName.trim() || (!selectedProjectId && !(createNewProject && newProjectName.trim()))}>
+                        <Button onClick={handleExtract} className="gap-1.5" disabled={!uploadedFile || !profile?.company_id || !nameValidation.valid || (!selectedProjectId && !(createNewProject && newProjectName.trim()))}>
                           <Sparkles className="w-4 h-4" /> Extract & Map
                         </Button>
                       )}
