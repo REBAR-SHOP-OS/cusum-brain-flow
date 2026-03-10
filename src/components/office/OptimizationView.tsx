@@ -82,15 +82,15 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
   const activeResult = getResult(selectedPlan) || combinationResult;
 
   const savings = useMemo(() => {
-    if (!standardResult || !optimizedResult) return null;
-    const best = bestFitResult && bestFitResult.totalWasteKg < optimizedResult.totalWasteKg ? bestFitResult : optimizedResult;
+    if (!rawResult || !longToShortResult) return null;
+    const best = combinationResult && combinationResult.totalWasteKg < longToShortResult.totalWasteKg ? combinationResult : longToShortResult;
     return {
-      wasteReduction: standardResult.totalWasteKg - best.totalWasteKg,
-      barsSaved: standardResult.totalStockBars - best.totalStockBars,
-      efficiencyGain: best.overallEfficiency - standardResult.overallEfficiency,
-      bestMode: best === bestFitResult ? "Best Fit" : "FFD Optimized",
+      wasteReduction: rawResult.totalWasteKg - best.totalWasteKg,
+      barsSaved: rawResult.totalStockBars - best.totalStockBars,
+      efficiencyGain: best.overallEfficiency - rawResult.overallEfficiency,
+      bestMode: best === combinationResult ? "Combination" : "Long → Short",
     };
-  }, [standardResult, optimizedResult, bestFitResult]);
+  }, [rawResult, longToShortResult, combinationResult]);
 
   const skippedCount = activeResult?.totalSkipped ?? 0;
 
