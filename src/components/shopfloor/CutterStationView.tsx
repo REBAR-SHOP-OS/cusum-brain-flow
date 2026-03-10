@@ -876,7 +876,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           <CutEngine
             barCode={currentItem.bar_code}
             maxBars={maxBars}
-            suggestedBars={Math.min(barsStillNeeded, maxBars)}
+            suggestedBars={autoBarsToLoad}
             runPlan={runPlan}
             onLockAndStart={handleLockAndStart}
             onStockLengthChange={setSelectedStockLength}
