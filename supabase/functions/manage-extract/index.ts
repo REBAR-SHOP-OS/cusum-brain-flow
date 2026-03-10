@@ -147,7 +147,7 @@ serve(async (req) => {
 });
 
 // ─── Detect Duplicates ──────────────────────────────────────
-async function detectDuplicates(sb: any, sessionId: string, userId: string) {
+async function detectDuplicates(sb: any, sessionId: string, userId: string, dryRun: boolean = false) {
   const { data: session } = await sb
     .from("extract_sessions")
     .select("id, company_id, name, status")
