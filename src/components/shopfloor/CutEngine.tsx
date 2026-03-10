@@ -98,7 +98,7 @@ export function CutEngine({
 
   // Allow LOCK & START if plan is feasible OR supervisor can confirm
   // Supervisors can start above capacity; operators cannot
-  const canStart = canWrite && !isRunning && !isDone && (!isOverCapacity || isSupervisor) && (isFeasible || runPlan?.stockSource === "manual");
+  const canStart = canWrite && !isRunning && !isDone && !isOverCapacity && (isFeasible || runPlan?.stockSource === "manual");
 
   return (
     <div className={cn("space-y-4", baseClasses)}>
