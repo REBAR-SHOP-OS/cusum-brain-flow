@@ -9,7 +9,49 @@ export async function handleStartRun(ctx: ActionContext): Promise<{ response?: R
     return { response: json({ error: `Invalid process: ${process}` }, 400) };
   }
   if (machine.current_run_id) {
-    return { response: json({ error: "Machine already has an active run" }, 400) };
+    // ── AUTO-RECOVERY: cancel stale runs (>30 min) instead of blocking ──
+    const { data: existingRun } = await supabaseService
+      .from("machine_runs")
+      .select("id, status, started_at")
+      .eq("id", machine.current_run_id)
+      .maybeSingle();
+
+    const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+    const isStale = existingRun?.started_at &&
+      (Date.now() - new Date(existingRun.started_at).getTime()) > STALE_THRESHOLD_MS;
+    const isOrphan = !existingRun; // run row deleted but machine still references it
+
+    if (isStale || isOrphan) {
+      console.warn(`[startRun] Auto-recovering stale/orphan run ${machine.current_run_id} on ${machine.name}`);
+      if (existingRun) {
+        await supabaseService
+          .from("machine_runs")
+          .update({ status: "canceled", ended_at: now, notes: "Auto-canceled: stale run recovery" })
+          .eq("id", machine.current_run_id);
+      }
+      await supabaseService
+        .from("machines")
+        .update({
+          current_run_id: null, active_job_id: null, active_plan_id: null,
+          cut_session_status: "idle", machine_lock: false, job_assigned_by: null,
+          status: "idle", last_event_at: now,
+        })
+        .eq("id", machineId);
+
+      await logProductionEvent(supabaseService, machine.company_id, "stale_run_auto_recovered", {
+        machineId, machineName: machine.name,
+        staleRunId: machine.current_run_id, isOrphan, isStale,
+      }, `Auto-recovered stale run on ${machine.name}`, machineId, userId);
+
+      // Refresh machine state for the rest of this handler
+      machine.current_run_id = null;
+      machine.active_job_id = null;
+      machine.active_plan_id = null;
+      machine.cut_session_status = "idle";
+      machine.machine_lock = false;
+    } else {
+      return { response: json({ error: "Machine already has an active run" }, 400) };
+    }
   }
 
   // ── HARD JOB LOCK CHECK ──
