@@ -44,6 +44,7 @@ export function CutEngine({
   isRunning,
   canWrite,
   darkMode = false,
+  isSupervisor = false,
   lockedBars,
   strokesDone = 0,
   totalStrokesNeeded = 0,
