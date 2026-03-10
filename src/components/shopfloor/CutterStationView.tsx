@@ -268,7 +268,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // ── LOCK & START ──
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
-    // Supervisors can exceed maxBars; operators are still clamped
+    // Hard clamp: never exceed machine max capacity regardless of role
     const finalBars = Math.max(1, Math.min(bars, maxBars));
     try {
       setIsRunning(true);

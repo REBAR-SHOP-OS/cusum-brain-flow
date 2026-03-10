@@ -98,7 +98,7 @@ export function CutEngine({
 
   // Allow LOCK & START if plan is feasible OR supervisor can confirm
   // Supervisors can start above capacity; operators cannot
-  const canStart = canWrite && !isRunning && !isDone && (!isOverCapacity || isSupervisor) && (isFeasible || runPlan?.stockSource === "manual");
+  const canStart = canWrite && !isRunning && !isDone && !isOverCapacity && (isFeasible || runPlan?.stockSource === "manual");
 
   return (
     <div className={cn("space-y-4", baseClasses)}>
@@ -245,8 +245,8 @@ export function CutEngine({
                 "h-9 w-9 rounded-md",
                 darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
               )}
-              onClick={() => { const upperLimit = 99; const n = Math.min(upperLimit, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
-              disabled={bars >= 99 || isRunning}
+              onClick={() => { const n = Math.min(maxBars, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
+              disabled={bars >= maxBars || isRunning}
             >
               <ChevronUp className="w-4 h-4" />
             </Button>
@@ -260,36 +260,19 @@ export function CutEngine({
             : `Max capacity: ${maxBars} bars`}
         </p>
         {/* Role-based helper text */}
-        <p className={cn("text-[10px] text-center font-medium", operatorOverride && isSupervisor ? "text-amber-400" : mutedClasses)}>
-          {operatorOverride && isSupervisor
-            ? "⚡ Supervisor override active"
-            : isSupervisor
-              ? "Supervisor can override"
-              : "Auto-set to max safe load"}
+        <p className={cn("text-[10px] text-center font-medium",
+          operatorOverride && isSupervisor ? "text-amber-400"
+          : bars >= maxBars && isSupervisor ? "text-amber-400"
+          : mutedClasses
+        )}>
+          {bars >= maxBars && isSupervisor
+            ? `⚠ Capped at machine max capacity: ${maxBars}`
+            : operatorOverride && isSupervisor
+              ? "⚡ Supervisor override active"
+              : isSupervisor
+                ? "Supervisor can override within machine limit"
+                : "Auto-set to max safe load"}
         </p>
-
-        {/* ── GPS-STYLE OVER CAPACITY WARNING ── */}
-        {isOverCapacity && (
-          <div className={cn(
-            "rounded-lg border-2 border-amber-500 bg-amber-500/10 p-3 mt-2 space-y-1",
-            "animate-pulse"
-          )}>
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-              <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                Over Capacity
-              </p>
-            </div>
-            <p className={cn("text-[10px]", darkMode ? "text-amber-300" : "text-amber-700")}>
-              Machine rated for <span className="font-black">{maxBars}</span> bars — you selected <span className="font-black">{bars}</span>
-            </p>
-            {isSupervisor && (
-              <p className={cn("text-[10px] font-semibold", darkMode ? "text-amber-200" : "text-amber-600")}>
-                ⚡ Supervisor override active
-              </p>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Lock & Start / Abort buttons */}
