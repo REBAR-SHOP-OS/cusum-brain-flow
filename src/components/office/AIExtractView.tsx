@@ -195,7 +195,7 @@ export function AIExtractView() {
   
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const currentStepIndex = activeSession ? getStepIndex(activeSession.status) : -1;
+  const currentStepIndex = activeSession ? getStepIndex(activeSession.status, (activeSession as any).optimization_mode) : -1;
 
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
