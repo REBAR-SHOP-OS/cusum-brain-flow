@@ -516,9 +516,10 @@ async function validateExtract(sb: any, sessionId: string) {
     }
   }
 
-  // Insert errors
+  // Insert errors (with company_id for direct RLS)
   if (errors.length > 0) {
-    await sb.from("extract_errors").insert(errors);
+    const errorsWithCompany = errors.map((e: any) => ({ ...e, company_id: session.company_id }));
+    await sb.from("extract_errors").insert(errorsWithCompany);
   }
 
   const blockers = errors.filter((e) => e.error_type === "blocker").length;
