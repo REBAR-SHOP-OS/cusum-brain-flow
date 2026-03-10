@@ -402,35 +402,56 @@ export default function StationView() {
                     <div className="text-center py-12 text-muted-foreground text-sm">
                       No items queued to this machine yet
                     </div>
-                  ) : projectGroupedData && !selectedProjectId ? (
-                    // Grouped by project
-                    projectGroupedData.map((proj) => (
-                      <Collapsible key={proj.id} defaultOpen={true}>
+                  ) : customerGroupedData && !selectedProjectId ? (
+                    // Grouped by customer → barlist
+                    customerGroupedData.map((cust) => (
+                      <Collapsible key={cust.customerName} defaultOpen={true}>
                         <CollapsibleTrigger className="flex items-center gap-3 w-full group py-2">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <FolderOpen className="w-4 h-4 text-primary" />
+                            <Building2 className="w-4 h-4 text-primary" />
                           </div>
                           <div className="text-left flex-1 min-w-0">
-                            <h2 className="text-sm font-bold text-foreground truncate">{proj.name}</h2>
+                            <h2 className="text-sm font-bold text-foreground truncate">{cust.customerName}</h2>
                             <p className="text-[9px] tracking-[0.15em] uppercase text-muted-foreground">
-                              {proj.groups.reduce((s, g) => s + g.bendItems.length + g.straightItems.length, 0)} items
+                              {cust.totalItems} items · {cust.barlists.length} barlist{cust.barlists.length !== 1 ? "s" : ""}
                             </p>
                           </div>
                           <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
                           <div className="flex-1 h-px bg-border" />
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="space-y-8 pl-2 pt-2 pb-4">
-                            {proj.groups.map((group) => (
-                              <BarSizeGroup
-                                key={group.barCode}
-                                group={group}
-                                canWrite={canWrite}
-                                isSupervisor={isSupervisor}
-                                machineId={machineId}
-                                machineType={machine?.type}
-                                onCardClick={(itemId) => setSelectedItemId(itemId)}
-                              />
+                          <div className="space-y-6 pl-2 pt-2 pb-4">
+                            {cust.barlists.map((bl) => (
+                              <Collapsible key={bl.planId} defaultOpen={true}>
+                                <CollapsibleTrigger className="flex items-center gap-2 w-full group/bl py-1.5">
+                                  <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                    <List className="w-3.5 h-3.5 text-muted-foreground" />
+                                  </div>
+                                  <span className="text-xs font-semibold text-foreground truncate">{bl.planName}</span>
+                                  {bl.projectName && (
+                                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
+                                      {bl.projectName}
+                                    </Badge>
+                                  )}
+                                  <span className="text-[9px] text-muted-foreground shrink-0">({bl.itemCount})</span>
+                                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground transition-transform group-data-[state=open]/bl:rotate-180 ml-auto" />
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  <div className="space-y-8 pl-2 pt-2 pb-2">
+                                    {bl.groups.map((group) => (
+                                      <BarSizeGroup
+                                        key={group.barCode}
+                                        group={group}
+                                        canWrite={canWrite}
+                                        isSupervisor={isSupervisor}
+                                        machineId={machineId}
+                                        machineType={machine?.type}
+                                        onCardClick={(itemId) => setSelectedItemId(itemId)}
+                                      />
+                                    ))}
+                                  </div>
+                                </CollapsibleContent>
+                              </Collapsible>
                             ))}
                           </div>
                         </CollapsibleContent>
