@@ -25,6 +25,29 @@ export interface MachineSpec {
 
 /** Keyed by machines.model (DB column) */
 export const MACHINE_REGISTRY: Record<string, MachineSpec> = {
+  "GENSCO DTX 600": {
+    image: dtx400Img,
+    label: "DTX 600",
+    purpose: "Heavy-duty straight cuts",
+    operation: "cut",
+    maxBarCode: "55M",
+    capacity: {
+      "10M": 25,
+      "15M": 16,
+      "20M": 12,
+      "25M": 6,
+      "30M": 5,
+      "35M": 4,
+      "45M": 2,
+      "55M": 1,
+    },
+    blocked: [],
+    notes: [
+      "The Rebar King — heavy-duty cutter",
+      "No bending allowed",
+      "Scrap must be logged on completion",
+    ],
+  },
   "GENSCO DTX 400": {
     image: dtx400Img,
     label: "DTX 400",
@@ -32,11 +55,11 @@ export const MACHINE_REGISTRY: Record<string, MachineSpec> = {
     operation: "cut",
     maxBarCode: "35M",
     capacity: {
-      "10M": 12,
+      "10M": 14,
       "15M": 12,
       "20M": 8,
       "25M": 6,
-      "30M": 4,
+      "30M": 2,
       "35M": 1,
     },
     blocked: ["45M", "55M"],

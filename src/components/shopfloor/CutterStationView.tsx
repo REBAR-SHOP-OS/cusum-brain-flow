@@ -265,8 +265,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // ── LOCK & START ──
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
-    // Clamp bars to dynamic max to prevent overloading
-    const clampedBars = Math.min(bars, maxBars);
+    // Supervisors can exceed maxBars; operators are still clamped
+    const finalBars = (isAdmin || isShopSupervisor) ? bars : Math.min(bars, maxBars);
     try {
       setIsRunning(true);
       // Fetch fresh completed_pieces from DB to avoid stale realtime data
@@ -278,14 +278,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const freshCompleted = freshRow?.completed_pieces ?? completedPieces;
       setCompletedAtRunStart(freshCompleted);
       // Initialize slot tracker with actual bars the operator chose
-      slotTracker.startWithBars(clampedBars);
+      slotTracker.startWithBars(finalBars);
 
       const result = await manageMachine({
         action: "start-run",
         machineId: machine.id,
         process: "cut",
         barCode: currentItem.bar_code,
-        qty: clampedBars,
+        qty: finalBars,
         notes: `Stock: ${stockLength}mm | Mark: ${currentItem.mark_number || "—"} | Length: ${currentItem.cut_length_mm}mm | Pcs/bar: ${computedPiecesPerBar}`,
         cutPlanItemId: currentItem.id,
         cutPlanId: currentItem.cut_plan_id || undefined,
@@ -303,14 +303,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             .select("id, bar_code, source, standard_length_mm, qty_on_hand, qty_reserved")
             .eq("bar_code", currentItem.bar_code)
             .gt("qty_on_hand", 0);
-          const bestLot = (freshLots || []).find((l) => l.qty_on_hand - l.qty_reserved >= clampedBars);
+          const bestLot = (freshLots || []).find((l) => l.qty_on_hand - l.qty_reserved >= finalBars);
           if (bestLot) {
             await manageInventory({
               action: "consume-on-start",
               machineRunId: runId,
               cutPlanItemId: currentItem.id,
               barCode: currentItem.bar_code,
-              qty: clampedBars,
+              qty: finalBars,
               sourceType: bestLot.source === "remnant" ? "remnant" : "lot",
               sourceId: bestLot.id,
               stockLengthMm: stockLength,
@@ -332,7 +332,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             bar_code: currentItem.bar_code,
             cut_length_mm: currentItem.cut_length_mm,
             stock_length_mm: stockLength,
-            bars_loaded: clampedBars,
+            bars_loaded: finalBars,
             pcs_per_bar: computedPiecesPerBar,
             partial_bar: runPlan.lastBarPieces,
             stock_source: runPlan.stockSource,
@@ -856,6 +856,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             isRunning={machineIsRunning}
             canWrite={effectiveCanWrite}
             isDone={isDone}
+            isSupervisor={isAdmin || isShopSupervisor}
             darkMode
             lockedBars={machineIsRunning ? slotTracker.slots.length : undefined}
             strokesDone={slotTracker.slots.length > 0 ? Math.max(...slotTracker.slots.map(s => s.cutsDone)) : 0}

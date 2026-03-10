@@ -17,6 +17,8 @@ interface CutEngineProps {
   isRunning: boolean;
   canWrite: boolean;
   darkMode?: boolean;
+  /** Supervisors can exceed maxBars with a warning */
+  isSupervisor?: boolean;
   /** Authoritative bar count locked at run start (from SlotTracker) */
   lockedBars?: number;
   /** Live counter data from slot tracker */
@@ -42,6 +44,7 @@ export function CutEngine({
   isRunning,
   canWrite,
   darkMode = false,
+  isSupervisor = false,
   lockedBars,
   strokesDone = 0,
   totalStrokesNeeded = 0,
@@ -91,8 +94,11 @@ export function CutEngine({
   const expectedScrap = runPlan?.expectedScrapBars || 0;
   const isFeasible = runPlan?.feasible ?? true;
 
+  const isOverCapacity = bars > maxBars;
+
   // Allow LOCK & START if plan is feasible OR supervisor can confirm
-  const canStart = canWrite && !isRunning && !isDone && bars <= maxBars && (isFeasible || runPlan?.stockSource === "manual");
+  // Supervisors can start above capacity; operators cannot
+  const canStart = canWrite && !isRunning && !isDone && (!isOverCapacity || isSupervisor) && (isFeasible || runPlan?.stockSource === "manual");
 
   return (
     <div className={cn("space-y-4", baseClasses)}>
@@ -222,7 +228,7 @@ export function CutEngine({
             <ChevronDown className="w-4 h-4" />
           </Button>
           <div className="text-center">
-            <span className="text-3xl font-black font-mono">{isRunning && lockedBars != null ? lockedBars : bars}</span>
+            <span className={cn("text-3xl font-black font-mono", isOverCapacity && "text-amber-400")}>{isRunning && lockedBars != null ? lockedBars : bars}</span>
             <span className={cn("text-xs ml-1.5 uppercase tracking-wider", mutedClasses)}>
               Bars
             </span>
@@ -234,8 +240,8 @@ export function CutEngine({
               "h-9 w-9 rounded-md",
               darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
             )}
-            onClick={() => { const n = Math.min(maxBars, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
-            disabled={bars >= maxBars || isRunning}
+            onClick={() => { const upperLimit = isSupervisor ? 99 : maxBars; const n = Math.min(upperLimit, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
+            disabled={(!isSupervisor && bars >= maxBars) || isRunning}
           >
             <ChevronUp className="w-4 h-4" />
           </Button>
@@ -245,6 +251,29 @@ export function CutEngine({
             ? `Need ${runPlan.totalBarsNeeded} total · Max capacity: ${maxBars}`
             : `Max capacity: ${maxBars} bars`}
         </p>
+
+        {/* ── GPS-STYLE OVER CAPACITY WARNING ── */}
+        {isOverCapacity && (
+          <div className={cn(
+            "rounded-lg border-2 border-amber-500 bg-amber-500/10 p-3 mt-2 space-y-1",
+            "animate-pulse"
+          )}>
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                Over Capacity
+              </p>
+            </div>
+            <p className={cn("text-[10px]", darkMode ? "text-amber-300" : "text-amber-700")}>
+              Machine rated for <span className="font-black">{maxBars}</span> bars — you selected <span className="font-black">{bars}</span>
+            </p>
+            {isSupervisor && (
+              <p className={cn("text-[10px] font-semibold", darkMode ? "text-amber-200" : "text-amber-600")}>
+                ⚡ Supervisor override active
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Lock & Start / Abort buttons */}
