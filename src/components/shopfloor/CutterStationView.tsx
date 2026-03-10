@@ -502,7 +502,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         : 0;
 
       // ── Show remnant prompt BEFORE completing run (deferred from handleRecordStroke) ──
-      if (avgRemnant > 0 && !remnantPromptOpen) {
+      if (avgRemnant > 0 && !remnantDecisionRef.current) {
         setRemnantInfo({
           lengthMm: avgRemnant,
           isWasteBank: avgRemnant >= REMNANT_THRESHOLD_MM,
@@ -520,8 +520,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         cutPlanItemId: currentItem.id,
         cutPlanId: currentItem.cut_plan_id || undefined,
         plannedQty: barsForThisRun * computedPiecesPerBar,
-        remnantLengthMm: avgRemnant >= REMNANT_THRESHOLD_MM ? avgRemnant : undefined,
-        remnantBarCode: avgRemnant >= REMNANT_THRESHOLD_MM ? currentItem.bar_code : undefined,
+        remnantLengthMm: remnantDecisionRef.current === "save" && avgRemnant >= REMNANT_THRESHOLD_MM ? avgRemnant : undefined,
+        remnantBarCode: remnantDecisionRef.current === "save" && avgRemnant >= REMNANT_THRESHOLD_MM ? currentItem.bar_code : undefined,
       });
 
       recordCompletion("cut", machine.id, currentItem.bar_code, {
