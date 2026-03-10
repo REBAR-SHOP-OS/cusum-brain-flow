@@ -8280,6 +8280,54 @@ export type Database = {
         }
         Relationships: []
       }
+      production_events: {
+        Row: {
+          batch_id: string | null
+          company_id: string
+          created_at: string | null
+          event_type: string
+          id: string
+          job_id: string | null
+          machine_id: string | null
+          metadata: Json | null
+          new_status: string | null
+          old_status: string | null
+          row_id: string | null
+          session_id: string | null
+          triggered_by: string | null
+        }
+        Insert: {
+          batch_id?: string | null
+          company_id: string
+          created_at?: string | null
+          event_type: string
+          id?: string
+          job_id?: string | null
+          machine_id?: string | null
+          metadata?: Json | null
+          new_status?: string | null
+          old_status?: string | null
+          row_id?: string | null
+          session_id?: string | null
+          triggered_by?: string | null
+        }
+        Update: {
+          batch_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          job_id?: string | null
+          machine_id?: string | null
+          metadata?: Json | null
+          new_status?: string | null
+          old_status?: string | null
+          row_id?: string | null
+          session_id?: string | null
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
       production_tasks: {
         Row: {
           asa_shape_code: string | null
