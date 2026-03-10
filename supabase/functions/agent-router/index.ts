@@ -4,7 +4,7 @@
  * Uses GPT-4o-mini for speed (~200ms, ~100 tokens).
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
