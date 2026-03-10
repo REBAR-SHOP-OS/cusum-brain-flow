@@ -126,7 +126,7 @@ serve(async (req) => {
         return await validateExtract(sb, sessionId);
 
       case "detect-duplicates":
-        return await detectDuplicates(sb, sessionId, user.id);
+        return await detectDuplicates(sb, sessionId, user.id, params.dryRun === true);
 
       case "approve":
         return await approveExtract(sb, sessionId, user.id, params.optimizerConfig);
