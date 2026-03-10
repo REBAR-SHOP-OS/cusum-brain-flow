@@ -1,23 +1,22 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Customer → Barlist Grouping Not Activating
 
-## Webhook URL
-```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+## Root Cause
+The auto-select logic (line 60) selects a project when there's only 1 project. Since all 59 items belong to one project, `selectedProjectId` gets set, which causes `customerGroupedData` to return `null` (line 140: `if (selectedProjectId) return null`). The UI then falls through to the flat layout instead of the grouped view.
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+## Fix
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+### `src/pages/StationView.tsx`
+
+1. **Remove auto-select for single project** — Always default to `selectedProjectId = null` so the customer-grouped view is the default. The project dropdown remains available as an optional filter.
+
+   Change the `useEffect` (lines 59-65): remove the `projects.length === 1` auto-select branch. Only keep the cleanup branch for stale selections.
+
+2. **Always compute `customerGroupedData`** — Remove the `if (selectedProjectId) return null` guard (line 140). When a project IS selected, still group by customer/barlist but use the already-filtered `filteredGroups` (which respects `selectedProjectId`).
+
+This way:
+- Default view = all items grouped by Customer → Barlist → Bar Size
+- Optional project filter via dropdown still works, but shows grouped layout too
+- Single project or multiple projects — same consistent grouped UI
+
