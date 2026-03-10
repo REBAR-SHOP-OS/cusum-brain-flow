@@ -94,8 +94,8 @@ Deno.serve(async (req) => {
       // Enforce 8 AM ET restriction for @rebar.shop users
       if (isRebarUser) {
         const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-        if (nowET.getHours() < 8) {
-          return new Response(JSON.stringify({ error: "Clock-in is available from 8:00 AM" }), {
+        if (nowET.getHours() < 6) {
+          return new Response(JSON.stringify({ error: "Clock-in is available from 6:00 AM" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
