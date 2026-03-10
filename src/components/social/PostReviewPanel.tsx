@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -139,9 +139,17 @@ export function PostReviewPanel({
 
   // Sub-panel state
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
-  const [localContentType, setLocalContentType] = useState("post");
-  const [localPages, setLocalPages] = useState<string[]>(["Ontario Steel Detailing"]);
+  const [localContentType, setLocalContentType] = useState(post?.content_type || "post");
+  const [localPages, setLocalPages] = useState<string[]>(post?.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
   const [localPlatforms, setLocalPlatforms] = useState<string[]>([post?.platform || "facebook"]);
+
+  // Sync local state when post changes (navigation or refresh)
+  useEffect(() => {
+    if (!post) return;
+    setLocalPlatforms([post.platform]);
+    setLocalPages(post.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
+    setLocalContentType(post.content_type || "post");
+  }, [post?.id]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
