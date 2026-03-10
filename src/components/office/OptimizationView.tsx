@@ -58,28 +58,28 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
     mode,
   });
 
-  const standardResult = useMemo<OptimizationSummary | null>(() => {
+  const rawResult = useMemo<OptimizationSummary | null>(() => {
     if (!cutItems.length) return null;
-    return runOptimization(cutItems, makeConfig("standard"));
+    return runOptimization(cutItems, makeConfig("raw"));
   }, [cutItems, stockLength, kerf, minRemnant]);
 
-  const optimizedResult = useMemo<OptimizationSummary | null>(() => {
+  const longToShortResult = useMemo<OptimizationSummary | null>(() => {
     if (!cutItems.length) return null;
-    return runOptimization(cutItems, makeConfig("optimized"));
+    return runOptimization(cutItems, makeConfig("long_to_short"));
   }, [cutItems, stockLength, kerf, minRemnant]);
 
-  const bestFitResult = useMemo<OptimizationSummary | null>(() => {
+  const combinationResult = useMemo<OptimizationSummary | null>(() => {
     if (!cutItems.length) return null;
-    return runOptimization(cutItems, makeConfig("best-fit"));
+    return runOptimization(cutItems, makeConfig("combination"));
   }, [cutItems, stockLength, kerf, minRemnant]);
 
   const getResult = (mode: OptimizerConfig["mode"] | null) => {
-    if (mode === "standard") return standardResult;
-    if (mode === "best-fit") return bestFitResult;
-    return optimizedResult; // default
+    if (mode === "raw") return rawResult;
+    if (mode === "long_to_short") return longToShortResult;
+    return combinationResult; // default
   };
 
-  const activeResult = getResult(selectedPlan) || optimizedResult;
+  const activeResult = getResult(selectedPlan) || combinationResult;
 
   const savings = useMemo(() => {
     if (!standardResult || !optimizedResult) return null;
