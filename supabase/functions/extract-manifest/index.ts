@@ -314,8 +314,13 @@ Rules:
           .eq("id", sessionId);
 
         console.log(`Extraction complete for session ${sessionId}: ${items.length} rows saved`);
-      } catch (bgErr: any) {
-        console.error(`Background extraction failed for session ${sessionId}:`, bgErr);
+
+    return new Response(
+      JSON.stringify({ status: "extracted", sessionId }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+    } catch (bgErr: any) {
+        console.error(`Extraction failed for session ${sessionId}:`, bgErr);
         await svcClient
           .from("extract_sessions")
           .update({
@@ -324,21 +329,12 @@ Rules:
             progress: 0,
           })
           .eq("id", sessionId);
-      }
-    })();
-
-    // Use EdgeRuntime.waitUntil if available (Deno Deploy), otherwise let promise run
-    if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
-      (globalThis as any).EdgeRuntime.waitUntil(bgTask);
-    } else {
-      // Fallback: don't await, let it run in background
-      bgTask.catch((e: any) => console.error("Background task error:", e));
-    }
 
     return new Response(
-      JSON.stringify({ status: "processing", sessionId }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ status: "error", sessionId, error: bgErr instanceof Error ? bgErr.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+    }
   } catch (error) {
     console.error("Extract manifest error:", error);
     return new Response(
