@@ -44,6 +44,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const queryClient = useQueryClient();
   const { isAdmin, isShopSupervisor } = useUserRole();
   const canCorrectCount = isAdmin || isShopSupervisor;
+  const [isSupervisor, setIsSupervisor] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [trackedItemId, setTrackedItemId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -589,6 +590,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           machineName={machine.name}
           machineModel={machine.model}
           canWrite={canWrite}
+          isSupervisor={isSupervisor}
+          onToggleSupervisor={canCorrectCount ? () => setIsSupervisor(v => !v) : undefined}
           onBack={onBack}
           showBedsSuffix={true}
         />
@@ -609,6 +612,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         drawingRef={currentItem.drawing_ref}
         remainingCount={remaining}
         canWrite={canWrite}
+        isSupervisor={isSupervisor}
+        onToggleSupervisor={canCorrectCount ? () => setIsSupervisor(v => !v) : undefined}
         onBack={onBack}
         showBedsSuffix={false}
       />
