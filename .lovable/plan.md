@@ -1,23 +1,36 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Extract Rows Stuck on "Loading" — Robustness Improvements
 
-## Webhook URL
-```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+## Diagnosis
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+The RLS fix from the previous migration is **working correctly** — the `user_can_access_session` function returns `true`, the query executes in 2.5ms, and 61 rows exist. The "Loading extracted rows..." state you're seeing is from a **stale browser session** that cached the empty result before the RLS fix was deployed.
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+However, there are real robustness gaps that can cause the loading state to appear stuck:
+
+## Obstacles Found
+
+### 1. No loading timeout or auto-retry
+The `useExtractRows` hook fetches once and never retries. If the fetch returns 0 rows (e.g., due to stale RLS), the user sees "Loading..." forever since `rowsLoading` stays `true` during the fetch with no fallback.
+
+### 2. No realtime subscription for `extract_rows`
+The `useExtractSessions` hook subscribes to realtime changes, but `useExtractRows` does NOT. When the edge function inserts rows during extraction, the UI has no way to know rows appeared — the user must manually refresh.
+
+### 3. Loading condition too strict at step 3
+The condition `rowsLoading || !rowsHasFetched` blocks the entire mapping panel. If the fetch completes with 0 rows (transient RLS issue), the user sees "No extracted rows" with only a manual retry button.
+
+## Plan
+
+### File: `src/hooks/useExtractSessions.ts` — `useExtractRows` hook
+
+1. **Add realtime subscription** for `extract_rows` filtered by `session_id`, triggering `refresh()` on INSERT/UPDATE/DELETE events — identical pattern to `useExtractSessions`.
+
+2. **Add auto-retry with backoff** — if the first fetch returns 0 rows and the session status suggests rows should exist, retry once after 2 seconds.
+
+### File: `src/components/office/AIExtractView.tsx`
+
+3. **Add a loading timeout** — if `rowsLoading` is true for more than 10 seconds, show a retry button alongside the spinner instead of an infinite loading state.
+
+### No database changes needed
+The RLS fix is already deployed and working.
+
