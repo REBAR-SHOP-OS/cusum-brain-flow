@@ -431,6 +431,11 @@ export default function StationView() {
                           <div className="flex-1 h-px bg-border" />
                         </CollapsibleTrigger>
                         <CollapsibleContent>
+                          {cust.totalItems === 0 ? (
+                            <div className="pl-12 py-3 text-xs text-muted-foreground italic">
+                              No compatible items for this machine — routed to other station
+                            </div>
+                          ) : (
                           <div className="space-y-6 pl-2 pt-2 pb-4">
                             {cust.barlists.map((bl) => (
                               <Collapsible key={bl.planId} defaultOpen={true}>
@@ -465,6 +470,7 @@ export default function StationView() {
                               </Collapsible>
                             ))}
                           </div>
+                          )}
                         </CollapsibleContent>
                       </Collapsible>
                     ))
