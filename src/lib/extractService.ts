@@ -181,7 +181,7 @@ export async function uploadExtractFile(params: {
   return { fileId: (data as any).id, fileUrl, storagePath };
 }
 
-export async function runExtract(params: {
+export function runExtract(params: {
   sessionId: string;
   fileUrl: string;
   fileName: string;
@@ -191,21 +191,19 @@ export async function runExtract(params: {
     address: string;
     type: string;
   };
-}): Promise<void> {
-  // Fire-and-forget: edge function handles extraction in background
-  const { data, error } = await supabase.functions.invoke("extract-manifest", {
+}): void {
+  // Fire-and-forget: edge function runs synchronously (up to 150s),
+  // client polls extract_sessions for progress/completion
+  supabase.functions.invoke("extract-manifest", {
     body: {
       sessionId: params.sessionId,
       fileUrl: params.fileUrl,
       fileName: params.fileName,
       manifestContext: params.manifestContext,
     },
+  }).catch((err) => {
+    console.error("Extract invoke failed:", err);
   });
-
-  if (error) throw new Error(error.message || "Extraction failed");
-  if (data?.error) throw new Error(data.error);
-  // Edge function returns immediately with { status: "processing" }
-  // Client should poll extract_sessions for status updates
 }
 
 export interface DuplicatePreviewItem {
