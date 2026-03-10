@@ -1469,7 +1469,16 @@ export function AIExtractView() {
                             <TableCell className="text-xs text-center font-bold p-1">
                               {edit ? (
                                 <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-center font-bold" value={edit.quantity} onChange={e => updateEditField(row.id, "quantity", e.target.value)} />
-                              ) : (row.quantity ?? "—")}
+                              ) : (
+                                <span className="inline-flex items-center gap-1">
+                                  {row.quantity ?? "—"}
+                                  {row.original_quantity != null && row.original_quantity !== row.quantity && (
+                                    <span className="text-[9px] text-amber-500" title={`Originally ${row.original_quantity}, merged duplicates added`}>
+                                      ↑{(row.quantity || 0) - row.original_quantity}
+                                    </span>
+                                  )}
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="text-xs p-1">
                               {edit ? (
