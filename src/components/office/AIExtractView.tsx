@@ -1523,12 +1523,7 @@ export function AIExtractView() {
 
         {activeSession && currentStepIndex === 3 && (
           (rowsLoading || !rowsHasFetched) ? (
-            <Card className="border-border/50">
-              <CardContent className="flex items-center gap-3 py-6">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Loading extracted rows…</span>
-              </CardContent>
-            </Card>
+            <LoadingRowsCard onRetry={refreshRows} />
           ) : activeRows.length > 0 ? (
             <BarlistMappingPanel
               rows={activeRows}
