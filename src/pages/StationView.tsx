@@ -3,6 +3,7 @@ import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useStationData } from "@/hooks/useStationData";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useTabletPin } from "@/hooks/useTabletPin";
+import { useSupabaseWorkOrders } from "@/hooks/useSupabaseWorkOrders";
 import { CutterStationView } from "@/components/shopfloor/CutterStationView";
 import { BenderStationView } from "@/components/shopfloor/BenderStationView";
 import { BarSizeGroup } from "@/components/shopfloor/BarSizeGroup";
@@ -33,6 +34,7 @@ export default function StationView() {
   const [isSupervisor, setIsSupervisor] = useState(false);
   const [selectedBarListId, setSelectedBarListId] = useState<string | null>(null);
   const { pinnedMachineId, unpinMachine } = useTabletPin();
+  const { data: activeWorkOrders } = useSupabaseWorkOrders();
   const isPinned = pinnedMachineId === machineId;
 
   // Compute distinct projects from all items
@@ -134,6 +136,7 @@ export default function StationView() {
     : groups;
 
   // Group filteredGroups by customer → barlist for cutter display
+  // Also merge active work orders so all active projects appear even with 0 compatible items
   const customerGroupedData = useMemo(() => {
     const allItemsFlat = filteredGroups.flatMap(g => [...g.bendItems, ...g.straightItems]);
     // Build: customer → barlist → items
@@ -151,6 +154,17 @@ export default function StationView() {
       }
       cust.barlists.get(planId)!.items.push(item);
     }
+
+    // Merge active work orders — add customers with no compatible items
+    const activeStatuses = new Set(["in_progress", "pending", "on_hold"]);
+    for (const wo of activeWorkOrders) {
+      if (!wo.status || !activeStatuses.has(wo.status)) continue;
+      const custKey = wo.customer_name || "Unknown Customer";
+      if (!custMap.has(custKey)) {
+        custMap.set(custKey, { name: custKey, barlists: new Map() });
+      }
+    }
+
     // Convert to array and build BarSizeGroups per barlist
     return [...custMap.entries()].map(([custKey, cust]) => ({
       customerName: cust.name,
@@ -182,7 +196,7 @@ export default function StationView() {
       }),
       totalItems: [...cust.barlists.values()].reduce((s, bl) => s + bl.items.length, 0),
     }));
-  }, [filteredGroups, selectedProjectId]);
+  }, [filteredGroups, selectedProjectId, activeWorkOrders]);
 
 
   if (!machineId) return <Navigate to="/shopfloor/station" replace />;
@@ -410,13 +424,20 @@ export default function StationView() {
                           <div className="text-left flex-1 min-w-0">
                             <h2 className="text-sm font-bold text-foreground truncate">{cust.customerName}</h2>
                             <p className="text-[9px] tracking-[0.15em] uppercase text-muted-foreground">
-                              {cust.totalItems} items · {cust.barlists.length} barlist{cust.barlists.length !== 1 ? "s" : ""}
+                              {cust.totalItems > 0
+                                ? `${cust.totalItems} items · ${cust.barlists.length} barlist${cust.barlists.length !== 1 ? "s" : ""}`
+                                : "0 items · routed to other machine"}
                             </p>
                           </div>
                           <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
                           <div className="flex-1 h-px bg-border" />
                         </CollapsibleTrigger>
                         <CollapsibleContent>
+                          {cust.totalItems === 0 ? (
+                            <div className="pl-12 py-3 text-xs text-muted-foreground italic">
+                              No compatible items for this machine — routed to other station
+                            </div>
+                          ) : (
                           <div className="space-y-6 pl-2 pt-2 pb-4">
                             {cust.barlists.map((bl) => (
                               <Collapsible key={bl.planId} defaultOpen={true}>
@@ -451,6 +472,7 @@ export default function StationView() {
                               </Collapsible>
                             ))}
                           </div>
+                          )}
                         </CollapsibleContent>
                       </Collapsible>
                     ))
