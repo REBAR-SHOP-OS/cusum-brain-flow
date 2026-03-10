@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { StationHeader } from "./StationHeader";
@@ -60,6 +60,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [restoredFromBackend, setRestoredFromBackend] = useState(false);
   const [remnantPromptOpen, setRemnantPromptOpen] = useState(false);
   const [remnantInfo, setRemnantInfo] = useState<{ lengthMm: number; isWasteBank: boolean } | null>(null);
+  const remnantDecisionRef = useRef<"save" | "discard" | null>(null);
 
   // ── REFRESH-SAFE STATE RESTORATION ──
   // On mount, if machine has an active locked job, restore state from backend
@@ -502,7 +503,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         : 0;
 
       // ── Show remnant prompt BEFORE completing run (deferred from handleRecordStroke) ──
-      if (avgRemnant > 0 && !remnantPromptOpen) {
+      if (avgRemnant > 0 && !remnantDecisionRef.current) {
         setRemnantInfo({
           lengthMm: avgRemnant,
           isWasteBank: avgRemnant >= REMNANT_THRESHOLD_MM,
@@ -520,8 +521,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         cutPlanItemId: currentItem.id,
         cutPlanId: currentItem.cut_plan_id || undefined,
         plannedQty: barsForThisRun * computedPiecesPerBar,
-        remnantLengthMm: avgRemnant >= REMNANT_THRESHOLD_MM ? avgRemnant : undefined,
-        remnantBarCode: avgRemnant >= REMNANT_THRESHOLD_MM ? currentItem.bar_code : undefined,
+        remnantLengthMm: remnantDecisionRef.current === "save" && avgRemnant >= REMNANT_THRESHOLD_MM ? avgRemnant : undefined,
+        remnantBarCode: remnantDecisionRef.current === "save" && avgRemnant >= REMNANT_THRESHOLD_MM ? currentItem.bar_code : undefined,
       });
 
       recordCompletion("cut", machine.id, currentItem.bar_code, {
@@ -557,6 +558,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       setCompletedAtRunStart(null);
       setRemnantPromptOpen(false);
       setRemnantInfo(null);
+      remnantDecisionRef.current = null;
 
       // ── Routing toast based on bend type ──
       if (currentItem.bend_type === "bend") {
@@ -929,9 +931,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               <Button
                 className="w-full gap-2"
                 onClick={() => {
+                  remnantDecisionRef.current = "save";
                   setRemnantPromptOpen(false);
                   setRemnantInfo(null);
-                  toast({ title: "Remnant noted", description: "Will be saved to waste bank on run complete." });
+                  handleCompleteRun();
                 }}
               >
                 <Recycle className="w-4 h-4" />
@@ -942,9 +945,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               variant={remnantInfo?.isWasteBank ? "outline" : "default"}
               className="w-full gap-2"
               onClick={() => {
+                remnantDecisionRef.current = "discard";
                 setRemnantPromptOpen(false);
                 setRemnantInfo(null);
-                toast({ title: "Waste acknowledged", description: "Remove scrap from machine." });
+                handleCompleteRun();
               }}
             >
               <Trash2 className="w-4 h-4" />
