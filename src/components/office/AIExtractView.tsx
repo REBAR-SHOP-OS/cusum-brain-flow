@@ -143,7 +143,7 @@ export function AIExtractView() {
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
-  const { rows, refresh: refreshRows } = useExtractRows(activeSessionId);
+  const { rows, loading: rowsLoading, refresh: refreshRows } = useExtractRows(activeSessionId);
   const { errors, refresh: refreshErrors } = useExtractErrors(activeSessionId);
 
   // Get company_id
