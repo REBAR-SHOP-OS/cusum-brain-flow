@@ -84,7 +84,6 @@ const PIPELINE_STEPS = [
   { key: "strategy", label: "Strategy", icon: Scissors },
   { key: "mapping", label: "Mapped", icon: Globe },
   { key: "validated", label: "Validated", icon: Shield },
-  { key: "optimizing", label: "Optimized", icon: Zap },
   { key: "approved", label: "Approved", icon: CheckCircle2 },
 ] as const;
 
@@ -99,6 +98,10 @@ function getStepIndex(status: string, optimizationMode?: string | null) {
   }
   // "mapped" means mapping is done → advance to validated step (ready to validate/optimize)
   if (status === "mapped") {
+    return PIPELINE_STEPS.findIndex((s) => s.key === "validated");
+  }
+  // Legacy: "optimizing" maps to validated step
+  if (status === "optimizing") {
     return PIPELINE_STEPS.findIndex((s) => s.key === "validated");
   }
   const idx = PIPELINE_STEPS.findIndex((s) => s.key === status);
@@ -549,13 +552,7 @@ export function AIExtractView() {
       // Set local flag immediately for UI visibility (DB update may fail due to RLS)
       setIsOptimizing(true);
 
-      // Best-effort DB status update
-      try {
-        await supabase
-          .from("extract_sessions")
-          .update({ status: "optimizing" } as any)
-          .eq("id", activeSessionId);
-      } catch (_) { /* RLS may block — local flag handles UI */ }
+      // Session stays at "validated" — no separate "optimizing" status
       
       // Run all three modes for comparison
       const cutItems: CutItem[] = activeRows
@@ -639,8 +636,8 @@ export function AIExtractView() {
     setInvoiceNumber(session.invoice_number || "");
     setInvoiceDate(session.invoice_date || "");
     setShowHistory(false);
-    setIsOptimizing(session.status === "optimizing");
-    if (session.status !== "optimizing") {
+    setIsOptimizing(session.status === "optimizing" || session.status === "validated");
+    if (session.status !== "optimizing" && session.status !== "validated") {
       setOptimizationResult(null);
       setSelectedOptMode(null);
       setAllModeResults({});
@@ -1348,7 +1345,7 @@ export function AIExtractView() {
                 <Zap className="w-4 h-4" /> Optimize
               </Button>
             )}
-            {(currentStepIndex >= 5 || isOptimizing) && (
+            {(currentStepIndex >= 4 && isOptimizing) && (
               <>
                 <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                   <Zap className="w-3 h-3 mr-1" /> Select a cutting plan below, then click Approve
@@ -1968,7 +1965,7 @@ export function AIExtractView() {
         )}
 
         {/* Optimization Panel — rendered below the table so users see data first */}
-        {(activeSession?.status === "optimizing" || isOptimizing) && (
+        {isOptimizing && (
           <Card ref={optimizationPanelRef} className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center gap-2">
@@ -2121,7 +2118,7 @@ function StatusBadge({ status }: { status: string }) {
     extracted: { label: "EXTRACTED", className: "bg-blue-500/20 text-blue-500" },
     mapping: { label: "MAPPED", className: "bg-purple-500/20 text-purple-500" },
     validated: { label: "VALIDATED", className: "bg-emerald-500/20 text-emerald-500" },
-    optimizing: { label: "OPTIMIZED", className: "bg-amber-500/20 text-amber-500" },
+    optimizing: { label: "VALIDATED", className: "bg-emerald-500/20 text-emerald-500" },
     approved: { label: "APPROVED", className: "bg-emerald-600/20 text-emerald-400" },
     rejected: { label: "REJECTED", className: "bg-destructive/20 text-destructive" },
   };
