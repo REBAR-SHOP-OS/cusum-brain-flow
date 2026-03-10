@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
-import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import * as XLSX from "npm:xlsx@0.18.5";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
@@ -242,7 +242,13 @@ Rules:
           if (lastCompleteItem > 0) {
             jsonStr = jsonStr.substring(0, lastCompleteItem + 1) + "]}";
             extractedData = JSON.parse(jsonStr);
-            console.log(`Repaired truncated JSON: recovered ${extractedData.items?.length || 0} items`);
+            const recoveredCount = extractedData.items?.length || 0;
+            console.log(`Repaired truncated JSON: recovered ${recoveredCount} items`);
+            // Store truncation warning so UI can inform user
+            await svcClient
+              .from("extract_sessions")
+              .update({ error_message: `Warning: AI response was truncated. Recovered ${recoveredCount} items — some rows may be missing.` })
+              .eq("id", sessionId);
           } else {
             throw new Error("Failed to parse AI extraction results");
           }
