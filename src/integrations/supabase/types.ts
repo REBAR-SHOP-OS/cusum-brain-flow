@@ -14912,6 +14912,10 @@ export type Database = {
         Returns: undefined
       }
       score_lead: { Args: { p_lead_id: string }; Returns: undefined }
+      user_can_access_session: {
+        Args: { _session_id: string; _user_id: string }
+        Returns: boolean
+      }
       verify_admin_pin: { Args: { _pin: string }; Returns: boolean }
     }
     Enums: {
