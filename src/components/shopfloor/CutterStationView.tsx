@@ -265,8 +265,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   }, [machine.id, currentItem, selectedStockLength, runPlan, toast]);
 
   // ── LOCK & START ──
+  const startingRef = useRef(false);
   const handleLockAndStart = async (stockLength: number, bars: number) => {
-    if (!currentItem) return;
+    if (!currentItem || startingRef.current) return;
+    startingRef.current = true;
     // Hard clamp: never exceed machine max capacity regardless of role
     const finalBars = Math.max(1, Math.min(bars, maxBars));
     try {
