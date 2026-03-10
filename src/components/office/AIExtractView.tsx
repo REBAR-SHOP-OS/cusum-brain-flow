@@ -514,6 +514,10 @@ export function AIExtractView() {
         description: `${result.blockers} blockers, ${result.warnings} warnings`,
         variant: result.can_approve ? "default" : "destructive",
       });
+      // Auto-advance to optimize if validation passed
+      if (result.can_approve) {
+        handleStartOptimize();
+      }
     } catch (err: any) {
       toast({ title: "Validation failed", description: err.message, variant: "destructive" });
     } finally {
