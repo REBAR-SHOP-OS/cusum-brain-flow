@@ -254,7 +254,7 @@ export default function StationView() {
         }}
       />
 
-      {/* Back to project picker (only if multiple projects) */}
+      {/* Active project indicator (only if single project selected) */}
       {projects.length > 1 && selectedProjectId && (
         <div className="flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-border">
           <Button
@@ -268,7 +268,7 @@ export default function StationView() {
             }}
           >
             <ArrowLeft className="w-3 h-3" />
-            Switch Project
+            Show All Projects
           </Button>
           <span className="text-[10px] tracking-wider uppercase font-bold text-primary truncate">
             {projects.find(p => p.id === selectedProjectId)?.name}
