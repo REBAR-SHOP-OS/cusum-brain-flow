@@ -404,11 +404,35 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       console.warn("[CutterStation] No currentItem — stroke NOT persisted!");
     }
 
+    // ── Check for remnant/waste prompt after stroke ──
+    // Check if ALL slots are now completed/removed (run is done)
+    const updatedSlots = slotTracker.slots; // slots updated synchronously in recordStroke
+    const allSlotsFinished = updatedSlots.length > 0 && updatedSlots.every(
+      s => s.status === "completed" || s.status === "removed" || s.status === "removable"
+    );
+    
+    if (allSlotsFinished && currentItem) {
+      // Calculate average remnant from completed bars
+      const completedSlots = updatedSlots.filter(s => s.status === "completed" || s.status === "removable");
+      if (completedSlots.length > 0) {
+        const avgRemnant = Math.round(
+          completedSlots.reduce((sum, s) => sum + (selectedStockLength - s.cutsDone * currentItem.cut_length_mm), 0) / completedSlots.length
+        );
+        if (avgRemnant > 0) {
+          setRemnantInfo({
+            lengthMm: avgRemnant,
+            isWasteBank: avgRemnant >= REMNANT_THRESHOLD_MM,
+          });
+          setRemnantPromptOpen(true);
+        }
+      }
+    }
+
     toast({
       title: "Cut recorded",
       description: `${newCutsDone} total cuts done`,
     });
-  }, [slotTracker, toast, currentItem, completedAtRunStart, totalPieces]);
+  }, [slotTracker, toast, currentItem, completedAtRunStart, totalPieces, selectedStockLength]);
 
   // ── Remove bar ──
   const handleRemoveBar = useCallback(async (slotIndex: number) => {
