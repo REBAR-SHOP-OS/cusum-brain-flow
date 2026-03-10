@@ -223,7 +223,9 @@ export function PostReviewPanel({
   const isVideo = post.image_url?.endsWith(".mp4");
 
   // Derive display values
-  const platformsDisplay = localPlatforms.map(p => PLATFORM_OPTIONS.find(o => o.value === p)?.label || p).join(", ");
+  const platformsDisplay = localPlatforms.length === PLATFORM_OPTIONS.length
+    ? "All"
+    : localPlatforms.map(p => PLATFORM_OPTIONS.find(o => o.value === p)?.label || p).join(", ");
   const contentTypeDisplay = CONTENT_TYPE_OPTIONS.find((o) => o.value === localContentType)?.label || "Post";
 
   return (

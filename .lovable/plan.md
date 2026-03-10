@@ -1,39 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Fix: Platform Display "All" + Cron Must Publish & Mark as Published
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Problems Identified
-
-1. **Platform display never shows "All"**: When all platforms are selected, the review panel lists each name individually instead of showing "All".
-
-2. **Cron publish doesn't update `qa_status`**: The `social-cron-publish` function updates `status: "published"` but forgets to set `qa_status: "published"`. This means posts don't appear under the "Published" filter tab after the cron publishes them.
-
-3. **Published tab filtering**: Posts published by the cron won't show in the Published category because `qa_status` remains `"scheduled"`.
-
-## Changes
-
-### 1. `src/components/social/PostReviewPanel.tsx` — Show "All" when all platforms selected
-
-Change line 226 from individual name join to:
-```typescript
-const platformsDisplay = localPlatforms.length === PLATFORM_OPTIONS.length
-  ? "All"
-  : localPlatforms.map(p => PLATFORM_OPTIONS.find(o => o.value === p)?.label || p).join(", ");
+## Webhook URL
+```
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
 ```
 
-### 2. `supabase/functions/social-cron-publish/index.ts` — Update `qa_status` on publish
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
-**Line 115** (failure): Add `qa_status` update:
-```typescript
-await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review" }).eq("id", post.id);
-```
-
-**Line 118** (success): Add `qa_status` update:
-```typescript
-await supabase.from("social_posts").update({ status: "published", qa_status: "published" }).eq("id", post.id);
-```
-
-### Files Modified
-- `src/components/social/PostReviewPanel.tsx` — 1 line change for "All" display
-- `supabase/functions/social-cron-publish/index.ts` — 2 line changes for `qa_status` updates
-
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
