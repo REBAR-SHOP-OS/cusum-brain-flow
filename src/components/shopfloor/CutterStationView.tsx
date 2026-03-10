@@ -528,12 +528,12 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
       // ── Auto-advance to next item if mark is complete ──
       // In manual mode: do NOT auto-advance — supervisor controls navigation
-      const isManualMode = currentItem.optimization_mode === "manual";
-      if (isMarkComplete && !isManualMode && currentIndex < items.length - 1) {
+      const isRawMode = currentItem.optimization_mode === "raw" || currentItem.optimization_mode === "manual";
+      if (isMarkComplete && !isRawMode && currentIndex < items.length - 1) {
         setTimeout(() => {
           setCurrentIndex((i) => i + 1);
         }, 1200);
-      } else if (isMarkComplete && isManualMode) {
+      } else if (isMarkComplete && isRawMode) {
         toast({
           title: "✅ Mark complete",
           description: "Manual mode — use arrows to navigate to next item when ready.",
