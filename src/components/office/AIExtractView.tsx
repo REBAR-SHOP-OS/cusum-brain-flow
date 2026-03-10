@@ -487,9 +487,18 @@ export function AIExtractView() {
     setProcessingStep("Applying mapping...");
     try {
       const result = await applyMapping(activeSessionId);
-      // Safety net: force DB status to "mapped" to ensure pipeline advances
-      const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped" } as any).eq("id", activeSessionId);
-      if (updateErr) console.warn("[handleApplyMapping] status update failed:", updateErr.message);
+      // Safety net: force DB status to "mapped" with retry to ensure pipeline advances
+      let retries = 0;
+      let lastErr: any = null;
+      while (retries < 3) {
+        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped" } as any).eq("id", activeSessionId);
+        if (!updateErr) { lastErr = null; break; }
+        lastErr = updateErr;
+        console.warn(`[handleApplyMapping] status update attempt ${retries + 1} failed:`, updateErr.message);
+        retries++;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if (lastErr) console.error(`[handleApplyMapping] Failed to set status=mapped after 3 retries:`, lastErr.message);
       await refreshRows();
       await refreshSessions();
       toast({ title: "✅ Mapping Complete", description: `${result.mapped_count} rows mapped — ready for validation` });
