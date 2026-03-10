@@ -135,6 +135,7 @@ export function AIExtractView() {
   const [showMergedRows, setShowMergedRows] = useState(false);
   const [dedupePreview, setDedupePreview] = useState<DuplicatePreviewItem[] | null>(null);
   const [pendingDedupeSessionId, setPendingDedupeSessionId] = useState<string | null>(null);
+  const [mappingConfirmed, setMappingConfirmed] = useState(false);
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, refresh: refreshRows } = useExtractRows(activeSessionId);
