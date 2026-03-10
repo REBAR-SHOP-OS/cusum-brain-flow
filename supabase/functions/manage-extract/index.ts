@@ -22,6 +22,79 @@ const VALID_BAR_SIZES = [
 // Valid grades
 const VALID_GRADES = ["400W", "500W", "300W"];
 
+// ─── Session Name Validation ────────────────────────────────
+const JUNK_NAMES = [
+  "test", "testing", "asdf", "qwerty", "xxx", "abc", "aaa", "zzz",
+  "123", "1234", "12345", "foo", "bar", "baz", "temp", "tmp",
+  "undefined", "null", "none", "untitled", "new", "n/a",
+];
+
+function validateSessionName(name: string): { valid: boolean; reason?: string } {
+  if (!name || typeof name !== "string") {
+    return { valid: false, reason: "Session name is required" };
+  }
+  const trimmed = name.trim();
+  if (trimmed.length < 3) {
+    return { valid: false, reason: "Session name must be at least 3 characters" };
+  }
+  // Check for whitespace-only
+  if (/^\s+$/.test(name)) {
+    return { valid: false, reason: "Session name cannot be whitespace only" };
+  }
+  // Check for junk names
+  if (JUNK_NAMES.includes(trimmed.toLowerCase())) {
+    return { valid: false, reason: `"${trimmed}" is not a valid session name. Use a meaningful project/manifest name.` };
+  }
+  // Check for repeating single char
+  if (/^(.)\1+$/.test(trimmed)) {
+    return { valid: false, reason: "Session name must be meaningful" };
+  }
+  return { valid: true };
+}
+
+// ─── Duplicate Key Computation ──────────────────────────────
+function computeDuplicateKey(row: any, sessionName: string): string {
+  const project = (sessionName || "").trim().toLowerCase();
+  const mark = (row.mark || "").trim().toLowerCase();
+  const size = (row.bar_size_mapped || row.bar_size || "").trim().toLowerCase();
+  const length = String(row.total_length_mm || 0);
+  const shape = (row.shape_code_mapped || row.shape_type || "straight").trim().toLowerCase();
+  return `${project}:${mark}:${size}:${length}:${shape}`;
+}
+
+// ─── Production Event Logger ────────────────────────────────
+async function logProductionEvent(sb: any, event: {
+  company_id: string;
+  session_id?: string;
+  job_id?: string;
+  row_id?: string;
+  machine_id?: string;
+  batch_id?: string;
+  event_type: string;
+  old_status?: string;
+  new_status?: string;
+  triggered_by?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  try {
+    await sb.from("production_events").insert({
+      company_id: event.company_id,
+      session_id: event.session_id || null,
+      job_id: event.job_id || null,
+      row_id: event.row_id || null,
+      machine_id: event.machine_id || null,
+      batch_id: event.batch_id || null,
+      event_type: event.event_type,
+      old_status: event.old_status || null,
+      new_status: event.new_status || null,
+      triggered_by: event.triggered_by || null,
+      metadata: event.metadata || {},
+    });
+  } catch (err) {
+    console.error("[logProductionEvent] Failed:", err);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -52,6 +125,9 @@ serve(async (req) => {
       case "validate":
         return await validateExtract(sb, sessionId);
 
+      case "detect-duplicates":
+        return await detectDuplicates(sb, sessionId, user.id);
+
       case "approve":
         return await approveExtract(sb, sessionId, user.id, params.optimizerConfig);
 
@@ -69,6 +145,102 @@ serve(async (req) => {
     );
   }
 });
+
+// ─── Detect Duplicates ──────────────────────────────────────
+async function detectDuplicates(sb: any, sessionId: string, userId: string) {
+  const { data: session } = await sb
+    .from("extract_sessions")
+    .select("id, company_id, name, status")
+    .eq("id", sessionId)
+    .single();
+
+  if (!session) return jsonResponse({ error: "Session not found" }, 404);
+
+  // Get all active (non-merged) rows
+  const { data: rows } = await sb
+    .from("extract_rows")
+    .select("*")
+    .eq("session_id", sessionId)
+    .is("merged_into_id", null)
+    .neq("status", "merged")
+    .order("row_index");
+
+  if (!rows?.length) return jsonResponse({ duplicates_found: 0, rows_merged: 0 });
+
+  // Compute duplicate_key for all rows
+  const keyMap = new Map<string, any[]>();
+  for (const row of rows) {
+    const key = computeDuplicateKey(row, session.name);
+    // Update duplicate_key in DB
+    await sb.from("extract_rows").update({ duplicate_key: key }).eq("id", row.id);
+    if (!keyMap.has(key)) keyMap.set(key, []);
+    keyMap.get(key)!.push(row);
+  }
+
+  let duplicatesFound = 0;
+  let rowsMerged = 0;
+
+  for (const [key, group] of keyMap.entries()) {
+    if (group.length <= 1) continue;
+
+    duplicatesFound++;
+    // Keep first row as survivor, merge rest into it
+    const survivor = group[0];
+    const absorbed = group.slice(1);
+    const totalQty = group.reduce((s: number, r: any) => s + (r.quantity || 0), 0);
+
+    // Save original quantity on survivor if not already set
+    if (survivor.original_quantity == null) {
+      await sb.from("extract_rows").update({
+        original_quantity: survivor.quantity,
+        quantity: totalQty,
+      }).eq("id", survivor.id);
+    } else {
+      await sb.from("extract_rows").update({
+        quantity: totalQty,
+      }).eq("id", survivor.id);
+    }
+
+    // Mark absorbed rows
+    for (const absorbed_row of absorbed) {
+      await sb.from("extract_rows").update({
+        merged_into_id: survivor.id,
+        status: "merged",
+        original_quantity: absorbed_row.quantity,
+        duplicate_key: key,
+      }).eq("id", absorbed_row.id);
+      rowsMerged++;
+
+      // Log merge event
+      await logProductionEvent(sb, {
+        company_id: session.company_id,
+        session_id: sessionId,
+        row_id: absorbed_row.id,
+        event_type: "duplicate_merged",
+        triggered_by: userId,
+        metadata: {
+          survivor_row_id: survivor.id,
+          absorbed_row_id: absorbed_row.id,
+          duplicate_key: key,
+          absorbed_quantity: absorbed_row.quantity,
+          new_total_quantity: totalQty,
+        },
+      });
+    }
+  }
+
+  // Update session status to indicate dedup completed
+  await sb.from("extract_sessions")
+    .update({ status: "extracted" })
+    .eq("id", sessionId);
+
+  return jsonResponse({
+    success: true,
+    duplicates_found: duplicatesFound,
+    rows_merged: rowsMerged,
+    total_active_rows: rows.length - rowsMerged,
+  });
+}
 
 // ─── Apply Mapping ──────────────────────────────────────────
 async function applyMapping(sb: any, sessionId: string) {
@@ -93,11 +265,12 @@ async function applyMapping(sb: any, sessionId: string) {
     mappingLookup[m.source_field][m.source_value.toUpperCase()] = m.mapped_value;
   }
 
-  // Get all rows
+  // Get all active rows (exclude merged)
   const { data: rows } = await sb
     .from("extract_rows")
     .select("*")
-    .eq("session_id", sessionId);
+    .eq("session_id", sessionId)
+    .neq("status", "merged");
 
   if (!rows?.length) return jsonResponse({ error: "No rows to map" }, 400);
 
@@ -211,10 +384,12 @@ async function validateExtract(sb: any, sessionId: string) {
     .delete()
     .eq("session_id", sessionId);
 
+  // Only validate active (non-merged) rows
   const { data: rows } = await sb
     .from("extract_rows")
     .select("*")
-    .eq("session_id", sessionId);
+    .eq("session_id", sessionId)
+    .neq("status", "merged");
 
   if (!rows?.length) return jsonResponse({ error: "No rows to validate" }, 400);
 
@@ -333,20 +508,7 @@ async function validateExtract(sb: any, sessionId: string) {
 
 // ─── Approve ────────────────────────────────────────────────
 async function approveExtract(sb: any, sessionId: string, userId: string, optimizerConfig?: any) {
-  // Check for blockers
-  const { data: blockers } = await sb
-    .from("extract_errors")
-    .select("id")
-    .eq("session_id", sessionId)
-    .eq("error_type", "blocker");
-
-  if (blockers?.length > 0) {
-    return jsonResponse(
-      { error: `Cannot approve: ${blockers.length} blocking errors remain` },
-      400,
-    );
-  }
-
+  // ── Session name validation ───────────────────────────────
   const { data: session } = await sb
     .from("extract_sessions")
     .select("*")
@@ -355,10 +517,51 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
 
   if (!session) return jsonResponse({ error: "Session not found" }, 404);
 
+  // Idempotency guard: already approved
+  if (session.status === "approved") {
+    return jsonResponse({ error: "Session already approved", already_approved: true }, 400);
+  }
+
+  // Session name validation
+  const nameCheck = validateSessionName(session.name);
+  if (!nameCheck.valid) {
+    await logProductionEvent(sb, {
+      company_id: session.company_id,
+      session_id: sessionId,
+      event_type: "session_name_blocked",
+      triggered_by: userId,
+      metadata: { name: session.name, reason: nameCheck.reason },
+    });
+    return jsonResponse({ error: nameCheck.reason }, 400);
+  }
+
+  // Re-check blockers at approval time (not relying on stale validation)
+  const { data: blockers } = await sb
+    .from("extract_errors")
+    .select("id")
+    .eq("session_id", sessionId)
+    .eq("error_type", "blocker");
+
+  if (blockers?.length > 0) {
+    await logProductionEvent(sb, {
+      company_id: session.company_id,
+      session_id: sessionId,
+      event_type: "approval_blocked",
+      triggered_by: userId,
+      metadata: { blocker_count: blockers.length },
+    });
+    return jsonResponse(
+      { error: `Cannot approve: ${blockers.length} blocking errors remain` },
+      400,
+    );
+  }
+
+  // Get only active rows (exclude merged)
   const { data: rows } = await sb
     .from("extract_rows")
     .select("*")
     .eq("session_id", sessionId)
+    .neq("status", "merged")
     .order("row_index");
 
   if (!rows?.length)
@@ -671,9 +874,28 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
   await sb
     .from("extract_rows")
     .update({ status: "approved" })
-    .eq("session_id", sessionId);
+    .eq("session_id", sessionId)
+    .neq("status", "merged");
 
-  // Log session event
+  // Log validation_approved production event
+  await logProductionEvent(sb, {
+    company_id: session.company_id,
+    session_id: sessionId,
+    event_type: "validation_approved",
+    triggered_by: userId,
+    new_status: "approved",
+    metadata: {
+      order_id: order.id,
+      work_order_id: workOrder.id,
+      cut_plan_id: cutPlan?.id,
+      barlist_id: barlistId,
+      project_id: projectId,
+      item_count: rows.length,
+      work_order_number: woNumber,
+    },
+  });
+
+  // Log session event (activity_events)
   await sb.from("activity_events").insert({
     company_id: session.company_id,
     entity_type: "extract_session",
@@ -775,7 +997,7 @@ async function autoDispatchTask(sb: any, taskId: string, companyId: string, barl
 
   const { data: machines } = await sb
     .from("machines")
-    .select("id, name, status, current_run_id")
+    .select("id, name, status, current_run_id, active_job_id, cut_session_status")
     .in("id", capableMachineIds)
     .eq("company_id", companyId);
 
@@ -793,11 +1015,15 @@ async function autoDispatchTask(sb: any, taskId: string, companyId: string, barl
     queueMap.set((q as any).machine_id, (queueMap.get((q as any).machine_id) || 0) + 1);
   }
 
-  // Score: idle bonus, shortest queue
+  // Score: idle bonus, shortest queue — skip machines with active locked jobs
   let bestMachine = machines[0];
   let bestScore = -Infinity;
   for (const m of machines) {
     let score = 0;
+    // Respect machine lock: if cut_session_status is 'running', heavily penalize
+    if (m.cut_session_status === "running" && m.active_job_id) {
+      score -= 200;
+    }
     if (m.status === "idle" && !m.current_run_id) score += 50;
     else if (m.status === "running") score += 10;
     if (m.status === "blocked") score -= 30;
@@ -806,8 +1032,7 @@ async function autoDispatchTask(sb: any, taskId: string, companyId: string, barl
     if (score > bestScore) { bestScore = score; bestMachine = m; }
   }
 
-  // Get next position using a safe approach — use timestamp-based position to avoid race conditions
-  // When multiple approvals run in parallel, each gets a unique position based on current max + random offset
+  // Get next position using a safe approach
   const { data: posData } = await sb
     .from("machine_queue_items")
     .select("position")
@@ -816,7 +1041,6 @@ async function autoDispatchTask(sb: any, taskId: string, companyId: string, barl
     .order("position", { ascending: false })
     .limit(1);
   const basePos = posData?.length ? (posData[0] as any).position + 1 : 0;
-  // Add small random offset (0-99) to avoid exact collisions in parallel execution
   const nextPos = basePos + Math.floor(Math.random() * 100);
 
   // Insert queue item with barlist_id

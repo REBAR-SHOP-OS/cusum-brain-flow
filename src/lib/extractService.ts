@@ -53,6 +53,10 @@ export interface ExtractRow {
   address: string | null;
   status: string;
   created_at: string;
+  // Phase 1 additions
+  duplicate_key: string | null;
+  merged_into_id: string | null;
+  original_quantity: number | null;
 }
 
 export interface ExtractError {
@@ -63,6 +67,34 @@ export interface ExtractError {
   error_type: string;
   message: string;
   created_at: string;
+}
+
+// ── Session Name Validation ──────────────────────────────────
+
+const JUNK_NAMES = [
+  "test", "testing", "asdf", "qwerty", "xxx", "abc", "aaa", "zzz",
+  "123", "1234", "12345", "foo", "bar", "baz", "temp", "tmp",
+  "undefined", "null", "none", "untitled", "new", "n/a",
+];
+
+export function validateSessionName(name: string): { valid: boolean; reason?: string } {
+  if (!name || typeof name !== "string") {
+    return { valid: false, reason: "Session name is required" };
+  }
+  const trimmed = name.trim();
+  if (trimmed.length < 3) {
+    return { valid: false, reason: "Session name must be at least 3 characters" };
+  }
+  if (/^\s+$/.test(name)) {
+    return { valid: false, reason: "Session name cannot be whitespace only" };
+  }
+  if (JUNK_NAMES.includes(trimmed.toLowerCase())) {
+    return { valid: false, reason: `"${trimmed}" is not a valid session name` };
+  }
+  if (/^(.)\1+$/.test(trimmed)) {
+    return { valid: false, reason: "Session name must be meaningful" };
+  }
+  return { valid: true };
 }
 
 // ── Service Functions ────────────────────────────────────────
@@ -95,6 +127,18 @@ export async function createExtractSession(params: {
     .single();
 
   if (error) throw new Error(error.message);
+
+  // Log extract_created production event (best-effort)
+  try {
+    await supabase.from("production_events" as any).insert({
+      company_id: params.companyId,
+      session_id: (data as any).id,
+      event_type: "extract_created",
+      triggered_by: params.createdBy || null,
+      metadata: { name: params.name, customer: params.customer },
+    });
+  } catch (_) { /* best-effort */ }
+
   return data as unknown as ExtractSession;
 }
 
@@ -210,6 +254,23 @@ export async function runExtract(params: {
   if (statusErr) throw new Error(`Failed to update session: ${statusErr.message}`);
 
   return { items, summary: data?.summary };
+}
+
+export async function detectDuplicates(sessionId: string): Promise<{
+  duplicates_found: number;
+  rows_merged: number;
+  total_active_rows: number;
+}> {
+  const { data, error } = await supabase.functions.invoke("manage-extract", {
+    body: { action: "detect-duplicates", sessionId },
+  });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  return {
+    duplicates_found: data?.duplicates_found ?? 0,
+    rows_merged: data?.rows_merged ?? 0,
+    total_active_rows: data?.total_active_rows ?? 0,
+  };
 }
 
 export async function applyMapping(sessionId: string) {

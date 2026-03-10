@@ -4221,6 +4221,7 @@ export type Database = {
           dim_k: number | null
           dim_o: number | null
           dim_r: number | null
+          duplicate_key: string | null
           dwg: string | null
           file_id: string | null
           grade: string | null
@@ -4228,6 +4229,8 @@ export type Database = {
           id: string
           item_number: string | null
           mark: string | null
+          merged_into_id: string | null
+          original_quantity: number | null
           quantity: number | null
           reference: string | null
           row_index: number
@@ -4256,6 +4259,7 @@ export type Database = {
           dim_k?: number | null
           dim_o?: number | null
           dim_r?: number | null
+          duplicate_key?: string | null
           dwg?: string | null
           file_id?: string | null
           grade?: string | null
@@ -4263,6 +4267,8 @@ export type Database = {
           id?: string
           item_number?: string | null
           mark?: string | null
+          merged_into_id?: string | null
+          original_quantity?: number | null
           quantity?: number | null
           reference?: string | null
           row_index?: number
@@ -4291,6 +4297,7 @@ export type Database = {
           dim_k?: number | null
           dim_o?: number | null
           dim_r?: number | null
+          duplicate_key?: string | null
           dwg?: string | null
           file_id?: string | null
           grade?: string | null
@@ -4298,6 +4305,8 @@ export type Database = {
           id?: string
           item_number?: string | null
           mark?: string | null
+          merged_into_id?: string | null
+          original_quantity?: number | null
           quantity?: number | null
           reference?: string | null
           row_index?: number
@@ -4314,6 +4323,13 @@ export type Database = {
             columns: ["file_id"]
             isOneToOne: false
             referencedRelation: "extract_raw_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extract_rows_merged_into_id_fkey"
+            columns: ["merged_into_id"]
+            isOneToOne: false
+            referencedRelation: "extract_rows"
             referencedColumns: ["id"]
           },
           {
@@ -6848,11 +6864,14 @@ export type Database = {
       }
       machines: {
         Row: {
+          active_job_id: string | null
           company_id: string
           created_at: string
           current_operator_profile_id: string | null
           current_run_id: string | null
+          cut_session_status: string | null
           id: string
+          job_assigned_by: string | null
           last_event_at: string | null
           model: string | null
           name: string
@@ -6862,11 +6881,14 @@ export type Database = {
           warehouse_id: string | null
         }
         Insert: {
+          active_job_id?: string | null
           company_id: string
           created_at?: string
           current_operator_profile_id?: string | null
           current_run_id?: string | null
+          cut_session_status?: string | null
           id?: string
+          job_assigned_by?: string | null
           last_event_at?: string | null
           model?: string | null
           name: string
@@ -6876,11 +6898,14 @@ export type Database = {
           warehouse_id?: string | null
         }
         Update: {
+          active_job_id?: string | null
           company_id?: string
           created_at?: string
           current_operator_profile_id?: string | null
           current_run_id?: string | null
+          cut_session_status?: string | null
           id?: string
+          job_assigned_by?: string | null
           last_event_at?: string | null
           model?: string | null
           name?: string
@@ -8261,6 +8286,54 @@ export type Database = {
           secret?: string | null
           updated_at?: string
           url?: string
+        }
+        Relationships: []
+      }
+      production_events: {
+        Row: {
+          batch_id: string | null
+          company_id: string
+          created_at: string | null
+          event_type: string
+          id: string
+          job_id: string | null
+          machine_id: string | null
+          metadata: Json | null
+          new_status: string | null
+          old_status: string | null
+          row_id: string | null
+          session_id: string | null
+          triggered_by: string | null
+        }
+        Insert: {
+          batch_id?: string | null
+          company_id: string
+          created_at?: string | null
+          event_type: string
+          id?: string
+          job_id?: string | null
+          machine_id?: string | null
+          metadata?: Json | null
+          new_status?: string | null
+          old_status?: string | null
+          row_id?: string | null
+          session_id?: string | null
+          triggered_by?: string | null
+        }
+        Update: {
+          batch_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          job_id?: string | null
+          machine_id?: string | null
+          metadata?: Json | null
+          new_status?: string | null
+          old_status?: string | null
+          row_id?: string | null
+          session_id?: string | null
+          triggered_by?: string | null
         }
         Relationships: []
       }

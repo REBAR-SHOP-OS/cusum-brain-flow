@@ -42,6 +42,8 @@ import {
   validateExtract,
   approveExtract,
   rejectExtract,
+  detectDuplicates,
+  validateSessionName,
 } from "@/lib/extractService";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -55,7 +57,7 @@ type ManifestType = "delivery" | "pickup";
 const PIPELINE_STEPS = [
   { key: "uploaded", label: "Uploaded", icon: Upload },
   { key: "extracting", label: "Extracting", icon: Sparkles },
-  { key: "extracted", label: "Extracted", icon: FileText },
+  { key: "extracted", label: "Dedupe", icon: GitBranch },
   { key: "mapping", label: "Mapped", icon: Globe },
   { key: "validated", label: "Validated", icon: Shield },
   { key: "optimizing", label: "Optimized", icon: Zap },
@@ -124,7 +126,9 @@ export function AIExtractView() {
   const [editingRows, setEditingRows] = useState<Record<string, Record<string, any>>>({});
   const [isEditing, setIsEditing] = useState(false);
   const [savingEdits, setSavingEdits] = useState(false);
-
+  
+  // Duplicate detection state
+  const [dedupeResult, setDedupeResult] = useState<{ duplicates_found: number; rows_merged: number; total_active_rows: number } | null>(null);
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, refresh: refreshRows } = useExtractRows(activeSessionId);
@@ -181,14 +185,24 @@ export function AIExtractView() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status) : -1;
 
-  // Stats
+  // Filter out merged rows for display
+  const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
+  const mergedRows = useMemo(() => rows.filter(r => r.status === "merged"), [rows]);
+
+  // Stats — computed from active rows only
   const stats = useMemo(() => {
-    if (!rows.length) return null;
-    const totalPieces = rows.reduce((s, r) => s + (r.quantity || 0), 0);
-    const barSizes = [...new Set(rows.map((r) => r.bar_size_mapped || r.bar_size).filter(Boolean))];
-    const shapeTypes = [...new Set(rows.map((r) => r.shape_code_mapped || r.shape_type).filter(Boolean))];
-    return { totalItems: rows.length, totalPieces, barSizes, shapeTypes };
-  }, [rows]);
+    if (!activeRows.length) return null;
+    const totalPieces = activeRows.reduce((s, r) => s + (r.quantity || 0), 0);
+    const barSizes = [...new Set(activeRows.map((r) => r.bar_size_mapped || r.bar_size).filter(Boolean))];
+    const shapeTypes = [...new Set(activeRows.map((r) => r.shape_code_mapped || r.shape_type).filter(Boolean))];
+    return { totalItems: activeRows.length, totalPieces, barSizes, shapeTypes };
+  }, [activeRows]);
+
+  // Session name validation
+  const nameValidation = useMemo(() => {
+    if (!manifestName.trim()) return { valid: false, reason: "Session name is required" };
+    return validateSessionName(manifestName);
+  }, [manifestName]);
 
   const blockerCount = errors.filter((e) => e.error_type === "blocker").length;
   const warningCount = errors.filter((e) => e.error_type === "warning").length;
@@ -337,6 +351,22 @@ export function AIExtractView() {
         if (!manifestName && result.summary.project) setManifestName(result.summary.project);
       }
 
+      // Auto-detect duplicates after extraction
+      setProcessingStep("Detecting duplicates...");
+      try {
+        const dedupeRes = await detectDuplicates(session.id);
+        setDedupeResult(dedupeRes);
+        if (dedupeRes.rows_merged > 0) {
+          toast({
+            title: "Duplicates merged",
+            description: `${dedupeRes.rows_merged} duplicate rows merged into ${dedupeRes.total_active_rows} active rows`,
+          });
+        }
+      } catch (dedupeErr: any) {
+        console.error("Dedupe failed:", dedupeErr);
+        // Non-fatal — extraction still succeeded
+      }
+
       await refreshRows();
       await refreshSessions();
 
@@ -430,7 +460,7 @@ export function AIExtractView() {
       } catch (_) { /* RLS may block — local flag handles UI */ }
       
       // Run all three modes for comparison
-      const cutItems: CutItem[] = rows
+      const cutItems: CutItem[] = activeRows
         .filter(r => r.bar_size_mapped || r.bar_size)
         .map((r, i) => ({
           id: r.id,
@@ -468,7 +498,7 @@ export function AIExtractView() {
   };
 
   const runOptimizationForMode = (mode: OptimizerConfig["mode"]) => {
-    const cutItems: CutItem[] = rows
+    const cutItems: CutItem[] = activeRows
       .filter(r => r.bar_size_mapped || r.bar_size)
       .map((r, i) => ({
         id: r.id,
@@ -537,6 +567,7 @@ export function AIExtractView() {
     setOptimizationResult(null);
     setSelectedOptMode(null);
     setAllModeResults({});
+    setDedupeResult(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -545,7 +576,7 @@ export function AIExtractView() {
   // ─── Inline Editing Helpers ──────────────────────────────
   const startEditing = useCallback(() => {
     const edits: Record<string, Record<string, any>> = {};
-    rows.forEach((row) => {
+    activeRows.forEach((row) => {
       edits[row.id] = {
         dwg: row.dwg ?? "",
         grade: row.grade_mapped || row.grade || "",
@@ -559,7 +590,7 @@ export function AIExtractView() {
     });
     setEditingRows(edits);
     setIsEditing(true);
-  }, [rows]);
+  }, [activeRows]);
 
   const cancelEditing = () => {
     setEditingRows({});
@@ -971,8 +1002,11 @@ export function AIExtractView() {
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
                   Scope <span className="text-destructive">*</span>
                 </label>
-                <Input value={manifestName} onChange={(e) => setManifestName(e.target.value)}
-                  className="bg-card border-border" placeholder="e.g. 23 HALFORD ROAD - HAB (3)" />
+                 <Input value={manifestName} onChange={(e) => setManifestName(e.target.value)}
+                  className={`bg-card border-border ${!nameValidation.valid && manifestName.trim() ? "border-destructive" : ""}`} placeholder="e.g. 23 HALFORD ROAD - HAB (3)" />
+                {!nameValidation.valid && manifestName.trim() && (
+                  <p className="text-[10px] text-destructive mt-1">{nameValidation.reason}</p>
+                )}
               </div>
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
@@ -1112,7 +1146,7 @@ export function AIExtractView() {
                     </div>
                     <div className="flex items-center gap-2">
                       {!processing && (
-                        <Button onClick={handleExtract} className="gap-1.5" disabled={!uploadedFile || !profile?.company_id || !manifestName.trim() || (!selectedProjectId && !(createNewProject && newProjectName.trim()))}>
+                        <Button onClick={handleExtract} className="gap-1.5" disabled={!uploadedFile || !profile?.company_id || !nameValidation.valid || (!selectedProjectId && !(createNewProject && newProjectName.trim()))}>
                           <Sparkles className="w-4 h-4" /> Extract & Map
                         </Button>
                       )}
@@ -1304,6 +1338,26 @@ export function AIExtractView() {
           </Card>
         )}
 
+        {/* Duplicate Summary Card */}
+        {(dedupeResult && dedupeResult.rows_merged > 0) && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-amber-500" />
+                <span className="text-sm font-bold text-foreground">
+                  {dedupeResult.duplicates_found} Duplicate Groups Found
+                </span>
+                <Badge variant="secondary" className="text-[10px]">
+                  {dedupeResult.rows_merged} rows merged
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Duplicate rows (same mark + size + length + shape) were merged by summing quantities. {dedupeResult.total_active_rows} active rows remain.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Summary Stats */}
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1346,14 +1400,14 @@ export function AIExtractView() {
         )}
 
         {/* Results Table */}
-        {rows.length > 0 && (
+        {activeRows.length > 0 && (
           <Card>
             <CardContent className="p-0">
               {/* Edit toolbar */}
               {activeSession && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
                 <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
                   <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-                    {rows.length} Line Items
+                    {activeRows.length} Line Items{mergedRows.length > 0 ? ` (${mergedRows.length} merged)` : ""}
                   </span>
                   <div className="flex items-center gap-2">
                     {!isEditing ? (
@@ -1393,7 +1447,7 @@ export function AIExtractView() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rows.map((row) => {
+                      {activeRows.map((row) => {
                         const edit = isEditing ? editingRows[row.id] : null;
                         return (
                           <TableRow key={row.id} className={`hover:bg-muted/30 ${isEditing ? "bg-primary/[0.02]" : ""}`}>
@@ -1416,7 +1470,16 @@ export function AIExtractView() {
                             <TableCell className="text-xs text-center font-bold p-1">
                               {edit ? (
                                 <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-center font-bold" value={edit.quantity} onChange={e => updateEditField(row.id, "quantity", e.target.value)} />
-                              ) : (row.quantity ?? "—")}
+                              ) : (
+                                <span className="inline-flex items-center gap-1">
+                                  {row.quantity ?? "—"}
+                                  {row.original_quantity != null && row.original_quantity !== row.quantity && (
+                                    <span className="text-[9px] text-amber-500" title={`Originally ${row.original_quantity}, merged duplicates added`}>
+                                      ↑{(row.quantity || 0) - row.original_quantity}
+                                    </span>
+                                  )}
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="text-xs p-1">
                               {edit ? (
