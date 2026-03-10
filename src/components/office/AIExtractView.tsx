@@ -57,6 +57,27 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
+function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
+  const [showRetry, setShowRetry] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShowRetry(true), 10000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <Card className="border-border/50">
+      <CardContent className="flex items-center gap-3 py-6">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Loading extracted rows…</span>
+        {showRetry && (
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => { setShowRetry(false); onRetry(); }}>
+            <RotateCcw className="w-3 h-3 mr-1" /> Retry
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 const PIPELINE_STEPS = [
   { key: "uploaded", label: "Uploaded", icon: Upload },
   { key: "extracting", label: "Extracting", icon: Sparkles },
