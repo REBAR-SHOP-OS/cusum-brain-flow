@@ -19,7 +19,7 @@ import { useInventoryData } from "@/hooks/useInventoryData";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { useSlotTracker } from "@/hooks/useSlotTracker";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle, Edit3 } from "lucide-react";
+import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle, Edit3, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
@@ -56,6 +56,38 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [completedLocally, setCompletedLocally] = useState(false);
   const [correctCountOpen, setCorrectCountOpen] = useState(false);
   const [correctCountValue, setCorrectCountValue] = useState("");
+  const [restoredFromBackend, setRestoredFromBackend] = useState(false);
+
+  // ── REFRESH-SAFE STATE RESTORATION ──
+  // On mount, if machine has an active locked job, restore state from backend
+  useEffect(() => {
+    if (restoredFromBackend) return;
+    if (
+      machine.cut_session_status === "running" &&
+      machine.active_job_id &&
+      machine.machine_lock &&
+      items.length > 0
+    ) {
+      // Find the item matching the locked job
+      const lockedIndex = items.findIndex(i => i.id === machine.active_job_id);
+      if (lockedIndex >= 0) {
+        setCurrentIndex(lockedIndex);
+        setIsRunning(true);
+        setActiveRunId(machine.current_run_id);
+        // Fetch fresh completed count for snapshot
+        supabase
+          .from("cut_plan_items")
+          .select("completed_pieces")
+          .eq("id", machine.active_job_id)
+          .single()
+          .then(({ data }) => {
+            if (data) setCompletedAtRunStart(data.completed_pieces ?? 0);
+          });
+        console.log("[CutterStation] Restored active job from backend:", machine.active_job_id);
+      }
+    }
+    setRestoredFromBackend(true);
+  }, [machine.cut_session_status, machine.active_job_id, machine.machine_lock, items.length, restoredFromBackend]);
 
   // Keep currentIndex in bounds when items change (e.g. completed item removed by realtime)
   useEffect(() => {
@@ -238,6 +270,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         barCode: currentItem.bar_code,
         qty: clampedBars,
         notes: `Stock: ${stockLength}mm | Mark: ${currentItem.mark_number || "—"} | Length: ${currentItem.cut_length_mm}mm | Pcs/bar: ${computedPiecesPerBar}`,
+        cutPlanItemId: currentItem.id,
+        cutPlanId: currentItem.cut_plan_id || undefined,
+        assignedBy: "manual",
       });
 
       const runId = result.machineRunId;
@@ -425,11 +460,22 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       // Immediately invalidate to refresh UI without waiting for realtime
       queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] });
 
+      // Compute remnant info for waste bank
+      const completedSlots = slotTracker.slots.filter(s => s.status === "completed");
+      const avgRemnant = completedSlots.length > 0
+        ? Math.round(completedSlots.reduce((sum, s) => sum + (selectedStockLength - s.cutsDone * currentItem.cut_length_mm), 0) / completedSlots.length)
+        : 0;
+
       await manageMachine({
         action: "complete-run",
         machineId: machine.id,
         outputQty: totalOutput,
         scrapQty: scrapSlots,
+        cutPlanItemId: currentItem.id,
+        cutPlanId: currentItem.cut_plan_id || undefined,
+        plannedQty: barsForThisRun * computedPiecesPerBar,
+        remnantLengthMm: avgRemnant >= REMNANT_THRESHOLD_MM ? avgRemnant : undefined,
+        remnantBarCode: avgRemnant >= REMNANT_THRESHOLD_MM ? currentItem.bar_code : undefined,
       });
 
       recordCompletion("cut", machine.id, currentItem.bar_code, {
@@ -528,6 +574,27 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         onBack={onBack}
         showBedsSuffix={false}
       />
+
+      {/* ── MACHINE LOCK STATUS BAR ── */}
+      {machine.machine_lock && (
+        <div className="flex items-center gap-3 px-6 py-2 border-b border-border bg-destructive/10">
+          <Lock className="w-4 h-4 text-destructive" />
+          <span className="text-xs font-bold text-destructive uppercase tracking-wider">
+            LOCKED — {machine.job_assigned_by === "optimizer" ? "Optimizer" : machine.job_assigned_by === "supervisor" ? "Supervisor" : "Manual"} Assignment
+          </span>
+          {currentItem && (
+            <span className="text-xs text-muted-foreground ml-auto font-mono">
+              Active: {currentItem.mark_number || currentItem.id.slice(0, 8)}
+            </span>
+          )}
+        </div>
+      )}
+      {!machine.machine_lock && machine.cut_session_status === "idle" && (
+        <div className="flex items-center gap-2 px-6 py-1.5 border-b border-border bg-muted/20">
+          <Unlock className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Unlocked — Ready</span>
+        </div>
+      )}
 
       {/* Remaining progress strip */}
       <div className={cn(

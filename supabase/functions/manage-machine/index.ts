@@ -15,6 +15,32 @@ function json(body: unknown, status = 200) {
   });
 }
 
+/** Helper to log a production event */
+async function logProductionEvent(
+  supabaseService: any,
+  companyId: string,
+  eventType: string,
+  metadata: Record<string, unknown>,
+  description: string,
+  entityId?: string,
+  actorId?: string,
+) {
+  try {
+    await supabaseService.from("production_events").insert({
+      company_id: companyId,
+      event_type: eventType,
+      metadata,
+      machine_id: metadata.machineId || null,
+      session_id: metadata.sessionId || null,
+      row_id: metadata.rowId || null,
+      batch_id: metadata.batchId || null,
+      triggered_by: actorId || null,
+    });
+  } catch (err) {
+    console.error(`Failed to log production event ${eventType}:`, err);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS")
     return new Response(null, { headers: corsHeaders });
@@ -140,9 +166,9 @@ serve(async (req) => {
         break;
       }
 
-      // ─── Start run (with capability validation) ────────────────────
+      // ─── Start run (with capability validation + job lock) ─────────
       case "start-run": {
-        const { process, workOrderId, notes, barCode, qty } = body;
+        const { process, workOrderId, notes, barCode, qty, cutPlanItemId, cutPlanId, assignedBy } = body;
         const validProcesses = [
           "cut", "bend", "load", "pickup", "delivery", "clearance", "other",
         ];
@@ -153,10 +179,34 @@ serve(async (req) => {
           return json({ error: "Machine already has an active run" }, 400);
         }
 
+        // ── HARD JOB LOCK CHECK ──────────────────────────────────────
+        if (
+          machine.cut_session_status === "running" &&
+          machine.active_job_id &&
+          cutPlanItemId &&
+          machine.active_job_id !== cutPlanItemId
+        ) {
+          // Log the blocked attempt
+          await logProductionEvent(
+            supabaseService, machine.company_id,
+            "cutter_switch_blocked",
+            {
+              machineId, machineName: machine.name,
+              activeJobId: machine.active_job_id,
+              attemptedJobId: cutPlanItemId,
+              assignedBy: machine.job_assigned_by,
+            },
+            `BLOCKED: Job switch on ${machine.name} while running. Active: ${machine.active_job_id}, Attempted: ${cutPlanItemId}`,
+            machineId, userId
+          );
+          return json({
+            error: `Machine ${machine.name} is locked to active job. Complete or pause current job first.`,
+            lockedJobId: machine.active_job_id,
+          }, 403);
+        }
+
         // ── CAPABILITY VALIDATION (hard rule) ────────────────────────
-        // If barCode is provided, validate against machine_capabilities
         if (barCode) {
-          // First verify bar_code exists in rebar_sizes (canonical source)
           const { data: rebarSize, error: rebarErr } = await supabaseService
             .from("rebar_sizes")
             .select("bar_code, diameter_mm")
@@ -169,7 +219,6 @@ serve(async (req) => {
             }, 400);
           }
 
-          // Check machine has capability for this bar_code + process
           const { data: capability, error: capErr } = await supabaseService
             .from("machine_capabilities")
             .select("bar_code, process, max_bars")
@@ -183,7 +232,6 @@ serve(async (req) => {
           }
 
           if (!capability) {
-            // ❌ Block run + log capability_violation event
             events.push({
               entity_type: "machine",
               entity_id: machineId,
@@ -192,36 +240,22 @@ serve(async (req) => {
               actor_type: "user",
               description: `BLOCKED: ${machine.name} cannot ${process} ${barCode}. No matching capability.`,
               metadata: {
-                machineId,
-                machineName: machine.name,
-                model: machine.model,
-                barCode,
-                process,
-                requestedQty: qty || 1,
+                machineId, machineName: machine.name, model: machine.model,
+                barCode, process, requestedQty: qty || 1,
               },
             });
-
-            // Write events before returning error
             if (events.length > 0) {
               const { error: evtErr } = await supabaseService
                 .from("activity_events")
                 .insert(events.map((e: any) => ({ ...e, source: "system", company_id: machine.company_id })));
               if (evtErr) console.error("Failed to log events:", evtErr);
             }
-
             return json({
               error: `Capability violation: ${machine.name} is not configured to ${process} ${barCode}. Check machine_capabilities.`,
-              violation: {
-                machineId,
-                machineName: machine.name,
-                barCode,
-                process,
-                requestedQty: qty || 1,
-              },
+              violation: { machineId, machineName: machine.name, barCode, process, requestedQty: qty || 1 },
             }, 403);
           }
 
-          // Check qty against max_bars
           const requestedQty = qty || 1;
           if (requestedQty > capability.max_bars) {
             events.push({
@@ -231,32 +265,17 @@ serve(async (req) => {
               actor_id: userId,
               actor_type: "user",
               description: `BLOCKED: ${machine.name} max ${capability.max_bars} bars for ${barCode} ${process}, requested ${requestedQty}.`,
-              metadata: {
-                machineId,
-                machineName: machine.name,
-                barCode,
-                process,
-                requestedQty,
-                maxBars: capability.max_bars,
-              },
+              metadata: { machineId, machineName: machine.name, barCode, process, requestedQty, maxBars: capability.max_bars },
             });
-
             if (events.length > 0) {
               const { error: evtErr } = await supabaseService
                 .from("activity_events")
                 .insert(events.map((e: any) => ({ ...e, source: "system", company_id: machine.company_id })));
               if (evtErr) console.error("Failed to log events:", evtErr);
             }
-
             return json({
               error: `Capacity exceeded: ${machine.name} can ${process} max ${capability.max_bars} × ${barCode} at once (requested ${requestedQty}).`,
-              violation: {
-                machineId,
-                barCode,
-                process,
-                requestedQty,
-                maxBars: capability.max_bars,
-              },
+              violation: { machineId, barCode, process, requestedQty, maxBars: capability.max_bars },
             }, 403);
           }
         }
@@ -283,13 +302,21 @@ serve(async (req) => {
         if (runError) throw runError;
         machineRunId = newRun.id;
 
+        // ── Set lock columns on machine ──────────────────────────────
+        const machineUpdate: Record<string, unknown> = {
+          current_run_id: newRun.id,
+          status: "running",
+          last_event_at: now,
+          cut_session_status: "running",
+          machine_lock: true,
+          job_assigned_by: assignedBy || "manual",
+        };
+        if (cutPlanItemId) machineUpdate.active_job_id = cutPlanItemId;
+        if (cutPlanId) machineUpdate.active_plan_id = cutPlanId;
+
         const { error: mErr } = await supabaseUser
           .from("machines")
-          .update({
-            current_run_id: newRun.id,
-            status: "running",
-            last_event_at: now,
-          })
+          .update(machineUpdate)
           .eq("id", machineId);
         if (mErr) throw mErr;
 
@@ -302,13 +329,12 @@ serve(async (req) => {
             actor_type: "user",
             description: `Run started: ${process}${barCode ? ` ${barCode}` : ""} on ${machine.name}`,
             metadata: {
-              machineRunId: newRun.id,
-              machineId,
-              process,
-              barCode: barCode || null,
-              qty: qty || null,
-              status: "running",
-              startedAt: now,
+              machineRunId: newRun.id, machineId, process,
+              barCode: barCode || null, qty: qty || null,
+              status: "running", startedAt: now,
+              cutPlanItemId: cutPlanItemId || null,
+              cutPlanId: cutPlanId || null,
+              assignedBy: assignedBy || "manual",
             },
           },
           {
@@ -321,6 +347,16 @@ serve(async (req) => {
             metadata: { machineId, oldStatus: machine.status, newStatus: "running" },
           }
         );
+
+        // ── Log production events ────────────────────────────────────
+        await logProductionEvent(supabaseService, machine.company_id, "cutter_job_assigned", {
+          machineId, machineName: machine.name, cutPlanItemId, cutPlanId, assignedBy: assignedBy || "manual",
+        }, `Job assigned to ${machine.name}`, machineId, userId);
+
+        await logProductionEvent(supabaseService, machine.company_id, "cutter_started", {
+          machineId, machineName: machine.name, machineRunId: newRun.id, barCode, qty,
+        }, `Cutter started on ${machine.name}`, machineId, userId);
+
         break;
       }
 
@@ -334,7 +370,6 @@ serve(async (req) => {
           return json({ error: "Machine already has an active run" }, 400);
         }
 
-        // Fetch the queued run
         const { data: queuedRun, error: qrErr } = await supabaseUser
           .from("machine_runs")
           .select("*")
@@ -347,7 +382,6 @@ serve(async (req) => {
           return json({ error: "Queued run not found or already started" }, 404);
         }
 
-        // Capability validation if barCode provided
         if (barCode) {
           const { data: rebarSize } = await supabaseService
             .from("rebar_sizes")
@@ -405,7 +439,6 @@ serve(async (req) => {
           }
         }
 
-        // Update run to running
         const { error: updateRunErr } = await supabaseUser
           .from("machine_runs")
           .update({ status: "running", started_at: now })
@@ -413,10 +446,12 @@ serve(async (req) => {
         if (updateRunErr) throw updateRunErr;
         machineRunId = runId;
 
-        // Update machine
         const { error: updateMachineErr } = await supabaseUser
           .from("machines")
-          .update({ current_run_id: runId, status: "running", last_event_at: now })
+          .update({
+            current_run_id: runId, status: "running", last_event_at: now,
+            cut_session_status: "running", machine_lock: true,
+          })
           .eq("id", machineId);
         if (updateMachineErr) throw updateMachineErr;
 
@@ -429,11 +464,8 @@ serve(async (req) => {
             actor_type: "user",
             description: `Queued run started: ${queuedRun.process} on ${machine.name}`,
             metadata: {
-              machineRunId: runId,
-              machineId,
-              process: queuedRun.process,
-              barCode: barCode || null,
-              startedAt: now,
+              machineRunId: runId, machineId, process: queuedRun.process,
+              barCode: barCode || null, startedAt: now,
             },
           },
           {
@@ -454,9 +486,12 @@ serve(async (req) => {
       case "block-run":
       case "complete-run": {
         if (!machine.current_run_id) {
-          // No formal run was started — for complete-run this is OK
-          // (cuts were tracked directly via cut_plan_items), just return success
           if (action === "complete-run") {
+            // Clear lock columns even if no formal run
+            await supabaseUser.from("machines").update({
+              active_job_id: null, active_plan_id: null,
+              cut_session_status: "idle", machine_lock: false,
+            }).eq("id", machineId);
             return json({ success: true, action, warning: "no_active_run" });
           }
           return json({ error: "No active run on this machine" }, 400);
@@ -476,6 +511,7 @@ serve(async (req) => {
         const newRunStatus = runStatusMap[action];
         const newMachineStatus = machineStatusMap[action];
         const isCompleting = action === "complete-run";
+        const isPausing = action === "pause-run";
 
         // Update machine_runs row
         const runUpdate: Record<string, unknown> = { status: newRunStatus };
@@ -494,18 +530,121 @@ serve(async (req) => {
           .single();
         if (runErr) throw runErr;
 
-        // Update machine
+        // ── Update machine with lock state ───────────────────────────
         const machineUpdate: Record<string, unknown> = {
           status: newMachineStatus,
           last_event_at: now,
         };
-        if (isCompleting) machineUpdate.current_run_id = null;
+
+        if (isCompleting) {
+          // Clear all lock columns on completion
+          machineUpdate.current_run_id = null;
+          machineUpdate.active_job_id = null;
+          machineUpdate.active_plan_id = null;
+          machineUpdate.cut_session_status = "idle";
+          machineUpdate.machine_lock = false;
+          machineUpdate.job_assigned_by = null;
+        } else if (isPausing) {
+          // Paused: keep active_job_id but update status
+          machineUpdate.cut_session_status = "paused";
+          // Keep machine_lock true and active_job_id intact
+        }
 
         const { error: mErr } = await supabaseUser
           .from("machines")
           .update(machineUpdate)
           .eq("id", machineId);
         if (mErr) throw mErr;
+
+        // ── Create cut_batch on completion ────────────────────────────
+        if (isCompleting) {
+          const { cutPlanItemId, cutPlanId, plannedQty, remnantLengthMm, remnantBarCode } = body;
+          const actualQty = body.outputQty ?? 0;
+          const scrapQty = body.scrapQty ?? 0;
+
+          // Create cut_batch record
+          if (cutPlanItemId || plannedQty !== undefined) {
+            try {
+              const batchRow: Record<string, unknown> = {
+                company_id: machine.company_id,
+                machine_id: machineId,
+                machine_run_id: machine.current_run_id,
+                cut_plan_item_id: cutPlanItemId || null,
+                source_plan_id: cutPlanId || null,
+                bar_code: remnantBarCode || updatedRun.process || null,
+                planned_qty: plannedQty ?? actualQty,
+                actual_qty: actualQty,
+                scrap_qty: scrapQty,
+                status: "completed",
+                created_by: userId,
+              };
+
+              const { data: newBatch, error: batchErr } = await supabaseService
+                .from("cut_batches")
+                .insert(batchRow)
+                .select()
+                .single();
+
+              if (batchErr) {
+                console.error("Failed to create cut_batch:", batchErr);
+              } else {
+                // Log cut_batch_created production event
+                await logProductionEvent(supabaseService, machine.company_id, "cut_batch_created", {
+                  batchId: newBatch.id, machineId, machineName: machine.name,
+                  plannedQty: batchRow.planned_qty, actualQty, scrapQty,
+                  variance: actualQty - (plannedQty ?? actualQty),
+                  cutPlanItemId,
+                }, `Cut batch created on ${machine.name}`, machineId, userId);
+
+                // Log variance if detected
+                const variance = actualQty - (plannedQty ?? actualQty);
+                if (variance !== 0) {
+                  await logProductionEvent(supabaseService, machine.company_id, "variance_detected", {
+                    batchId: newBatch.id, machineId, machineName: machine.name,
+                    plannedQty: plannedQty ?? actualQty, actualQty, variance,
+                    cutPlanItemId,
+                  }, `Variance detected on ${machine.name}: planned ${plannedQty ?? actualQty}, actual ${actualQty}, diff ${variance}`,
+                  machineId, userId);
+                }
+
+                // ── Generate waste bank piece for remnants ≥ 300mm ───
+                if (remnantLengthMm && remnantLengthMm >= 300 && remnantBarCode) {
+                  try {
+                    await supabaseService.from("waste_bank_pieces").insert({
+                      company_id: machine.company_id,
+                      bar_code: remnantBarCode,
+                      length_mm: remnantLengthMm,
+                      quantity: 1,
+                      source_job_id: cutPlanItemId || null,
+                      source_batch_id: newBatch.id,
+                      source_machine_id: machineId,
+                      status: "available",
+                      location: machine.name,
+                    });
+                  } catch (wErr) {
+                    console.error("Failed to create waste bank piece:", wErr);
+                  }
+                }
+              }
+            } catch (batchError) {
+              console.error("cut_batch creation error:", batchError);
+            }
+          }
+
+          // Log cutter_completed production event
+          await logProductionEvent(supabaseService, machine.company_id, "cutter_completed", {
+            machineId, machineName: machine.name, machineRunId: machine.current_run_id,
+            outputQty: actualQty, scrapQty, cutPlanItemId,
+          }, `Cutter completed on ${machine.name}: ${actualQty} pieces`, machineId, userId);
+        }
+
+        // Log cutter_paused production event
+        if (isPausing) {
+          await logProductionEvent(supabaseService, machine.company_id, "cutter_paused", {
+            machineId, machineName: machine.name, machineRunId: machine.current_run_id,
+            activeJobId: machine.active_job_id,
+          }, `Cutter paused on ${machine.name}`, machineId, userId);
+        }
 
         events.push(
           {
@@ -516,14 +655,10 @@ serve(async (req) => {
             actor_type: "user",
             description: `Run ${newRunStatus}: ${updatedRun.process} on ${machine.name}`,
             metadata: {
-              machineRunId: updatedRun.id,
-              machineId,
-              status: newRunStatus,
-              process: updatedRun.process,
-              startedAt: updatedRun.started_at,
-              endedAt: updatedRun.ended_at,
-              inputQty: updatedRun.input_qty,
-              outputQty: updatedRun.output_qty,
+              machineRunId: updatedRun.id, machineId,
+              status: newRunStatus, process: updatedRun.process,
+              startedAt: updatedRun.started_at, endedAt: updatedRun.ended_at,
+              inputQty: updatedRun.input_qty, outputQty: updatedRun.output_qty,
               scrapQty: updatedRun.scrap_qty,
             },
           },

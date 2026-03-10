@@ -44,6 +44,7 @@ import FacebookCommenter from "./pages/FacebookCommenter";
 import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
 import AdminPanel from "./pages/AdminPanel";
+import WasteBankAdmin from "./pages/WasteBankAdmin";
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
@@ -194,6 +195,7 @@ const App = () => (
                     <Route path="/admin/cleanup" element={<P><CleanupReport /></P>} />
                     <Route path="/admin/connections-audit" element={<P><ConnectionsAudit /></P>} />
                     <Route path="/admin/data-audit" element={<P><DataStoresAudit /></P>} />
+                    <Route path="/admin/waste-bank" element={<P><AdminRoute><WasteBankAdmin /></AdminRoute></P>} />
 
                     {/* Automations Hub */}
                     <Route path="/automations" element={<P><AdminRoute><AutomationsHub /></AdminRoute></P>} />

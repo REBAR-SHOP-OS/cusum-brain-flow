@@ -2514,6 +2514,75 @@ export type Database = {
           },
         ]
       }
+      cut_batches: {
+        Row: {
+          actual_qty: number | null
+          bar_code: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          cut_plan_item_id: string | null
+          id: string
+          machine_id: string | null
+          machine_run_id: string | null
+          notes: string | null
+          planned_qty: number | null
+          scrap_qty: number | null
+          source_plan_id: string | null
+          status: string | null
+          variance: number | null
+        }
+        Insert: {
+          actual_qty?: number | null
+          bar_code?: string | null
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          cut_plan_item_id?: string | null
+          id?: string
+          machine_id?: string | null
+          machine_run_id?: string | null
+          notes?: string | null
+          planned_qty?: number | null
+          scrap_qty?: number | null
+          source_plan_id?: string | null
+          status?: string | null
+          variance?: number | null
+        }
+        Update: {
+          actual_qty?: number | null
+          bar_code?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          cut_plan_item_id?: string | null
+          id?: string
+          machine_id?: string | null
+          machine_run_id?: string | null
+          notes?: string | null
+          planned_qty?: number | null
+          scrap_qty?: number | null
+          source_plan_id?: string | null
+          status?: string | null
+          variance?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cut_batches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cut_batches_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cut_output_batches: {
         Row: {
           bar_code: string
@@ -6865,6 +6934,7 @@ export type Database = {
       machines: {
         Row: {
           active_job_id: string | null
+          active_plan_id: string | null
           company_id: string
           created_at: string
           current_operator_profile_id: string | null
@@ -6873,6 +6943,7 @@ export type Database = {
           id: string
           job_assigned_by: string | null
           last_event_at: string | null
+          machine_lock: boolean | null
           model: string | null
           name: string
           status: string
@@ -6882,6 +6953,7 @@ export type Database = {
         }
         Insert: {
           active_job_id?: string | null
+          active_plan_id?: string | null
           company_id: string
           created_at?: string
           current_operator_profile_id?: string | null
@@ -6890,6 +6962,7 @@ export type Database = {
           id?: string
           job_assigned_by?: string | null
           last_event_at?: string | null
+          machine_lock?: boolean | null
           model?: string | null
           name: string
           status?: string
@@ -6899,6 +6972,7 @@ export type Database = {
         }
         Update: {
           active_job_id?: string | null
+          active_plan_id?: string | null
           company_id?: string
           created_at?: string
           current_operator_profile_id?: string | null
@@ -6907,6 +6981,7 @@ export type Database = {
           id?: string
           job_assigned_by?: string | null
           last_event_at?: string | null
+          machine_lock?: boolean | null
           model?: string | null
           name?: string
           status?: string
@@ -13469,6 +13544,79 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      waste_bank_pieces: {
+        Row: {
+          bar_code: string
+          company_id: string
+          consumed_at: string | null
+          created_at: string | null
+          id: string
+          length_mm: number
+          location: string | null
+          quantity: number
+          reserved_at: string | null
+          reserved_by: string | null
+          source_batch_id: string | null
+          source_job_id: string | null
+          source_machine_id: string | null
+          status: string
+        }
+        Insert: {
+          bar_code: string
+          company_id: string
+          consumed_at?: string | null
+          created_at?: string | null
+          id?: string
+          length_mm: number
+          location?: string | null
+          quantity?: number
+          reserved_at?: string | null
+          reserved_by?: string | null
+          source_batch_id?: string | null
+          source_job_id?: string | null
+          source_machine_id?: string | null
+          status?: string
+        }
+        Update: {
+          bar_code?: string
+          company_id?: string
+          consumed_at?: string | null
+          created_at?: string | null
+          id?: string
+          length_mm?: number
+          location?: string | null
+          quantity?: number
+          reserved_at?: string | null
+          reserved_by?: string | null
+          source_batch_id?: string | null
+          source_job_id?: string | null
+          source_machine_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waste_bank_pieces_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waste_bank_pieces_source_batch_id_fkey"
+            columns: ["source_batch_id"]
+            isOneToOne: false
+            referencedRelation: "cut_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waste_bank_pieces_source_machine_id_fkey"
+            columns: ["source_machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       wc_qb_order_map: {
         Row: {
