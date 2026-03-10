@@ -356,19 +356,23 @@ export function AIExtractView() {
         if (!manifestName && result.summary.project) setManifestName(result.summary.project);
       }
 
-      // Auto-detect duplicates after extraction
-      setProcessingStep("Detecting duplicates...");
+      // Dry-run duplicate detection — show preview before merging
+      setProcessingStep("Scanning for duplicates...");
       try {
-        const dedupeRes = await detectDuplicates(session.id);
-        setDedupeResult(dedupeRes);
-        if (dedupeRes.rows_merged > 0) {
+        const dryRunRes = await detectDuplicates(session.id, true);
+        if (dryRunRes.duplicates_found > 0 && dryRunRes.preview?.length) {
+          setDedupePreview(dryRunRes.preview);
+          setPendingDedupeSessionId(session.id);
+          // Don't auto-merge — let user review the preview first
           toast({
-            title: "Duplicates merged",
-            description: `${dedupeRes.rows_merged} duplicate rows merged into ${dedupeRes.total_active_rows} active rows`,
+            title: `${dryRunRes.duplicates_found} duplicate groups detected`,
+            description: "Review and confirm merge in the Duplicates panel below.",
           });
+        } else {
+          setDedupeResult(dryRunRes);
         }
       } catch (dedupeErr: any) {
-        console.error("Dedupe failed:", dedupeErr);
+        console.error("Dedupe scan failed:", dedupeErr);
         // Non-fatal — extraction still succeeded
       }
 
