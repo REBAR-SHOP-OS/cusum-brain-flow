@@ -167,55 +167,34 @@ export default function StationView() {
     );
   }
 
-  // PROJECT PICKER — shown when multiple projects and none selected
-  if (projects.length > 1 && !selectedProjectId) {
-    return (
-      <div className="flex flex-col h-full">
-        <StationHeader
-          machineName={machine.name}
-          machineModel={machine.model}
-          canWrite={canWrite}
-          isSupervisor={isSupervisor}
-          onToggleSupervisor={() => setIsSupervisor((v) => !v)}
-          showBedsSuffix={false}
-        />
-        <div className="flex-1 overflow-auto p-4 sm:p-6">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <FolderOpen className="w-5 h-5 text-primary" />
-              <h2 className="text-sm font-bold tracking-wider uppercase text-foreground">
-                Select Active Project
-              </h2>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              This machine has items from multiple projects. Select one to avoid mixing barlists.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {projects.map((proj) => (
-                <button
-                  key={proj.id}
-                  onClick={() => setSelectedProjectId(proj.id)}
-                  className="flex items-center gap-4 p-4 rounded-xl border-2 border-border bg-card hover:border-primary hover:bg-primary/5 transition-all text-left group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-                    <FolderOpen className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-foreground truncate">
-                      {proj.name}
-                    </h3>
-                    <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-0.5">
-                      {proj.count} {proj.count === 1 ? "ITEM" : "ITEMS"}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Group filteredGroups by project for cutter display
+  const projectGroupedData = useMemo(() => {
+    if (selectedProjectId) return null; // single project selected, use flat layout
+    const projMap = new Map<string, { id: string; name: string; groups: typeof filteredGroups }>();
+    for (const group of filteredGroups) {
+      // Each group has items from potentially multiple projects, split them
+      const itemsByProj = new Map<string, { bend: typeof group.bendItems; straight: typeof group.straightItems }>();
+      for (const item of [...group.bendItems, ...group.straightItems]) {
+        const pid = item.project_id || "__unassigned__";
+        if (!itemsByProj.has(pid)) itemsByProj.set(pid, { bend: [], straight: [] });
+        const bucket = itemsByProj.get(pid)!;
+        if (item.bend_type === "bend") bucket.bend.push(item);
+        else bucket.straight.push(item);
+      }
+      for (const [pid, bucket] of itemsByProj) {
+        if (!projMap.has(pid)) {
+          const proj = projects.find(p => p.id === pid);
+          projMap.set(pid, { id: pid, name: proj?.name || "Unassigned", groups: [] });
+        }
+        projMap.get(pid)!.groups.push({
+          barCode: group.barCode,
+          bendItems: bucket.bend,
+          straightItems: bucket.straight,
+        });
+      }
+    }
+    return [...projMap.values()];
+  }, [filteredGroups, selectedProjectId, projects]);
 
   // If user selected a specific item, show focused view for that machine type
   if (selectedItemId) {
