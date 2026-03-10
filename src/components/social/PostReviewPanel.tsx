@@ -571,6 +571,11 @@ export function PostReviewPanel({
                           return;
                         }
 
+                        if ((post.content || "").length < 20) {
+                          toast({ title: "Content too short", description: "Post content must be at least 20 characters to schedule.", variant: "destructive" });
+                          return;
+                        }
+
                         // Build all platform×page combos
                         const combos: { platform: string; page: string }[] = [];
                         for (const plat of localPlatforms) {

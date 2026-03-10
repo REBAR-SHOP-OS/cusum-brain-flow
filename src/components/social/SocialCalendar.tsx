@@ -112,11 +112,12 @@ export function SocialCalendar({ posts, weekStart, onPostClick }: SocialCalendar
                     <p className="text-xs font-medium truncate">{post.title || "Untitled"}</p>
                     <p className={cn(
                       "text-xs capitalize",
-                      post.status === "scheduled" ? "text-primary"
+                      post.status === "published" ? "text-green-600 font-medium"
+                        : post.status === "scheduled" ? "text-primary"
                         : post.status === "declined" ? "text-destructive"
                         : "text-muted-foreground"
                     )}>
-                      {post.status}
+                      {post.status === "published" ? "Published ✅" : post.status}
                     </p>
                   </button>
                 );
