@@ -1261,22 +1261,22 @@ export function AIExtractView() {
         {/* Action Bar for active session */}
         {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
-            {currentStepIndex >= 2 && currentStepIndex < 3 && (
+            {currentStepIndex >= 3 && currentStepIndex < 4 && (
               <Button onClick={handleApplyMapping} className="gap-1.5" disabled={!mappingConfirmed}>
                 <Globe className="w-4 h-4" /> Apply Mapping
               </Button>
             )}
-            {currentStepIndex >= 3 && currentStepIndex < 4 && (
+            {currentStepIndex >= 4 && currentStepIndex < 5 && (
               <Button onClick={handleValidate} className="gap-1.5">
                 <Shield className="w-4 h-4" /> Validate
               </Button>
             )}
-            {currentStepIndex === 4 && blockerCount === 0 && !isOptimizing && (
+            {currentStepIndex === 5 && blockerCount === 0 && !isOptimizing && (
               <Button onClick={handleStartOptimize} className="gap-1.5">
                 <Zap className="w-4 h-4" /> Optimize
               </Button>
             )}
-            {(currentStepIndex >= 5 || isOptimizing) && (
+            {(currentStepIndex >= 6 || isOptimizing) && (
               <>
                 <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                   <Zap className="w-3 h-3 mr-1" /> Select a cutting plan below, then click Approve
