@@ -1316,12 +1316,12 @@ export function AIExtractView() {
                 <Shield className="w-4 h-4" /> Validate
               </Button>
             )}
-            {currentStepIndex === 5 && blockerCount === 0 && !isOptimizing && (
+            {currentStepIndex === 4 && blockerCount === 0 && !isOptimizing && (
               <Button onClick={handleStartOptimize} className="gap-1.5">
                 <Zap className="w-4 h-4" /> Optimize
               </Button>
             )}
-            {(currentStepIndex >= 6 || isOptimizing) && (
+            {(currentStepIndex >= 5 || isOptimizing) && (
               <>
                 <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                   <Zap className="w-3 h-3 mr-1" /> Select a cutting plan below, then click Approve
