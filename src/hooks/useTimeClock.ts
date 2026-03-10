@@ -115,8 +115,8 @@ export function useTimeClock() {
     const isRebarUser = myProfile.email?.toLowerCase().endsWith("@rebar.shop") && myProfile.email?.toLowerCase() !== "kourosh@rebar.shop";
     if (isRebarUser) {
       const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-      if (nowET.getHours() < 8) {
-        toast.error("Clock-in is available from 8:00 AM");
+      if (nowET.getHours() < 6) {
+        toast.error("Clock-in is available from 6:00 AM");
         return;
       }
     }
