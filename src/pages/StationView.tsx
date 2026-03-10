@@ -135,33 +135,57 @@ export default function StationView() {
         .filter((g) => g.bendItems.length > 0 || g.straightItems.length > 0)
     : groups;
 
-  // Group filteredGroups by project for cutter display
-  const projectGroupedData = useMemo(() => {
+  // Group filteredGroups by customer → barlist for cutter display
+  const customerGroupedData = useMemo(() => {
     if (selectedProjectId) return null;
-    const projMap = new Map<string, { id: string; name: string; groups: typeof filteredGroups }>();
-    for (const group of filteredGroups) {
-      const itemsByProj = new Map<string, { bend: typeof group.bendItems; straight: typeof group.straightItems }>();
-      for (const item of [...group.bendItems, ...group.straightItems]) {
-        const pid = item.project_id || "__unassigned__";
-        if (!itemsByProj.has(pid)) itemsByProj.set(pid, { bend: [], straight: [] });
-        const bucket = itemsByProj.get(pid)!;
-        if (item.bend_type === "bend") bucket.bend.push(item);
-        else bucket.straight.push(item);
+    const allItemsFlat = filteredGroups.flatMap(g => [...g.bendItems, ...g.straightItems]);
+    // Build: customer → barlist → items
+    const custMap = new Map<string, {
+      name: string;
+      barlists: Map<string, { planId: string; planName: string; projectName: string | null; items: typeof allItemsFlat }>;
+    }>();
+    for (const item of allItemsFlat) {
+      const custKey = item.customer_name || "Unknown Customer";
+      if (!custMap.has(custKey)) custMap.set(custKey, { name: custKey, barlists: new Map() });
+      const cust = custMap.get(custKey)!;
+      const planId = item.cut_plan_id;
+      if (!cust.barlists.has(planId)) {
+        cust.barlists.set(planId, { planId, planName: item.plan_name, projectName: item.project_name, items: [] });
       }
-      for (const [pid, bucket] of itemsByProj) {
-        if (!projMap.has(pid)) {
-          const proj = projects.find(p => p.id === pid);
-          projMap.set(pid, { id: pid, name: proj?.name || "Unassigned", groups: [] });
-        }
-        projMap.get(pid)!.groups.push({
-          barCode: group.barCode,
-          bendItems: bucket.bend,
-          straightItems: bucket.straight,
-        });
-      }
+      cust.barlists.get(planId)!.items.push(item);
     }
-    return [...projMap.values()];
-  }, [filteredGroups, selectedProjectId, projects]);
+    // Convert to array and build BarSizeGroups per barlist
+    return [...custMap.entries()].map(([custKey, cust]) => ({
+      customerName: cust.name,
+      barlists: [...cust.barlists.values()].map(bl => {
+        // Build bar-size groups from this barlist's items
+        const groupMap = new Map<string, { bend: typeof allItemsFlat; straight: typeof allItemsFlat }>();
+        for (const item of bl.items) {
+          if (!groupMap.has(item.bar_code)) groupMap.set(item.bar_code, { bend: [], straight: [] });
+          const g = groupMap.get(item.bar_code)!;
+          if (item.bend_type === "bend") g.bend.push(item);
+          else g.straight.push(item);
+        }
+        const sortedKeys = [...groupMap.keys()].sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, "")) || 0;
+          const numB = parseInt(b.replace(/\D/g, "")) || 0;
+          return numA - numB;
+        });
+        return {
+          planId: bl.planId,
+          planName: bl.planName,
+          projectName: bl.projectName,
+          itemCount: bl.items.length,
+          groups: sortedKeys.map(k => ({
+            barCode: k,
+            bendItems: groupMap.get(k)!.bend,
+            straightItems: groupMap.get(k)!.straight,
+          })),
+        };
+      }),
+      totalItems: [...cust.barlists.values()].reduce((s, bl) => s + bl.items.length, 0),
+    }));
+  }, [filteredGroups, selectedProjectId]);
 
 
   if (!machineId) return <Navigate to="/shopfloor/station" replace />;
