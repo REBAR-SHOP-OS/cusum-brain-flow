@@ -135,37 +135,33 @@ export default function StationView() {
         .filter((g) => g.bendItems.length > 0 || g.straightItems.length > 0)
     : groups;
 
-  if (!machineId) return <Navigate to="/shopfloor/station" replace />;
-
-  const isLoading = machinesLoading || dataLoading;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-destructive gap-3 py-20">
-        <AlertTriangle className="w-12 h-12 opacity-60" />
-        <p className="text-sm">Failed to load station data</p>
-        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
-  if (!machine) {
-    return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        Machine not found
-      </div>
-    );
-  }
+  // Group filteredGroups by project for cutter display
+  const projectGroupedData = useMemo(() => {
+    if (selectedProjectId) return null;
+    const projMap = new Map<string, { id: string; name: string; groups: typeof filteredGroups }>();
+    for (const group of filteredGroups) {
+      const itemsByProj = new Map<string, { bend: typeof group.bendItems; straight: typeof group.straightItems }>();
+      for (const item of [...group.bendItems, ...group.straightItems]) {
+        const pid = item.project_id || "__unassigned__";
+        if (!itemsByProj.has(pid)) itemsByProj.set(pid, { bend: [], straight: [] });
+        const bucket = itemsByProj.get(pid)!;
+        if (item.bend_type === "bend") bucket.bend.push(item);
+        else bucket.straight.push(item);
+      }
+      for (const [pid, bucket] of itemsByProj) {
+        if (!projMap.has(pid)) {
+          const proj = projects.find(p => p.id === pid);
+          projMap.set(pid, { id: pid, name: proj?.name || "Unassigned", groups: [] });
+        }
+        projMap.get(pid)!.groups.push({
+          barCode: group.barCode,
+          bendItems: bucket.bend,
+          straightItems: bucket.straight,
+        });
+      }
+    }
+    return [...projMap.values()];
+  }, [filteredGroups, selectedProjectId, projects]);
 
   // Group filteredGroups by project for cutter display
   const projectGroupedData = useMemo(() => {
