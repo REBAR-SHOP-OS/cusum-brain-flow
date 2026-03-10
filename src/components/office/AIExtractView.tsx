@@ -100,8 +100,8 @@ function getStepIndex(status: string, optimizationMode?: string | null) {
   if (status === "mapped") {
     return PIPELINE_STEPS.findIndex((s) => s.key === "validated");
   }
-  // Legacy: "optimizing" maps to validated step
-  if (status === "optimizing") {
+  // Legacy: "optimizing" or stale "mapping" both map to validated step
+  if (status === "optimizing" || status === "mapping") {
     return PIPELINE_STEPS.findIndex((s) => s.key === "validated");
   }
   const idx = PIPELINE_STEPS.findIndex((s) => s.key === status);
@@ -487,11 +487,12 @@ export function AIExtractView() {
     setProcessingStep("Applying mapping...");
     try {
       const result = await applyMapping(activeSessionId);
-      // Safety net: ensure DB status is "mapped" even if edge function wrote "mapping"
-      await supabase.from("extract_sessions").update({ status: "mapped" } as any).eq("id", activeSessionId);
+      // Safety net: force DB status to "mapped" to ensure pipeline advances
+      const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped" } as any).eq("id", activeSessionId);
+      if (updateErr) console.warn("[handleApplyMapping] status update failed:", updateErr.message);
       await refreshRows();
       await refreshSessions();
-      toast({ title: "Mapping applied", description: `${result.mapped_count} rows mapped, ${result.auto_mappings_created} auto-rules created` });
+      toast({ title: "✅ Mapping Complete", description: `${result.mapped_count} rows mapped — ready for validation` });
     } catch (err: any) {
       toast({ title: "Mapping failed", description: err.message, variant: "destructive" });
     } finally {
@@ -1325,10 +1326,15 @@ export function AIExtractView() {
         {/* Action Bar for active session */}
         {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
-            {currentStepIndex === 3 && (
+            {currentStepIndex === 3 && activeSession?.status !== "mapped" && activeSession?.status !== "mapping" && (
               <Button onClick={handleApplyMapping} className="gap-1.5" disabled={!mappingConfirmed}>
                 <Globe className="w-4 h-4" /> Apply Mapping
               </Button>
+            )}
+            {currentStepIndex >= 4 && (activeSession?.status === "mapped" || activeSession?.status === "mapping") && (
+              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40 bg-emerald-500/10 py-1 px-2.5">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Mapping Complete
+              </Badge>
             )}
             {currentStepIndex === 3 && activeSession?.dedupe_status === "skipped" && (
               <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
