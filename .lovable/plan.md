@@ -1,23 +1,51 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Remnant Dialog Not Completing the Run
 
-## Webhook URL
-```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+## Problem
+When operator clicks "Save Remnant to Waste Bank" or "Discard as Scrap", the dialog closes but `handleCompleteRun` is never re-invoked. The run stays stuck — remnant acknowledged but never completed.
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+## Root Cause
+Line 505-512: `handleCompleteRun` returns early to show the remnant prompt. The dialog button handlers (lines 931-946) close the dialog but never call `handleCompleteRun()` again. Since `setState` is async, simply calling it after closing won't work — the function would see stale state and show the prompt again.
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+## Fix in `CutterStationView.tsx`
+
+1. **Add a `useRef`** to track remnant decision:
+   ```typescript
+   const remnantDecisionRef = useRef<"save" | "discard" | null>(null);
+   ```
+
+2. **Update `handleCompleteRun`** (line 505): Check the ref to skip the prompt when already acknowledged:
+   ```typescript
+   if (avgRemnant > 0 && !remnantDecisionRef.current) {
+     // show prompt and return early (existing logic)
+   }
+   ```
+
+3. **Update remnant data passed to `complete-run`** (line 523-524): Use the ref decision instead of just threshold:
+   ```typescript
+   remnantLengthMm: remnantDecisionRef.current === "save" && avgRemnant >= REMNANT_THRESHOLD_MM ? avgRemnant : undefined,
+   remnantBarCode: remnantDecisionRef.current === "save" && avgRemnant >= REMNANT_THRESHOLD_MM ? currentItem.bar_code : undefined,
+   ```
+
+4. **Update "Save Remnant" button** (line 931-934): Set ref, close dialog, re-call completion:
+   ```typescript
+   onClick={() => {
+     remnantDecisionRef.current = "save";
+     setRemnantPromptOpen(false);
+     setRemnantInfo(null);
+     handleCompleteRun(); // re-invoke — ref check will skip prompt
+   }}
+   ```
+
+5. **Update "Discard as Scrap" button** (line 944-947): Same pattern with `"discard"`.
+
+6. **Reset ref** on run reset (line 558, alongside existing cleanup):
+   ```typescript
+   remnantDecisionRef.current = null;
+   ```
+
+7. **Add `useRef` to import** (line 1).
+
+One file changed: `src/components/shopfloor/CutterStationView.tsx`.
+
