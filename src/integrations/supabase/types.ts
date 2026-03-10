@@ -4613,6 +4613,7 @@ export type Database = {
           invoice_number: string | null
           manifest_type: string
           name: string
+          optimization_mode: string | null
           site_address: string | null
           status: string
           target_eta: string | null
@@ -4628,6 +4629,7 @@ export type Database = {
           invoice_number?: string | null
           manifest_type?: string
           name: string
+          optimization_mode?: string | null
           site_address?: string | null
           status?: string
           target_eta?: string | null
@@ -4643,6 +4645,7 @@ export type Database = {
           invoice_number?: string | null
           manifest_type?: string
           name?: string
+          optimization_mode?: string | null
           site_address?: string | null
           status?: string
           target_eta?: string | null

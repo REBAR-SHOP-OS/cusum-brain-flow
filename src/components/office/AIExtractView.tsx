@@ -60,6 +60,7 @@ type ManifestType = "delivery" | "pickup";
 const PIPELINE_STEPS = [
   { key: "uploaded", label: "Uploaded", icon: Upload },
   { key: "extracting", label: "Extracting", icon: Sparkles },
+  { key: "strategy", label: "Strategy", icon: Scissors },
   { key: "extracted", label: "Dedupe", icon: GitBranch },
   { key: "mapping", label: "Mapped", icon: Globe },
   { key: "validated", label: "Validated", icon: Shield },
@@ -67,7 +68,11 @@ const PIPELINE_STEPS = [
   { key: "approved", label: "Approved", icon: CheckCircle2 },
 ] as const;
 
-function getStepIndex(status: string) {
+function getStepIndex(status: string, optimizationMode?: string | null) {
+  // When status is "extracted" but no optimization_mode chosen yet, park at "strategy"
+  if (status === "extracted" && !optimizationMode) {
+    return PIPELINE_STEPS.findIndex((s) => s.key === "strategy");
+  }
   const idx = PIPELINE_STEPS.findIndex((s) => s.key === status);
   return idx >= 0 ? idx : -1;
 }
@@ -190,7 +195,7 @@ export function AIExtractView() {
   
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const currentStepIndex = activeSession ? getStepIndex(activeSession.status) : -1;
+  const currentStepIndex = activeSession ? getStepIndex(activeSession.status, (activeSession as any).optimization_mode) : -1;
 
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
@@ -1256,22 +1261,22 @@ export function AIExtractView() {
         {/* Action Bar for active session */}
         {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
-            {currentStepIndex >= 2 && currentStepIndex < 3 && (
+            {currentStepIndex >= 3 && currentStepIndex < 4 && (
               <Button onClick={handleApplyMapping} className="gap-1.5" disabled={!mappingConfirmed}>
                 <Globe className="w-4 h-4" /> Apply Mapping
               </Button>
             )}
-            {currentStepIndex >= 3 && currentStepIndex < 4 && (
+            {currentStepIndex >= 4 && currentStepIndex < 5 && (
               <Button onClick={handleValidate} className="gap-1.5">
                 <Shield className="w-4 h-4" /> Validate
               </Button>
             )}
-            {currentStepIndex === 4 && blockerCount === 0 && !isOptimizing && (
+            {currentStepIndex === 5 && blockerCount === 0 && !isOptimizing && (
               <Button onClick={handleStartOptimize} className="gap-1.5">
                 <Zap className="w-4 h-4" /> Optimize
               </Button>
             )}
-            {(currentStepIndex >= 5 || isOptimizing) && (
+            {(currentStepIndex >= 6 || isOptimizing) && (
               <>
                 <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                   <Zap className="w-3 h-3 mr-1" /> Select a cutting plan below, then click Approve
@@ -1368,8 +1373,71 @@ export function AIExtractView() {
         )}
 
 
-        {/* Barlist Mapping Panel — shown at Dedupe→Mapped stage */}
-        {activeSession && currentStepIndex >= 2 && currentStepIndex < 3 && activeRows.length > 0 && (
+        {/* Optimization Strategy Selection — shown when extracted but no mode chosen */}
+        {activeSession && currentStepIndex === 2 && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Scissors className="w-5 h-5 text-primary" />
+                <h3 className="text-sm font-bold text-foreground tracking-wide">Choose Optimization Strategy</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Select how bars should be optimized before proceeding to deduplication and validation.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {([
+                  {
+                    mode: "raw",
+                    title: "RAW",
+                    desc: "No optimization. Bars cut exactly as listed. Waste bank ignored.",
+                    icon: Ruler,
+                  },
+                  {
+                    mode: "long_to_short",
+                    title: "LONG → SHORT",
+                    desc: "Use full stock bars first. Reuse leftover pieces where possible. Reduce waste.",
+                    icon: ArrowRight,
+                  },
+                  {
+                    mode: "combination",
+                    title: "COMBINATION",
+                    desc: "Combine different bar marks on the same stock. Use waste bank. Minimize scrap globally.",
+                    icon: Zap,
+                  },
+                ] as const).map((opt) => {
+                  const OptIcon = opt.icon;
+                  return (
+                    <button
+                      key={opt.mode}
+                      onClick={async () => {
+                        try {
+                          await supabase
+                            .from("extract_sessions")
+                            .update({ optimization_mode: opt.mode } as any)
+                            .eq("id", activeSession.id);
+                          await refreshSessions();
+                          toast({ title: "Strategy selected", description: `${opt.title} mode applied.` });
+                        } catch (err: any) {
+                          toast({ title: "Failed", description: err.message, variant: "destructive" });
+                        }
+                      }}
+                      className="flex flex-col items-start gap-2 p-4 rounded-lg border border-border bg-background hover:border-primary hover:bg-primary/5 transition-all text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <OptIcon className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-bold text-foreground">{opt.title}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{opt.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+
+        {activeSession && currentStepIndex >= 3 && currentStepIndex < 4 && activeRows.length > 0 && (
           <BarlistMappingPanel
             rows={activeRows}
             sessionId={activeSession.id}

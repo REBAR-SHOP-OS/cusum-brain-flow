@@ -15,6 +15,7 @@ export interface ExtractSession {
   invoice_number: string | null;
   invoice_date: string | null;
   status: string;
+  optimization_mode: string | null;
   created_at: string;
   updated_at: string;
 }
