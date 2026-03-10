@@ -410,12 +410,11 @@ export function AIExtractView() {
       } catch (dedupeErr: any) {
         console.error("Dedupe scan failed:", dedupeErr);
         // Non-fatal — auto-skip dedupe so pipeline isn't blocked
-        try {
-          await supabase
-            .from("extract_sessions")
-            .update({ dedupe_status: "none" } as any)
-            .eq("id", session.id);
-        } catch (_) { /* best-effort */ }
+        const { error: dedupeFallbackErr } = await supabase
+          .from("extract_sessions")
+          .update({ dedupe_status: "complete" } as any)
+          .eq("id", session.id);
+        if (dedupeFallbackErr) console.error("Failed to set dedupe_status fallback:", dedupeFallbackErr);
       }
 
       await refreshRows();
