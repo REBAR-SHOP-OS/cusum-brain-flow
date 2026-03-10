@@ -1,23 +1,24 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Eliminate Page-Level Horizontal Scrollbar
 
-## Webhook URL
-```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+## Problem
+The page shows a horizontal scrollbar because two sections overflow their container:
+1. **Mapping panel preview table** — DIMS column pushes past viewport
+2. **Line items table** — has `min-w-[1400px]` forcing the page wider
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+## Changes
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+**File: `src/components/office/AIExtractView.tsx`**
+
+1. **Main container**: Change line 810 from `overflow-x-hidden` to add explicit `max-w-[100vw]` to hard-cap width.
+2. **Line items table wrapper** (line 1841-1842): The outer div already has `max-w-full`, but the inner div forces `min-w-[1400px]`. Wrap in `overflow-x-auto` and remove `max-w-full` from outer (it's already constrained). The `overflow-auto` on line 1841 should handle this, but the parent containers need `overflow-hidden` or `min-w-0` to prevent bleed-through.
+3. **Add `min-w-0`** to parent flex/grid containers that wrap these sections to allow content to shrink below intrinsic width.
+
+**File: `src/components/office/BarlistMappingPanel.tsx`**
+
+4. **Preview table** (line 286): Already has `overflow-x-auto` — confirmed OK.
+5. **Card root** (line 219): Already has `overflow-hidden` — confirmed OK. Add `max-w-full min-w-0` to ensure it respects parent constraints.
+
+**Root cause**: The `min-w-[1400px]` on the line items inner div (line 1842) is correct for making the table scrollable internally, but the cascade of parent containers doesn't prevent this minimum width from propagating up. Adding `min-w-0` on key flex children and ensuring `overflow-hidden` on the right parent will contain it.
+
