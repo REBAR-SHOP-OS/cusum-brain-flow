@@ -17,6 +17,8 @@ interface CutEngineProps {
   isRunning: boolean;
   canWrite: boolean;
   darkMode?: boolean;
+  /** Supervisors can exceed maxBars with a warning */
+  isSupervisor?: boolean;
   /** Authoritative bar count locked at run start (from SlotTracker) */
   lockedBars?: number;
   /** Live counter data from slot tracker */
