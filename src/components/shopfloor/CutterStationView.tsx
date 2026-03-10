@@ -590,6 +590,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           machineName={machine.name}
           machineModel={machine.model}
           canWrite={canWrite}
+          isSupervisor={isSupervisor}
+          onToggleSupervisor={canCorrectCount ? () => setIsSupervisor(v => !v) : undefined}
           onBack={onBack}
           showBedsSuffix={true}
         />
