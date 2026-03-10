@@ -95,7 +95,9 @@ export function SocialCalendar({ posts, weekStart, onPostClick }: SocialCalendar
                     onClick={() => onPostClick(post)}
                     className={cn(
                       "w-full p-2 rounded-lg border text-left transition-all hover:shadow-md",
-                      post.status === "scheduled"
+                      post.status === "published"
+                        ? "bg-green-500/10 border-green-500/40"
+                        : post.status === "scheduled"
                         ? "bg-card border-primary/30"
                         : post.status === "draft"
                         ? "bg-muted/30 border-dashed border-muted-foreground/30"
