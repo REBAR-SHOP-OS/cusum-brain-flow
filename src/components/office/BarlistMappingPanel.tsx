@@ -283,7 +283,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                 Mapped Preview — First {previewRows.length} of {rows.length} rows
               </span>
             </div>
-            <ScrollArea className="max-h-52">
+            <div className="overflow-x-auto max-h-52">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30">
