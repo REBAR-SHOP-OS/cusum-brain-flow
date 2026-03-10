@@ -484,6 +484,10 @@ export function AIExtractView() {
     setProcessingStep("Applying mapping...");
     try {
       const result = await applyMapping(activeSessionId);
+      // Optimistic: advance UI to "mapped" immediately so pipeline doesn't stall
+      if (activeSession) {
+        setActiveSession({ ...activeSession, status: "mapped" } as any);
+      }
       await refreshRows();
       await refreshSessions();
       toast({ title: "Mapping applied", description: `${result.mapped_count} rows mapped, ${result.auto_mappings_created} auto-rules created` });
