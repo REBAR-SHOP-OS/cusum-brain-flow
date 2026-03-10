@@ -24,8 +24,9 @@ export function useExtractSessions() {
     refresh();
   }, [refresh]);
 
-  // Subscribe to realtime changes
+  // Subscribe to realtime changes (debounced)
   useEffect(() => {
+    const debounceRef: { current: ReturnType<typeof setTimeout> | null } = { current: null };
     const channel = supabase
       .channel("extract-sessions-changes-" + Math.random().toString(36).slice(2, 8))
       .on(
@@ -34,11 +35,15 @@ export function useExtractSessions() {
           event: "*", schema: "public", table: "extract_sessions",
           ...(companyId ? { filter: `company_id=eq.${companyId}` } : {}),
         },
-        () => refresh()
+        () => {
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => refresh(), 500);
+        }
       )
       .subscribe();
 
     return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
   }, [refresh, companyId]);
