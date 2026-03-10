@@ -1,44 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Fix: manage-machine Edge Function Returning Non-2xx
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Root Cause
-
-**Primary:** The `manage-machine` edge function uses the **deprecated `auth.getClaims(token)`** method (line 29 of index.ts). Per project memory, this causes **intermittent token validation failures** returning 401. The fix is to use `auth.getUser()` instead, which is stable and reliable.
-
-**Secondary:** The edge function uses **subfolders** (`handlers/`, `lib/`) which can cause deployment issues with Lovable Cloud. All code must be in a single `index.ts`.
-
-## Evidence
-- Edge function logs show **zero entries** for `manage-machine` — the function may not even be booting correctly due to subfolder import resolution failures.
-- The `schedule-post` function (recently created, single file) works fine.
-- Memory note explicitly states: *"use `getUser()` instead of `getClaims()` to avoid intermittent token validation failures"*.
-
-## Fix
-
-Consolidate the entire `manage-machine` edge function into a single `index.ts` file with these changes:
-
-1. **Replace `getClaims()`** with `getUser()`:
-```typescript
-// OLD (broken)
-const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
-const userId = claimsData.claims.sub;
-
-// NEW (stable)
-const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-const userId = user.id;
+## Webhook URL
+```
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
 ```
 
-2. **Inline all handler code** from `handlers/*.ts` and `lib/helpers.ts` directly into `index.ts` — eliminating subfolders entirely.
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
-3. **Delete subfolder files**: `handlers/`, `lib/` directories.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `supabase/functions/manage-machine/index.ts` | Rewrite: inline all handlers + helpers, replace `getClaims` with `getUser` |
-| `supabase/functions/manage-machine/handlers/*` | Delete all 6 files |
-| `supabase/functions/manage-machine/lib/helpers.ts` | Delete |
-
-No frontend changes needed — `manageMachineService.ts` calls the same function name with the same payload.
-
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
