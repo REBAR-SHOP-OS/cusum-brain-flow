@@ -35,15 +35,14 @@ serve(async (req) => {
     const supabaseService = createClient(supabaseUrl, serviceKey);
 
     // Validate JWT
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
+    if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const userId = claimsData.claims.sub as string;
+    const userId = user.id;
 
     // ── Role check: block 'office' role ──────────────────────────────
     const { data: userRoles } = await supabaseService
