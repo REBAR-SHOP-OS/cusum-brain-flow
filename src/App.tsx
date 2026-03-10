@@ -47,6 +47,7 @@ import AdminPanel from "./pages/AdminPanel";
 import WasteBankAdmin from "./pages/WasteBankAdmin";
 import BendQueueAdmin from "./pages/BendQueueAdmin";
 import BundleAdmin from "./pages/BundleAdmin";
+import ProductionAudit from "./pages/ProductionAudit";
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
