@@ -420,7 +420,6 @@ export function AIExtractView() {
       setProcessing(false);
       setProcessingStep("");
     }
-    }
   };
 
   const handleValidate = async () => {
