@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ExtractSession, ExtractRow, ExtractError } from "@/lib/extractService";
 import { fetchExtractSessions, fetchExtractRows, fetchExtractErrors } from "@/lib/extractService";
@@ -50,6 +50,7 @@ export function useExtractRows(sessionId: string | null) {
   const [rows, setRows] = useState<ExtractRow[]>([]);
   const [loading, setLoading] = useState(!!sessionId);
   const [hasFetched, setHasFetched] = useState(false);
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
     if (!sessionId) {
@@ -64,6 +65,18 @@ export function useExtractRows(sessionId: string | null) {
       const data = await fetchExtractRows(sessionId);
       console.log("[useExtractRows] fetched", data.length, "rows");
       setRows(data);
+
+      // Auto-retry once after 2s if 0 rows returned (handles transient RLS / race)
+      if (data.length === 0 && !retryRef.current) {
+        retryRef.current = setTimeout(async () => {
+          try {
+            const retryData = await fetchExtractRows(sessionId);
+            console.log("[useExtractRows] retry fetched", retryData.length, "rows");
+            setRows(retryData);
+          } catch (_) { /* best-effort */ }
+          retryRef.current = null;
+        }, 2000);
+      }
     } catch (err) {
       console.error("[useExtractRows] Failed to load rows:", err);
     }
@@ -73,7 +86,35 @@ export function useExtractRows(sessionId: string | null) {
 
   useEffect(() => {
     refresh();
+    return () => {
+      if (retryRef.current) {
+        clearTimeout(retryRef.current);
+        retryRef.current = null;
+      }
+    };
   }, [refresh]);
+
+  // Realtime subscription for extract_rows
+  useEffect(() => {
+    if (!sessionId) return;
+    const channel = supabase
+      .channel("extract-rows-changes-" + sessionId)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "extract_rows",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        () => refresh()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sessionId, refresh]);
 
   return { rows, loading, hasFetched, refresh };
 }

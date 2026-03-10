@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -56,6 +56,27 @@ import { createProject, createBarlist } from "@/lib/barlistService";
 import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
+
+function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
+  const [showRetry, setShowRetry] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShowRetry(true), 10000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <Card className="border-border/50">
+      <CardContent className="flex items-center gap-3 py-6">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Loading extracted rows…</span>
+        {showRetry && (
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => { setShowRetry(false); onRetry(); }}>
+            <RotateCcw className="w-3 h-3 mr-1" /> Retry
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 const PIPELINE_STEPS = [
   { key: "uploaded", label: "Uploaded", icon: Upload },
@@ -1523,12 +1544,7 @@ export function AIExtractView() {
 
         {activeSession && currentStepIndex === 3 && (
           (rowsLoading || !rowsHasFetched) ? (
-            <Card className="border-border/50">
-              <CardContent className="flex items-center gap-3 py-6">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Loading extracted rows…</span>
-              </CardContent>
-            </Card>
+            <LoadingRowsCard onRetry={refreshRows} />
           ) : activeRows.length > 0 ? (
             <BarlistMappingPanel
               rows={activeRows}
