@@ -288,6 +288,7 @@ Rules:
         if (items.length > 0) {
           const rows = items.map((item: any, idx: number) => ({
             session_id: sessionId,
+            company_id: sessionCompanyId,
             row_index: idx + 1,
             dwg: item.dwg || null,
             item_number: String(item.item || idx + 1),
