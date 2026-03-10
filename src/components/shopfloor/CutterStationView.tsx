@@ -612,6 +612,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         drawingRef={currentItem.drawing_ref}
         remainingCount={remaining}
         canWrite={canWrite}
+        isSupervisor={isSupervisor}
+        onToggleSupervisor={canCorrectCount ? () => setIsSupervisor(v => !v) : undefined}
         onBack={onBack}
         showBedsSuffix={false}
       />
