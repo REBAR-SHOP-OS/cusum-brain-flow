@@ -2717,13 +2717,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "cut_batches_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "cut_batches_machine_id_fkey"
             columns: ["machine_id"]
             isOneToOne: false
