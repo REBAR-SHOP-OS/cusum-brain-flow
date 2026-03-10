@@ -48,11 +48,14 @@ export function useExtractSessions() {
 
 export function useExtractRows(sessionId: string | null) {
   const [rows, setRows] = useState<ExtractRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!sessionId);
+  const [hasFetched, setHasFetched] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!sessionId) {
       setRows([]);
+      setHasFetched(false);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -62,6 +65,7 @@ export function useExtractRows(sessionId: string | null) {
     } catch (err) {
       console.error("Failed to load rows:", err);
     }
+    setHasFetched(true);
     setLoading(false);
   }, [sessionId]);
 
@@ -69,7 +73,7 @@ export function useExtractRows(sessionId: string | null) {
     refresh();
   }, [refresh]);
 
-  return { rows, loading, refresh };
+  return { rows, loading, hasFetched, refresh };
 }
 
 export function useExtractErrors(sessionId: string | null) {
