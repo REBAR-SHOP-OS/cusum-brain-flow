@@ -290,6 +290,28 @@ export function AIExtractView() {
         setCreateNewProject(false);
       }
 
+      // Guard: verify selected project exists in projects table before FK insert
+      if (projectId && !createNewProject) {
+        const { data: existingProj } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("id", projectId)
+          .maybeSingle();
+        if (!existingProj) {
+          // Project doesn't exist — auto-create it to satisfy FK
+          setProcessingStep("Creating project record...");
+          const selectedProj = projects.find(p => p.id === projectId);
+          const project = await createProject({
+            companyId: profile.company_id,
+            name: selectedProj?.name || manifestName || "Imported Project",
+            siteAddress,
+            createdBy: user?.id,
+          });
+          projectId = project.id;
+          setSelectedProjectId(project.id);
+        }
+      }
+
       // Resolve barlist
       let barlistId: string | null = null;
       if (projectId) {
