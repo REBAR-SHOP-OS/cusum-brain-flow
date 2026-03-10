@@ -6864,11 +6864,14 @@ export type Database = {
       }
       machines: {
         Row: {
+          active_job_id: string | null
           company_id: string
           created_at: string
           current_operator_profile_id: string | null
           current_run_id: string | null
+          cut_session_status: string | null
           id: string
+          job_assigned_by: string | null
           last_event_at: string | null
           model: string | null
           name: string
@@ -6878,11 +6881,14 @@ export type Database = {
           warehouse_id: string | null
         }
         Insert: {
+          active_job_id?: string | null
           company_id: string
           created_at?: string
           current_operator_profile_id?: string | null
           current_run_id?: string | null
+          cut_session_status?: string | null
           id?: string
+          job_assigned_by?: string | null
           last_event_at?: string | null
           model?: string | null
           name: string
@@ -6892,11 +6898,14 @@ export type Database = {
           warehouse_id?: string | null
         }
         Update: {
+          active_job_id?: string | null
           company_id?: string
           created_at?: string
           current_operator_profile_id?: string | null
           current_run_id?: string | null
+          cut_session_status?: string | null
           id?: string
+          job_assigned_by?: string | null
           last_event_at?: string | null
           model?: string | null
           name?: string
