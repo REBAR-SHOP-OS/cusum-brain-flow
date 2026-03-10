@@ -244,7 +244,7 @@ export function TagsExportView() {
               size="sm" className="h-7 text-xs gap-1"
               onClick={() => setSortMode("standard")}
             >
-              <Zap className="w-3 h-3" /> Standard
+               <Zap className="w-3 h-3" /> Raw
             </Button>
             <Button
               variant={sortMode === "optimized" ? "default" : "ghost"}

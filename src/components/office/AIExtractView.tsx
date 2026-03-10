@@ -154,7 +154,7 @@ export function AIExtractView() {
     stockLengthMm: 12000,
     kerfMm: 5,
     minRemnantMm: 300,
-    mode: "best-fit",
+    mode: "combination",
   });
   const [optimizationResult, setOptimizationResult] = useState<OptimizationSummary | null>(null);
   const [selectedOptMode, setSelectedOptMode] = useState<OptimizerConfig["mode"] | null>(null);
@@ -543,7 +543,7 @@ export function AIExtractView() {
       const result = await approveExtract(activeSessionId, {
         stockLengthMm: optimizerConfig.stockLengthMm,
         kerfMm: optimizerConfig.kerfMm,
-        selectedMode: selectedOptMode || "best-fit",
+        selectedMode: selectedOptMode || "combination",
       });
       await refreshSessions();
       toast({
@@ -581,16 +581,16 @@ export function AIExtractView() {
         }));
 
       // Pre-compute all three modes for comparison
-      const modes: OptimizerConfig["mode"][] = ["manual", "standard", "optimized", "best-fit"];
+      const modes: OptimizerConfig["mode"][] = ["raw", "long_to_short", "combination"];
       const modeResults: Record<string, OptimizationSummary> = {};
       for (const mode of modes) {
         modeResults[mode] = runOptimization(cutItems, { ...optimizerConfig, mode });
       }
       setAllModeResults(modeResults);
 
-      // Auto-select best-fit
-      setOptimizationResult(modeResults["best-fit"]);
-      setSelectedOptMode("best-fit");
+      // Auto-select combination
+      setOptimizationResult(modeResults["combination"]);
+      setSelectedOptMode("combination");
 
       await refreshSessions();
       toast({ title: "Optimization ready", description: "Select your preferred cutting plan below." });
@@ -2038,12 +2038,11 @@ export function AIExtractView() {
               </div>
 
               {/* Mode cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {([
-                  { mode: "manual" as const, label: "Manual", desc: "No optimization — supervisor picks order" },
-                  { mode: "standard" as const, label: "Standard", desc: "Sequential, fewer stopper moves" },
-                  { mode: "optimized" as const, label: "Optimized (FFD)", desc: "First Fit Decreasing bin-pack" },
-                  { mode: "best-fit" as const, label: "Best Fit (BFD)", desc: "Tightest fit, least waste" },
+                  { mode: "raw" as const, label: "RAW", desc: "Original bar list — no bin-packing" },
+                  { mode: "long_to_short" as const, label: "LONG → SHORT", desc: "First Fit Decreasing — reuse waste" },
+                  { mode: "combination" as const, label: "COMBINATION", desc: "Best Fit — tightest packing, least waste" },
                 ]).map(({ mode, label, desc }) => {
                   const isSelected = selectedOptMode === mode;
                   const modeResult = allModeResults[mode];

@@ -58,39 +58,39 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
     mode,
   });
 
-  const standardResult = useMemo<OptimizationSummary | null>(() => {
+  const rawResult = useMemo<OptimizationSummary | null>(() => {
     if (!cutItems.length) return null;
-    return runOptimization(cutItems, makeConfig("standard"));
+    return runOptimization(cutItems, makeConfig("raw"));
   }, [cutItems, stockLength, kerf, minRemnant]);
 
-  const optimizedResult = useMemo<OptimizationSummary | null>(() => {
+  const longToShortResult = useMemo<OptimizationSummary | null>(() => {
     if (!cutItems.length) return null;
-    return runOptimization(cutItems, makeConfig("optimized"));
+    return runOptimization(cutItems, makeConfig("long_to_short"));
   }, [cutItems, stockLength, kerf, minRemnant]);
 
-  const bestFitResult = useMemo<OptimizationSummary | null>(() => {
+  const combinationResult = useMemo<OptimizationSummary | null>(() => {
     if (!cutItems.length) return null;
-    return runOptimization(cutItems, makeConfig("best-fit"));
+    return runOptimization(cutItems, makeConfig("combination"));
   }, [cutItems, stockLength, kerf, minRemnant]);
 
   const getResult = (mode: OptimizerConfig["mode"] | null) => {
-    if (mode === "standard") return standardResult;
-    if (mode === "best-fit") return bestFitResult;
-    return optimizedResult; // default
+    if (mode === "raw") return rawResult;
+    if (mode === "long_to_short") return longToShortResult;
+    return combinationResult; // default
   };
 
-  const activeResult = getResult(selectedPlan) || optimizedResult;
+  const activeResult = getResult(selectedPlan) || combinationResult;
 
   const savings = useMemo(() => {
-    if (!standardResult || !optimizedResult) return null;
-    const best = bestFitResult && bestFitResult.totalWasteKg < optimizedResult.totalWasteKg ? bestFitResult : optimizedResult;
+    if (!rawResult || !longToShortResult) return null;
+    const best = combinationResult && combinationResult.totalWasteKg < longToShortResult.totalWasteKg ? combinationResult : longToShortResult;
     return {
-      wasteReduction: standardResult.totalWasteKg - best.totalWasteKg,
-      barsSaved: standardResult.totalStockBars - best.totalStockBars,
-      efficiencyGain: best.overallEfficiency - standardResult.overallEfficiency,
-      bestMode: best === bestFitResult ? "Best Fit" : "FFD Optimized",
+      wasteReduction: rawResult.totalWasteKg - best.totalWasteKg,
+      barsSaved: rawResult.totalStockBars - best.totalStockBars,
+      efficiencyGain: best.overallEfficiency - rawResult.overallEfficiency,
+      bestMode: best === combinationResult ? "Combination" : "Long → Short",
     };
-  }, [standardResult, optimizedResult, bestFitResult]);
+  }, [rawResult, longToShortResult, combinationResult]);
 
   const skippedCount = activeResult?.totalSkipped ?? 0;
 
@@ -175,7 +175,7 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
     );
   }
 
-  if (rowsLoading || !standardResult || !optimizedResult || !bestFitResult) {
+  if (rowsLoading || !rawResult || !longToShortResult || !combinationResult) {
     return (
       <div ref={ref} className="p-6 flex items-center justify-center h-64">
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -246,7 +246,7 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
                 {savings.barsSaved > 0 && ` and ${savings.barsSaved} stock bars`}
               </p>
               <p className="text-xs text-muted-foreground">
-                +{savings.efficiencyGain.toFixed(1)}% efficiency gain over Standard
+                +{savings.efficiencyGain.toFixed(1)}% efficiency gain over RAW
               </p>
             </div>
           </div>
@@ -254,9 +254,9 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
 
         {/* Three-way Comparison */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <PlanCard mode="standard" result={standardResult} selected={selectedPlan === "standard"} onSelect={() => setSelectedPlan("standard")} />
-          <PlanCard mode="optimized" result={optimizedResult} selected={selectedPlan === "optimized"} onSelect={() => setSelectedPlan("optimized")} />
-          <PlanCard mode="best-fit" result={bestFitResult} selected={selectedPlan === "best-fit"} onSelect={() => setSelectedPlan("best-fit")} />
+          <PlanCard mode="raw" result={rawResult} selected={selectedPlan === "raw"} onSelect={() => setSelectedPlan("raw")} />
+          <PlanCard mode="long_to_short" result={longToShortResult} selected={selectedPlan === "long_to_short"} onSelect={() => setSelectedPlan("long_to_short")} />
+          <PlanCard mode="combination" result={combinationResult} selected={selectedPlan === "combination"} onSelect={() => setSelectedPlan("combination")} />
         </div>
 
         {/* Apply Button */}
@@ -281,7 +281,7 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
             Breakdown by Bar Size
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {(activeResult || optimizedResult).results.map((r) => (
+            {(activeResult || combinationResult).results.map((r) => (
               <Card key={r.barSize} className="border-border">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -357,8 +357,8 @@ const PlanCard = React.forwardRef<HTMLDivElement, {
   selected: boolean;
   onSelect: () => void;
 }>(({ mode, result, selected, onSelect }, ref) => {
-  const Icon = mode === "best-fit" ? Target : mode === "optimized" ? Sparkles : Zap;
-  const label = mode === "best-fit" ? "Best Fit" : mode === "optimized" ? "Optimized (FFD)" : "Standard";
+  const Icon = mode === "combination" ? Target : mode === "long_to_short" ? Sparkles : Zap;
+  const label = mode === "combination" ? "COMBINATION" : mode === "long_to_short" ? "LONG → SHORT" : "RAW";
 
   return (
     <Card
