@@ -45,6 +45,11 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
   const handleConfirm = async () => {
     if (!selectedDate || selectedPlatforms.length === 0) return;
 
+    if ((post.content || "").length < 20) {
+      toast({ title: "Content too short", description: "Post content must be at least 20 characters to schedule.", variant: "destructive" });
+      return;
+    }
+
     const scheduledDateTime = new Date(selectedDate);
     scheduledDateTime.setHours(parseInt(hour), parseInt(minute), 0, 0);
 

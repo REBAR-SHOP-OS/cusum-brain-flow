@@ -42,6 +42,37 @@ serve(async (req) => {
       throw new Error("Failed to fetch scheduled posts");
     }
 
+    // Fallback: auto-promote stuck draft posts that have qa_status=scheduled but status=draft
+    const { data: stuckPosts } = await supabase
+      .from("social_posts")
+      .select("id, scheduled_date, platform")
+      .eq("qa_status", "scheduled")
+      .eq("status", "draft")
+      .lte("scheduled_date", now)
+      .limit(20);
+
+    if (stuckPosts && stuckPosts.length > 0) {
+      console.log(`[social-cron-publish] Found ${stuckPosts.length} stuck draft posts with qa_status=scheduled — promoting to scheduled`);
+      for (const sp of stuckPosts) {
+        console.log(`  Promoting stuck post ${sp.id}: platform=${sp.platform}, scheduled_date=${sp.scheduled_date}`);
+        await supabase
+          .from("social_posts")
+          .update({ status: "scheduled" })
+          .eq("id", sp.id);
+      }
+      // Re-fetch to include newly promoted posts
+      const { data: refreshed } = await supabase
+        .from("social_posts")
+        .select("*")
+        .eq("status", "scheduled")
+        .lte("scheduled_date", now)
+        .order("scheduled_date", { ascending: true })
+        .limit(20);
+      if (refreshed && refreshed.length > 0) {
+        duePosts.push(...refreshed.filter(r => !duePosts.some(d => d.id === r.id)));
+      }
+    }
+
     if (!duePosts || duePosts.length === 0) {
       return new Response(
         JSON.stringify({ message: "No posts due for publishing", published: 0 }),
