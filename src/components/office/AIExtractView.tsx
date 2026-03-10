@@ -514,6 +514,10 @@ export function AIExtractView() {
         description: `${result.blockers} blockers, ${result.warnings} warnings`,
         variant: result.can_approve ? "default" : "destructive",
       });
+      // Auto-advance to optimize if validation passed
+      if (result.can_approve) {
+        handleStartOptimize();
+      }
     } catch (err: any) {
       toast({ title: "Validation failed", description: err.message, variant: "destructive" });
     } finally {
@@ -1336,17 +1340,22 @@ export function AIExtractView() {
                 <CheckCircle2 className="w-3 h-3 mr-1" /> Mapping Complete
               </Badge>
             )}
+            {currentStepIndex >= 4 && activeSession?.status === "validated" && !isOptimizing && (
+              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40 bg-emerald-500/10 py-1 px-2.5">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Validated
+              </Badge>
+            )}
             {currentStepIndex === 3 && activeSession?.dedupe_status === "skipped" && (
               <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                 <TriangleAlert className="w-3 h-3 mr-1" /> Duplicates skipped — not merged
               </Badge>
             )}
-            {currentStepIndex === 4 && (
+            {currentStepIndex === 4 && activeSession?.status !== "validated" && (
               <Button onClick={handleValidate} className="gap-1.5">
                 <Shield className="w-4 h-4" /> Validate
               </Button>
             )}
-            {currentStepIndex === 4 && blockerCount === 0 && !isOptimizing && (
+            {currentStepIndex === 4 && blockerCount === 0 && !isOptimizing && activeSession?.status !== "validated" && (
               <Button onClick={handleStartOptimize} className="gap-1.5">
                 <Zap className="w-4 h-4" /> Optimize
               </Button>

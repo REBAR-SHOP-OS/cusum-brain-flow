@@ -1,36 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Fix: Mapped → Validated → Approved Flow
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Problem
-After clicking Validate, the session status becomes `"validated"` but `getStepIndex` still returns 4 (same step). The Validate button remains visible alongside Optimize, creating confusion. The user must manually figure out to click Optimize, then Approve. No auto-progression occurs.
+## Webhook URL
+```
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
+```
 
-## Root Issues
-1. **Validate button has no status guard** — shows at step 4 even when already validated
-2. **Optimize button requires blockerCount === 0** — correct, but appears alongside Validate with no visual distinction
-3. **No auto-advance after validation** — user is left at same visual state
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
-## Fix (single file: `src/components/office/AIExtractView.tsx`)
-
-### 1. Guard Validate button against already-validated status
-Line 1344: Change `currentStepIndex === 4` to `currentStepIndex === 4 && activeSession?.status !== "validated"`
-
-This hides Validate once validation has run, leaving only the Optimize button visible.
-
-### 2. Add "Validated" success badge when status is validated
-After the Validate button block, add a badge showing "Validation Passed" when `activeSession?.status === "validated" && !isOptimizing` — so the user sees confirmation before clicking Optimize.
-
-### 3. Auto-trigger optimization after successful validation
-In `handleValidate`, after validation succeeds with `can_approve === true`, automatically call `handleStartOptimize()` — eliminating the manual Optimize click and taking the user straight to the Approve step.
-
-This creates a smooth flow: **Apply Mapping** → click **Validate** → auto-runs **Optimize** → user sees cut plans → clicks **Approve**.
-
-### 4. Show "Validated" badge in the mapping-complete area
-When `activeSession?.status === "validated"`, show a "Validated" badge alongside "Mapping Complete".
-
-## Result
-- Mapped → click Validate → auto-optimizes → Approve button appears
-- No dead-end states
-- Validate button hidden once done
-- Single file, ~15 lines changed
-
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
