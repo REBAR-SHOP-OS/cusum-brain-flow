@@ -7,7 +7,8 @@ export type ManageMachineAction =
   | "start-queued-run"
   | "pause-run"
   | "block-run"
-  | "complete-run";
+  | "complete-run"
+  | "supervisor-unlock";
 
 export interface ManageMachineParams {
   action: ManageMachineAction;
