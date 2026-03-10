@@ -216,10 +216,10 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
   };
 
   return (
-    <Card className="border-primary/30 bg-primary/5 overflow-hidden max-w-full min-w-0">
-      <CardContent className="p-4 space-y-4">
+    <Card className="border-primary/30 bg-primary/5 overflow-hidden max-w-full min-w-0 flex flex-col max-h-[80vh]">
+      <CardContent className="p-4 flex flex-col flex-1 min-h-0 gap-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Globe className="w-4 h-4 text-primary" />
             <span className="text-sm font-bold text-foreground">Bar List Column Mapping</span>
@@ -234,95 +234,98 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
           )}
         </div>
 
-        {/* Mapping Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {CANONICAL_FIELDS.map(field => (
-            <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border min-w-0">
-              <div className="flex items-center gap-1 min-w-[70px] shrink-0">
-                {field.required && <span className="text-destructive text-[10px]">*</span>}
-                <span className="text-xs font-medium text-foreground truncate">{field.label}</span>
+        {/* Scrollable content: mapping grid + blockers + preview */}
+        <div className="flex-1 overflow-auto min-h-0 space-y-4">
+          {/* Mapping Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {CANONICAL_FIELDS.map(field => (
+              <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border min-w-0">
+                <div className="flex items-center gap-1 min-w-[70px] shrink-0">
+                  {field.required && <span className="text-destructive text-[10px]">*</span>}
+                  <span className="text-xs font-medium text-foreground truncate">{field.label}</span>
+                </div>
+                <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                <Select
+                  value={mapping[field.key] || ""}
+                  onValueChange={(val) => updateMapping(field.key, val)}
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                    <SelectValue placeholder="Select column..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SOURCE_COLUMNS.map(col => (
+                      <SelectItem key={col.key} value={col.key} className="text-xs">
+                        {col.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
-              <Select
-                value={mapping[field.key] || ""}
-                onValueChange={(val) => updateMapping(field.key, val)}
-                disabled={disabled}
-              >
-                <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                  <SelectValue placeholder="Select column..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {SOURCE_COLUMNS.map(col => (
-                    <SelectItem key={col.key} value={col.key} className="text-xs">
-                      {col.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
-        </div>
-
-        {/* Blockers */}
-        {blockers.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {blockers.map((b, i) => (
-              <Badge key={i} variant="destructive" className="text-[10px] gap-1">
-                <AlertCircle className="w-3 h-3" />
-                {b.field}: {b.type === "missing" ? "no column mapped" : "all values empty"}
-              </Badge>
             ))}
           </div>
-        )}
 
-        {/* Preview Table */}
-        {previewRows.length > 0 && (
-          <div className="border border-border rounded-lg overflow-hidden">
-            <div className="bg-muted/50 px-3 py-1.5 border-b border-border">
-              <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
-                Mapped Preview — First {previewRows.length} of {rows.length} rows
-              </span>
+          {/* Blockers */}
+          {blockers.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {blockers.map((b, i) => (
+                <Badge key={i} variant="destructive" className="text-[10px] gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {b.field}: {b.type === "missing" ? "no column mapped" : "all values empty"}
+                </Badge>
+              ))}
             </div>
-            <div className="overflow-x-auto max-h-52">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/30">
-                    <TableHead className="text-[10px] font-bold tracking-wider w-[40px]">#</TableHead>
-                    <TableHead className="text-[10px] font-bold tracking-wider">MARK</TableHead>
-                    <TableHead className="text-[10px] font-bold tracking-wider">SIZE</TableHead>
-                    <TableHead className="text-[10px] font-bold tracking-wider">SHAPE</TableHead>
-                    <TableHead className="text-[10px] font-bold tracking-wider text-right">LENGTH</TableHead>
-                    <TableHead className="text-[10px] font-bold tracking-wider text-right">QTY</TableHead>
-                    <TableHead className="text-[10px] font-bold tracking-wider">DIMS</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {previewRows.map((row) => {
-                    const dimEntries = Object.entries(row.dimensions_json).filter(([, v]) => v > 0);
-                    return (
-                      <TableRow key={row.source_row_id}>
-                        <TableCell className="text-xs p-1.5 text-muted-foreground">{row.source_row_index}</TableCell>
-                        <TableCell className="text-xs p-1.5 font-medium">{row.mark || "—"}</TableCell>
-                        <TableCell className="text-xs p-1.5">{row.size || "—"}</TableCell>
-                        <TableCell className="text-xs p-1.5">{row.shape || "—"}</TableCell>
-                        <TableCell className="text-xs p-1.5 text-right font-mono">{row.length || "—"}</TableCell>
-                        <TableCell className="text-xs p-1.5 text-right font-mono">{row.quantity || "—"}</TableCell>
-                        <TableCell className="text-[10px] p-1.5 text-muted-foreground max-w-[150px] truncate">
-                          {dimEntries.length > 0
-                            ? dimEntries.map(([k, v]) => `${k}=${v}`).join(" ")
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Confirm Button — sticky for iOS accessibility */}
-        <div className="sticky bottom-0 bg-card pt-3 pb-4 -mx-4 px-4 border-t border-border shadow-[0_-2px_8px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 1rem))' }}>
+          {/* Preview Table */}
+          {previewRows.length > 0 && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="bg-muted/50 px-3 py-1.5 border-b border-border">
+                <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+                  Mapped Preview — First {previewRows.length} of {rows.length} rows
+                </span>
+              </div>
+              <div className="overflow-x-auto max-h-52">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="text-[10px] font-bold tracking-wider w-[40px]">#</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider">MARK</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider">SIZE</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider">SHAPE</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider text-right">LENGTH</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider text-right">QTY</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider">DIMS</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {previewRows.map((row) => {
+                      const dimEntries = Object.entries(row.dimensions_json).filter(([, v]) => v > 0);
+                      return (
+                        <TableRow key={row.source_row_id}>
+                          <TableCell className="text-xs p-1.5 text-muted-foreground">{row.source_row_index}</TableCell>
+                          <TableCell className="text-xs p-1.5 font-medium">{row.mark || "—"}</TableCell>
+                          <TableCell className="text-xs p-1.5">{row.size || "—"}</TableCell>
+                          <TableCell className="text-xs p-1.5">{row.shape || "—"}</TableCell>
+                          <TableCell className="text-xs p-1.5 text-right font-mono">{row.length || "—"}</TableCell>
+                          <TableCell className="text-xs p-1.5 text-right font-mono">{row.quantity || "—"}</TableCell>
+                          <TableCell className="text-[10px] p-1.5 text-muted-foreground max-w-[150px] truncate">
+                            {dimEntries.length > 0
+                              ? dimEntries.map(([k, v]) => `${k}=${v}`).join(" ")
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Confirm Button — fixed footer, always visible */}
+        <div className="shrink-0 pt-3 border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="flex items-center justify-end gap-2">
             {!canConfirm && rows.length > 0 && (
               <span className="text-xs text-destructive">
