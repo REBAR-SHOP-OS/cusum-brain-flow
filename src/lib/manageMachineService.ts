@@ -25,15 +25,23 @@ export interface ManageMachineParams {
   qty?: number;
   /** ID of an existing queued run to start */
   runId?: string;
+  /** ID of the active cut_plan_item — used for job lock and batch tracking */
+  cutPlanItemId?: string;
+  /** ID of the cut_plan being worked on */
+  cutPlanId?: string;
+  /** Who assigned this job: 'manual' | 'optimizer' | 'supervisor' */
+  assignedBy?: string;
+  /** Expected output quantity for batch variance tracking */
+  plannedQty?: number;
+  /** Remnant length in mm — if >= 300mm, creates a waste bank piece */
+  remnantLengthMm?: number;
+  /** Bar code for the remnant piece */
+  remnantBarCode?: string;
 }
 
 /**
  * Calls the manage-machine edge function.
  * Requires admin or workshop role. Office users are blocked server-side.
- *
- * For start-run: if barCode is provided, the server validates:
- *   (machine + process + barCode + qty) ∈ machine_capabilities
- * If not matched → 403 capability_violation event is logged.
  */
 export async function manageMachine(
   params: ManageMachineParams

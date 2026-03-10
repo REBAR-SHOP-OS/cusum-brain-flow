@@ -15,6 +15,16 @@ export interface Machine {
   last_event_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Phase 2: ID of the active cut_plan_item locked to this machine */
+  active_job_id: string | null;
+  /** Phase 2: ID of the cut_plan being worked on */
+  active_plan_id: string | null;
+  /** Phase 2: Current session status — 'idle' | 'running' | 'paused' */
+  cut_session_status: string | null;
+  /** Phase 2: Who assigned the current job — 'manual' | 'optimizer' | 'supervisor' */
+  job_assigned_by: string | null;
+  /** Phase 2: Hard lock preventing job switches during active runs */
+  machine_lock: boolean | null;
 }
 
 /** Machine with joined operator profile and current run */
