@@ -57,7 +57,7 @@ type ManifestType = "delivery" | "pickup";
 const PIPELINE_STEPS = [
   { key: "uploaded", label: "Uploaded", icon: Upload },
   { key: "extracting", label: "Extracting", icon: Sparkles },
-  { key: "extracted", label: "Extracted", icon: FileText },
+  { key: "extracted", label: "Dedupe", icon: GitBranch },
   { key: "mapping", label: "Mapped", icon: Globe },
   { key: "validated", label: "Validated", icon: Shield },
   { key: "optimizing", label: "Optimized", icon: Zap },
