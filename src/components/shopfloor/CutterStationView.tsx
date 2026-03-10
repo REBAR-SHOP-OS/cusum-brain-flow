@@ -930,9 +930,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               <Button
                 className="w-full gap-2"
                 onClick={() => {
+                  remnantDecisionRef.current = "save";
                   setRemnantPromptOpen(false);
                   setRemnantInfo(null);
-                  toast({ title: "Remnant noted", description: "Will be saved to waste bank on run complete." });
+                  handleCompleteRun();
                 }}
               >
                 <Recycle className="w-4 h-4" />
