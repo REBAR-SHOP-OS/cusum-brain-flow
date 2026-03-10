@@ -460,7 +460,7 @@ export function AIExtractView() {
       } catch (_) { /* RLS may block — local flag handles UI */ }
       
       // Run all three modes for comparison
-      const cutItems: CutItem[] = rows
+      const cutItems: CutItem[] = activeRows
         .filter(r => r.bar_size_mapped || r.bar_size)
         .map((r, i) => ({
           id: r.id,
