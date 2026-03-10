@@ -71,7 +71,7 @@ serve(async (req) => {
         .from("time_clock_entries")
         .update({
           clock_out: clockOutTime,
-          notes: "[auto-closed: 8 AM morning reset]",
+          notes: "[auto-closed: 6 AM morning reset]",
         })
         .in("id", idsToClose);
 
