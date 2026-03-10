@@ -552,13 +552,7 @@ export function AIExtractView() {
       // Set local flag immediately for UI visibility (DB update may fail due to RLS)
       setIsOptimizing(true);
 
-      // Best-effort DB status update
-      try {
-        await supabase
-          .from("extract_sessions")
-          .update({ status: "optimizing" } as any)
-          .eq("id", activeSessionId);
-      } catch (_) { /* RLS may block — local flag handles UI */ }
+      // Session stays at "validated" — no separate "optimizing" status
       
       // Run all three modes for comparison
       const cutItems: CutItem[] = activeRows
