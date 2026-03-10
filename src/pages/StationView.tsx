@@ -424,7 +424,9 @@ export default function StationView() {
                           <div className="text-left flex-1 min-w-0">
                             <h2 className="text-sm font-bold text-foreground truncate">{cust.customerName}</h2>
                             <p className="text-[9px] tracking-[0.15em] uppercase text-muted-foreground">
-                              {cust.totalItems} items · {cust.barlists.length} barlist{cust.barlists.length !== 1 ? "s" : ""}
+                              {cust.totalItems > 0
+                                ? `${cust.totalItems} items · ${cust.barlists.length} barlist${cust.barlists.length !== 1 ? "s" : ""}`
+                                : "0 items · routed to other machine"}
                             </p>
                           </div>
                           <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
