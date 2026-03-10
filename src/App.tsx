@@ -201,6 +201,7 @@ const App = () => (
                     <Route path="/admin/waste-bank" element={<P><AdminRoute><WasteBankAdmin /></AdminRoute></P>} />
                     <Route path="/admin/bend-queue" element={<P><AdminRoute><BendQueueAdmin /></AdminRoute></P>} />
                     <Route path="/admin/bundles" element={<P><AdminRoute><BundleAdmin /></AdminRoute></P>} />
+                    <Route path="/admin/production-audit" element={<P><AdminRoute><ProductionAudit /></AdminRoute></P>} />
 
                     {/* Automations Hub */}
                     <Route path="/automations" element={<P><AdminRoute><AutomationsHub /></AdminRoute></P>} />

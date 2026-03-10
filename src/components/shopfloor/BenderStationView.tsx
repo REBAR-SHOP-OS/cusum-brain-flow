@@ -291,6 +291,17 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
 
         {/* Bending schematic */}
         <BendingSchematic dimensions={currentItem.bend_dimensions} />
+
+        {/* ── BEND BATCHES PANEL (Phase 4) ── */}
+        {bendBatches.length > 0 && (
+          <div className="mt-6">
+            <BenderBatchPanel
+              batches={bendBatches}
+              canWrite={effectiveCanWrite}
+              onRefresh={() => refetchBendBatches()}
+            />
+          </div>
+        )}
       </div>
 
       {/* Bottom bar */}
