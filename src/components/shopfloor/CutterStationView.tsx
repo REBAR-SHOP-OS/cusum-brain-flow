@@ -460,11 +460,22 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       // Immediately invalidate to refresh UI without waiting for realtime
       queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] });
 
+      // Compute remnant info for waste bank
+      const completedSlots = slotTracker.slots.filter(s => s.status === "completed");
+      const avgRemnant = completedSlots.length > 0
+        ? Math.round(completedSlots.reduce((sum, s) => sum + (selectedStockLength - s.cutsDone * currentItem.cut_length_mm), 0) / completedSlots.length)
+        : 0;
+
       await manageMachine({
         action: "complete-run",
         machineId: machine.id,
         outputQty: totalOutput,
         scrapQty: scrapSlots,
+        cutPlanItemId: currentItem.id,
+        cutPlanId: currentItem.cut_plan_id || undefined,
+        plannedQty: barsForThisRun * computedPiecesPerBar,
+        remnantLengthMm: avgRemnant >= REMNANT_THRESHOLD_MM ? avgRemnant : undefined,
+        remnantBarCode: avgRemnant >= REMNANT_THRESHOLD_MM ? currentItem.bar_code : undefined,
       });
 
       recordCompletion("cut", machine.id, currentItem.bar_code, {
