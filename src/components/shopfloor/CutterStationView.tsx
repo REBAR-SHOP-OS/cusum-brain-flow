@@ -269,7 +269,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
     // Supervisors can exceed maxBars; operators are still clamped
-    const finalBars = (isAdmin || isShopSupervisor) ? bars : Math.min(bars, maxBars);
+    const finalBars = Math.max(1, Math.min(bars, maxBars));
     try {
       setIsRunning(true);
       // Fetch fresh completed_pieces from DB to avoid stale realtime data
