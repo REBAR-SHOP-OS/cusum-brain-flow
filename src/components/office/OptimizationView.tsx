@@ -175,7 +175,7 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
     );
   }
 
-  if (rowsLoading || !standardResult || !optimizedResult || !bestFitResult) {
+  if (rowsLoading || !rawResult || !longToShortResult || !combinationResult) {
     return (
       <div ref={ref} className="p-6 flex items-center justify-center h-64">
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
