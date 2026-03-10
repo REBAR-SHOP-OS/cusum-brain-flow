@@ -1,23 +1,49 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: "Machine already has an active run" Race Condition
 
-## Webhook URL
+## Root Cause
+The `handleLockAndStart` function sets `isRunning = true` (line 273) but there is **no guard** preventing a second call before the first `manageMachine()` resolves. Double-tapping the Start button fires two `start-run` requests — the first succeeds and sets `current_run_id`, the second hits it and returns the 400 error.
+
+Evidence: Run history shows duplicate runs created within 1 second (18:44:49 and 18:44:50), both later canceled.
+
+**Current machine state is clean** — CUTTER-01 is idle with no stuck runs.
+
+## Fix (2 changes)
+
+### 1. Frontend: Add `useRef` guard to prevent double-fire
+In `CutterStationView.tsx`, add a `startingRef` that blocks re-entry:
+
+```typescript
+const startingRef = useRef(false);
+
+const handleLockAndStart = async (stockLength: number, bars: number) => {
+  if (!currentItem || startingRef.current) return;  // ← guard
+  startingRef.current = true;
+  try {
+    // ... existing logic
+  } catch { ... }
+  finally {
+    startingRef.current = false;  // ← always release
+  }
+};
 ```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
+
+### 2. Backend: Reduce stale threshold for rapid retries
+In `manage-machine` edge function, add a short-circuit for runs under 5 seconds old with same machine — treat the existing run as "already started successfully" and return its ID instead of erroring:
+
+```typescript
+// After fetching existingRun, before the stale check:
+const AGE_MS = Date.now() - new Date(existingRun.started_at).getTime();
+if (AGE_MS < 5000) {
+  // Likely a double-tap — return success with existing run ID
+  return { machineRunId: existingRun.id };
+}
 ```
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+This makes double-taps idempotent rather than erroring.
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+## Files Changed
+- `src/components/shopfloor/CutterStationView.tsx` — add `startingRef` guard
+- `supabase/functions/manage-machine/index.ts` — add <5s idempotency in both `startRun` and `startQueuedRun` handlers
+
