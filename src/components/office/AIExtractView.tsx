@@ -407,33 +407,24 @@ export function AIExtractView() {
 
       await pollForCompletion();
 
-      // Dry-run duplicate detection — show preview before merging
-      setProcessingStep("Scanning for duplicates...");
-      try {
-        const dryRunRes = await detectDuplicates(session.id, true);
+      // Fire dedupe scan in background (advisory only — does NOT block mapping)
+      detectDuplicates(session.id, true).then((dryRunRes) => {
         if (dryRunRes.duplicates_found > 0 && dryRunRes.preview?.length) {
           setDedupePreview(dryRunRes.preview);
           setPendingDedupeSessionId(session.id);
           toast({
-            title: `${dryRunRes.duplicates_found} duplicate groups detected`,
-            description: "Review and confirm merge in the Duplicates panel below.",
+            title: `${dryRunRes.duplicates_found} possible duplicates`,
+            description: "You can review and merge duplicates at any time.",
           });
         } else {
           setDedupeResult(dryRunRes);
-          const { error: dedupeUpErr } = await supabase
-            .from("extract_sessions")
-            .update({ dedupe_status: "complete" } as any)
-            .eq("id", session.id);
-          if (dedupeUpErr) console.error("Failed to set dedupe_status=complete:", dedupeUpErr);
         }
-      } catch (dedupeErr: any) {
-        console.error("Dedupe scan failed:", dedupeErr);
-        const { error: dedupeFallbackErr } = await supabase
-          .from("extract_sessions")
-          .update({ dedupe_status: "complete" } as any)
-          .eq("id", session.id);
-        if (dedupeFallbackErr) console.error("Failed to set dedupe_status fallback:", dedupeFallbackErr);
-      }
+        // Always mark dedupe as complete so it never blocks
+        supabase.from("extract_sessions").update({ dedupe_status: "complete" } as any).eq("id", session.id).then();
+      }).catch((err) => {
+        console.error("Background dedupe scan failed:", err);
+        supabase.from("extract_sessions").update({ dedupe_status: "complete" } as any).eq("id", session.id).then();
+      });
 
       await refreshRows();
       await refreshSessions();
