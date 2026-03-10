@@ -1,23 +1,42 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Persist Platform & Page Selection from Saved Post Data
 
-## Webhook URL
+## Problem
+When opening a post's review panel, the platform and page dropdowns always show hardcoded defaults (`"facebook"` and `"Ontario Steel Detailing"`) instead of reading the values actually saved on the post (`post.platform` and `post.page_name`). After refresh, users can't see which platform/page was assigned.
+
+## Root Cause
+- `localPlatforms` initializes from `post?.platform` but only on first mount — if `post` is null initially (loading), it falls back to `"facebook"`.
+- `localPages` always hardcodes `["Ontario Steel Detailing"]` regardless of what's saved.
+- There is **no `useEffect`** to sync these states when the `post` object loads or changes (e.g. navigating between posts).
+
+## Fix — `src/components/social/PostReviewPanel.tsx`
+
+### 1. Initialize from post data
+```typescript
+const [localPages, setLocalPages] = useState<string[]>(
+  post?.page_name ? [post.page_name] : ["Ontario Steel Detailing"]
+);
+const [localPlatforms, setLocalPlatforms] = useState<string[]>(
+  [post?.platform || "facebook"]
+);
+const [localContentType, setLocalContentType] = useState(
+  post?.content_type || "post"
+);
 ```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
+
+### 2. Add sync effect when post changes (e.g. switching between posts in the review queue)
+```typescript
+useEffect(() => {
+  if (!post) return;
+  setLocalPlatforms([post.platform]);
+  setLocalPages(post.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
+  setLocalContentType(post.content_type || "post");
+}, [post?.id]);
 ```
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+This ensures that every time a different post is opened (or the same post reloads after refresh), the UI shows the **saved** platform and page — not defaults.
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+### File Modified
+- `src/components/social/PostReviewPanel.tsx` — add `useEffect` + fix initializers
+
