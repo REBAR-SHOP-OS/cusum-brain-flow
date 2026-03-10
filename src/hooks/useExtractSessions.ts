@@ -58,12 +58,14 @@ export function useExtractRows(sessionId: string | null) {
       setLoading(false);
       return;
     }
+    console.log("[useExtractRows] fetching rows for session:", sessionId);
     setLoading(true);
     try {
       const data = await fetchExtractRows(sessionId);
+      console.log("[useExtractRows] fetched", data.length, "rows");
       setRows(data);
     } catch (err) {
-      console.error("Failed to load rows:", err);
+      console.error("[useExtractRows] Failed to load rows:", err);
     }
     setHasFetched(true);
     setLoading(false);
