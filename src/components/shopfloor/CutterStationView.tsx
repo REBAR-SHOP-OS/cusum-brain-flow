@@ -232,7 +232,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   const remainingPieces = totalPieces - effectiveCompleted;
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
-  const barsForThisRun = operatorBars ?? runPlan?.barsThisRun ?? barsStillNeeded;
+  const autoBarsToLoad = Math.max(1, Math.min(barsStillNeeded, maxBars));
+  const barsForThisRun = operatorBars != null ? Math.max(1, Math.min(operatorBars, maxBars)) : (runPlan?.barsThisRun ?? autoBarsToLoad);
   const isDone = remainingPieces <= 0;
 
   // ── Alternative action handler ──
