@@ -979,6 +979,85 @@ export type Database = {
           },
         ]
       }
+      bend_batches: {
+        Row: {
+          actual_qty: number | null
+          assigned_operator: string | null
+          bend_pattern: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          machine_id: string | null
+          notes: string | null
+          planned_qty: number
+          shape: string | null
+          size: string | null
+          source_cut_batch_id: string | null
+          source_job_id: string | null
+          status: string
+          variance: number | null
+        }
+        Insert: {
+          actual_qty?: number | null
+          assigned_operator?: string | null
+          bend_pattern?: string | null
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          machine_id?: string | null
+          notes?: string | null
+          planned_qty?: number
+          shape?: string | null
+          size?: string | null
+          source_cut_batch_id?: string | null
+          source_job_id?: string | null
+          status?: string
+          variance?: number | null
+        }
+        Update: {
+          actual_qty?: number | null
+          assigned_operator?: string | null
+          bend_pattern?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          machine_id?: string | null
+          notes?: string | null
+          planned_qty?: number
+          shape?: string | null
+          size?: string | null
+          source_cut_batch_id?: string | null
+          source_job_id?: string | null
+          status?: string
+          variance?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bend_batches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bend_batches_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bend_batches_source_cut_batch_id_fkey"
+            columns: ["source_cut_batch_id"]
+            isOneToOne: false
+            referencedRelation: "cut_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bid_board: {
         Row: {
           bid_due_date: string | null
@@ -1188,6 +1267,76 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      bundles: {
+        Row: {
+          bundle_code: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          notes: string | null
+          quantity: number
+          shape: string | null
+          size: string | null
+          source_bend_batch_id: string | null
+          source_cut_batch_id: string | null
+          source_job_id: string | null
+          status: string
+        }
+        Insert: {
+          bundle_code?: string | null
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number
+          shape?: string | null
+          size?: string | null
+          source_bend_batch_id?: string | null
+          source_cut_batch_id?: string | null
+          source_job_id?: string | null
+          status?: string
+        }
+        Update: {
+          bundle_code?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number
+          shape?: string | null
+          size?: string | null
+          source_bend_batch_id?: string | null
+          source_cut_batch_id?: string | null
+          source_job_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bundles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bundles_source_bend_batch_id_fkey"
+            columns: ["source_bend_batch_id"]
+            isOneToOne: false
+            referencedRelation: "bend_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bundles_source_cut_batch_id_fkey"
+            columns: ["source_cut_batch_id"]
+            isOneToOne: false
+            referencedRelation: "cut_batches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       call_tasks: {
         Row: {
@@ -2899,6 +3048,49 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_bundles: {
+        Row: {
+          bundle_id: string
+          created_at: string | null
+          delivery_id: string
+          id: string
+        }
+        Insert: {
+          bundle_id: string
+          created_at?: string | null
+          delivery_id: string
+          id?: string
+        }
+        Update: {
+          bundle_id?: string
+          created_at?: string | null
+          delivery_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_bundles_bundle_id_fkey"
+            columns: ["bundle_id"]
+            isOneToOne: false
+            referencedRelation: "bundles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_bundles_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_bundles_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "v_deliveries_enriched"
             referencedColumns: ["id"]
           },
         ]
