@@ -256,13 +256,27 @@ export async function runExtract(params: {
   return { items, summary: data?.summary };
 }
 
-export async function detectDuplicates(sessionId: string): Promise<{
+export interface DuplicatePreviewItem {
+  duplicate_key: string;
+  survivor_mark: string;
+  survivor_row_index: number;
+  absorbed_count: number;
+  original_qty: number;
+  new_qty: number;
+  absorbed_rows: Array<{ row_index: number; mark: string; quantity: number }>;
+}
+
+export interface DedupeResult {
   duplicates_found: number;
   rows_merged: number;
   total_active_rows: number;
-}> {
+  dry_run?: boolean;
+  preview?: DuplicatePreviewItem[];
+}
+
+export async function detectDuplicates(sessionId: string, dryRun: boolean = false): Promise<DedupeResult> {
   const { data, error } = await supabase.functions.invoke("manage-extract", {
-    body: { action: "detect-duplicates", sessionId },
+    body: { action: "detect-duplicates", sessionId, dryRun },
   });
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);
@@ -270,6 +284,8 @@ export async function detectDuplicates(sessionId: string): Promise<{
     duplicates_found: data?.duplicates_found ?? 0,
     rows_merged: data?.rows_merged ?? 0,
     total_active_rows: data?.total_active_rows ?? 0,
+    dry_run: data?.dry_run ?? false,
+    preview: data?.preview ?? [],
   };
 }
 

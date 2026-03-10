@@ -44,6 +44,8 @@ import {
   rejectExtract,
   detectDuplicates,
   validateSessionName,
+  type DuplicatePreviewItem,
+  type DedupeResult,
 } from "@/lib/extractService";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -128,7 +130,10 @@ export function AIExtractView() {
   const [savingEdits, setSavingEdits] = useState(false);
   
   // Duplicate detection state
-  const [dedupeResult, setDedupeResult] = useState<{ duplicates_found: number; rows_merged: number; total_active_rows: number } | null>(null);
+  const [dedupeResult, setDedupeResult] = useState<DedupeResult | null>(null);
+  const [showMergedRows, setShowMergedRows] = useState(false);
+  const [dedupePreview, setDedupePreview] = useState<DuplicatePreviewItem[] | null>(null);
+  const [pendingDedupeSessionId, setPendingDedupeSessionId] = useState<string | null>(null);
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, refresh: refreshRows } = useExtractRows(activeSessionId);
@@ -351,19 +356,23 @@ export function AIExtractView() {
         if (!manifestName && result.summary.project) setManifestName(result.summary.project);
       }
 
-      // Auto-detect duplicates after extraction
-      setProcessingStep("Detecting duplicates...");
+      // Dry-run duplicate detection — show preview before merging
+      setProcessingStep("Scanning for duplicates...");
       try {
-        const dedupeRes = await detectDuplicates(session.id);
-        setDedupeResult(dedupeRes);
-        if (dedupeRes.rows_merged > 0) {
+        const dryRunRes = await detectDuplicates(session.id, true);
+        if (dryRunRes.duplicates_found > 0 && dryRunRes.preview?.length) {
+          setDedupePreview(dryRunRes.preview);
+          setPendingDedupeSessionId(session.id);
+          // Don't auto-merge — let user review the preview first
           toast({
-            title: "Duplicates merged",
-            description: `${dedupeRes.rows_merged} duplicate rows merged into ${dedupeRes.total_active_rows} active rows`,
+            title: `${dryRunRes.duplicates_found} duplicate groups detected`,
+            description: "Review and confirm merge in the Duplicates panel below.",
           });
+        } else {
+          setDedupeResult(dryRunRes);
         }
       } catch (dedupeErr: any) {
-        console.error("Dedupe failed:", dedupeErr);
+        console.error("Dedupe scan failed:", dedupeErr);
         // Non-fatal — extraction still succeeded
       }
 
@@ -568,7 +577,41 @@ export function AIExtractView() {
     setSelectedOptMode(null);
     setAllModeResults({});
     setDedupeResult(null);
+    setDedupePreview(null);
+    setPendingDedupeSessionId(null);
+    setShowMergedRows(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleConfirmMerge = async () => {
+    if (!pendingDedupeSessionId) return;
+    setProcessing(true);
+    setProcessingStep("Merging duplicates...");
+    try {
+      const mergeRes = await detectDuplicates(pendingDedupeSessionId, false);
+      setDedupeResult(mergeRes);
+      setDedupePreview(null);
+      setPendingDedupeSessionId(null);
+      await refreshRows();
+      await refreshSessions();
+      if (mergeRes.rows_merged > 0) {
+        toast({
+          title: "Duplicates merged",
+          description: `${mergeRes.rows_merged} rows merged into ${mergeRes.total_active_rows} active rows`,
+        });
+      }
+    } catch (err: any) {
+      toast({ title: "Merge failed", description: err.message, variant: "destructive" });
+    } finally {
+      setProcessing(false);
+      setProcessingStep("");
+    }
+  };
+
+  const handleDismissPreview = () => {
+    setDedupePreview(null);
+    setPendingDedupeSessionId(null);
+    toast({ title: "Merge skipped", description: "Duplicates were not merged." });
   };
 
   const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
@@ -1338,22 +1381,151 @@ export function AIExtractView() {
           </Card>
         )}
 
+        {/* Dedupe Dry-Run Preview */}
+        {dedupePreview && dedupePreview.length > 0 && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-bold text-foreground">
+                    Duplicate Merge Preview
+                  </span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {dedupePreview.length} groups · {dedupePreview.reduce((s, p) => s + p.absorbed_count, 0)} rows to merge
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="text-xs h-7" onClick={handleDismissPreview}>
+                    Skip
+                  </Button>
+                  <Button size="sm" className="text-xs h-7 gap-1.5" onClick={handleConfirmMerge} disabled={processing}>
+                    {processing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                    Confirm Merge
+                  </Button>
+                </div>
+              </div>
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="max-h-60 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="text-[10px] font-bold tracking-wider">SURVIVOR</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider">DUP KEY</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider text-center">ABSORBED</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider text-center">ORIG QTY</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider text-center">NEW QTY</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider">ABSORBED ROWS</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dedupePreview.map((p, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-xs font-bold p-1.5">
+                            #{p.survivor_row_index} ({p.survivor_mark})
+                          </TableCell>
+                          <TableCell className="text-[10px] font-mono text-muted-foreground p-1.5 max-w-[180px] truncate">
+                            {p.duplicate_key}
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-center p-1.5">{p.absorbed_count}</TableCell>
+                          <TableCell className="text-xs text-center p-1.5">{p.original_qty}</TableCell>
+                          <TableCell className="text-xs font-bold text-center p-1.5 text-primary">{p.new_qty}</TableCell>
+                          <TableCell className="text-[10px] text-muted-foreground p-1.5">
+                            {p.absorbed_rows.map(r => `#${r.row_index} (${r.mark || '—'}: ${r.quantity})`).join(", ")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Duplicate Summary Card */}
         {(dedupeResult && dedupeResult.rows_merged > 0) && (
           <Card className="border-amber-500/30 bg-amber-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <GitBranch className="w-4 h-4 text-amber-500" />
-                <span className="text-sm font-bold text-foreground">
-                  {dedupeResult.duplicates_found} Duplicate Groups Found
-                </span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {dedupeResult.rows_merged} rows merged
-                </Badge>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm font-bold text-foreground">
+                    {dedupeResult.duplicates_found} Duplicate Groups Found
+                  </span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {dedupeResult.rows_merged} rows merged
+                  </Badge>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs h-7"
+                  onClick={() => setShowMergedRows(!showMergedRows)}
+                >
+                  <GitBranch className="w-3 h-3" />
+                  {showMergedRows ? "Hide Merged" : "Show Merged"}
+                </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 Duplicate rows (same mark + size + length + shape) were merged by summing quantities. {dedupeResult.total_active_rows} active rows remain.
               </p>
+
+              {/* Merged Rows Inspector */}
+              {showMergedRows && mergedRows.length > 0 && (
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="bg-muted/50 px-3 py-1.5 border-b border-border">
+                    <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+                      Merged Row Lineage — {mergedRows.length} rows absorbed
+                    </span>
+                  </div>
+                  <div className="max-h-48 overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[40px]">#</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[80px]">MARK</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[50px]">SIZE</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[70px]">LENGTH</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[50px]">ORIG QTY</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[100px]">MERGED INTO</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider">DUP KEY</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {mergedRows.map((row) => {
+                          const survivorRow = activeRows.find(r => r.id === row.merged_into_id);
+                          return (
+                            <TableRow key={row.id} className="opacity-70">
+                              <TableCell className="text-xs p-1.5">{row.row_index}</TableCell>
+                              <TableCell className="text-xs font-bold p-1.5">{row.mark || "—"}</TableCell>
+                              <TableCell className="text-xs p-1.5">
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {row.bar_size_mapped || row.bar_size || "—"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm ?? "—"}</TableCell>
+                              <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
+                              <TableCell className="text-xs p-1.5">
+                                {survivorRow ? (
+                                  <span className="text-primary font-medium">
+                                    #{survivorRow.row_index} ({survivorRow.mark})
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">{row.merged_into_id?.slice(0, 8)}…</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-[10px] font-mono text-muted-foreground p-1.5 max-w-[200px] truncate">
+                                {row.duplicate_key || "—"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
