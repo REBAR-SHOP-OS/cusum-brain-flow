@@ -27,6 +27,8 @@ export function useAutoGenerate() {
 
       if (error) throw new Error(error.message);
 
+      console.log("[useAutoGenerate] Edge function response:", JSON.stringify(data));
+
       if (data?.error) {
         toast({
           title: "Generation failed",
