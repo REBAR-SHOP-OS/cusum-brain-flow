@@ -54,6 +54,13 @@ serve(async (req) => {
 
     for (const post of duePosts) {
       try {
+        // Mark publish attempt to prevent retry storms
+        await supabase
+          .from("social_posts")
+          .update({ status: "publishing" })
+          .eq("id", post.id)
+          .eq("status", "scheduled");
+
         const message = [
           post.content || "",
           (post.hashtags || []).length > 0 ? "\n\n" + (post.hashtags || []).join(" ") : "",
