@@ -54,6 +54,8 @@ export function useExtractRows(sessionId: string | null) {
   const refresh = useCallback(async () => {
     if (!sessionId) {
       setRows([]);
+      setHasFetched(false);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -63,6 +65,7 @@ export function useExtractRows(sessionId: string | null) {
     } catch (err) {
       console.error("Failed to load rows:", err);
     }
+    setHasFetched(true);
     setLoading(false);
   }, [sessionId]);
 
