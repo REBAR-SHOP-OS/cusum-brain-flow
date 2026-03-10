@@ -334,6 +334,13 @@ async function handleStartQueuedRun(ctx: ActionContext): Promise<{ response?: Re
       (Date.now() - new Date(existingRun.started_at).getTime()) > STALE_THRESHOLD_MS;
     const isOrphan = !existingRun;
 
+    // Idempotency: if existing run is <5s old, treat as double-tap and return it
+    const ageMs = existingRun?.started_at ? Date.now() - new Date(existingRun.started_at).getTime() : Infinity;
+    if (existingRun && ageMs < 5000) {
+      console.warn(`[startQueuedRun] Double-tap detected (<5s) on ${machine.name}, returning existing run ${existingRun.id}`);
+      return { machineRunId: existingRun.id };
+    }
+
     if (isStale || isOrphan) {
       console.warn(`[startQueuedRun] Auto-recovering stale/orphan run ${machine.current_run_id}`);
       if (existingRun) {
