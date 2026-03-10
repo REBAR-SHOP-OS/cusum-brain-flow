@@ -380,59 +380,51 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   // ── Record stroke ──
   const handleRecordStroke = useCallback(() => {
+    // GUARD: block strokes until completedAtRunStart snapshot is set
+    if (completedAtRunStart === null) {
+      toast({ title: "⏳ Initializing…", description: "Wait for run to fully start before cutting.", variant: "destructive" });
+      return;
+    }
+
     // Count active bars BEFORE the stroke (this is how many pieces this stroke produces)
     const activeBars = slotTracker.slots.filter(s => s.status === "active").length;
     const newCutsDone = slotTracker.totalCutsDone + activeBars;
 
     slotTracker.recordStroke();
 
-    // ── Persist progress to DB after every stroke (atomic increment) ──
+    // ── Persist progress to DB after every stroke (atomic increment + 1 retry) ──
     if (currentItem) {
       console.log("[CutterStation] RPC call:", { itemId: currentItem.id, activeBars, completedAtRunStart });
-      supabase
-        .rpc("increment_completed_pieces", {
+      const doIncrement = () =>
+        supabase.rpc("increment_completed_pieces", {
           p_item_id: currentItem.id,
           p_increment: activeBars,
-        })
-        .then(({ error }) => {
-          if (error) {
-            console.error("[CutterStation] Stroke persist failed:", error.message);
-            toast({ title: "⚠️ Stroke save failed", description: error.message, variant: "destructive" });
-          }
         });
+
+      doIncrement().then(({ error }) => {
+        if (error) {
+          console.warn("[CutterStation] Stroke persist failed, retrying in 1s:", error.message);
+          setTimeout(() => {
+            doIncrement().then(({ error: retryErr }) => {
+              if (retryErr) {
+                console.error("[CutterStation] Stroke persist retry failed:", retryErr.message);
+                toast({ title: "⚠️ Stroke save failed", description: retryErr.message, variant: "destructive" });
+              }
+            });
+          }, 1000);
+        }
+      });
     } else {
       console.warn("[CutterStation] No currentItem — stroke NOT persisted!");
     }
 
-    // ── Check for remnant/waste prompt after stroke ──
-    // Check if ALL slots are now completed/removed (run is done)
-    const updatedSlots = slotTracker.slots; // slots updated synchronously in recordStroke
-    const allSlotsFinished = updatedSlots.length > 0 && updatedSlots.every(
-      s => s.status === "completed" || s.status === "removed" || s.status === "removable"
-    );
-    
-    if (allSlotsFinished && currentItem) {
-      // Calculate average remnant from completed bars
-      const completedSlots = updatedSlots.filter(s => s.status === "completed" || s.status === "removable");
-      if (completedSlots.length > 0) {
-        const avgRemnant = Math.round(
-          completedSlots.reduce((sum, s) => sum + (selectedStockLength - s.cutsDone * currentItem.cut_length_mm), 0) / completedSlots.length
-        );
-        if (avgRemnant > 0) {
-          setRemnantInfo({
-            lengthMm: avgRemnant,
-            isWasteBank: avgRemnant >= REMNANT_THRESHOLD_MM,
-          });
-          setRemnantPromptOpen(true);
-        }
-      }
-    }
+    // NOTE: Remnant prompt is deferred to handleCompleteRun to avoid blocking mid-run UI
 
     toast({
       title: "Cut recorded",
       description: `${newCutsDone} total cuts done`,
     });
-  }, [slotTracker, toast, currentItem, completedAtRunStart, totalPieces, selectedStockLength]);
+  }, [slotTracker, toast, currentItem, completedAtRunStart]);
 
   // ── Remove bar ──
   const handleRemoveBar = useCallback(async (slotIndex: number) => {
