@@ -595,6 +595,7 @@ export function AIExtractView() {
     setDedupePreview(null);
     setPendingDedupeSessionId(null);
     setShowMergedRows(false);
+    setMappingConfirmed(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
