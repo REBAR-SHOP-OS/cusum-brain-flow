@@ -53,3 +53,9 @@ verify_jwt = false
 
 [functions.vizzy-glasses-webhook]
 verify_jwt = false
+
+[functions.extract-manifest]
+verify_jwt = false
+
+[functions.manage-extract]
+verify_jwt = false
