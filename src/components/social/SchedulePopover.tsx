@@ -35,7 +35,7 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
   const [minute, setMinute] = useState("00");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([post.platform]);
 
-  const { updatePost } = useSocialPosts();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const togglePlatform = (platform: string) => {
