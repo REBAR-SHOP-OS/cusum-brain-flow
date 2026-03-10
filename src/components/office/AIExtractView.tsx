@@ -185,14 +185,24 @@ export function AIExtractView() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status) : -1;
 
-  // Stats
+  // Filter out merged rows for display
+  const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
+  const mergedRows = useMemo(() => rows.filter(r => r.status === "merged"), [rows]);
+
+  // Stats — computed from active rows only
   const stats = useMemo(() => {
-    if (!rows.length) return null;
-    const totalPieces = rows.reduce((s, r) => s + (r.quantity || 0), 0);
-    const barSizes = [...new Set(rows.map((r) => r.bar_size_mapped || r.bar_size).filter(Boolean))];
-    const shapeTypes = [...new Set(rows.map((r) => r.shape_code_mapped || r.shape_type).filter(Boolean))];
-    return { totalItems: rows.length, totalPieces, barSizes, shapeTypes };
-  }, [rows]);
+    if (!activeRows.length) return null;
+    const totalPieces = activeRows.reduce((s, r) => s + (r.quantity || 0), 0);
+    const barSizes = [...new Set(activeRows.map((r) => r.bar_size_mapped || r.bar_size).filter(Boolean))];
+    const shapeTypes = [...new Set(activeRows.map((r) => r.shape_code_mapped || r.shape_type).filter(Boolean))];
+    return { totalItems: activeRows.length, totalPieces, barSizes, shapeTypes };
+  }, [activeRows]);
+
+  // Session name validation
+  const nameValidation = useMemo(() => {
+    if (!manifestName.trim()) return { valid: false, reason: "Session name is required" };
+    return validateSessionName(manifestName);
+  }, [manifestName]);
 
   const blockerCount = errors.filter((e) => e.error_type === "blocker").length;
   const warningCount = errors.filter((e) => e.error_type === "warning").length;
