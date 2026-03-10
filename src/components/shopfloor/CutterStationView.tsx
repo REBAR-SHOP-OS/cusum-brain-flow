@@ -895,6 +895,65 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           />
         </div>
       </div>
+      {/* ── Remnant / Waste Prompt Dialog ── */}
+      <Dialog open={remnantPromptOpen} onOpenChange={() => { /* block dismiss — must use buttons */ }}>
+        <DialogContent className="max-w-sm" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {remnantInfo?.isWasteBank ? (
+                <><Recycle className="w-5 h-5 text-primary" /> Remove Remnant</>
+              ) : (
+                <><Trash2 className="w-5 h-5 text-destructive" /> Remove Waste</>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {remnantInfo?.isWasteBank
+                ? "The remaining stock qualifies for the waste bank."
+                : "The remaining stock is too short to reuse."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Remaining Length</p>
+              <p className="text-4xl font-black font-mono text-foreground">{remnantInfo?.lengthMm ?? 0}<span className="text-lg text-muted-foreground ml-1">mm</span></p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">
+                {remnantInfo?.isWasteBank
+                  ? `≥ ${REMNANT_THRESHOLD_MM}mm — eligible for waste bank`
+                  : `< ${REMNANT_THRESHOLD_MM}mm — discard as scrap`}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            {remnantInfo?.isWasteBank && (
+              <Button
+                className="w-full gap-2"
+                onClick={() => {
+                  setRemnantPromptOpen(false);
+                  setRemnantInfo(null);
+                  toast({ title: "Remnant noted", description: "Will be saved to waste bank on run complete." });
+                }}
+              >
+                <Recycle className="w-4 h-4" />
+                Save Remnant to Waste Bank
+              </Button>
+            )}
+            <Button
+              variant={remnantInfo?.isWasteBank ? "outline" : "default"}
+              className="w-full gap-2"
+              onClick={() => {
+                setRemnantPromptOpen(false);
+                setRemnantInfo(null);
+                toast({ title: "Waste acknowledged", description: "Remove scrap from machine." });
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+              {remnantInfo?.isWasteBank ? "Discard as Scrap" : "Remove Waste — Continue"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* ── Correct Count Dialog (supervisor only) ── */}
       <Dialog open={correctCountOpen} onOpenChange={setCorrectCountOpen}>
         <DialogContent className="max-w-sm">
