@@ -35,9 +35,17 @@ function pickUniqueProducts(count: number): string[] {
 }
 
 function buildScheduledDate(baseDate: string, hour: number, minute: number): string {
+  // Parse base date components to avoid UTC-shift from Date constructor
   const d = new Date(baseDate);
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  // Eastern Time offset: EDT = -04:00 (Mar–Nov), EST = -05:00 (Nov–Mar)
+  // March 10 2026 is EDT
+  const eastern = new Date(
+    `${year}-${month}-${day}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00-04:00`
+  );
+  return eastern.toISOString();
 }
 
 async function verifyAuth(req: Request): Promise<string | null> {
