@@ -25,6 +25,8 @@ serve(async (req) => {
 
     // Find all scheduled posts that are due
     const now = new Date().toISOString();
+    console.log(`[social-cron-publish] Querying scheduled posts. Current UTC: ${now}`);
+
     const { data: duePosts, error: fetchError } = await supabase
       .from("social_posts")
       .select("*")
@@ -32,6 +34,8 @@ serve(async (req) => {
       .lte("scheduled_date", now)
       .order("scheduled_date", { ascending: true })
       .limit(20);
+
+    console.log(`[social-cron-publish] Query returned ${duePosts?.length ?? 0} posts, error: ${fetchError?.message ?? 'none'}`);
 
     if (fetchError) {
       console.error("Error fetching due posts:", fetchError);
