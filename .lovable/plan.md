@@ -1,23 +1,32 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Remove Admin Role from ai@rebar.shop to Stop Access Errors
 
-## Webhook URL
+## Problem
+`ai@rebar.shop` has the `admin` role in the database. This causes dozens of UI components to render admin-only features (CEO Portal, Accounting panels, Office dashboards, etc.) that try to fetch data the shopfloor device shouldn't access — resulting in constant access errors.
+
+## Root Cause
+The `admin` role was originally added so supervisor controls would work, but those controls already check `isAdmin || isShopSupervisor` — so `shop_supervisor` alone is sufficient.
+
+## Fix
+
+### 1. Database: Remove `admin` role from ai@rebar.shop
+```sql
+DELETE FROM public.user_roles 
+WHERE user_id = (SELECT user_id FROM profiles WHERE email = 'ai@rebar.shop') 
+AND role = 'admin';
 ```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+Keeps `workshop` and `shop_supervisor` roles — all shopfloor supervisor buttons continue to work.
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+### 2. Code: Remove ai@rebar.shop from CEO Portal nav
+In `src/components/layout/MobileNavV2.tsx`, remove `ai@rebar.shop` from the CEO Portal `allowedEmails` list.
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+## What stays working
+- All shopfloor supervisor controls (`isShopSupervisor` check passes)
+- RoleGuard route restriction (unchanged — device-email whitelist)
+- Vizzy button (controlled by `useSuperAdmin`, not roles)
+
+## What stops breaking
+- No more admin-only UI panels loading and failing
+- No more unauthorized data fetch errors
+
