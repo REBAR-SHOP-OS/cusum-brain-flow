@@ -89,12 +89,16 @@ export function useSocialPosts() {
         .update(updates)
         .eq("id", id)
         .select()
-        .single();
+        .maybeSingle();
       if (error) {
         console.error(`[useSocialPosts] updatePost FAILED — id: ${id}, error:`, error.message);
         throw error;
       }
-      console.log(`[useSocialPosts] updatePost SUCCESS — id: ${id}, new status: ${data?.status}, qa_status: ${data?.qa_status}`);
+      if (!data) {
+        console.error(`[useSocialPosts] updatePost returned NULL data — id: ${id}. RLS blocked or row not found.`);
+        throw new Error("Update failed — post not found or permission denied. Check that you have access.");
+      }
+      console.log(`[useSocialPosts] updatePost SUCCESS — id: ${id}, new status: ${data.status}, qa_status: ${data.qa_status}`);
       return data;
     },
     onSuccess: () => {

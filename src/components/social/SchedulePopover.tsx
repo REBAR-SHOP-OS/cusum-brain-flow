@@ -67,8 +67,25 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
       },
       {
         onSuccess: async () => {
+          // Verify DB state before showing success
+          const { supabase } = await import("@/integrations/supabase/client");
+          const { data: verified } = await supabase
+            .from("social_posts")
+            .select("id, status, qa_status")
+            .eq("id", post.id)
+            .maybeSingle();
+
+          if (!verified || verified.status !== "scheduled") {
+            console.error("[SchedulePopover] Verification FAILED — post status after update:", verified?.status);
+            toast({
+              title: "Scheduling failed",
+              description: "The post was not saved as scheduled. Please check permissions and try again.",
+              variant: "destructive",
+            });
+            return;
+          }
+
           if (selectedPlatforms.length > 1) {
-            const { supabase } = await import("@/integrations/supabase/client");
             for (let i = 1; i < selectedPlatforms.length; i++) {
               await supabase.from("social_posts").insert({
                 user_id: post.user_id,
