@@ -944,9 +944,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               variant={remnantInfo?.isWasteBank ? "outline" : "default"}
               className="w-full gap-2"
               onClick={() => {
+                remnantDecisionRef.current = "discard";
                 setRemnantPromptOpen(false);
                 setRemnantInfo(null);
-                toast({ title: "Waste acknowledged", description: "Remove scrap from machine." });
+                handleCompleteRun();
               }}
             >
               <Trash2 className="w-4 h-4" />
