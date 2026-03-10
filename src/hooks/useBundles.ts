@@ -50,7 +50,7 @@ export function useBundles(statusFilter?: string) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return (data || []) as Bundle[];
+      return (data || []) as unknown as Bundle[];
     },
   });
 }

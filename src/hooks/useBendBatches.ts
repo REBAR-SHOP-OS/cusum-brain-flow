@@ -53,7 +53,7 @@ export function useBendBatches(statusFilter?: string) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return (data || []) as BendBatch[];
+      return (data || []) as unknown as BendBatch[];
     },
   });
 }
