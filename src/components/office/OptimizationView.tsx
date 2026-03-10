@@ -246,7 +246,7 @@ const OptimizationView = React.forwardRef<HTMLDivElement>((_, ref) => {
                 {savings.barsSaved > 0 && ` and ${savings.barsSaved} stock bars`}
               </p>
               <p className="text-xs text-muted-foreground">
-                +{savings.efficiencyGain.toFixed(1)}% efficiency gain over Standard
+                +{savings.efficiencyGain.toFixed(1)}% efficiency gain over RAW
               </p>
             </div>
           </div>
