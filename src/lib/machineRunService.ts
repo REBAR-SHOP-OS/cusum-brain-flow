@@ -41,7 +41,15 @@ export async function logMachineRunEvent(
   });
 
   if (error) {
-    throw new Error(error.message || "Failed to log machine run event");
+    let serverMessage: string | null = null;
+    try {
+      const ctx = (error as any).context;
+      if (ctx && typeof ctx.json === "function") {
+        const body = await ctx.json();
+        serverMessage = body?.error ?? null;
+      }
+    } catch {}
+    throw new Error(serverMessage || error.message || "Failed to log machine run event");
   }
 
   if (data?.error) {

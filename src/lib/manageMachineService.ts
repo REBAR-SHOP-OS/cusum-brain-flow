@@ -65,7 +65,17 @@ export async function manageMachine(
     body: params,
   });
 
-  if (error) throw new Error(error.message || "Failed to manage machine");
+  if (error) {
+    let serverMessage: string | null = null;
+    try {
+      const ctx = (error as any).context;
+      if (ctx && typeof ctx.json === "function") {
+        const body = await ctx.json();
+        serverMessage = body?.error ?? null;
+      }
+    } catch {}
+    throw new Error(serverMessage || error.message || "Failed to manage machine");
+  }
   if (data?.error) throw new Error(data.error);
 
   return data as { success: boolean; machineId: string; action: string; machineRunId?: string };
