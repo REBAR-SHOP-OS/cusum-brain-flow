@@ -228,7 +228,7 @@ export function CutEngine({
             <ChevronDown className="w-4 h-4" />
           </Button>
           <div className="text-center">
-            <span className="text-3xl font-black font-mono">{isRunning && lockedBars != null ? lockedBars : bars}</span>
+            <span className={cn("text-3xl font-black font-mono", isOverCapacity && "text-amber-400")}>{isRunning && lockedBars != null ? lockedBars : bars}</span>
             <span className={cn("text-xs ml-1.5 uppercase tracking-wider", mutedClasses)}>
               Bars
             </span>
@@ -240,8 +240,8 @@ export function CutEngine({
               "h-9 w-9 rounded-md",
               darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
             )}
-            onClick={() => { const n = Math.min(maxBars, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
-            disabled={bars >= maxBars || isRunning}
+            onClick={() => { const upperLimit = isSupervisor ? 99 : maxBars; const n = Math.min(upperLimit, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
+            disabled={(!isSupervisor && bars >= maxBars) || isRunning}
           >
             <ChevronUp className="w-4 h-4" />
           </Button>
