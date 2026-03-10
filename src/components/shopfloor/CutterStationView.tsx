@@ -136,10 +136,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   // Reset run state when switching to a different item (Bug #12)
   const currentItem = items[currentIndex] || null;
-  // Sync trackedItemId if not yet set
-  if (currentItem && !trackedItemId) {
-    setTrackedItemId(currentItem.id);
-  }
+
+  // Initialize trackedItemId on first valid item
+  useEffect(() => {
+    if (currentItem && !trackedItemId) {
+      setTrackedItemId(currentItem.id);
+    }
+  }, [currentItem, trackedItemId]);
+
   const [prevItemId, setPrevItemId] = useState<string | null>(null);
   useEffect(() => {
     if (currentItem && prevItemId !== currentItem.id) {
