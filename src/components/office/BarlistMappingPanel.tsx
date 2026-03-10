@@ -237,10 +237,10 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
         {/* Mapping Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {CANONICAL_FIELDS.map(field => (
-            <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border">
-              <div className="flex items-center gap-1 min-w-[90px]">
+            <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border min-w-0">
+              <div className="flex items-center gap-1 min-w-[70px] shrink-0">
                 {field.required && <span className="text-destructive text-[10px]">*</span>}
-                <span className="text-xs font-medium text-foreground">{field.label}</span>
+                <span className="text-xs font-medium text-foreground truncate">{field.label}</span>
               </div>
               <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
               <Select
