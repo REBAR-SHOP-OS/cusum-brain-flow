@@ -399,7 +399,7 @@ export default function StationView() {
                     <div className="text-center py-12 text-muted-foreground text-sm">
                       No items queued to this machine yet
                     </div>
-                  ) : customerGroupedData && !selectedProjectId ? (
+                  ) : customerGroupedData ? (
                     // Grouped by customer → barlist
                     customerGroupedData.map((cust) => (
                       <Collapsible key={cust.customerName} defaultOpen={true}>
