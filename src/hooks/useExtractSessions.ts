@@ -48,7 +48,8 @@ export function useExtractSessions() {
 
 export function useExtractRows(sessionId: string | null) {
   const [rows, setRows] = useState<ExtractRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!sessionId);
+  const [hasFetched, setHasFetched] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!sessionId) {
