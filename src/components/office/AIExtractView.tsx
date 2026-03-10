@@ -1482,51 +1482,46 @@ export function AIExtractView() {
         )}
 
 
-        {/* Dedupe Status & Fallback Action Bar */}
-        {activeSession && currentStepIndex === 3 && !dedupeResolved && !dedupePreview && (
+        {/* Advisory Duplicate Warning (non-blocking) */}
+        {activeSession && currentStepIndex >= 3 && dedupePreview && dedupePreview.length > 0 && !dedupeResolved && (
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <GitBranch className="w-4 h-4 text-amber-500" />
-                  <span className="text-sm font-bold text-foreground">Dedupe Review Pending</span>
-                  <Badge variant="secondary" className="text-[10px]">Action Required</Badge>
+                  <TriangleAlert className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm font-bold text-foreground">
+                    ⚠ {dedupePreview.length} possible duplicate group{dedupePreview.length > 1 ? "s" : ""} found
+                  </span>
+                  <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10">Advisory</Badge>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="text-xs h-7 gap-1.5" onClick={() => setPendingDedupeSessionId(activeSession.id)}>
+                    <GitBranch className="w-3 h-3" /> Review Duplicates
+                  </Button>
                   <Button size="sm" className="text-xs h-7 gap-1.5" onClick={handleConfirmMerge} disabled={processing}>
                     {processing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                    Confirm Merge
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs h-7 gap-1.5" onClick={handleSkipDedupe}>
-                    <ArrowRight className="w-3 h-3" /> Skip Merge
+                    Merge Duplicates
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs h-7 gap-1.5" onClick={handleSkipDedupe}>
-                    Continue to Mapping
+                    <X className="w-3 h-3" /> Dismiss
                   </Button>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Choose to merge duplicates, skip, or continue without deduplication.
+                Duplicates won't block your workflow. You can merge, review, or dismiss at any time.
               </p>
             </CardContent>
           </Card>
         )}
 
-        {activeSession && currentStepIndex === 3 && dedupeResolved && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
-            <CheckCircle2 className="w-4 h-4 text-primary" />
-            <span className="text-xs font-bold text-foreground">
-              Dedupe {activeSession.dedupe_status === "merged" ? "Merged" : activeSession.dedupe_status === "skipped" ? "Skipped" : "Complete (No Duplicates)"}
-            </span>
-            {activeSession.dedupe_status === "skipped" && (
-              <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 ml-2">
-                <TriangleAlert className="w-3 h-3 mr-1" /> Duplicates may still exist
-              </Badge>
-            )}
+        {activeSession && currentStepIndex >= 3 && activeSession.dedupe_status === "skipped" && (
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
+            <TriangleAlert className="w-3.5 h-3.5 text-amber-500" />
+            <span className="text-[11px] text-amber-600">Duplicates were dismissed — unmerged duplicates may exist</span>
           </div>
         )}
 
-        {activeSession && currentStepIndex >= 3 && currentStepIndex < 4 && dedupeResolved && (
+        {activeSession && currentStepIndex === 3 && (
           (rowsLoading || !rowsHasFetched) ? (
             <Card className="border-border/50">
               <CardContent className="flex items-center gap-3 py-6">
