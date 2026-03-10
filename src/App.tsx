@@ -44,6 +44,7 @@ import FacebookCommenter from "./pages/FacebookCommenter";
 import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
 import AdminPanel from "./pages/AdminPanel";
+import WasteBankAdmin from "./pages/WasteBankAdmin";
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
