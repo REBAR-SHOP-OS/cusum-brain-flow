@@ -1,0 +1,1 @@
+ALTER TABLE public.extract_sessions ADD COLUMN IF NOT EXISTS optimization_mode text DEFAULT NULL;
