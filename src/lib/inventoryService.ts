@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 export type InventoryAction =
   | "reserve"
@@ -25,17 +25,9 @@ export interface InventoryParams {
 
 /**
  * Calls the manage-inventory edge function.
- * Handles reservation, consumption, remnant/scrap creation, and replanning.
  */
 export async function manageInventory(
   params: InventoryParams
 ): Promise<{ success: boolean; action: string }> {
-  const { data, error } = await supabase.functions.invoke("manage-inventory", {
-    body: params,
-  });
-
-  if (error) throw new Error(error.message || "Failed to manage inventory");
-  if (data?.error) throw new Error(data.error);
-
-  return data;
+  return invokeEdgeFunction("manage-inventory", params as any);
 }

@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 export type DispatchAction = "dispatch" | "start-task" | "move-task" | "get-queues";
 
@@ -42,17 +42,9 @@ export interface QueueItemWithTask {
 
 /**
  * Calls the smart-dispatch edge function.
- * Handles task dispatching, starting, moving, and queue retrieval.
  */
 export async function smartDispatch(
   params: DispatchParams
 ): Promise<{ success: boolean; action: string; queueItems?: QueueItemWithTask[] }> {
-  const { data, error } = await supabase.functions.invoke("smart-dispatch", {
-    body: params,
-  });
-
-  if (error) throw new Error(error.message || "Dispatch failed");
-  if (data?.error) throw new Error(data.error);
-
-  return data;
+  return invokeEdgeFunction("smart-dispatch", params as any);
 }

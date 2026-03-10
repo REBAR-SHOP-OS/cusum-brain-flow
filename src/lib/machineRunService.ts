@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import type { MachineRun, MachineRunProcess, MachineRunStatus } from "@/types/machineRun";
 
 export interface LogMachineRunParams {
@@ -26,28 +26,9 @@ export interface LogMachineRunResult {
 
 /**
  * Logs a machine run event by calling the log-machine-run edge function.
- *
- * - Creates or updates a row in machine_runs (RLS enforced).
- * - Automatically logs an event in the events table.
- * - Blocked for users with only the 'office' role.
- *
- * @throws Error if the request fails or the user lacks permissions.
  */
 export async function logMachineRunEvent(
   params: LogMachineRunParams
 ): Promise<LogMachineRunResult> {
-  const { data, error } = await supabase.functions.invoke("log-machine-run", {
-    body: params,
-  });
-
-  if (error) {
-    const serverMessage = (data as any)?.error ?? null;
-    throw new Error(serverMessage || error.message || "Failed to log machine run event");
-  }
-
-  if (data?.error) {
-    throw new Error(data.error);
-  }
-
-  return data as LogMachineRunResult;
+  return invokeEdgeFunction<LogMachineRunResult>("log-machine-run", params as any);
 }
