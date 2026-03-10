@@ -176,6 +176,7 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
                   📅 {format(selectedDate, "PPP")} at {hour}:{minute}
                 </p>
               )}
+              <p className="text-amber-600 font-medium">🕐 Eastern Time (America/Toronto)</p>
               <p>📢 {selectedPlatforms.length} platform(s) selected</p>
             </div>
             <div className="flex gap-2">
