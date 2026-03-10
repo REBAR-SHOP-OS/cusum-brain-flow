@@ -104,7 +104,7 @@ serve(async (req) => {
         return json({ success: true, bendBatchId: bendBatch.id, action });
       }
 
-      // ─── Start bending ─────────────────────────────────────────────
+      // ─── Start bending (from queued or paused) ────────────────────
       case "start-bend": {
         const { bendBatchId } = body;
         if (!bendBatchId) return json({ error: "Missing bendBatchId" }, 400);
@@ -112,7 +112,9 @@ serve(async (req) => {
         const { data: bb, error: bbErr } = await supabaseUser
           .from("bend_batches").select("*").eq("id", bendBatchId).single();
         if (bbErr || !bb) return json({ error: "Bend batch not found" }, 404);
-        if (bb.status !== "queued") return json({ error: `Invalid transition: ${bb.status} → bending. Must be queued.` }, 400);
+        if (!["queued", "paused"].includes(bb.status)) {
+          return json({ error: `Invalid transition: ${bb.status} → bending. Must be queued or paused.` }, 400);
+        }
 
         const { error } = await supabaseUser
           .from("bend_batches").update({ status: "bending" }).eq("id", bendBatchId);
@@ -120,6 +122,7 @@ serve(async (req) => {
 
         await logEvent(sb, bb.company_id, "bender_started", {
           batchId: bendBatchId, machineId: bb.machine_id, size: bb.size, shape: bb.shape,
+          fromStatus: bb.status,
         }, `Bender started on batch ${bendBatchId}`, userId);
 
         return json({ success: true, bendBatchId, action });
