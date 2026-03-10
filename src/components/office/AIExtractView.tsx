@@ -581,16 +581,16 @@ export function AIExtractView() {
         }));
 
       // Pre-compute all three modes for comparison
-      const modes: OptimizerConfig["mode"][] = ["manual", "standard", "optimized", "best-fit"];
+      const modes: OptimizerConfig["mode"][] = ["raw", "long_to_short", "combination"];
       const modeResults: Record<string, OptimizationSummary> = {};
       for (const mode of modes) {
         modeResults[mode] = runOptimization(cutItems, { ...optimizerConfig, mode });
       }
       setAllModeResults(modeResults);
 
-      // Auto-select best-fit
-      setOptimizationResult(modeResults["best-fit"]);
-      setSelectedOptMode("best-fit");
+      // Auto-select combination
+      setOptimizationResult(modeResults["combination"]);
+      setSelectedOptMode("combination");
 
       await refreshSessions();
       toast({ title: "Optimization ready", description: "Select your preferred cutting plan below." });
