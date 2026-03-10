@@ -112,7 +112,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
         cutterQuery = cutterQuery.eq("cut_plans.project_id", projectId);
       }
 
-      const { data: items, error: itemsError } = await cutterQuery.order("created_at", { ascending: true });
+      const { data: items, error: itemsError } = await cutterQuery.order("id", { ascending: true });
 
       if (itemsError) throw itemsError;
 
