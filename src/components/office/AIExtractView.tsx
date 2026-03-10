@@ -575,7 +575,7 @@ export function AIExtractView() {
   // ─── Inline Editing Helpers ──────────────────────────────
   const startEditing = useCallback(() => {
     const edits: Record<string, Record<string, any>> = {};
-    rows.forEach((row) => {
+    activeRows.forEach((row) => {
       edits[row.id] = {
         dwg: row.dwg ?? "",
         grade: row.grade_mapped || row.grade || "",
