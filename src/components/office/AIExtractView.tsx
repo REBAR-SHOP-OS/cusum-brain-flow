@@ -1399,14 +1399,14 @@ export function AIExtractView() {
         )}
 
         {/* Results Table */}
-        {rows.length > 0 && (
+        {activeRows.length > 0 && (
           <Card>
             <CardContent className="p-0">
               {/* Edit toolbar */}
               {activeSession && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
                 <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
                   <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-                    {rows.length} Line Items
+                    {activeRows.length} Line Items{mergedRows.length > 0 ? ` (${mergedRows.length} merged)` : ""}
                   </span>
                   <div className="flex items-center gap-2">
                     {!isEditing ? (
