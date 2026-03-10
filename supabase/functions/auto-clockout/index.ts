@@ -45,8 +45,8 @@ serve(async (req) => {
 
     if (mode === "morning") {
       // Morning mode: close ALL open shifts (no hour guard — works for cron and manual calls)
-      if (currentETHour < 7 || currentETHour > 9) {
-        console.log(`Warning: morning reset called at ET hour ${currentETHour} (expected ~8 AM)`);
+      if (currentETHour < 5 || currentETHour > 7) {
+        console.log(`Warning: morning reset called at ET hour ${currentETHour} (expected ~6 AM)`);
       }
 
       // Close ALL open shifts for everyone
@@ -71,7 +71,7 @@ serve(async (req) => {
         .from("time_clock_entries")
         .update({
           clock_out: clockOutTime,
-          notes: "[auto-closed: 8 AM morning reset]",
+          notes: "[auto-closed: 6 AM morning reset]",
         })
         .in("id", idsToClose);
 
