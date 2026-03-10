@@ -48,10 +48,12 @@ async function verifyAuth(req: Request): Promise<string | null> {
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } }
   );
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) return null;
-  return data.claims.sub as string;
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    console.error("auto-generate-post auth failed:", error?.message);
+    return null;
+  }
+  return user.id;
 }
 
 async function fetchBusinessIntelligence(authHeader: string): Promise<string> {
