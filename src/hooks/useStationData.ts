@@ -146,25 +146,34 @@ export function useStationData(machineId: string | null, machineType?: string, p
     },
   });
 
-  // Realtime subscription
+  // Realtime subscription with debounce to prevent jumping
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
     if (!user || !machineId) return;
+
+    const debouncedInvalidate = () => {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["station-data", machineId] });
+      }, 500);
+    };
 
     const channel = supabase
       .channel(`station-${machineId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plan_items" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId] })
+        debouncedInvalidate
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plans" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId] })
+        debouncedInvalidate
       )
       .subscribe();
 
     return () => {
+      clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
   }, [user, machineId, machineType, companyId, queryClient]);

@@ -88,14 +88,21 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       }
     }
     setRestoredFromBackend(true);
-  }, [machine.cut_session_status, machine.active_job_id, machine.machine_lock, items.length, restoredFromBackend]);
+  }, [machine.cut_session_status, machine.active_job_id, machine.machine_lock, restoredFromBackend]);
 
-  // Keep currentIndex in bounds when items change (e.g. completed item removed by realtime)
+  // ID-based reconciliation: after items refresh, find the tracked item and fix index
   useEffect(() => {
-    if (items.length > 0 && currentIndex >= items.length) {
-      setCurrentIndex(items.length - 1);
+    if (!trackedItemId || items.length === 0) return;
+    const newIdx = items.findIndex(i => i.id === trackedItemId);
+    if (newIdx >= 0 && newIdx !== currentIndex) {
+      setCurrentIndex(newIdx);
+    } else if (newIdx < 0) {
+      // Item removed from list — clamp index
+      if (currentIndex >= items.length) {
+        setCurrentIndex(Math.max(0, items.length - 1));
+      }
     }
-  }, [items.length, currentIndex]);
+  }, [items, trackedItemId]);
 
   // Clear justCompleted guard when the item leaves the list or we switch items
   useEffect(() => {
