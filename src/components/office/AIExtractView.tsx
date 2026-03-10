@@ -640,14 +640,20 @@ export function AIExtractView() {
   };
 
   const handleConfirmMerge = async () => {
-    if (!pendingDedupeSessionId) return;
+    const sid = pendingDedupeSessionId || activeSessionId;
+    if (!sid) return;
     setProcessing(true);
     setProcessingStep("Merging duplicates...");
     try {
-      const mergeRes = await detectDuplicates(pendingDedupeSessionId, false);
+      const mergeRes = await detectDuplicates(sid, false);
       setDedupeResult(mergeRes);
       setDedupePreview(null);
       setPendingDedupeSessionId(null);
+      // Persist dedupe decision
+      await supabase
+        .from("extract_sessions")
+        .update({ dedupe_status: "merged" } as any)
+        .eq("id", sid);
       await refreshRows();
       await refreshSessions();
       if (mergeRes.rows_merged > 0) {
@@ -664,10 +670,23 @@ export function AIExtractView() {
     }
   };
 
-  const handleDismissPreview = () => {
+  const handleSkipDedupe = async () => {
+    const sid = pendingDedupeSessionId || activeSessionId;
+    if (!sid) return;
     setDedupePreview(null);
     setPendingDedupeSessionId(null);
-    toast({ title: "Merge skipped", description: "Duplicates were not merged." });
+    try {
+      await supabase
+        .from("extract_sessions")
+        .update({ dedupe_status: "skipped" } as any)
+        .eq("id", sid);
+      await refreshSessions();
+    } catch (_) { /* best-effort */ }
+    toast({ title: "Dedupe skipped", description: "Duplicates were not merged. You can still proceed." });
+  };
+
+  const handleDismissPreview = () => {
+    handleSkipDedupe();
   };
 
   const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
