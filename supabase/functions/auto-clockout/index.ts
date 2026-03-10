@@ -92,24 +92,54 @@ serve(async (req) => {
       );
 
     } else {
-      // Evening mode: close ALL open shifts for all users at 5 PM ET
+      // Evening mode: close ONLY office worker shifts at 5 PM ET
+      // Shop workers (non-@rebar.shop emails OR Kourosh Zand) are exempt
       const clockOutTime = new Date().toISOString();
 
       const { data: openShifts, error: fetchErr } = await supabase
         .from("time_clock_entries")
-        .select("id, profile_id")
+        .select("id, profile_id, profiles!inner(email, full_name)")
         .is("clock_out", null);
 
       if (fetchErr) throw fetchErr;
 
       if (!openShifts || openShifts.length === 0) {
         return new Response(
-          JSON.stringify({ ok: true, mode: "evening", closed: 0, message: "No open shifts to auto-close" }),
+          JSON.stringify({ ok: true, mode: "evening", closed: 0, exempted: 0, message: "No open shifts" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const idsToClose = openShifts.map((e: any) => e.id);
+      // Split into office vs shop workers
+      const officeShifts: any[] = [];
+      const shopExempted: any[] = [];
+
+      for (const shift of openShifts) {
+        const profile = (shift as any).profiles;
+        const email = (profile?.email || "").toLowerCase();
+        const fullName = (profile?.full_name || "");
+        const isOffice = email.endsWith("@rebar.shop") && fullName !== "Kourosh Zand";
+
+        if (isOffice) {
+          officeShifts.push(shift);
+        } else {
+          shopExempted.push(shift);
+        }
+      }
+
+      if (shopExempted.length > 0) {
+        console.log(`Evening: exempted ${shopExempted.length} shop worker shifts:`,
+          shopExempted.map((s: any) => (s as any).profiles?.full_name));
+      }
+
+      if (officeShifts.length === 0) {
+        return new Response(
+          JSON.stringify({ ok: true, mode: "evening", closed: 0, exempted: shopExempted.length, message: "Only shop workers have open shifts — exempted" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const idsToClose = officeShifts.map((e: any) => e.id);
 
       const { error: updateErr } = await supabase
         .from("time_clock_entries")
@@ -121,16 +151,16 @@ serve(async (req) => {
 
       if (updateErr) throw updateErr;
 
-      const profileIds = [...new Set(openShifts.map((e: any) => e.profile_id))];
+      const profileIds = [...new Set(officeShifts.map((e: any) => e.profile_id))];
       await supabase
         .from("profiles")
         .update({ is_active: false })
         .in("id", profileIds);
 
-      console.log(`Evening auto clock-out: closed ${idsToClose.length} shifts at ${clockOutTime}`);
+      console.log(`Evening auto clock-out: closed ${idsToClose.length} office shifts, exempted ${shopExempted.length} shop workers`);
 
       return new Response(
-        JSON.stringify({ ok: true, mode: "evening", closed: idsToClose.length, clock_out_time: clockOutTime }),
+        JSON.stringify({ ok: true, mode: "evening", closed: idsToClose.length, exempted: shopExempted.length, clock_out_time: clockOutTime }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
