@@ -567,6 +567,7 @@ export function AIExtractView() {
     setOptimizationResult(null);
     setSelectedOptMode(null);
     setAllModeResults({});
+    setDedupeResult(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
