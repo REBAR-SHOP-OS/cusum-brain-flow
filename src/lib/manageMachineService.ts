@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { FunctionsHttpError } from "@supabase/supabase-js";
 
 export type ManageMachineAction =
   | "update-status"
