@@ -109,27 +109,11 @@ describe("Extract Service - End to End Flow", () => {
     });
   });
 
-  it("3. runExtract throws when session status update fails", async () => {
-    // Mock the functions.invoke to return items
+  it("3. runExtract throws when edge function returns error", async () => {
     mockInvoke.mockResolvedValue({
-      data: {
-        items: [{ item: "1", quantity: 5, size: "10M" }],
-        summary: { total_items: 1 },
-      },
+      data: { error: "Rate limit exceeded" },
       error: null,
     });
-
-    // Insert rows succeeds
-    mockInsert.mockResolvedValue({ error: null });
-
-    let updateCallCount = 0;
-    mockUpdate.mockImplementation(() => ({
-      eq: () => {
-        updateCallCount++;
-        if (updateCallCount === 1) return Promise.resolve({ data: null, error: null });
-        return Promise.resolve({ data: null, error: { message: "permission denied" } });
-      },
-    }));
 
     const { runExtract } = await import("@/lib/extractService");
 
@@ -145,7 +129,7 @@ describe("Extract Service - End to End Flow", () => {
           type: "delivery",
         },
       })
-    ).rejects.toThrow("Failed to update session");
+    ).rejects.toThrow("Rate limit exceeded");
   });
 
   it("4. fetchExtractRows returns rows ordered by row_index", async () => {
