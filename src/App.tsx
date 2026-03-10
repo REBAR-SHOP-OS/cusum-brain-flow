@@ -45,6 +45,8 @@ import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
 import AdminPanel from "./pages/AdminPanel";
 import WasteBankAdmin from "./pages/WasteBankAdmin";
+import BendQueueAdmin from "./pages/BendQueueAdmin";
+import BundleAdmin from "./pages/BundleAdmin";
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
@@ -196,6 +198,8 @@ const App = () => (
                     <Route path="/admin/connections-audit" element={<P><ConnectionsAudit /></P>} />
                     <Route path="/admin/data-audit" element={<P><DataStoresAudit /></P>} />
                     <Route path="/admin/waste-bank" element={<P><AdminRoute><WasteBankAdmin /></AdminRoute></P>} />
+                    <Route path="/admin/bend-queue" element={<P><AdminRoute><BendQueueAdmin /></AdminRoute></P>} />
+                    <Route path="/admin/bundles" element={<P><AdminRoute><BundleAdmin /></AdminRoute></P>} />
 
                     {/* Automations Hub */}
                     <Route path="/automations" element={<P><AdminRoute><AutomationsHub /></AdminRoute></P>} />
