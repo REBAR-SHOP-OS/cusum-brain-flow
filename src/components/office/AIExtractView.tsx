@@ -1337,6 +1337,26 @@ export function AIExtractView() {
           </Card>
         )}
 
+        {/* Duplicate Summary Card */}
+        {(dedupeResult && dedupeResult.rows_merged > 0) && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-amber-500" />
+                <span className="text-sm font-bold text-foreground">
+                  {dedupeResult.duplicates_found} Duplicate Groups Found
+                </span>
+                <Badge variant="secondary" className="text-[10px]">
+                  {dedupeResult.rows_merged} rows merged
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Duplicate rows (same mark + size + length + shape) were merged by summing quantities. {dedupeResult.total_active_rows} active rows remain.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Summary Stats */}
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
