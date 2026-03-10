@@ -278,7 +278,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const freshCompleted = freshRow?.completed_pieces ?? completedPieces;
       setCompletedAtRunStart(freshCompleted);
       // Initialize slot tracker with actual bars the operator chose
-      slotTracker.startWithBars(clampedBars);
+      slotTracker.startWithBars(finalBars);
 
       const result = await manageMachine({
         action: "start-run",
