@@ -68,6 +68,14 @@ serve(async (req) => {
       );
     }
 
+    // Fetch session company_id for denormalized column
+    const { data: sessionData } = await svcClient
+      .from("extract_sessions")
+      .select("company_id")
+      .eq("id", sessionId)
+      .single();
+    const sessionCompanyId = sessionData?.company_id || null;
+
     // Update session to extracting immediately
     console.log(`Starting extraction for session ${sessionId}`);
     const { error: statusErr } = await svcClient
@@ -280,6 +288,7 @@ Rules:
         if (items.length > 0) {
           const rows = items.map((item: any, idx: number) => ({
             session_id: sessionId,
+            company_id: sessionCompanyId,
             row_index: idx + 1,
             dwg: item.dwg || null,
             item_number: String(item.item || idx + 1),

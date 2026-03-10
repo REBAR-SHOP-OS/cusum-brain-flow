@@ -4340,6 +4340,7 @@ export type Database = {
       }
       extract_errors: {
         Row: {
+          company_id: string | null
           created_at: string
           error_type: string
           field: string
@@ -4349,6 +4350,7 @@ export type Database = {
           session_id: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           error_type?: string
           field: string
@@ -4358,6 +4360,7 @@ export type Database = {
           session_id: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           error_type?: string
           field?: string
@@ -4468,6 +4471,7 @@ export type Database = {
           address: string | null
           bar_size: string | null
           bar_size_mapped: string | null
+          company_id: string | null
           created_at: string
           customer: string | null
           dim_a: number | null
@@ -4506,6 +4510,7 @@ export type Database = {
           address?: string | null
           bar_size?: string | null
           bar_size_mapped?: string | null
+          company_id?: string | null
           created_at?: string
           customer?: string | null
           dim_a?: number | null
@@ -4544,6 +4549,7 @@ export type Database = {
           address?: string | null
           bar_size?: string | null
           bar_size_mapped?: string | null
+          company_id?: string | null
           created_at?: string
           customer?: string | null
           dim_a?: number | null
