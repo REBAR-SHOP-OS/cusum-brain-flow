@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import type { MachineRun, MachineRunProcess, MachineRunStatus } from "@/types/machineRun";
 
 export interface LogMachineRunParams {
@@ -42,13 +43,12 @@ export async function logMachineRunEvent(
 
   if (error) {
     let serverMessage: string | null = null;
-    try {
-      const ctx = (error as any).context;
-      if (ctx && typeof ctx.json === "function") {
-        const body = await ctx.json();
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const body = await error.context.json();
         serverMessage = body?.error ?? null;
-      }
-    } catch {}
+      } catch {}
+    }
     throw new Error(serverMessage || error.message || "Failed to log machine run event");
   }
 
