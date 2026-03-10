@@ -543,7 +543,7 @@ export function AIExtractView() {
       const result = await approveExtract(activeSessionId, {
         stockLengthMm: optimizerConfig.stockLengthMm,
         kerfMm: optimizerConfig.kerfMm,
-        selectedMode: selectedOptMode || "best-fit",
+        selectedMode: selectedOptMode || "combination",
       });
       await refreshSessions();
       toast({
