@@ -56,6 +56,38 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [completedLocally, setCompletedLocally] = useState(false);
   const [correctCountOpen, setCorrectCountOpen] = useState(false);
   const [correctCountValue, setCorrectCountValue] = useState("");
+  const [restoredFromBackend, setRestoredFromBackend] = useState(false);
+
+  // ── REFRESH-SAFE STATE RESTORATION ──
+  // On mount, if machine has an active locked job, restore state from backend
+  useEffect(() => {
+    if (restoredFromBackend) return;
+    if (
+      machine.cut_session_status === "running" &&
+      machine.active_job_id &&
+      machine.machine_lock &&
+      items.length > 0
+    ) {
+      // Find the item matching the locked job
+      const lockedIndex = items.findIndex(i => i.id === machine.active_job_id);
+      if (lockedIndex >= 0) {
+        setCurrentIndex(lockedIndex);
+        setIsRunning(true);
+        setActiveRunId(machine.current_run_id);
+        // Fetch fresh completed count for snapshot
+        supabase
+          .from("cut_plan_items")
+          .select("completed_pieces")
+          .eq("id", machine.active_job_id)
+          .single()
+          .then(({ data }) => {
+            if (data) setCompletedAtRunStart(data.completed_pieces ?? 0);
+          });
+        console.log("[CutterStation] Restored active job from backend:", machine.active_job_id);
+      }
+    }
+    setRestoredFromBackend(true);
+  }, [machine.cut_session_status, machine.active_job_id, machine.machine_lock, items.length, restoredFromBackend]);
 
   // Keep currentIndex in bounds when items change (e.g. completed item removed by realtime)
   useEffect(() => {
