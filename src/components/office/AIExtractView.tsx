@@ -1236,7 +1236,7 @@ export function AIExtractView() {
         {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
             {currentStepIndex >= 2 && currentStepIndex < 3 && (
-              <Button onClick={handleApplyMapping} className="gap-1.5">
+              <Button onClick={handleApplyMapping} className="gap-1.5" disabled={!mappingConfirmed}>
                 <Globe className="w-4 h-4" /> Apply Mapping
               </Button>
             )}
