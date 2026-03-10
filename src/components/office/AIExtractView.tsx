@@ -1965,7 +1965,7 @@ export function AIExtractView() {
         )}
 
         {/* Optimization Panel — rendered below the table so users see data first */}
-        {(activeSession?.status === "optimizing" || isOptimizing) && (
+        {isOptimizing && (
           <Card ref={optimizationPanelRef} className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center gap-2">
