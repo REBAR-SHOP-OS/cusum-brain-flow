@@ -57,9 +57,7 @@ export default function StationView() {
 
   // Auto-select if only one project; show all grouped if multiple
   useEffect(() => {
-    if (projects.length === 1) {
-      setSelectedProjectId(projects[0].id);
-    } else if (projects.length > 1 && selectedProjectId && !projects.some(p => p.id === selectedProjectId)) {
+    if (selectedProjectId && !projects.some(p => p.id === selectedProjectId)) {
       setSelectedProjectId(null);
     }
   }, [projects]);
@@ -137,7 +135,6 @@ export default function StationView() {
 
   // Group filteredGroups by customer → barlist for cutter display
   const customerGroupedData = useMemo(() => {
-    if (selectedProjectId) return null;
     const allItemsFlat = filteredGroups.flatMap(g => [...g.bendItems, ...g.straightItems]);
     // Build: customer → barlist → items
     const custMap = new Map<string, {
@@ -402,7 +399,7 @@ export default function StationView() {
                     <div className="text-center py-12 text-muted-foreground text-sm">
                       No items queued to this machine yet
                     </div>
-                  ) : customerGroupedData && !selectedProjectId ? (
+                  ) : customerGroupedData ? (
                     // Grouped by customer → barlist
                     customerGroupedData.map((cust) => (
                       <Collapsible key={cust.customerName} defaultOpen={true}>
