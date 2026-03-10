@@ -1446,7 +1446,7 @@ export function AIExtractView() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rows.map((row) => {
+                      {activeRows.map((row) => {
                         const edit = isEditing ? editingRows[row.id] : null;
                         return (
                           <TableRow key={row.id} className={`hover:bg-muted/30 ${isEditing ? "bg-primary/[0.02]" : ""}`}>
