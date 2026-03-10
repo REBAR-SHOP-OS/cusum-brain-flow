@@ -1374,7 +1374,7 @@ export function AIExtractView() {
 
 
         {/* Barlist Mapping Panel — shown at Dedupe→Mapped stage */}
-        {activeSession && currentStepIndex >= 2 && currentStepIndex < 3 && activeRows.length > 0 && (
+        {activeSession && currentStepIndex >= 3 && currentStepIndex < 4 && activeRows.length > 0 && (
           <BarlistMappingPanel
             rows={activeRows}
             sessionId={activeSession.id}
