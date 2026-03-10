@@ -244,14 +244,14 @@ describe("Approval Safety", () => {
     const result = await approveExtract("session-123", {
       stockLengthMm: 12000,
       kerfMm: 5,
-      selectedMode: "best-fit",
+      selectedMode: "combination",
     });
 
     expect(mockInvoke).toHaveBeenCalledWith("manage-extract", {
       body: {
         action: "approve",
         sessionId: "session-123",
-        optimizerConfig: { stockLengthMm: 12000, kerfMm: 5, selectedMode: "best-fit" },
+        optimizerConfig: { stockLengthMm: 12000, kerfMm: 5, selectedMode: "combination" },
       },
     });
     expect(result.work_order_number).toBe("WO-001");
