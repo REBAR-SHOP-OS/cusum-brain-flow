@@ -1,23 +1,23 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Infinite Fetch Loop After Apply Mapping
 
-## Webhook URL
-```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+## Problem
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+The `useExtractRows` hook subscribes to realtime changes on `extract_rows`. When "Apply Mapping" updates all 89 rows simultaneously, each row update triggers a separate realtime event → `refresh()` call. This creates ~89 back-to-back fetches, causing the UI to show "Loading extracted rows…" in a rapid loop.
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+## Fix
+
+**Debounce the realtime callback** in `useExtractRows` so that multiple rapid-fire realtime events within a short window (e.g. 500ms) are collapsed into a single `refresh()` call.
+
+### Changes
+
+**`src/hooks/useExtractSessions.ts`** — `useExtractRows` function:
+
+1. Add a `debounceRef` (setTimeout ref)
+2. In the realtime `on` callback, clear any pending debounce and set a new 500ms timeout before calling `refresh()`
+3. Clean up the debounce timer on unmount
+4. Apply the same pattern to `useExtractSessions` for consistency
+
+This is a ~10-line change in one file.
+
