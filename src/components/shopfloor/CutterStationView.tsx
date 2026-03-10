@@ -540,7 +540,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const isRawMode = currentItem.optimization_mode === "raw" || currentItem.optimization_mode === "manual";
       if (isMarkComplete && !isRawMode && currentIndex < items.length - 1) {
         setTimeout(() => {
-          setCurrentIndex((i) => i + 1);
+          const nextIdx = currentIndex + 1;
+          setCurrentIndex(nextIdx);
+          if (items[nextIdx]) setTrackedItemId(items[nextIdx].id);
         }, 1200);
       } else if (isMarkComplete && isRawMode) {
         toast({
