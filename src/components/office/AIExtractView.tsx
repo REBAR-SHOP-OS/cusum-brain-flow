@@ -61,17 +61,20 @@ const PIPELINE_STEPS = [
   { key: "uploaded", label: "Uploaded", icon: Upload },
   { key: "extracting", label: "Extracting", icon: Sparkles },
   { key: "strategy", label: "Strategy", icon: Scissors },
-  { key: "extracted", label: "Dedupe", icon: GitBranch },
   { key: "mapping", label: "Mapped", icon: Globe },
   { key: "validated", label: "Validated", icon: Shield },
   { key: "optimizing", label: "Optimized", icon: Zap },
   { key: "approved", label: "Approved", icon: CheckCircle2 },
 ] as const;
 
-function getStepIndex(status: string, optimizationMode?: string | null, dedupeStatus?: string | null) {
+function getStepIndex(status: string, optimizationMode?: string | null) {
   // When status is "extracted" but no optimization_mode chosen yet, park at "strategy"
   if (status === "extracted" && !optimizationMode) {
     return PIPELINE_STEPS.findIndex((s) => s.key === "strategy");
+  }
+  // "extracted" with mode set → mapping step (dedupe no longer blocks)
+  if (status === "extracted" && optimizationMode) {
+    return PIPELINE_STEPS.findIndex((s) => s.key === "mapping");
   }
   const idx = PIPELINE_STEPS.findIndex((s) => s.key === status);
   return idx >= 0 ? idx : -1;
@@ -195,7 +198,7 @@ export function AIExtractView() {
   
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode, activeSession.dedupe_status) : -1;
+  const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode) : -1;
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
   // Filter out merged rows for display
@@ -404,33 +407,24 @@ export function AIExtractView() {
 
       await pollForCompletion();
 
-      // Dry-run duplicate detection — show preview before merging
-      setProcessingStep("Scanning for duplicates...");
-      try {
-        const dryRunRes = await detectDuplicates(session.id, true);
+      // Fire dedupe scan in background (advisory only — does NOT block mapping)
+      detectDuplicates(session.id, true).then((dryRunRes) => {
         if (dryRunRes.duplicates_found > 0 && dryRunRes.preview?.length) {
           setDedupePreview(dryRunRes.preview);
           setPendingDedupeSessionId(session.id);
           toast({
-            title: `${dryRunRes.duplicates_found} duplicate groups detected`,
-            description: "Review and confirm merge in the Duplicates panel below.",
+            title: `${dryRunRes.duplicates_found} possible duplicates`,
+            description: "You can review and merge duplicates at any time.",
           });
         } else {
           setDedupeResult(dryRunRes);
-          const { error: dedupeUpErr } = await supabase
-            .from("extract_sessions")
-            .update({ dedupe_status: "complete" } as any)
-            .eq("id", session.id);
-          if (dedupeUpErr) console.error("Failed to set dedupe_status=complete:", dedupeUpErr);
         }
-      } catch (dedupeErr: any) {
-        console.error("Dedupe scan failed:", dedupeErr);
-        const { error: dedupeFallbackErr } = await supabase
-          .from("extract_sessions")
-          .update({ dedupe_status: "complete" } as any)
-          .eq("id", session.id);
-        if (dedupeFallbackErr) console.error("Failed to set dedupe_status fallback:", dedupeFallbackErr);
-      }
+        // Always mark dedupe as complete so it never blocks
+        supabase.from("extract_sessions").update({ dedupe_status: "complete" } as any).eq("id", session.id).then();
+      }).catch((err) => {
+        console.error("Background dedupe scan failed:", err);
+        supabase.from("extract_sessions").update({ dedupe_status: "complete" } as any).eq("id", session.id).then();
+      });
 
       await refreshRows();
       await refreshSessions();
@@ -1307,27 +1301,27 @@ export function AIExtractView() {
         {/* Action Bar for active session */}
         {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
-            {currentStepIndex >= 3 && currentStepIndex < 4 && dedupeResolved && (
+            {currentStepIndex === 3 && (
               <Button onClick={handleApplyMapping} className="gap-1.5" disabled={!mappingConfirmed}>
                 <Globe className="w-4 h-4" /> Apply Mapping
               </Button>
             )}
-            {currentStepIndex >= 3 && currentStepIndex < 4 && activeSession?.dedupe_status === "skipped" && (
+            {currentStepIndex === 3 && activeSession?.dedupe_status === "skipped" && (
               <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                 <TriangleAlert className="w-3 h-3 mr-1" /> Duplicates skipped — not merged
               </Badge>
             )}
-            {currentStepIndex >= 4 && currentStepIndex < 5 && (
+            {currentStepIndex === 4 && (
               <Button onClick={handleValidate} className="gap-1.5">
                 <Shield className="w-4 h-4" /> Validate
               </Button>
             )}
-            {currentStepIndex === 5 && blockerCount === 0 && !isOptimizing && (
+            {currentStepIndex === 4 && blockerCount === 0 && !isOptimizing && (
               <Button onClick={handleStartOptimize} className="gap-1.5">
                 <Zap className="w-4 h-4" /> Optimize
               </Button>
             )}
-            {(currentStepIndex >= 6 || isOptimizing) && (
+            {(currentStepIndex >= 5 || isOptimizing) && (
               <>
                 <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                   <Zap className="w-3 h-3 mr-1" /> Select a cutting plan below, then click Approve
@@ -1488,51 +1482,46 @@ export function AIExtractView() {
         )}
 
 
-        {/* Dedupe Status & Fallback Action Bar */}
-        {activeSession && currentStepIndex === 3 && !dedupeResolved && !dedupePreview && (
+        {/* Advisory Duplicate Warning (non-blocking) */}
+        {activeSession && currentStepIndex >= 3 && dedupePreview && dedupePreview.length > 0 && !dedupeResolved && (
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <GitBranch className="w-4 h-4 text-amber-500" />
-                  <span className="text-sm font-bold text-foreground">Dedupe Review Pending</span>
-                  <Badge variant="secondary" className="text-[10px]">Action Required</Badge>
+                  <TriangleAlert className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm font-bold text-foreground">
+                    ⚠ {dedupePreview.length} possible duplicate group{dedupePreview.length > 1 ? "s" : ""} found
+                  </span>
+                  <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10">Advisory</Badge>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="text-xs h-7 gap-1.5" onClick={() => setPendingDedupeSessionId(activeSession.id)}>
+                    <GitBranch className="w-3 h-3" /> Review Duplicates
+                  </Button>
                   <Button size="sm" className="text-xs h-7 gap-1.5" onClick={handleConfirmMerge} disabled={processing}>
                     {processing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                    Confirm Merge
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs h-7 gap-1.5" onClick={handleSkipDedupe}>
-                    <ArrowRight className="w-3 h-3" /> Skip Merge
+                    Merge Duplicates
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs h-7 gap-1.5" onClick={handleSkipDedupe}>
-                    Continue to Mapping
+                    <X className="w-3 h-3" /> Dismiss
                   </Button>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Choose to merge duplicates, skip, or continue without deduplication.
+                Duplicates won't block your workflow. You can merge, review, or dismiss at any time.
               </p>
             </CardContent>
           </Card>
         )}
 
-        {activeSession && currentStepIndex === 3 && dedupeResolved && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
-            <CheckCircle2 className="w-4 h-4 text-primary" />
-            <span className="text-xs font-bold text-foreground">
-              Dedupe {activeSession.dedupe_status === "merged" ? "Merged" : activeSession.dedupe_status === "skipped" ? "Skipped" : "Complete (No Duplicates)"}
-            </span>
-            {activeSession.dedupe_status === "skipped" && (
-              <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 ml-2">
-                <TriangleAlert className="w-3 h-3 mr-1" /> Duplicates may still exist
-              </Badge>
-            )}
+        {activeSession && currentStepIndex >= 3 && activeSession.dedupe_status === "skipped" && (
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
+            <TriangleAlert className="w-3.5 h-3.5 text-amber-500" />
+            <span className="text-[11px] text-amber-600">Duplicates were dismissed — unmerged duplicates may exist</span>
           </div>
         )}
 
-        {activeSession && currentStepIndex >= 3 && currentStepIndex < 4 && dedupeResolved && (
+        {activeSession && currentStepIndex === 3 && (
           (rowsLoading || !rowsHasFetched) ? (
             <Card className="border-border/50">
               <CardContent className="flex items-center gap-3 py-6">
