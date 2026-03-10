@@ -1838,7 +1838,7 @@ export function AIExtractView() {
                   </div>
                 </div>
               )}
-              <div className="h-[55vh] overflow-auto max-w-full">
+              <div className="h-[55vh] overflow-auto min-w-0 w-full" style={{ maxWidth: '100%' }}>
                 <div className="min-w-[1400px]">
                   <Table>
                     <TableHeader>

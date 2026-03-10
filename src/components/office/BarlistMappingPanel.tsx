@@ -216,7 +216,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
   };
 
   return (
-    <Card className="border-primary/30 bg-primary/5 overflow-hidden">
+    <Card className="border-primary/30 bg-primary/5 overflow-hidden max-w-full min-w-0">
       <CardContent className="p-4 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
