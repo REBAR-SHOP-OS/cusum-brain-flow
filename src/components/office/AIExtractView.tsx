@@ -487,11 +487,12 @@ export function AIExtractView() {
     setProcessingStep("Applying mapping...");
     try {
       const result = await applyMapping(activeSessionId);
-      // Safety net: ensure DB status is "mapped" even if edge function wrote "mapping"
-      await supabase.from("extract_sessions").update({ status: "mapped" } as any).eq("id", activeSessionId);
+      // Safety net: force DB status to "mapped" to ensure pipeline advances
+      const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped" } as any).eq("id", activeSessionId);
+      if (updateErr) console.warn("[handleApplyMapping] status update failed:", updateErr.message);
       await refreshRows();
       await refreshSessions();
-      toast({ title: "Mapping applied", description: `${result.mapped_count} rows mapped, ${result.auto_mappings_created} auto-rules created` });
+      toast({ title: "✅ Mapping Complete", description: `${result.mapped_count} rows mapped — ready for validation` });
     } catch (err: any) {
       toast({ title: "Mapping failed", description: err.message, variant: "destructive" });
     } finally {
