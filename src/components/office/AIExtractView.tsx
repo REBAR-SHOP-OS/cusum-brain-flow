@@ -48,6 +48,7 @@ import {
   type DedupeResult,
 } from "@/lib/extractService";
 import { supabase } from "@/integrations/supabase/client";
+import { BarlistMappingPanel, type MappedRow } from "@/components/office/BarlistMappingPanel";
 import { useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useProjects";
 import { useBarlists } from "@/hooks/useBarlists";
