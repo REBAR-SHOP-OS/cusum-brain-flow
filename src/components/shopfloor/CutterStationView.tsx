@@ -351,6 +351,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     } catch (err: any) {
       setIsRunning(false);
       toast({ title: "Start failed", description: err.message, variant: "destructive" });
+    } finally {
+      startingRef.current = false;
     }
     // NOTE: Do NOT reset isRunning in finally — it stays true until
     // handleCompleteRun or reset. This prevents a race condition where
