@@ -135,7 +135,6 @@ export default function StationView() {
 
   // Group filteredGroups by customer → barlist for cutter display
   const customerGroupedData = useMemo(() => {
-    if (selectedProjectId) return null;
     const allItemsFlat = filteredGroups.flatMap(g => [...g.bendItems, ...g.straightItems]);
     // Build: customer → barlist → items
     const custMap = new Map<string, {
