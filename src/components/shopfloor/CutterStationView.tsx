@@ -575,6 +575,27 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         showBedsSuffix={false}
       />
 
+      {/* ── MACHINE LOCK STATUS BAR ── */}
+      {machine.machine_lock && (
+        <div className="flex items-center gap-3 px-6 py-2 border-b border-border bg-destructive/10">
+          <Lock className="w-4 h-4 text-destructive" />
+          <span className="text-xs font-bold text-destructive uppercase tracking-wider">
+            LOCKED — {machine.job_assigned_by === "optimizer" ? "Optimizer" : machine.job_assigned_by === "supervisor" ? "Supervisor" : "Manual"} Assignment
+          </span>
+          {currentItem && (
+            <span className="text-xs text-muted-foreground ml-auto font-mono">
+              Active: {currentItem.mark_number || currentItem.id.slice(0, 8)}
+            </span>
+          )}
+        </div>
+      )}
+      {!machine.machine_lock && machine.cut_session_status === "idle" && (
+        <div className="flex items-center gap-2 px-6 py-1.5 border-b border-border bg-muted/20">
+          <Unlock className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Unlocked — Ready</span>
+        </div>
+      )}
+
       {/* Remaining progress strip */}
       <div className={cn(
         "flex items-center justify-between px-6 py-2 border-b border-border",
