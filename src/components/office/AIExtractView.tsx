@@ -143,7 +143,7 @@ export function AIExtractView() {
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
-  const { rows, refresh: refreshRows } = useExtractRows(activeSessionId);
+  const { rows, loading: rowsLoading, refresh: refreshRows } = useExtractRows(activeSessionId);
   const { errors, refresh: refreshErrors } = useExtractErrors(activeSessionId);
 
   // Get company_id
@@ -1517,13 +1517,56 @@ export function AIExtractView() {
           </div>
         )}
 
-        {activeSession && currentStepIndex >= 3 && currentStepIndex < 4 && dedupeResolved && activeRows.length > 0 && (
-          <BarlistMappingPanel
-            rows={activeRows}
-            sessionId={activeSession.id}
-            onConfirmMapping={handleMappingConfirmed}
-            disabled={processing}
-          />
+        {activeSession && currentStepIndex >= 3 && currentStepIndex < 4 && dedupeResolved && (
+          rowsLoading ? (
+            <Card className="border-border/50">
+              <CardContent className="flex items-center gap-3 py-6">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Loading extracted rows…</span>
+              </CardContent>
+            </Card>
+          ) : activeRows.length > 0 ? (
+            <BarlistMappingPanel
+              rows={activeRows}
+              sessionId={activeSession.id}
+              onConfirmMapping={handleMappingConfirmed}
+              disabled={processing}
+            />
+          ) : (
+            <Card className="border-yellow-500/30 bg-yellow-500/5">
+              <CardContent className="flex flex-col gap-3 py-6">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-yellow-500" />
+                  <span className="text-sm font-medium">No extracted rows found for this session.</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Rows may not have been saved during extraction. Try reloading or skip to mapping.</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => refreshRows()} disabled={processing}>
+                    <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retry Loading Rows
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={processing}
+                    onClick={async () => {
+                      try {
+                        await supabase
+                          .from("extract_sessions")
+                          .update({ status: "mapping" } as any)
+                          .eq("id", activeSession.id);
+                        await refreshSessions();
+                        toast({ title: "Skipped to mapping", description: "Session advanced to mapping stage." });
+                      } catch (err: any) {
+                        toast({ title: "Error", description: err.message, variant: "destructive" });
+                      }
+                    }}
+                  >
+                    <ArrowRight className="w-3.5 h-3.5 mr-1" /> Skip to Mapping
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )
         )}
 
 
