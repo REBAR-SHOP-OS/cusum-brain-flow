@@ -83,13 +83,18 @@ export function useSocialPosts() {
 
   const updatePost = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<SocialPost> & { id: string }) => {
+      console.log(`[useSocialPosts] updatePost called — id: ${id}, payload:`, updates);
       const { data, error } = await supabase
         .from("social_posts")
         .update(updates)
         .eq("id", id)
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        console.error(`[useSocialPosts] updatePost FAILED — id: ${id}, error:`, error.message);
+        throw error;
+      }
+      console.log(`[useSocialPosts] updatePost SUCCESS — id: ${id}, new status: ${data?.status}, qa_status: ${data?.qa_status}`);
       return data;
     },
     onSuccess: () => {
