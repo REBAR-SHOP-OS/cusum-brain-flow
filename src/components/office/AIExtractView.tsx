@@ -498,7 +498,7 @@ export function AIExtractView() {
   };
 
   const runOptimizationForMode = (mode: OptimizerConfig["mode"]) => {
-    const cutItems: CutItem[] = rows
+    const cutItems: CutItem[] = activeRows
       .filter(r => r.bar_size_mapped || r.bar_size)
       .map((r, i) => ({
         id: r.id,
