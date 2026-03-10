@@ -181,7 +181,7 @@ export async function uploadExtractFile(params: {
   return { fileId: (data as any).id, fileUrl, storagePath };
 }
 
-export function runExtract(params: {
+export async function runExtract(params: {
   sessionId: string;
   fileUrl: string;
   fileName: string;
@@ -191,7 +191,13 @@ export function runExtract(params: {
     address: string;
     type: string;
   };
-}): void {
+}): Promise<void> {
+  // Update session to extracting client-side first as a safety net
+  await supabase
+    .from("extract_sessions")
+    .update({ status: "extracting", progress: 0 } as any)
+    .eq("id", params.sessionId);
+
   // Fire-and-forget: edge function runs synchronously (up to 150s),
   // client polls extract_sessions for progress/completion
   supabase.functions.invoke("extract-manifest", {
@@ -201,6 +207,12 @@ export function runExtract(params: {
       fileName: params.fileName,
       manifestContext: params.manifestContext,
     },
+  }).then((res) => {
+    if (res.error) {
+      console.error("Extract invoke error:", res.error);
+    } else if (res.data?.status === "error") {
+      console.error("Extract returned error:", res.data.error);
+    }
   }).catch((err) => {
     console.error("Extract invoke failed:", err);
   });
