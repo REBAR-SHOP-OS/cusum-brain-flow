@@ -1342,19 +1342,86 @@ export function AIExtractView() {
         {/* Duplicate Summary Card */}
         {(dedupeResult && dedupeResult.rows_merged > 0) && (
           <Card className="border-amber-500/30 bg-amber-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <GitBranch className="w-4 h-4 text-amber-500" />
-                <span className="text-sm font-bold text-foreground">
-                  {dedupeResult.duplicates_found} Duplicate Groups Found
-                </span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {dedupeResult.rows_merged} rows merged
-                </Badge>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm font-bold text-foreground">
+                    {dedupeResult.duplicates_found} Duplicate Groups Found
+                  </span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {dedupeResult.rows_merged} rows merged
+                  </Badge>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs h-7"
+                  onClick={() => setShowMergedRows(!showMergedRows)}
+                >
+                  <GitBranch className="w-3 h-3" />
+                  {showMergedRows ? "Hide Merged" : "Show Merged"}
+                </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 Duplicate rows (same mark + size + length + shape) were merged by summing quantities. {dedupeResult.total_active_rows} active rows remain.
               </p>
+
+              {/* Merged Rows Inspector */}
+              {showMergedRows && mergedRows.length > 0 && (
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="bg-muted/50 px-3 py-1.5 border-b border-border">
+                    <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+                      Merged Row Lineage — {mergedRows.length} rows absorbed
+                    </span>
+                  </div>
+                  <div className="max-h-48 overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[40px]">#</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[80px]">MARK</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[50px]">SIZE</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[70px]">LENGTH</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[50px]">ORIG QTY</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[100px]">MERGED INTO</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider">DUP KEY</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {mergedRows.map((row) => {
+                          const survivorRow = activeRows.find(r => r.id === row.merged_into_id);
+                          return (
+                            <TableRow key={row.id} className="opacity-70">
+                              <TableCell className="text-xs p-1.5">{row.row_index}</TableCell>
+                              <TableCell className="text-xs font-bold p-1.5">{row.mark || "—"}</TableCell>
+                              <TableCell className="text-xs p-1.5">
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {row.bar_size_mapped || row.bar_size || "—"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm ?? "—"}</TableCell>
+                              <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
+                              <TableCell className="text-xs p-1.5">
+                                {survivorRow ? (
+                                  <span className="text-primary font-medium">
+                                    #{survivorRow.row_index} ({survivorRow.mark})
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">{row.merged_into_id?.slice(0, 8)}…</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-[10px] font-mono text-muted-foreground p-1.5 max-w-[200px] truncate">
+                                {row.duplicate_key || "—"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
