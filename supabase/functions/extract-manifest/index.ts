@@ -69,10 +69,13 @@ serve(async (req) => {
     }
 
     // Update session to extracting immediately
-    await svcClient
+    console.log(`Starting extraction for session ${sessionId}`);
+    const { error: statusErr } = await svcClient
       .from("extract_sessions")
       .update({ status: "extracting", progress: 0, error_message: null })
       .eq("id", sessionId);
+    if (statusErr) console.error("Failed to update session status:", statusErr);
+    else console.log(`Session ${sessionId} marked as extracting`);
 
     // Run extraction synchronously — edge function stays alive up to 150s
     try {
