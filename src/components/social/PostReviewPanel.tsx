@@ -422,46 +422,32 @@ export function PostReviewPanel({
                         <PopoverContent className="w-auto p-0" align="start" side="left">
                           <DateSchedulePopover
                             post={post}
-                           onSetDate={(date) => {
+                           onSetDate={async (date) => {
                               if ((post.content || "").length < 20) {
                                 toast({ title: "Content too short", description: "Post content must be at least 20 characters to schedule.", variant: "destructive" });
                                 return;
                               }
-                              updatePost.mutate(
-                                {
-                                  id: post.id,
-                                  scheduled_date: date.toISOString(),
-                                  status: "scheduled",
-                                  qa_status: "scheduled",
-                                  page_name: post.page_name || localPages[0] || null,
-                                },
-                                {
-                                  onSuccess: async () => {
-                                    const { data: verified } = await supabase
-                                      .from("social_posts")
-                                      .select("status")
-                                      .eq("id", post.id)
-                                      .single();
-                                    if (!verified || verified.status !== "scheduled") {
-                                      toast({
-                                        title: "خطا در ذخیره‌سازی",
-                                        description: "پست در دیتابیس ذخیره نشد. محتوا باید حداقل ۲۰ کاراکتر باشد.",
-                                        variant: "destructive",
-                                      });
-                                      return;
-                                    }
-                                    setDatePopoverOpen(false);
-                                    toast({ title: "Date scheduled ✅", description: `Scheduled for ${format(date, "PPP p")}` });
-                                  },
-                                  onError: (err: Error) => {
-                                    toast({
-                                      title: "خطا در ذخیره تاریخ",
-                                      description: err.message || "تاریخ ذخیره نشد. دوباره تلاش کنید.",
-                                      variant: "destructive",
-                                    });
-                                  },
-                                }
-                              );
+                              const postId = post.id;
+                              console.log(`[PostReviewPanel] Set Date — post=${postId} date=${date.toISOString()}`);
+                              const result = await schedulePost({
+                                post_id: postId,
+                                scheduled_date: date.toISOString(),
+                                status: "scheduled",
+                                qa_status: "scheduled",
+                                page_name: post.page_name || localPages[0] || null,
+                              });
+                              if (!result.success) {
+                                console.error("[PostReviewPanel] Set Date FAILED:", result.error, result.details);
+                                toast({
+                                  title: "Scheduling failed",
+                                  description: result.error || "Post could not be scheduled. Check permissions and try again.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                              setDatePopoverOpen(false);
+                              toast({ title: "Date scheduled ✅", description: `Scheduled for ${format(date, "PPP p")}` });
                             }}
                           />
                         </PopoverContent>
