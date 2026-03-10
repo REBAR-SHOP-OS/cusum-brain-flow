@@ -235,6 +235,14 @@ Rules:
 
         const rawContent = aiResult.content;
 
+        // Check finish_reason for truncation detection
+        const finishReason = aiResult.raw?.choices?.[0]?.finish_reason;
+        if (finishReason === "length" || finishReason === "MAX_TOKENS") {
+          console.warn(`AI response TRUNCATED — finish_reason: ${finishReason}, model: ${model}, maxTokens: ${maxTokens}`);
+        } else {
+          console.log(`AI response complete — finish_reason: ${finishReason}`);
+        }
+
         // Parse the JSON from the response
         let extractedData;
         let jsonStr = rawContent
@@ -245,21 +253,67 @@ Rules:
         try {
           extractedData = JSON.parse(jsonStr);
         } catch {
-          console.warn("Initial JSON parse failed, attempting truncation repair...");
-          const lastCompleteItem = jsonStr.lastIndexOf("},");
-          if (lastCompleteItem > 0) {
-            jsonStr = jsonStr.substring(0, lastCompleteItem + 1) + "]}";
-            extractedData = JSON.parse(jsonStr);
-            const recoveredCount = extractedData.items?.length || 0;
-            console.log(`Repaired truncated JSON: recovered ${recoveredCount} items`);
-            // Store truncation warning so UI can inform user
-            await svcClient
-              .from("extract_sessions")
-              .update({ error_message: `Warning: AI response was truncated. Recovered ${recoveredCount} items — some rows may be missing.` })
-              .eq("id", sessionId);
-          } else {
-            throw new Error("Failed to parse AI extraction results");
+          console.warn("Initial JSON parse failed, attempting multi-strategy truncation repair...");
+          extractedData = null;
+
+          // Strategy 1: Close after last complete item in "items" array
+          if (!extractedData) {
+            try {
+              const lastCompleteItem = jsonStr.lastIndexOf("},");
+              if (lastCompleteItem > 0) {
+                const repaired = jsonStr.substring(0, lastCompleteItem + 1) + "]}";
+                extractedData = JSON.parse(repaired);
+                console.log(`Repair strategy 1 succeeded: recovered ${extractedData.items?.length || 0} items`);
+              }
+            } catch { /* try next */ }
           }
+
+          // Strategy 2: Close after last complete "}" (item without trailing comma)
+          if (!extractedData) {
+            try {
+              const lastBrace = jsonStr.lastIndexOf("}");
+              if (lastBrace > 0) {
+                // Check if we're inside the items array
+                const itemsIdx = jsonStr.indexOf('"items"');
+                if (itemsIdx > -1) {
+                  const repaired = jsonStr.substring(0, lastBrace + 1) + "]}";
+                  extractedData = JSON.parse(repaired);
+                  console.log(`Repair strategy 2 succeeded: recovered ${extractedData.items?.length || 0} items`);
+                }
+              }
+            } catch { /* try next */ }
+          }
+
+          // Strategy 3: Extract items array directly via regex
+          if (!extractedData) {
+            try {
+              const itemsMatch = jsonStr.match(/"items"\s*:\s*\[([\s\S]*)/);
+              if (itemsMatch) {
+                let arrStr = "[" + itemsMatch[1];
+                const lastBrace = arrStr.lastIndexOf("}");
+                if (lastBrace > 0) {
+                  arrStr = arrStr.substring(0, lastBrace + 1) + "]";
+                  const items = JSON.parse(arrStr);
+                  extractedData = { items };
+                  console.log(`Repair strategy 3 succeeded: recovered ${items.length} items`);
+                }
+              }
+            } catch { /* give up */ }
+          }
+
+          if (!extractedData) {
+            throw new Error("Failed to parse AI extraction results after all repair strategies");
+          }
+
+          // Log truncation warning
+          const recoveredCount = extractedData.items?.length || 0;
+          const truncationNote = finishReason === "length" || finishReason === "MAX_TOKENS"
+            ? ` (finish_reason: ${finishReason})`
+            : "";
+          await svcClient
+            .from("extract_sessions")
+            .update({ error_message: `Warning: AI response was truncated${truncationNote}. Recovered ${recoveredCount} items — some rows may be missing.` })
+            .eq("id", sessionId);
         }
 
         // Rebuild summary if truncated
