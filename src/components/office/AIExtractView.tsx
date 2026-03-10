@@ -196,7 +196,7 @@ export function AIExtractView() {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode, activeSession.dedupe_status) : -1;
-  const dedupeResolved = activeSession ? ["merged", "skipped", "none"].includes(activeSession.dedupe_status) : false;
+  const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
@@ -400,23 +400,21 @@ export function AIExtractView() {
           });
         } else {
           setDedupeResult(dryRunRes);
-          // No duplicates found — auto-mark dedupe as done
-          try {
-            await supabase
-              .from("extract_sessions")
-              .update({ dedupe_status: "none" } as any)
-              .eq("id", session.id);
-          } catch (_) { /* best-effort */ }
+          // No duplicates found — persist dedupe as complete so pipeline unlocks Mapping
+          const { error: dedupeUpErr } = await supabase
+            .from("extract_sessions")
+            .update({ dedupe_status: "complete" } as any)
+            .eq("id", session.id);
+          if (dedupeUpErr) console.error("Failed to set dedupe_status=complete:", dedupeUpErr);
         }
       } catch (dedupeErr: any) {
         console.error("Dedupe scan failed:", dedupeErr);
         // Non-fatal — auto-skip dedupe so pipeline isn't blocked
-        try {
-          await supabase
-            .from("extract_sessions")
-            .update({ dedupe_status: "none" } as any)
-            .eq("id", session.id);
-        } catch (_) { /* best-effort */ }
+        const { error: dedupeFallbackErr } = await supabase
+          .from("extract_sessions")
+          .update({ dedupe_status: "complete" } as any)
+          .eq("id", session.id);
+        if (dedupeFallbackErr) console.error("Failed to set dedupe_status fallback:", dedupeFallbackErr);
       }
 
       await refreshRows();
