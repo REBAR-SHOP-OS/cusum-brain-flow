@@ -6,7 +6,10 @@ export type ManageBendAction =
   | "pause-bend"
   | "complete-bend"
   | "cancel-bend"
-  | "create-delivery-from-bundles";
+  | "create-delivery-from-bundles"
+  | "reserve-waste"
+  | "consume-waste"
+  | "release-waste";
 
 export interface ManageBendParams {
   action: ManageBendAction;

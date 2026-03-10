@@ -104,7 +104,7 @@ serve(async (req) => {
         return json({ success: true, bendBatchId: bendBatch.id, action });
       }
 
-      // ─── Start bending ─────────────────────────────────────────────
+      // ─── Start bending (from queued or paused) ────────────────────
       case "start-bend": {
         const { bendBatchId } = body;
         if (!bendBatchId) return json({ error: "Missing bendBatchId" }, 400);
@@ -112,7 +112,9 @@ serve(async (req) => {
         const { data: bb, error: bbErr } = await supabaseUser
           .from("bend_batches").select("*").eq("id", bendBatchId).single();
         if (bbErr || !bb) return json({ error: "Bend batch not found" }, 404);
-        if (bb.status !== "queued") return json({ error: `Invalid transition: ${bb.status} → bending. Must be queued.` }, 400);
+        if (!["queued", "paused"].includes(bb.status)) {
+          return json({ error: `Invalid transition: ${bb.status} → bending. Must be queued or paused.` }, 400);
+        }
 
         const { error } = await supabaseUser
           .from("bend_batches").update({ status: "bending" }).eq("id", bendBatchId);
@@ -120,6 +122,7 @@ serve(async (req) => {
 
         await logEvent(sb, bb.company_id, "bender_started", {
           batchId: bendBatchId, machineId: bb.machine_id, size: bb.size, shape: bb.shape,
+          fromStatus: bb.status,
         }, `Bender started on batch ${bendBatchId}`, userId);
 
         return json({ success: true, bendBatchId, action });
@@ -276,6 +279,78 @@ serve(async (req) => {
         }, `Delivery created from ${bundleIds.length} bundles`, userId);
 
         return json({ success: true, deliveryId: delivery.id, action });
+      }
+
+      // ─── Waste Bank: Reserve piece ─────────────────────────────────
+      case "reserve-waste": {
+        const { pieceId, companyId: wbCompany } = body;
+        if (!pieceId) return json({ error: "Missing pieceId" }, 400);
+
+        const { data: piece, error: pErr } = await sb
+          .from("waste_bank_pieces").select("*").eq("id", pieceId).single();
+        if (pErr || !piece) return json({ error: "Waste piece not found" }, 404);
+        if (piece.status !== "available") return json({ error: `Cannot reserve: piece is ${piece.status}` }, 400);
+
+        const { error } = await sb
+          .from("waste_bank_pieces")
+          .update({ status: "reserved", reserved_by: userId, reserved_at: new Date().toISOString() })
+          .eq("id", pieceId)
+          .eq("status", "available"); // optimistic lock
+        if (error) throw error;
+
+        await logEvent(sb, piece.company_id, "waste_bank_reserved", {
+          pieceId, barCode: piece.bar_code, lengthMm: piece.length_mm,
+        }, `Waste piece reserved`, userId);
+
+        return json({ success: true, pieceId, action });
+      }
+
+      // ─── Waste Bank: Consume piece ────────────────────────────────
+      case "consume-waste": {
+        const { pieceId } = body;
+        if (!pieceId) return json({ error: "Missing pieceId" }, 400);
+
+        const { data: piece, error: pErr } = await sb
+          .from("waste_bank_pieces").select("*").eq("id", pieceId).single();
+        if (pErr || !piece) return json({ error: "Waste piece not found" }, 404);
+        if (piece.status !== "reserved") return json({ error: `Cannot consume: piece is ${piece.status}, must be reserved first` }, 400);
+
+        const { error } = await sb
+          .from("waste_bank_pieces")
+          .update({ status: "consumed", consumed_at: new Date().toISOString() })
+          .eq("id", pieceId)
+          .eq("status", "reserved"); // optimistic lock
+        if (error) throw error;
+
+        await logEvent(sb, piece.company_id, "waste_bank_consumed", {
+          pieceId, barCode: piece.bar_code, lengthMm: piece.length_mm,
+        }, `Waste piece consumed`, userId);
+
+        return json({ success: true, pieceId, action });
+      }
+
+      // ─── Waste Bank: Release reserved piece ───────────────────────
+      case "release-waste": {
+        const { pieceId } = body;
+        if (!pieceId) return json({ error: "Missing pieceId" }, 400);
+
+        const { data: piece, error: pErr } = await sb
+          .from("waste_bank_pieces").select("*").eq("id", pieceId).single();
+        if (pErr || !piece) return json({ error: "Waste piece not found" }, 404);
+        if (piece.status !== "reserved") return json({ error: `Cannot release: piece is ${piece.status}` }, 400);
+
+        const { error } = await sb
+          .from("waste_bank_pieces")
+          .update({ status: "available", reserved_by: null, reserved_at: null })
+          .eq("id", pieceId)
+          .eq("status", "reserved");
+        if (error) throw error;
+
+        await logEvent(sb, piece.company_id, "waste_bank_released", {
+          pieceId, barCode: piece.bar_code, lengthMm: piece.length_mm,
+        }, `Waste piece released`, userId);
+
+        return json({ success: true, pieceId, action });
       }
 
       default:

@@ -205,6 +205,27 @@ serve(async (req) => {
           }, 403);
         }
 
+        // ── CUTTER ROUTING ENFORCEMENT (hard rule) ──────────────────
+        if (barCode && process === "cut") {
+          const CUTTER_01 = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";
+          const CUTTER_02 = "b0000000-0000-0000-0000-000000000002";
+          const barNum = parseInt(barCode.replace(/\D/g, "")) || 0;
+          const isSmall = barNum <= 15;
+
+          if (machineId === CUTTER_01 && !isSmall) {
+            await logProductionEvent(supabaseService, machine.company_id, "machine_size_routing_blocked", {
+              machineId, machineName: machine.name, barCode, reason: `${barCode} not allowed on Cutter-01 (10M/15M only)`,
+            }, `BLOCKED: ${barCode} on Cutter-01`, machineId, userId);
+            return json({ error: `Routing blocked: ${barCode} cannot run on ${machine.name}. Only 10M and 15M allowed.` }, 403);
+          }
+          if (machineId === CUTTER_02 && isSmall) {
+            await logProductionEvent(supabaseService, machine.company_id, "machine_size_routing_blocked", {
+              machineId, machineName: machine.name, barCode, reason: `${barCode} not allowed on Cutter-02 (20M+ only)`,
+            }, `BLOCKED: ${barCode} on Cutter-02`, machineId, userId);
+            return json({ error: `Routing blocked: ${barCode} cannot run on ${machine.name}. Only 20M+ allowed.` }, 403);
+          }
+        }
+
         // ── CAPABILITY VALIDATION (hard rule) ────────────────────────
         if (barCode) {
           const { data: rebarSize, error: rebarErr } = await supabaseService

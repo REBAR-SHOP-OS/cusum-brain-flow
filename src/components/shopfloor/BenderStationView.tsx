@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useInventoryData } from "@/hooks/useInventoryData";
 import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
+import { useBenderBatches } from "@/hooks/useBenderBatches";
+import { BenderBatchPanel } from "./BenderBatchPanel";
 import { recordCompletion } from "@/lib/foremanLearningService";
 import { Check, ChevronLeft, ChevronRight, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -95,6 +97,9 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
     : null;
 
   const foreman = useForemanBrain({ context: foremanContext });
+
+  // ── Bend batches from new production chain ──
+  const { data: bendBatches = [], refetch: refetchBendBatches } = useBenderBatches(machine.id);
 
   const isMarkComplete = currentItem ? bendCompleted >= currentItem.total_pieces : false;
 
@@ -286,6 +291,17 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
 
         {/* Bending schematic */}
         <BendingSchematic dimensions={currentItem.bend_dimensions} />
+
+        {/* ── BEND BATCHES PANEL (Phase 4) ── */}
+        {bendBatches.length > 0 && (
+          <div className="mt-6">
+            <BenderBatchPanel
+              batches={bendBatches}
+              canWrite={effectiveCanWrite}
+              onRefresh={() => refetchBendBatches()}
+            />
+          </div>
+        )}
       </div>
 
       {/* Bottom bar */}
