@@ -73,7 +73,7 @@ export function useExtractRows(sessionId: string | null) {
     refresh();
   }, [refresh]);
 
-  return { rows, loading, refresh };
+  return { rows, loading, hasFetched, refresh };
 }
 
 export function useExtractErrors(sessionId: string | null) {
