@@ -100,8 +100,8 @@ function getStepIndex(status: string, optimizationMode?: string | null) {
   if (status === "mapped") {
     return PIPELINE_STEPS.findIndex((s) => s.key === "validated");
   }
-  // Legacy: "optimizing" maps to validated step
-  if (status === "optimizing") {
+  // Legacy: "optimizing" or stale "mapping" both map to validated step
+  if (status === "optimizing" || status === "mapping") {
     return PIPELINE_STEPS.findIndex((s) => s.key === "validated");
   }
   const idx = PIPELINE_STEPS.findIndex((s) => s.key === status);
