@@ -200,7 +200,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const runPlan = foreman.decision?.runPlan || null;
 
   // Determine if machine is actively running (local start or DB status)
-  const machineIsRunning = isRunning || (!completedLocally && machine.status === "running");
+  const machineIsRunning = isRunning || (machine.status === "running" && machine.current_run_id != null);
 
   // Clear completedLocally flag once DB catches up
   useEffect(() => {
