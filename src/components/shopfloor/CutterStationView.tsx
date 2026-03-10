@@ -19,7 +19,7 @@ import { useInventoryData } from "@/hooks/useInventoryData";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { useSlotTracker } from "@/hooks/useSlotTracker";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle, Edit3, Lock, Unlock } from "lucide-react";
+import { Scissors, Layers, Ruler, Hash, CheckCircle2, AlertCircle, Edit3, Lock, Unlock, Trash2, Recycle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
