@@ -34,6 +34,7 @@ export default function StationView() {
   const [isSupervisor, setIsSupervisor] = useState(false);
   const [selectedBarListId, setSelectedBarListId] = useState<string | null>(null);
   const { pinnedMachineId, unpinMachine } = useTabletPin();
+  const { data: activeWorkOrders } = useSupabaseWorkOrders();
   const isPinned = pinnedMachineId === machineId;
 
   // Compute distinct projects from all items
