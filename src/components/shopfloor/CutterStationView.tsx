@@ -555,6 +555,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       setOperatorBars(null);
       setManualFloorConfirmed(false);
       setCompletedAtRunStart(null);
+      setRemnantPromptOpen(false);
+      setRemnantInfo(null);
 
       // ── Routing toast based on bend type ──
       if (currentItem.bend_type === "bend") {
