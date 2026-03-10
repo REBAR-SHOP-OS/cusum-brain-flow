@@ -636,8 +636,8 @@ export function AIExtractView() {
     setInvoiceNumber(session.invoice_number || "");
     setInvoiceDate(session.invoice_date || "");
     setShowHistory(false);
-    setIsOptimizing(session.status === "optimizing");
-    if (session.status !== "optimizing") {
+    setIsOptimizing(session.status === "optimizing" || session.status === "validated");
+    if (session.status !== "optimizing" && session.status !== "validated") {
       setOptimizationResult(null);
       setSelectedOptMode(null);
       setAllModeResults({});
