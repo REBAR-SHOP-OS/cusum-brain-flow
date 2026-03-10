@@ -115,7 +115,7 @@ serve(async (req) => {
           await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review" }).eq("id", post.id);
           results.push({ postId: post.id, platform: post.platform, success: false, error: publishResult.error });
         } else {
-          await supabase.from("social_posts").update({ status: "published" }).eq("id", post.id);
+          await supabase.from("social_posts").update({ status: "published", qa_status: "published" }).eq("id", post.id);
           results.push({ postId: post.id, platform: post.platform, success: true });
         }
       } catch (err) {
