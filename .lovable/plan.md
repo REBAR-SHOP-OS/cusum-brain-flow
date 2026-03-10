@@ -1,23 +1,31 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Audit: Supervisor Controls Inconsistency
 
-## Webhook URL
+## Bug Found
+In `CutterStationView.tsx` line 887, the CutEngine receives `isSupervisor={isAdmin || isShopSupervisor}` — this is the **role check**, not the **toggle state**. This means:
+
+- **CutEngine**: Supervisor overrides (bar count adjustments, override warnings) are **always active** for admin/supervisor users, even when the Supervisor toggle is OFF
+- **ProductionCard**: Supervisor actions (reset, transfer) correctly follow the toggle state
+- **StationHeader**: Toggle button works correctly
+
+A supervisor should explicitly toggle into supervisor mode before getting elevated controls — the toggle exists for safety so operators don't accidentally use supervisor powers.
+
+## Fix
+
+**File: `src/components/shopfloor/CutterStationView.tsx`** (line 887)
+
+Change:
+```typescript
+isSupervisor={isAdmin || isShopSupervisor}
 ```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
+To:
+```typescript
+isSupervisor={isSupervisor}
 ```
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+This makes CutEngine respect the toggle, consistent with how ProductionCard already works. The supervisor must click "Supervisor" in the header to unlock override controls in the cut engine.
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+## Summary
+One-line fix. No other files affected. All supervisor controls will now be gated behind the explicit toggle.
+
