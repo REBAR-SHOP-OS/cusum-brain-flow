@@ -150,19 +150,22 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
     const isStale = existingRun?.started_at &&
       (Date.now() - new Date(existingRun.started_at).getTime()) > STALE_THRESHOLD_MS;
     const isOrphan = !existingRun;
+    // A run that is paused, completed, or canceled is no longer truly active
+    const isInactive = existingRun && ["paused", "completed", "canceled", "rejected"].includes(existingRun.status);
 
-    // Idempotency: if existing run is <5s old, treat as double-tap and return it
+    // Idempotency: if existing run is <5s old and still running, treat as double-tap and return it
     const ageMs = existingRun?.started_at ? Date.now() - new Date(existingRun.started_at).getTime() : Infinity;
-    if (existingRun && ageMs < 5000) {
+    if (existingRun && existingRun.status === "running" && ageMs < 5000) {
       console.warn(`[startRun] Double-tap detected (<5s) on ${machine.name}, returning existing run ${existingRun.id}`);
       return { machineRunId: existingRun.id };
     }
 
-    if (isStale || isOrphan) {
-      console.warn(`[startRun] Auto-recovering stale/orphan run ${machine.current_run_id} on ${machine.name}`);
-      if (existingRun) {
+    if (isStale || isOrphan || isInactive) {
+      const reason = isOrphan ? "orphan" : isInactive ? `inactive (${existingRun!.status})` : "stale";
+      console.warn(`[startRun] Auto-recovering ${reason} run ${machine.current_run_id} on ${machine.name}`);
+      if (existingRun && !["completed", "canceled", "rejected"].includes(existingRun.status)) {
         await supabaseService.from("machine_runs")
-          .update({ status: "canceled", ended_at: now, notes: "Auto-canceled: stale run recovery" })
+          .update({ status: "canceled", ended_at: now, notes: `Auto-canceled: ${reason} run recovery` })
           .eq("id", machine.current_run_id);
       }
       await supabaseService.from("machines").update({
@@ -172,8 +175,8 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
       }).eq("id", machineId);
 
       await logProductionEvent(supabaseService, machine.company_id, "stale_run_auto_recovered", {
-        machineId, machineName: machine.name, staleRunId: machine.current_run_id, isOrphan, isStale,
-      }, `Auto-recovered stale run on ${machine.name}`, machineId, userId);
+        machineId, machineName: machine.name, staleRunId: machine.current_run_id, isOrphan, isStale, isInactive, reason,
+      }, `Auto-recovered ${reason} run on ${machine.name}`, machineId, userId);
 
       machine.current_run_id = null;
       machine.active_job_id = null;
