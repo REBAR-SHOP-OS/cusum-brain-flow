@@ -270,6 +270,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         barCode: currentItem.bar_code,
         qty: clampedBars,
         notes: `Stock: ${stockLength}mm | Mark: ${currentItem.mark_number || "—"} | Length: ${currentItem.cut_length_mm}mm | Pcs/bar: ${computedPiecesPerBar}`,
+        cutPlanItemId: currentItem.id,
+        cutPlanId: currentItem.cut_plan_id || undefined,
+        assignedBy: "manual",
       });
 
       const runId = result.machineRunId;
