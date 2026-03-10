@@ -168,11 +168,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     const effective = localCompletedOverride[i.id] != null ? localCompletedOverride[i.id] : i.completed_pieces;
     return effective < i.total_pieces;
   }).length;
-  const staticMaxBars = currentItem ? (getMaxBars(currentItem.bar_code) || 10) : 10;
-  // Dynamic reduction: longer parts take more bed space, so fewer bars can be loaded
-  const maxBars = currentItem 
-    ? Math.max(1, Math.min(staticMaxBars, Math.floor(selectedStockLength / currentItem.cut_length_mm)))
-    : staticMaxBars;
+  // max_bars = machine throat capacity from spec sheet (NOT pieces per bar)
+  const maxBars = currentItem ? (getMaxBars(currentItem.bar_code) || 10) : 10;
 
   // ── Foreman Brain context ──
   const foremanContext: ForemanContext | null = currentItem
