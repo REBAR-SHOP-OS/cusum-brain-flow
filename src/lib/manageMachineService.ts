@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { FunctionsHttpError } from "@supabase/supabase-js";
 
 export type ManageMachineAction =
   | "update-status"
@@ -67,13 +66,9 @@ export async function manageMachine(
   });
 
   if (error) {
-    let serverMessage: string | null = null;
-    if (error instanceof FunctionsHttpError) {
-      try {
-        const body = await error.context.json();
-        serverMessage = body?.error ?? null;
-      } catch {}
-    }
+    // In supabase-js v2, non-2xx responses populate BOTH data and error.
+    // The body stream in error.context is already consumed, so data holds the real message.
+    const serverMessage = (data as any)?.error ?? null;
     throw new Error(serverMessage || error.message || "Failed to manage machine");
   }
   if (data?.error) throw new Error(data.error);
