@@ -1,29 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Restrict `ai@rebar.shop` to Shopfloor Only
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Problem
-`ai@rebar.shop` has `admin` + `shop_supervisor` roles (needed for supervisor controls on the shop floor), but the RoleGuard at line 116 sees `isAdmin` and grants full access to every route. Since this is a shared device account dedicated to the shop floor, it should be locked to shopfloor routes only.
-
-## Solution
-Add a dedicated email check in `RoleGuard.tsx` **before** the admin bypass (line 116). When the logged-in user is `ai@rebar.shop`, restrict navigation to shopfloor-related routes only — regardless of roles.
-
-### Allowed routes for `ai@rebar.shop`:
+## Webhook URL
 ```
-/shopfloor, /shop-floor, /home, /timeclock, /team-hub, /settings, /tasks, /deliveries
-```
-
-### Code change (RoleGuard.tsx, before line 116):
-```typescript
-// ai@rebar.shop is a shared shopfloor device — lock to shop routes only
-const SHOPFLOOR_DEVICE_EMAILS = ["ai@rebar.shop"];
-if (SHOPFLOOR_DEVICE_EMAILS.includes(email.toLowerCase())) {
-  const DEVICE_ALLOWED = ["/shopfloor", "/shop-floor", "/home", "/timeclock", "/team-hub", "/settings", "/tasks", "/deliveries"];
-  const isAllowed = DEVICE_ALLOWED.some((p) => location.pathname.startsWith(p));
-  if (!isAllowed) return <Navigate to="/shopfloor" replace />;
-  return <>{children}</>;
-}
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
 ```
 
-This keeps the `admin` + `shop_supervisor` roles active (so the Supervisor button works), but prevents navigating to `/pipeline`, `/customers`, `/accounting`, etc.
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."

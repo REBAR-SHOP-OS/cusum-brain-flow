@@ -112,6 +112,15 @@ export function RoleGuard({ children }: RoleGuardProps) {
   // Internal users: wait for roles to load
   if (isLoading) return <>{children}</>;
 
+  // ai@rebar.shop is a shared shopfloor device — lock to shop routes only
+  const SHOPFLOOR_DEVICE_EMAILS = ["ai@rebar.shop"];
+  if (SHOPFLOOR_DEVICE_EMAILS.includes(email.toLowerCase())) {
+    const DEVICE_ALLOWED = ["/shopfloor", "/shop-floor", "/home", "/timeclock", "/team-hub", "/settings", "/tasks", "/deliveries"];
+    const isAllowed = DEVICE_ALLOWED.some((p) => location.pathname.startsWith(p));
+    if (!isAllowed) return <Navigate to="/shopfloor" replace />;
+    return <>{children}</>;
+  }
+
   // If user has any elevated role, allow everything
   if (isAdmin) return <>{children}</>;
   const hasOfficeAccess = roles.some((r) =>
