@@ -536,7 +536,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       } else if (isMarkComplete && isRawMode) {
         toast({
           title: "✅ Mark complete",
-          description: "Manual mode — use arrows to navigate to next item when ready.",
+          description: "RAW mode — use arrows to navigate to next item when ready.",
         });
       }
     } catch (err: any) {

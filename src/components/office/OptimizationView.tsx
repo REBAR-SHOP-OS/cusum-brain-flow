@@ -357,8 +357,8 @@ const PlanCard = React.forwardRef<HTMLDivElement, {
   selected: boolean;
   onSelect: () => void;
 }>(({ mode, result, selected, onSelect }, ref) => {
-  const Icon = mode === "best-fit" ? Target : mode === "optimized" ? Sparkles : Zap;
-  const label = mode === "best-fit" ? "Best Fit" : mode === "optimized" ? "Optimized (FFD)" : "Standard";
+  const Icon = mode === "combination" ? Target : mode === "long_to_short" ? Sparkles : Zap;
+  const label = mode === "combination" ? "COMBINATION" : mode === "long_to_short" ? "LONG → SHORT" : "RAW";
 
   return (
     <Card
