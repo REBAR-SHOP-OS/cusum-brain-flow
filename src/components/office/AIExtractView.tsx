@@ -48,6 +48,7 @@ import {
   type DedupeResult,
 } from "@/lib/extractService";
 import { supabase } from "@/integrations/supabase/client";
+import { BarlistMappingPanel, type MappedRow } from "@/components/office/BarlistMappingPanel";
 import { useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useProjects";
 import { useBarlists } from "@/hooks/useBarlists";
@@ -134,6 +135,7 @@ export function AIExtractView() {
   const [showMergedRows, setShowMergedRows] = useState(false);
   const [dedupePreview, setDedupePreview] = useState<DuplicatePreviewItem[] | null>(null);
   const [pendingDedupeSessionId, setPendingDedupeSessionId] = useState<string | null>(null);
+  const [mappingConfirmed, setMappingConfirmed] = useState(false);
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, refresh: refreshRows } = useExtractRows(activeSessionId);
@@ -391,8 +393,20 @@ export function AIExtractView() {
     }
   };
 
+  const handleMappingConfirmed = useCallback((mappedRows: MappedRow[]) => {
+    setMappingConfirmed(true);
+    toast({
+      title: "Mapping confirmed",
+      description: `${mappedRows.length} rows mapped to canonical fields`,
+    });
+  }, [toast]);
+
   const handleApplyMapping = async () => {
     if (!activeSessionId) return;
+    if (!mappingConfirmed) {
+      toast({ title: "Mapping not confirmed", description: "Please confirm the column mapping before applying.", variant: "destructive" });
+      return;
+    }
     setProcessing(true);
     setProcessingStep("Applying mapping...");
     try {
@@ -580,6 +594,7 @@ export function AIExtractView() {
     setDedupePreview(null);
     setPendingDedupeSessionId(null);
     setShowMergedRows(false);
+    setMappingConfirmed(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -1220,7 +1235,7 @@ export function AIExtractView() {
         {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
             {currentStepIndex >= 2 && currentStepIndex < 3 && (
-              <Button onClick={handleApplyMapping} className="gap-1.5">
+              <Button onClick={handleApplyMapping} className="gap-1.5" disabled={!mappingConfirmed}>
                 <Globe className="w-4 h-4" /> Apply Mapping
               </Button>
             )}
@@ -1330,7 +1345,17 @@ export function AIExtractView() {
           </div>
         )}
 
-        
+
+        {/* Barlist Mapping Panel — shown at Dedupe→Mapped stage */}
+        {activeSession && currentStepIndex >= 2 && currentStepIndex < 3 && activeRows.length > 0 && (
+          <BarlistMappingPanel
+            rows={activeRows}
+            sessionId={activeSession.id}
+            onConfirmMapping={handleMappingConfirmed}
+            disabled={processing}
+          />
+        )}
+
 
         {activeSession?.status === "approved" && (
           <div className="flex items-center gap-2 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
