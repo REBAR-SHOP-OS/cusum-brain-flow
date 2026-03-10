@@ -98,6 +98,9 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
 
   const foreman = useForemanBrain({ context: foremanContext });
 
+  // ── Bend batches from new production chain ──
+  const { data: bendBatches = [], refetch: refetchBendBatches } = useBenderBatches(machine.id);
+
   const isMarkComplete = currentItem ? bendCompleted >= currentItem.total_pieces : false;
 
   const handleDone = async () => {
