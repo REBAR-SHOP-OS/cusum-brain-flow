@@ -84,7 +84,6 @@ const PIPELINE_STEPS = [
   { key: "strategy", label: "Strategy", icon: Scissors },
   { key: "mapping", label: "Mapped", icon: Globe },
   { key: "validated", label: "Validated", icon: Shield },
-  { key: "optimizing", label: "Optimized", icon: Zap },
   { key: "approved", label: "Approved", icon: CheckCircle2 },
 ] as const;
 
