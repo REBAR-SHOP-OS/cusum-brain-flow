@@ -562,6 +562,7 @@ export function PostReviewPanel({
 
                         // Primary post gets first combo
                         const [primary, ...rest] = combos;
+                        console.log(`[PostReviewPanel] Scheduling post ${post.id} — platform: ${primary.platform}, page: ${primary.page}, date: ${post.scheduled_date}`);
                         updatePost.mutate(
                           {
                             id: post.id,
