@@ -351,6 +351,22 @@ export function AIExtractView() {
         if (!manifestName && result.summary.project) setManifestName(result.summary.project);
       }
 
+      // Auto-detect duplicates after extraction
+      setProcessingStep("Detecting duplicates...");
+      try {
+        const dedupeRes = await detectDuplicates(session.id);
+        setDedupeResult(dedupeRes);
+        if (dedupeRes.rows_merged > 0) {
+          toast({
+            title: "Duplicates merged",
+            description: `${dedupeRes.rows_merged} duplicate rows merged into ${dedupeRes.total_active_rows} active rows`,
+          });
+        }
+      } catch (dedupeErr: any) {
+        console.error("Dedupe failed:", dedupeErr);
+        // Non-fatal — extraction still succeeded
+      }
+
       await refreshRows();
       await refreshSessions();
 
