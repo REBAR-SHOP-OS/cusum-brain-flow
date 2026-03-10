@@ -303,7 +303,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             .select("id, bar_code, source, standard_length_mm, qty_on_hand, qty_reserved")
             .eq("bar_code", currentItem.bar_code)
             .gt("qty_on_hand", 0);
-          const bestLot = (freshLots || []).find((l) => l.qty_on_hand - l.qty_reserved >= clampedBars);
+          const bestLot = (freshLots || []).find((l) => l.qty_on_hand - l.qty_reserved >= finalBars);
           if (bestLot) {
             await manageInventory({
               action: "consume-on-start",
