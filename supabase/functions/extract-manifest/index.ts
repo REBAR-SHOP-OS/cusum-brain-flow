@@ -74,14 +74,12 @@ serve(async (req) => {
       .update({ status: "extracting", progress: 0, error_message: null })
       .eq("id", sessionId);
 
-    // Fire background task and return immediately
-    const bgTask = (async () => {
-      try {
+    // Run extraction synchronously — edge function stays alive up to 150s
+    try {
         await svcClient
           .from("extract_sessions")
           .update({ progress: 10 })
           .eq("id", sessionId);
-
         const isImage = /\.(png|jpg|jpeg|gif|webp|bmp|tiff?)$/i.test(fileName || fileUrl);
         const isPdf = /\.pdf$/i.test(fileName || fileUrl);
         const isSpreadsheet = /\.(xlsx?|csv)$/i.test(fileName || fileUrl);
