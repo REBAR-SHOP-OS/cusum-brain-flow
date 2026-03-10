@@ -1373,7 +1373,70 @@ export function AIExtractView() {
         )}
 
 
-        {/* Barlist Mapping Panel — shown at Dedupe→Mapped stage */}
+        {/* Optimization Strategy Selection — shown when extracted but no mode chosen */}
+        {activeSession && currentStepIndex === 2 && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Scissors className="w-5 h-5 text-primary" />
+                <h3 className="text-sm font-bold text-foreground tracking-wide">Choose Optimization Strategy</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Select how bars should be optimized before proceeding to deduplication and validation.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {([
+                  {
+                    mode: "raw",
+                    title: "RAW",
+                    desc: "No optimization. Bars cut exactly as listed. Waste bank ignored.",
+                    icon: Ruler,
+                  },
+                  {
+                    mode: "long_to_short",
+                    title: "LONG → SHORT",
+                    desc: "Use full stock bars first. Reuse leftover pieces where possible. Reduce waste.",
+                    icon: ArrowRight,
+                  },
+                  {
+                    mode: "combination",
+                    title: "COMBINATION",
+                    desc: "Combine different bar marks on the same stock. Use waste bank. Minimize scrap globally.",
+                    icon: Zap,
+                  },
+                ] as const).map((opt) => {
+                  const OptIcon = opt.icon;
+                  return (
+                    <button
+                      key={opt.mode}
+                      onClick={async () => {
+                        try {
+                          await supabase
+                            .from("extract_sessions")
+                            .update({ optimization_mode: opt.mode } as any)
+                            .eq("id", activeSession.id);
+                          await refreshSessions();
+                          toast({ title: "Strategy selected", description: `${opt.title} mode applied.` });
+                        } catch (err: any) {
+                          toast({ title: "Failed", description: err.message, variant: "destructive" });
+                        }
+                      }}
+                      className="flex flex-col items-start gap-2 p-4 rounded-lg border border-border bg-background hover:border-primary hover:bg-primary/5 transition-all text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <OptIcon className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-bold text-foreground">{opt.title}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{opt.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+
         {activeSession && currentStepIndex >= 3 && currentStepIndex < 4 && activeRows.length > 0 && (
           <BarlistMappingPanel
             rows={activeRows}
