@@ -1,19 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Fix: `cut_batches_company_id_fkey` Foreign Key Mismatch
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Problem
-The `cut_batches.company_id` column has a foreign key referencing `companies.id` (the row UUID), but the code inserts the **tenant ID** (`a0000000-0000-0000-0000-000000000001`) — which lives in `companies.company_id`, not `companies.id`.
-
-Every other table in the system treats `company_id` as the tenant scoping column. The `cut_batches` FK is incorrectly pointing to `companies.id` instead of being a plain tenant column (or referencing nothing, like most other tables).
-
-## Fix
-Drop the incorrect foreign key constraint. The `company_id` column on `cut_batches` is a tenant-scoping column, consistent with every other table in the system. No code changes needed — the edge function is already inserting the correct tenant value.
-
-### Migration
-```sql
-ALTER TABLE public.cut_batches DROP CONSTRAINT cut_batches_company_id_fkey;
+## Webhook URL
+```
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
 ```
 
-One migration, no code changes. The `manage-machine` edge function will work immediately after this.
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
