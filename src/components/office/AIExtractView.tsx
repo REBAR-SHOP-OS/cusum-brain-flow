@@ -400,13 +400,12 @@ export function AIExtractView() {
           });
         } else {
           setDedupeResult(dryRunRes);
-          // No duplicates found — auto-mark dedupe as done
-          try {
-            await supabase
-              .from("extract_sessions")
-              .update({ dedupe_status: "none" } as any)
-              .eq("id", session.id);
-          } catch (_) { /* best-effort */ }
+          // No duplicates found — persist dedupe as complete so pipeline unlocks Mapping
+          const { error: dedupeUpErr } = await supabase
+            .from("extract_sessions")
+            .update({ dedupe_status: "complete" } as any)
+            .eq("id", session.id);
+          if (dedupeUpErr) console.error("Failed to set dedupe_status=complete:", dedupeUpErr);
         }
       } catch (dedupeErr: any) {
         console.error("Dedupe scan failed:", dedupeErr);
