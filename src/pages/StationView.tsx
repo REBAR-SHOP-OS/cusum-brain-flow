@@ -169,10 +169,9 @@ export default function StationView() {
 
   // Group filteredGroups by project for cutter display
   const projectGroupedData = useMemo(() => {
-    if (selectedProjectId) return null; // single project selected, use flat layout
+    if (selectedProjectId) return null;
     const projMap = new Map<string, { id: string; name: string; groups: typeof filteredGroups }>();
     for (const group of filteredGroups) {
-      // Each group has items from potentially multiple projects, split them
       const itemsByProj = new Map<string, { bend: typeof group.bendItems; straight: typeof group.straightItems }>();
       for (const item of [...group.bendItems, ...group.straightItems]) {
         const pid = item.project_id || "__unassigned__";
@@ -195,6 +194,38 @@ export default function StationView() {
     }
     return [...projMap.values()];
   }, [filteredGroups, selectedProjectId, projects]);
+
+  if (!machineId) return <Navigate to="/shopfloor/station" replace />;
+
+  const isLoading = machinesLoading || dataLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-destructive gap-3 py-20">
+        <AlertTriangle className="w-12 h-12 opacity-60" />
+        <p className="text-sm">Failed to load station data</p>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  if (!machine) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        Machine not found
+      </div>
+    );
+  }
 
   // If user selected a specific item, show focused view for that machine type
   if (selectedItemId) {
