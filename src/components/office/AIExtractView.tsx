@@ -2118,7 +2118,7 @@ function StatusBadge({ status }: { status: string }) {
     extracted: { label: "EXTRACTED", className: "bg-blue-500/20 text-blue-500" },
     mapping: { label: "MAPPED", className: "bg-purple-500/20 text-purple-500" },
     validated: { label: "VALIDATED", className: "bg-emerald-500/20 text-emerald-500" },
-    optimizing: { label: "OPTIMIZED", className: "bg-amber-500/20 text-amber-500" },
+    optimizing: { label: "VALIDATED", className: "bg-emerald-500/20 text-emerald-500" },
     approved: { label: "APPROVED", className: "bg-emerald-600/20 text-emerald-400" },
     rejected: { label: "REJECTED", className: "bg-destructive/20 text-destructive" },
   };
