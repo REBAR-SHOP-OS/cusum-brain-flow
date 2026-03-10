@@ -248,7 +248,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                 onValueChange={(val) => updateMapping(field.key, val)}
                 disabled={disabled}
               >
-                <SelectTrigger className="h-7 text-xs flex-1">
+                <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
                   <SelectValue placeholder="Select column..." />
                 </SelectTrigger>
                 <SelectContent>
