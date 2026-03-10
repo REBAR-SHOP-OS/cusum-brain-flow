@@ -1,23 +1,37 @@
 
-# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## ✅ انجام شده
-1. **جدول `glasses_captures`** — ساخته شد با RLS
-2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
-3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
-4. **`config.toml`** — verify_jwt=false اضافه شد
+# Fix: Pipeline Stuck After Dedupe — No Rows / Mapping Panel Missing
 
-## Webhook URL
-```
-POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
-Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
-Body: { "imageBase64": "...", "prompt": "optional question" }
-```
+## Problem
+When dedupe completes with "No Duplicates", the mapping panel doesn't render if `activeRows` is empty (rows failed to load or weren't saved). The "Apply Mapping" button stays disabled, trapping the user at the Dedupe step with no way forward.
 
-## قدم‌های بعدی (کاربر)
-1. Meta View App را نصب و عینک را pair کنید
-2. iOS Shortcut بسازید با prompt زیر
-3. Automation تنظیم کنید
+## Root Cause
+The `BarlistMappingPanel` gate requires `activeRows.length > 0`. If rows aren't loaded yet or the query silently failed, the panel never mounts, `mappingConfirmed` stays `false`, and the button stays disabled.
 
-## پرامپت iOS Shortcut
-> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
+## Changes
+
+**File: `src/components/office/AIExtractView.tsx`**
+
+1. **Add a loading/empty-state fallback** when `dedupeResolved` is true but `activeRows.length === 0`:
+   - Show a warning card: "No extract rows found for this session. Rows may not have been saved during extraction."
+   - Add a "Retry Loading Rows" button that calls `refreshRows()`.
+   - Add a "Skip to Mapping" fallback button that force-advances the session status to `"mapping"` so the user isn't permanently stuck.
+
+2. **Add a loading indicator** while rows are being fetched — show a spinner instead of nothing when the rows hook `loading` is `true`.
+
+3. **Surface the `rows` loading state** — currently `useExtractRows` returns `{ rows, loading, refresh }` but `loading` isn't used in `AIExtractView`. Destructure and use it.
+
+**File: `src/hooks/useExtractSessions.ts`** — No changes needed.
+
+**File: `src/lib/extractService.ts`** — No changes needed.
+
+## Exact UI Change
+- When dedupe is resolved and rows are loading: show a spinner with "Loading extracted rows..."
+- When dedupe is resolved and rows are empty after loading: show a warning card with "Retry" and "Skip to Mapping" options
+- When rows exist: existing mapping panel renders as before
+
+## Summary
+- 1 file changed: `AIExtractView.tsx`
+- Loading state surfaced for row fetching
+- Empty-rows fallback prevents permanent pipeline lock
+
