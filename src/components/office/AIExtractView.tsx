@@ -1326,10 +1326,15 @@ export function AIExtractView() {
         {/* Action Bar for active session */}
         {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
-            {currentStepIndex === 3 && (
+            {currentStepIndex === 3 && activeSession?.status !== "mapped" && activeSession?.status !== "mapping" && (
               <Button onClick={handleApplyMapping} className="gap-1.5" disabled={!mappingConfirmed}>
                 <Globe className="w-4 h-4" /> Apply Mapping
               </Button>
+            )}
+            {currentStepIndex >= 4 && (activeSession?.status === "mapped" || activeSession?.status === "mapping") && (
+              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40 bg-emerald-500/10 py-1 px-2.5">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Mapping Complete
+              </Badge>
             )}
             {currentStepIndex === 3 && activeSession?.dedupe_status === "skipped" && (
               <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
