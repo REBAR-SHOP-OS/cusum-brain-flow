@@ -195,7 +195,8 @@ export function AIExtractView() {
   
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const currentStepIndex = activeSession ? getStepIndex(activeSession.status, (activeSession as any).optimization_mode) : -1;
+  const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode, activeSession.dedupe_status) : -1;
+  const dedupeResolved = activeSession ? ["merged", "skipped", "none"].includes(activeSession.dedupe_status) : false;
 
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
