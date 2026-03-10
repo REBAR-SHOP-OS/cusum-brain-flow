@@ -1301,17 +1301,17 @@ export function AIExtractView() {
         {/* Action Bar for active session */}
         {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
-            {currentStepIndex >= 3 && currentStepIndex < 4 && dedupeResolved && (
+            {currentStepIndex === 3 && (
               <Button onClick={handleApplyMapping} className="gap-1.5" disabled={!mappingConfirmed}>
                 <Globe className="w-4 h-4" /> Apply Mapping
               </Button>
             )}
-            {currentStepIndex >= 3 && currentStepIndex < 4 && activeSession?.dedupe_status === "skipped" && (
+            {currentStepIndex === 3 && activeSession?.dedupe_status === "skipped" && (
               <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 py-1 px-2.5">
                 <TriangleAlert className="w-3 h-3 mr-1" /> Duplicates skipped — not merged
               </Badge>
             )}
-            {currentStepIndex >= 4 && currentStepIndex < 5 && (
+            {currentStepIndex === 4 && (
               <Button onClick={handleValidate} className="gap-1.5">
                 <Shield className="w-4 h-4" /> Validate
               </Button>
