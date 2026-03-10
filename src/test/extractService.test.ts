@@ -198,7 +198,7 @@ describe("Duplicate Detection", () => {
     const result = await detectDuplicates("session-123");
 
     expect(mockInvoke).toHaveBeenCalledWith("manage-extract", {
-      body: { action: "detect-duplicates", sessionId: "session-123" },
+      body: { action: "detect-duplicates", sessionId: "session-123", dryRun: false },
     });
     expect(result.duplicates_found).toBe(1);
     expect(result.rows_merged).toBe(1);
