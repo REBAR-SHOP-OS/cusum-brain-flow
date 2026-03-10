@@ -13,7 +13,7 @@ export async function handleSupervisorUnlock(ctx: ActionContext): Promise<Respon
   if (machine.current_run_id) {
     await supabaseService
       .from("machine_runs")
-      .update({ status: "cancelled", ended_at: now, notes: `Force-unlocked: ${reason}` })
+      .update({ status: "canceled", ended_at: now, notes: `Force-unlocked: ${reason}` })
       .eq("id", machine.current_run_id);
   }
 

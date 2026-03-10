@@ -501,6 +501,17 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         ? Math.round(completedSlots.reduce((sum, s) => sum + (selectedStockLength - s.cutsDone * currentItem.cut_length_mm), 0) / completedSlots.length)
         : 0;
 
+      // ── Show remnant prompt BEFORE completing run (deferred from handleRecordStroke) ──
+      if (avgRemnant > 0 && !remnantPromptOpen) {
+        setRemnantInfo({
+          lengthMm: avgRemnant,
+          isWasteBank: avgRemnant >= REMNANT_THRESHOLD_MM,
+        });
+        setRemnantPromptOpen(true);
+        // Don't proceed with completion yet — user must acknowledge remnant prompt first
+        return;
+      }
+
       await manageMachine({
         action: "complete-run",
         machineId: machine.id,
@@ -532,12 +543,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const isMarkComplete = newCompletedPieces >= totalPieces;
 
       // ── Set completion guard BEFORE resetting run state ──
-      // Bug fix #1: Only set guard for complete marks; partial runs skip guard
       if (isMarkComplete) {
         setJustCompletedItemId(currentItem.id);
       }
-      // Bug fix #2: Always set localCompletedOverride so effectiveCompleted
-      // doesn't revert to stale DB value after any run
       setLocalCompletedOverride(prev => ({ ...prev, [currentItem.id]: newCompletedPieces }));
 
       slotTracker.reset();
@@ -564,7 +572,6 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       }
 
       // ── Auto-advance to next item if mark is complete ──
-      // In manual mode: do NOT auto-advance — supervisor controls navigation
       const isRawMode = currentItem.optimization_mode === "raw" || currentItem.optimization_mode === "manual";
       if (isMarkComplete && !isRawMode && currentIndex < items.length - 1) {
         setTimeout(() => {
@@ -581,7 +588,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     } catch (err: any) {
       toast({ title: "Complete failed", description: err.message, variant: "destructive" });
     }
-  }, [currentItem, slotTracker, selectedStockLength, machine, toast, completedPieces, totalPieces, currentIndex, items.length, completedAtRunStart]);
+  }, [currentItem, slotTracker, selectedStockLength, machine, toast, completedPieces, totalPieces, currentIndex, items, completedAtRunStart, barsForThisRun, computedPiecesPerBar, queryClient, remnantPromptOpen]);
 
   if (!currentItem) {
     return (
