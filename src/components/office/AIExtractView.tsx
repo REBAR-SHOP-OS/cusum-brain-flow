@@ -154,7 +154,7 @@ export function AIExtractView() {
     stockLengthMm: 12000,
     kerfMm: 5,
     minRemnantMm: 300,
-    mode: "best-fit",
+    mode: "combination",
   });
   const [optimizationResult, setOptimizationResult] = useState<OptimizationSummary | null>(null);
   const [selectedOptMode, setSelectedOptMode] = useState<OptimizerConfig["mode"] | null>(null);
