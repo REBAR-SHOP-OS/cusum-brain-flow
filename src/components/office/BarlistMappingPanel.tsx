@@ -216,7 +216,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
   };
 
   return (
-    <Card className="border-primary/30 bg-primary/5">
+    <Card className="border-primary/30 bg-primary/5 overflow-hidden">
       <CardContent className="p-4 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -237,10 +237,10 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
         {/* Mapping Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {CANONICAL_FIELDS.map(field => (
-            <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border">
-              <div className="flex items-center gap-1 min-w-[90px]">
+            <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border min-w-0">
+              <div className="flex items-center gap-1 min-w-[70px] shrink-0">
                 {field.required && <span className="text-destructive text-[10px]">*</span>}
-                <span className="text-xs font-medium text-foreground">{field.label}</span>
+                <span className="text-xs font-medium text-foreground truncate">{field.label}</span>
               </div>
               <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
               <Select
@@ -248,7 +248,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                 onValueChange={(val) => updateMapping(field.key, val)}
                 disabled={disabled}
               >
-                <SelectTrigger className="h-7 text-xs flex-1">
+                <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
                   <SelectValue placeholder="Select column..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -283,7 +283,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                 Mapped Preview — First {previewRows.length} of {rows.length} rows
               </span>
             </div>
-            <ScrollArea className="max-h-52">
+            <div className="overflow-x-auto max-h-52">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30">
@@ -307,7 +307,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                         <TableCell className="text-xs p-1.5">{row.shape || "—"}</TableCell>
                         <TableCell className="text-xs p-1.5 text-right font-mono">{row.length || "—"}</TableCell>
                         <TableCell className="text-xs p-1.5 text-right font-mono">{row.quantity || "—"}</TableCell>
-                        <TableCell className="text-[10px] p-1.5 text-muted-foreground">
+                        <TableCell className="text-[10px] p-1.5 text-muted-foreground max-w-[150px] truncate">
                           {dimEntries.length > 0
                             ? dimEntries.map(([k, v]) => `${k}=${v}`).join(" ")
                             : "—"}
@@ -317,7 +317,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                   })}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </div>
         )}
 

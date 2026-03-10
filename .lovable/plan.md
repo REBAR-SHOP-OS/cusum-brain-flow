@@ -1,19 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-# Fix: Bar List Column Mapping — Fit to Page
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-## Problem
-The mapping panel and preview table overflow horizontally, causing content to extend beyond the viewport (visible in the screenshot with the red circle highlighting the overflow).
+## Webhook URL
+```
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
+```
 
-## Changes
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
-**File: `src/components/office/BarlistMappingPanel.tsx`**
-
-1. **Wrap the entire card** in `overflow-hidden` so nothing bleeds out.
-2. **Mapping grid items**: Reduce `min-w-[90px]` on labels to `min-w-[70px]` and add `truncate` so long labels don't force width.
-3. **Preview table**: Wrap in a horizontal `ScrollArea` or `overflow-x-auto` div so the table scrolls internally instead of pushing the page.
-4. **DIMS column**: Add `max-w-[150px] truncate` to prevent long dimension strings from blowing out the table width.
-5. **Select triggers**: Add `min-w-0` to allow them to shrink within flex containers.
-
-All changes are CSS/layout only — no logic changes.
-
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
