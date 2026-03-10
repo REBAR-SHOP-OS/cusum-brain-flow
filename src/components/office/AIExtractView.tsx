@@ -1381,6 +1381,68 @@ export function AIExtractView() {
           </Card>
         )}
 
+        {/* Dedupe Dry-Run Preview */}
+        {dedupePreview && dedupePreview.length > 0 && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-bold text-foreground">
+                    Duplicate Merge Preview
+                  </span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {dedupePreview.length} groups · {dedupePreview.reduce((s, p) => s + p.absorbed_count, 0)} rows to merge
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="text-xs h-7" onClick={handleDismissPreview}>
+                    Skip
+                  </Button>
+                  <Button size="sm" className="text-xs h-7 gap-1.5" onClick={handleConfirmMerge} disabled={processing}>
+                    {processing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                    Confirm Merge
+                  </Button>
+                </div>
+              </div>
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="max-h-60 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="text-[10px] font-bold tracking-wider">SURVIVOR</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider">DUP KEY</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider text-center">ABSORBED</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider text-center">ORIG QTY</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider text-center">NEW QTY</TableHead>
+                        <TableHead className="text-[10px] font-bold tracking-wider">ABSORBED ROWS</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dedupePreview.map((p, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-xs font-bold p-1.5">
+                            #{p.survivor_row_index} ({p.survivor_mark})
+                          </TableCell>
+                          <TableCell className="text-[10px] font-mono text-muted-foreground p-1.5 max-w-[180px] truncate">
+                            {p.duplicate_key}
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-center p-1.5">{p.absorbed_count}</TableCell>
+                          <TableCell className="text-xs text-center p-1.5">{p.original_qty}</TableCell>
+                          <TableCell className="text-xs font-bold text-center p-1.5 text-primary">{p.new_qty}</TableCell>
+                          <TableCell className="text-[10px] text-muted-foreground p-1.5">
+                            {p.absorbed_rows.map(r => `#${r.row_index} (${r.mark || '—'}: ${r.quantity})`).join(", ")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Duplicate Summary Card */}
         {(dedupeResult && dedupeResult.rows_merged > 0) && (
           <Card className="border-amber-500/30 bg-amber-500/5">
