@@ -67,7 +67,13 @@ async function veoGenerate(apiKey: string, prompt: string, duration: number) {
   if (!resp.ok) {
     const errText = await resp.text();
     console.error("Veo submit error:", resp.status, errText);
-    throw new Error(`Veo generation failed (${resp.status})`);
+    let detail = `Veo generation failed (${resp.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      const apiMsg = errJson?.error?.message || errJson?.error?.code || errJson?.error;
+      if (apiMsg) detail = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
+    } catch { /* use default */ }
+    throw new Error(detail);
   }
 
   const data = await resp.json();
@@ -157,7 +163,16 @@ async function soraGenerate(apiKey: string, prompt: string, duration: number, mo
   if (!resp.ok) {
     const errText = await resp.text();
     console.error("Sora submit error:", resp.status, errText);
-    throw new Error(`Sora generation failed (${resp.status})`);
+    // Parse and surface the actual API error message
+    let detail = `Sora generation failed (${resp.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      const apiMsg = errJson?.error?.message || errJson?.error?.code || errJson?.error;
+      if (apiMsg) {
+        detail = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
+      }
+    } catch { /* use default */ }
+    throw new Error(detail);
   }
 
   const data = await resp.json();
