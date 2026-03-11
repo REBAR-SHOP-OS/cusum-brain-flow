@@ -1,27 +1,67 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Update PLATFORM_PAGES to Include All Connected Pages
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+### Current State
+The `PLATFORM_PAGES` in `PostReviewPanel.tsx` is incomplete. The database (`user_meta_tokens`) shows **6 Facebook pages** and **6 Instagram accounts** but the code only lists 3 Facebook and 2 Instagram pages.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Database Reality
 
-### Plan
-Run a single database migration:
+| Platform | Pages |
+|----------|-------|
+| **Facebook** | Ontario Steel Detailing, Rebar.shop, Ontario Digital Marketing, Ontario Logistics, Ontario Steels, Rebar.shop Ontario |
+| **Instagram** | ontariosteeldetailing, rebar.shop, ontariodigitalmarketing, ontariologistics.ca, ontariosteels.ca, rebar.shop_on |
+| **LinkedIn** | (no tokens in DB) |
+| **YouTube** | (no tokens in DB) |
+| **TikTok** | (no tokens in DB) |
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+### Change in `src/components/social/PostReviewPanel.tsx`
+
+Update `PLATFORM_PAGES` (lines 52-79) to include all 6 pages for Facebook and all 6 for Instagram. Keep LinkedIn/YouTube/TikTok with their current single entry since they have no connected tokens yet.
+
+```typescript
+const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
+  facebook: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
+    { value: "Ontario Logistics", label: "Ontario Logistics" },
+    { value: "Ontario Steels", label: "Ontario Steels" },
+    { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
+  ],
+  instagram: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
+    { value: "Ontario Logistics", label: "Ontario Logistics" },
+    { value: "Ontario Steels", label: "Ontario Steels" },
+    { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
+  ],
+  instagram_fb: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
+    { value: "Ontario Logistics", label: "Ontario Logistics" },
+    { value: "Ontario Steels", label: "Ontario Steels" },
+    { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
+  ],
+  linkedin: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Ontario Logistics", label: "Ontario Logistics" },
+  ],
+  linkedin_org: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  youtube: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  tiktok: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+};
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+Also update the same mapping in `SettingsSheet.tsx` (`defaultConnectedPages`) to reflect the same 6 pages for Facebook and Instagram.
 
-No code changes needed — just the migration.
+### Single file change, no backend modifications needed.
 
