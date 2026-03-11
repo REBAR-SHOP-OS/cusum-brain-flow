@@ -216,7 +216,7 @@ export function SeoLinks() {
         </Card>
       ) : (
       /* Results table */
-      {isLoading ? (
+      isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : filtered.length === 0 ? (
         <Card>
@@ -281,7 +281,7 @@ export function SeoLinks() {
             </TableBody>
           </Table>
         </Card>
-      )}
+      )
       )}
     </div>
   );
