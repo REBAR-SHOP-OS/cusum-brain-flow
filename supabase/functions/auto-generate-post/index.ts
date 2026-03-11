@@ -66,6 +66,8 @@ async function verifyAuth(req: Request): Promise<string | null> {
 
 async function fetchBusinessIntelligence(authHeader: string): Promise<string> {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(
       `${Deno.env.get("SUPABASE_URL")}/functions/v1/social-intelligence`,
       {
@@ -75,8 +77,10 @@ async function fetchBusinessIntelligence(authHeader: string): Promise<string> {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({}),
+        signal: controller.signal,
       }
     );
+    clearTimeout(timeout);
     if (!res.ok) return "";
     const data = await res.json();
 
@@ -260,74 +264,11 @@ Return an array of 5 objects:
 
         if (!Array.isArray(generatedPosts) || generatedPosts.length === 0) continue;
 
-        // Generate images using Gemini image model via gateway (image generation not supported by aiRouter)
+        // Create text-only posts — images generated separately via Pixel agent to avoid timeout
         for (let i = 0; i < generatedPosts.length; i++) {
           const post = generatedPosts[i];
           const slot = TIME_SLOTS[i] || TIME_SLOTS[0];
-          let imageUrl: string | null = null;
-
-          if (post.image_prompt) {
-            try {
-              const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-              if (LOVABLE_API_KEY) {
-                const imgResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: "google/gemini-3-pro-image-preview",
-                    messages: [{
-                    role: "user",
-                      content: `Generate a PHOTOREALISTIC professional social media image for ${platform}. ${post.image_prompt}. CRITICAL RULES: 1) Must include REBAR.SHOP logo exactly as original — no changes to color, shape, or design. 2) Must look like a REAL photograph taken with a professional DSLR camera — NOT CGI, NOT illustration, NOT cartoon. 3) Natural lighting, real textures, authentic construction/industrial environment. 4) Include English text overlay with product name or tagline. 5) Square format, high resolution, cinematic quality.`,
-                    }],
-                    modalities: ["image", "text"],
-                  }),
-                });
-
-                if (imgResponse.ok) {
-                  const imgData = await imgResponse.json();
-                  const images = imgData.choices?.[0]?.message?.images;
-                  if (images && images.length > 0) {
-                    const imageDataUrl = images[0].image_url?.url;
-                    if (imageDataUrl) {
-                      const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, "");
-                      const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
-                      const imagePath = `auto/${platform}/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
-                      const { error: uploadError } = await supabaseAdmin.storage
-                        .from("social-images")
-                        .upload(imagePath, imageBytes, { contentType: "image/png" });
-                      if (!uploadError) {
-                        const { data: urlData } = supabaseAdmin.storage.from("social-images").getPublicUrl(imagePath);
-                        imageUrl = urlData.publicUrl;
-                      }
-                    }
-                  } else {
-                    const parts = imgData.choices?.[0]?.message?.parts;
-                    if (parts) {
-                      for (const part of parts) {
-                        if (part.inline_data?.data) {
-                          const imageBytes = Uint8Array.from(atob(part.inline_data.data), (c) => c.charCodeAt(0));
-                          const imagePath = `auto/${platform}/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
-                          const { error: uploadError } = await supabaseAdmin.storage
-                            .from("social-images")
-                            .upload(imagePath, imageBytes, { contentType: "image/png" });
-                          if (!uploadError) {
-                            const { data: urlData } = supabaseAdmin.storage.from("social-images").getPublicUrl(imagePath);
-                            imageUrl = urlData.publicUrl;
-                          }
-                          break;
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            } catch (imgErr) {
-              console.error("Image generation failed (non-critical):", imgErr);
-            }
-          }
+          const imageUrl: string | null = null;
 
           const scheduledAt = buildScheduledDate(postDate, slot.hour, slot.minute);
 

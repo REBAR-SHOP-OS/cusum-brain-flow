@@ -15,6 +15,8 @@ export function useAutoGenerate() {
     scheduledDate?: string;
   }) => {
     setGenerating(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000);
     try {
       const { data, error } = await supabase.functions.invoke("auto-generate-post", {
         body: {
@@ -24,6 +26,7 @@ export function useAutoGenerate() {
           scheduledDate: options?.scheduledDate,
         },
       });
+      clearTimeout(timeout);
 
       if (error) throw new Error(error.message);
 
@@ -48,9 +51,13 @@ export function useAutoGenerate() {
 
       return data;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to generate posts";
+      clearTimeout(timeout);
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
+      const message = isTimeout
+        ? "Generation timed out — please try again with fewer platforms."
+        : err instanceof Error ? err.message : "Failed to generate posts";
       toast({
-        title: "Generation error",
+        title: isTimeout ? "Timeout" : "Generation error",
         description: message,
         variant: "destructive",
       });
