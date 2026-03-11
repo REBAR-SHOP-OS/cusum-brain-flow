@@ -94,6 +94,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [sceneUrls, setSceneUrls] = useState<string[]>([]);
+  const [currentScene, setCurrentScene] = useState(0);
+  const [watermarking, setWatermarking] = useState(false);
   const [savedToLibrary, setSavedToLibrary] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("generate");
