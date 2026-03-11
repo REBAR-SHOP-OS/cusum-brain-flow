@@ -37,6 +37,12 @@ export const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
     { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
     { value: "Ontario Logistics", label: "Ontario Logistics" },
   ],
+  youtube: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  tiktok: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
 };
 
 export const PIXEL_APPROVE_PLATFORMS = ["facebook", "instagram"] as const;
