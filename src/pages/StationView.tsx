@@ -120,7 +120,7 @@ export default function StationView() {
 
   // Auto-clear selectedItemId if the item no longer exists (e.g. moved to clearance) or list is empty
   useEffect(() => {
-    if (selectedItemId && !filteredItems.some(i => i.id === selectedItemId)) {
+    if (selectedItemId && !items.some(i => i.id === selectedItemId)) {
       setSelectedItemId(null);
     }
   }, [filteredItems, selectedItemId]);
