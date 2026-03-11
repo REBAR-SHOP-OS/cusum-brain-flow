@@ -279,8 +279,8 @@ Return an array of 5 objects:
                   body: JSON.stringify({
                     model: "google/gemini-3-pro-image-preview",
                     messages: [{
-                      role: "user",
-                      content: `Generate a professional social media image for ${platform}: ${post.image_prompt}. Must include REBAR.SHOP logo. Realistic construction photography, minimalist aesthetic, high quality.`,
+                    role: "user",
+                      content: `Generate a PHOTOREALISTIC professional social media image for ${platform}. ${post.image_prompt}. CRITICAL RULES: 1) Must include REBAR.SHOP logo exactly as original — no changes to color, shape, or design. 2) Must look like a REAL photograph taken with a professional DSLR camera — NOT CGI, NOT illustration, NOT cartoon. 3) Natural lighting, real textures, authentic construction/industrial environment. 4) Include English text overlay with product name or tagline. 5) Square format, high resolution, cinematic quality.`,
                     }],
                     modalities: ["image", "text"],
                   }),
