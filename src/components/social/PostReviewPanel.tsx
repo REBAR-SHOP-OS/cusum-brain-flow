@@ -584,18 +584,27 @@ export function PostReviewPanel({
                     <Button
                       variant="outline"
                       className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 gap-1.5"
+                      disabled={approvingNeel}
                       onClick={async () => {
-                        const batchPosts = post.image_url
-                          ? allPosts.filter(p => p.image_url === post.image_url)
-                          : [post];
-                        for (const p of batchPosts) {
-                          await updatePost.mutateAsync({ id: p.id, neel_approved: true } as any);
+                        setApprovingNeel(true);
+                        try {
+                          const batchPosts = post.image_url
+                            ? allPosts.filter(p => p.image_url === post.image_url)
+                            : [post];
+                          for (const p of batchPosts) {
+                            await updatePost.mutateAsync({ id: p.id, neel_approved: true } as any);
+                          }
+                          toast({ title: "Approved", description: `${batchPosts.length} post(s) approved by Neel.` });
+                        } finally {
+                          setApprovingNeel(false);
                         }
-                        toast({ title: "Approved", description: `${batchPosts.length} post(s) approved by Neel.` });
                       }}
                     >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                      Neel Approval
+                      {approvingNeel ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Approving...</>
+                      ) : (
+                        <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg> Neel Approval</>
+                      )}
                     </Button>
                   ) : (
                     <Button
