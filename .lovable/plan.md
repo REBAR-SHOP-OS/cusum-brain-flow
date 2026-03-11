@@ -1,38 +1,27 @@
 
 
-## Disable Fields for Published Posts
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
 ### Problem
-When a post has status `published`, the user can still change Publish date, Content type, Platforms, and Pages — this should not be allowed.
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Changes in `src/components/social/PostReviewPanel.tsx`
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-1. **Add `isPublished` flag**: `const isPublished = post.status === "published";`
+### Plan
+Run a single database migration:
 
-2. **Publish date popover** (line ~446): Wrap in condition — if published, render as a static `div` instead of a `Popover` trigger (no click interaction).
-
-3. **Content type button** (line ~495): Add `disabled` behavior — if published, use a `div` with `opacity-60 cursor-not-allowed` instead of a clickable button, remove `onClick`.
-
-4. **Platforms button** (line ~507): Same treatment — disable click when published.
-
-5. **Pages button** (line ~519): Same treatment — disable click when published.
-
-6. **Footer actions**: Hide "Publish Now", "Decline", "Schedule", and "Delete post" buttons when published. Optionally show a "Published ✅" badge instead.
-
-### Implementation Pattern
-```typescript
-const isPublished = post.status === "published";
-
-// For each field button:
-{isPublished ? (
-  <div className="w-full rounded-lg border bg-card p-3 opacity-60 cursor-not-allowed">
-    <p className="text-xs text-muted-foreground mb-1">Platforms ({localPlatforms.length})</p>
-    <span className="text-sm font-medium">{platformsDisplay}</span>
-  </div>
-) : (
-  <button onClick={() => setSubPanel("platform")} className="...">
-    {/* existing content */}
-  </button>
-)}
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
+
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
+
+No code changes needed — just the migration.
 
