@@ -65,6 +65,22 @@ export async function schedulePost(params: SchedulePostParams): Promise<Schedule
   // Fallback: direct DB update if edge function failed
   console.warn("[schedulePost] Edge function failed — falling back to direct DB update");
   try {
+    // If delete_original is set, delete the unassigned post instead of updating it
+    if (params.delete_original) {
+      const { error: delErr } = await supabase
+        .from("social_posts")
+        .delete()
+        .eq("id", params.post_id);
+
+      if (delErr) {
+        console.error("[schedulePost] Fallback delete failed:", delErr.message);
+        return { success: false, error: delErr.message };
+      }
+
+      console.log("[schedulePost] Fallback: deleted unassigned post", params.post_id);
+      return { success: true, post: { id: params.post_id, status: "deleted", qa_status: "deleted", scheduled_date: params.scheduled_date } };
+    }
+
     const { data: updated, error: updateErr } = await supabase
       .from("social_posts")
       .update({
