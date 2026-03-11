@@ -265,14 +265,17 @@ Return an array of 5 objects:
 
         if (!Array.isArray(generatedPosts) || generatedPosts.length === 0) continue;
 
-        // Create text-only posts — images generated separately via Pixel agent to avoid timeout
+        // Create posts and generate images via Lovable AI
+        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+
         for (let i = 0; i < generatedPosts.length; i++) {
           const post = generatedPosts[i];
           const slot = TIME_SLOTS[i] || TIME_SLOTS[0];
-          const imageUrl: string | null = null;
+          let imageUrl: string | null = null;
 
           const scheduledAt = buildScheduledDate(postDate, slot.hour, slot.minute);
 
+          // Insert post first (text-only)
           const { data: insertedPost, error: insertError } = await supabaseAdmin
             .from("social_posts")
             .insert({
@@ -281,7 +284,7 @@ Return an array of 5 objects:
               title: post.title || "Untitled",
               content: post.content || "",
               hashtags: post.hashtags || [],
-              image_url: imageUrl,
+              image_url: null,
               status: "pending_approval",
               scheduled_date: scheduledAt,
             })
@@ -293,9 +296,67 @@ Return an array of 5 objects:
             continue;
           }
 
+          // Generate image via Lovable AI (gemini-2.5-flash-image)
+          if (LOVABLE_API_KEY && post.image_prompt) {
+            try {
+              console.log(`Generating image for post ${i + 1}/${generatedPosts.length}...`);
+              const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-2.5-flash-image",
+                  messages: [{ role: "user", content: post.image_prompt }],
+                  modalities: ["image", "text"],
+                }),
+              });
+
+              if (imgResp.ok) {
+                const imgData = await imgResp.json();
+                const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+                if (b64Url) {
+                  // Upload base64 to storage
+                  const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
+                  const binaryStr = atob(base64Data);
+                  const bytes = new Uint8Array(binaryStr.length);
+                  for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+                  const blob = new Blob([bytes], { type: "image/png" });
+
+                  const fileName = `images/${crypto.randomUUID()}.png`;
+                  const { error: uploadErr } = await supabaseAdmin.storage
+                    .from("social-media-assets")
+                    .upload(fileName, blob, { contentType: "image/png", upsert: false });
+
+                  if (!uploadErr) {
+                    const { data: pubUrl } = supabaseAdmin.storage
+                      .from("social-media-assets")
+                      .getPublicUrl(fileName);
+                    imageUrl = pubUrl.publicUrl;
+
+                    // Update post with image URL
+                    await supabaseAdmin
+                      .from("social_posts")
+                      .update({ image_url: imageUrl })
+                      .eq("id", insertedPost.id);
+
+                    console.log(`Image uploaded for post ${i + 1}: ${fileName}`);
+                  } else {
+                    console.error("Storage upload error:", uploadErr);
+                  }
+                }
+              } else {
+                console.error("Image generation failed:", imgResp.status, await imgResp.text());
+              }
+            } catch (imgErr) {
+              console.error("Image generation error (non-critical):", imgErr);
+            }
+          }
+
           // Create approval record for configured approvers
           try {
-            // Find admin users to be approvers (scoped via profiles)
             const { data: adminProfiles } = await supabaseAdmin
               .from("profiles")
               .select("user_id, user_roles!inner(role)")
@@ -314,7 +375,6 @@ Return an array of 5 objects:
               });
             }
 
-            // Notify approvers
             if (approverIds.length > 0) {
               try {
                 await fetch(
@@ -342,6 +402,7 @@ Return an array of 5 objects:
 
           allCreatedPosts.push({
             ...insertedPost,
+            image_url: imageUrl || insertedPost.image_url,
             time_slot: post.time_slot,
             product: post.product,
             farsi_translation: post.farsi_translation,
