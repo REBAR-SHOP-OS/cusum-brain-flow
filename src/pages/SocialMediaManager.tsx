@@ -134,6 +134,7 @@ export default function SocialMediaManager() {
     exitSelectionMode();
   }, [selectedPostIds, deletePost, exitSelectionMode]);
 
+  const weekPosts = useMemo(() => {
     const wEnd = addDays(weekStart, 7);
     return filteredPosts.filter((p) => {
       if (!p.scheduled_date) return false;
