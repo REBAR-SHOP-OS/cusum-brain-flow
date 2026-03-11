@@ -14,6 +14,7 @@ import { VideoLibrary } from "./VideoLibrary";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { applyLogoWatermark } from "@/lib/videoWatermark";
 
 interface VideoGeneratorDialogProps {
   open: boolean;

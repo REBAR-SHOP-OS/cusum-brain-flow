@@ -589,43 +589,48 @@ serve(async (req) => {
       const completedCount = results.filter(r => r.status === "completed").length;
 
       if (allCompleted) {
-        // Download all clips and concatenate
+        // Download each clip individually and upload to storage
         try {
           const sorted = results.sort((a, b) => a.sceneIndex - b.sceneIndex);
-          const clips: Uint8Array[] = [];
+          const sceneUrls: string[] = [];
 
           for (const scene of sorted) {
             const sceneApiKey = scene.provider === "veo" ? geminiKey : gptKey;
             if (!sceneApiKey) throw new Error("API key missing for download");
 
+            let clipBytes: Uint8Array;
             if (scene.provider === "veo" && scene.videoUrl) {
-              clips.push(await veoDownloadBytes(sceneApiKey, scene.videoUrl));
+              clipBytes = await veoDownloadBytes(sceneApiKey, scene.videoUrl);
             } else if (scene.provider === "sora") {
-              clips.push(await soraDownloadBytes(sceneApiKey, scene.id));
+              clipBytes = await soraDownloadBytes(sceneApiKey, scene.id);
+            } else {
+              continue;
             }
+
+            const url = await uploadToStorage(auth.userId, clipBytes);
+            sceneUrls.push(url);
           }
 
-          if (clips.length === 0) {
+          if (sceneUrls.length === 0) {
             return new Response(
               JSON.stringify({ status: "failed", error: "No clips downloaded" }),
               { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
 
-          // For single clip, just upload directly; for multiple, concat
-          const finalBytes = clips.length === 1 ? clips[0] : concatVideoBytes(clips);
-
-          // Upload to storage
-          const publicUrl = await uploadToStorage(auth.userId, finalBytes);
-
           return new Response(
-            JSON.stringify({ status: "completed", videoUrl: publicUrl, savedToLibrary: true }),
+            JSON.stringify({
+              status: "completed",
+              sceneUrls,
+              videoUrl: sceneUrls[0],
+              savedToLibrary: true,
+            }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         } catch (e) {
-          console.error("Multi-scene download/concat error:", e);
+          console.error("Multi-scene download error:", e);
           return new Response(
-            JSON.stringify({ status: "failed", error: e instanceof Error ? e.message : "Concat failed" }),
+            JSON.stringify({ status: "failed", error: e instanceof Error ? e.message : "Download failed" }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
