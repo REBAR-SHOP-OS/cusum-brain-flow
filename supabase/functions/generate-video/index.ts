@@ -363,6 +363,7 @@ serve(async (req) => {
       duration: z.number().min(1).max(120).optional(),
       model: z.string().max(50).optional(),
       fileId: z.string().max(500).optional(),
+      existingSceneUrls: z.record(z.string(), z.string()).optional(),
     });
     const parsed = videoSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -371,7 +372,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId } = parsed.data;
+    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls } = parsed.data;
 
     const isVeo = provider === "veo";
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
