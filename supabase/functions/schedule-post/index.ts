@@ -14,6 +14,12 @@ Deno.serve(async (req) => {
       return json({ error: "post_id and scheduled_date are required" }, 400);
     }
 
+    // Server-side guard: reject past scheduling
+    if (new Date(scheduled_date) <= new Date()) {
+      console.warn(`[schedule-post] REJECTED — scheduled_date is in the past: ${scheduled_date}`);
+      return json({ error: "Cannot schedule a post in the past" }, 400);
+    }
+
     console.log(`[schedule-post] user=${userId} post=${post_id} date=${scheduled_date} platform=${platform} page=${page_name}`);
 
     // Update the primary post using service role (bypasses RLS)

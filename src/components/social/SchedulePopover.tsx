@@ -55,6 +55,11 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
     const scheduledDateTime = new Date(selectedDate);
     scheduledDateTime.setHours(parseInt(hour), parseInt(minute), 0, 0);
 
+    if (scheduledDateTime <= new Date()) {
+      toast({ title: "زمان نامعتبر", description: "امکان زمان‌بندی در گذشته وجود ندارد. لطفاً زمان آینده انتخاب کنید.", variant: "destructive" });
+      return;
+    }
+
     const primaryPlatform = selectedPlatforms[0];
     const extraCombos = selectedPlatforms.slice(1).map(p => ({ platform: p, page: post.page_name || "" }));
 
