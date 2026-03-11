@@ -192,6 +192,16 @@ export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds,
                       )}
                     </div>
                     <p className="text-xs font-medium truncate">{firstPost.title || "Untitled"}</p>
+                    {(() => {
+                      const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))];
+                      return uniquePages.length > 0 ? (
+                        <div className="mt-0.5 space-y-0">
+                          {uniquePages.map(name => (
+                            <p key={name} className="text-[10px] text-muted-foreground truncate">· {name}</p>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
                     <p className={cn(
                       "text-xs capitalize",
                       status === "published" ? "text-green-600 font-medium"
