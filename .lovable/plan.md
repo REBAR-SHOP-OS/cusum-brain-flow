@@ -1,27 +1,34 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Two Changes: Dynamic Brand Kit Logo in Videos + Video Library Preview
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+### 1. Use Brand Kit Logo in Video Generation (instead of hardcoded description)
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
-
-### Plan
-Run a single database migration:
-
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+Currently line 330 in `VideoGeneratorDialog.tsx` hardcodes a logo description:
+```
+"...a subtle gold circular coin logo watermark with a blue geometric 'G' symbol..."
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+**Change**: Import `useBrandKit` hook, fetch the logo URL, and include it in the prompt dynamically. If the brand kit has a `logo_url`, reference it in the prompt as the company's actual logo. This way if the logo changes in the brand kit, videos automatically use the updated branding.
 
-No code changes needed — just the migration.
+- Import `useBrandKit` in `VideoGeneratorDialog.tsx`
+- Build the branded prompt using `brandKit.logo_url` description and `brandKit.business_name`
+- Same approach for `ImageGeneratorDialog.tsx` (line 92) to keep consistency
+
+### 2. Add Video Preview/View in Video Library
+
+Currently the library only shows thumbnails with hover-play and small "Use" / "Delete" buttons. No way to properly watch a video.
+
+**Change**: Add a view/play dialog to `VideoLibrary.tsx`:
+- Add a `Play` button overlay on each video card
+- Clicking opens a dialog with a full `<video>` player (with controls)
+- Include video date and a "Use in Post" button inside the dialog
+- Add `Download` button in the preview dialog
+
+### Files to modify
+| File | Change |
+|------|--------|
+| `VideoGeneratorDialog.tsx` | Import `useBrandKit`, build branded prompt from brand kit data |
+| `ImageGeneratorDialog.tsx` | Same — use brand kit logo dynamically |
+| `VideoLibrary.tsx` | Add preview dialog with full video player, play button overlay |
 
