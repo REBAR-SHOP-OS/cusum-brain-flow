@@ -62,15 +62,16 @@ serve(async (req) => {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const token = authHeader.replace("Bearer ", "");
-  const { data: claimsData, error: claimsError } =
-    await userClient.auth.getClaims(token);
+  const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"];
 
-  if (claimsError || !claimsData?.claims?.sub) {
+  const { data: userData, error: userError } = await userClient.auth.getUser();
+
+  if (userError || !userData?.user) {
     return json({ error: "Invalid token" }, 401);
   }
 
-  const userId = claimsData.claims.sub as string;
+  const userId = userData.user.id;
+  const userEmail = (userData.user.email ?? "").toLowerCase();
   const serviceClient = createClient(supabaseUrl, serviceKey);
 
   // ---------- Admin check ----------
@@ -79,7 +80,8 @@ serve(async (req) => {
     .select("role")
     .eq("user_id", userId);
 
-  const isAdmin = roleRows?.some((r) => r.role === "admin");
+  const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(userEmail);
+  const isAdmin = isSuperAdmin || roleRows?.some((r) => r.role === "admin");
 
   let requestBody: Record<string, unknown> = {};
   try {
