@@ -484,20 +484,42 @@ serve(async (req) => {
       }
 
       let result: { jobId: string; provider: string };
-      if (isVeo) {
-        try {
-          result = await veoGenerate(apiKey, prompt, duration || 8);
-        } catch (e) {
-          const isQuota = e instanceof Error && (e.message.includes("429") || e.message.includes("RESOURCE_EXHAUSTED") || e.message.includes("quota"));
-          if (isQuota && gptKey) {
-            console.warn("Veo quota exceeded on single generate, falling back to Sora");
-            result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
-          } else {
-            throw e;
+      try {
+        if (isVeo) {
+          try {
+            result = await veoGenerate(apiKey, prompt, duration || 8);
+          } catch (e) {
+            const message = getErrorMessage(e);
+            if (isProviderCapacityError(message) && gptKey) {
+              console.warn("Veo capacity reached on single generate, falling back to Sora");
+              result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
+            } else {
+              throw e;
+            }
+          }
+        } else {
+          try {
+            result = await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
+          } catch (e) {
+            const message = getErrorMessage(e);
+            if (isProviderCapacityError(message) && geminiKey) {
+              console.warn("Sora capacity reached on single generate, falling back to Veo");
+              result = await veoGenerate(geminiKey, prompt, duration || 8);
+            } else {
+              throw e;
+            }
           }
         }
-      } else {
-        result = await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
+      } catch (e) {
+        const message = getErrorMessage(e);
+        return new Response(
+          JSON.stringify({
+            status: "failed",
+            error: message,
+            errorCode: isProviderCapacityError(message) ? "provider_capacity_exhausted" : "generation_failed",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       return new Response(
