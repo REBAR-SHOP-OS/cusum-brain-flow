@@ -1,27 +1,51 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Strip Persian Text Before Publishing
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+The `---PERSIAN---` translation block is stored inside the `content` field of social posts. When publishing (both manual and cron), the raw `content` is sent directly to Facebook/Instagram/LinkedIn/Twitter APIs — including the Persian text. The Persian section is only meant for internal review, never for publishing.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Root Cause
+Two publish paths assemble the message without stripping Persian:
+1. **`src/hooks/usePublishPost.ts`** (manual publish) — line 34-37
+2. **`supabase/functions/social-cron-publish/index.ts`** (scheduled publish) — line 112-115
 
-### Plan
-Run a single database migration:
+Both do: `message = post.content + hashtags` — no filtering.
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+Note: `AgentWorkspace.tsx` already strips Persian when saving from Pixel agent (line 373-379), but posts created via `auto-generate-post` store the full content including Persian directly into the database.
+
+### Fix
+
+#### 1. Create a shared `stripPersian` utility function
+A simple function that removes everything from `---PERSIAN---` onward, plus fallback Persian markers (`🖼️ متن روی عکس:` blocks).
+
+#### 2. Apply in `src/hooks/usePublishPost.ts`
+Strip Persian from `post.content` before building the message sent to the API.
+
+#### 3. Apply in `supabase/functions/social-cron-publish/index.ts`
+Strip Persian from `post.content` before building the message for all platforms.
+
+#### 4. Apply in `supabase/functions/social-publish/index.ts`
+Add server-side stripping as a safety net — even if the client sends Persian text, the server will remove it before calling the platform API.
+
+#### 5. Fix `supabase/functions/auto-generate-post/index.ts`
+Strip Persian from content **before** inserting into the database, so the stored content is always clean. The Persian block should only exist in the agent chat display, not in the DB record.
+
+### Technical Detail
+```typescript
+function stripPersian(text: string): string {
+  // Remove ---PERSIAN--- block and everything after
+  const idx = text.indexOf("---PERSIAN---");
+  if (idx !== -1) text = text.slice(0, idx);
+  // Remove fallback Persian markers
+  text = text.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
+  return text.trim();
+}
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
-
-No code changes needed — just the migration.
+### Files
+1. `src/hooks/usePublishPost.ts` — strip before sending
+2. `supabase/functions/social-cron-publish/index.ts` — strip before publishing
+3. `supabase/functions/social-publish/index.ts` — server-side safety strip
+4. `supabase/functions/auto-generate-post/index.ts` — strip before DB insert
 
