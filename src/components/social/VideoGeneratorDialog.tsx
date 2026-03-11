@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save, X, Music, Volume2, Merge } from "lucide-react";
+import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save, X, Music, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { supabase } from "@/integrations/supabase/client";
