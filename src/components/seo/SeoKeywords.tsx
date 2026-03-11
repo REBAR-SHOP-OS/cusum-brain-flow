@@ -44,6 +44,8 @@ export function SeoKeywords() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [sortBy, setSortBy] = useState("opportunity");
+  const [researchInput, setResearchInput] = useState("");
+  const { researchKeyword } = useSemrushSync();
 
   const { data: domain } = useQuery({
     queryKey: ["seo-domain"],
