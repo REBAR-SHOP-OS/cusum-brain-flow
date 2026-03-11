@@ -123,6 +123,19 @@ export default function SocialMediaManager() {
     }
   }, [filteredPosts, selectedPostIds.size]);
 
+  const handleSelectDay = useCallback((dayPostIds: string[]) => {
+    setSelectedPostIds((prev) => {
+      const allSelected = dayPostIds.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of dayPostIds) next.delete(id);
+      } else {
+        for (const id of dayPostIds) next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleting(true);
     const ids = Array.from(selectedPostIds);
@@ -293,13 +306,6 @@ export default function SocialMediaManager() {
 
           {selectionMode && (
             <>
-              <div className="flex items-center gap-1.5 shrink-0 px-2">
-                <Checkbox
-                  checked={filteredPosts.length > 0 && selectedPostIds.size === filteredPosts.length}
-                  onCheckedChange={toggleSelectAll}
-                />
-                <span className="text-xs text-muted-foreground whitespace-nowrap">Select all</span>
-              </div>
               {selectedPostIds.size > 0 && (
                 <>
                   <span className="text-xs font-medium text-foreground shrink-0">
@@ -461,6 +467,7 @@ export default function SocialMediaManager() {
               onPostClick={setSelectedPost}
               selectedPostIds={selectionMode ? selectedPostIds : undefined}
               onToggleSelect={selectionMode ? toggleSelectPost : undefined}
+              onSelectDay={selectionMode ? handleSelectDay : undefined}
             />
             {weekPosts.length === 0 && filteredPosts.length > 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
