@@ -37,11 +37,13 @@ const modelOptions: ModelOption[] = [
     label: "Google Veo 3.1",
     description: "High-quality cinematic video with native audio",
     pricing: "$0.75/sec",
-    maxDuration: 8,
+    maxDuration: 60,
     durationOptions: [
       { value: "4", label: "4 seconds" },
       { value: "6", label: "6 seconds" },
       { value: "8", label: "8 seconds" },
+      { value: "30", label: "30 seconds" },
+      { value: "60", label: "60 seconds" },
     ],
   },
   {
