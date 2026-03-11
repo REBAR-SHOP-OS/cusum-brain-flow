@@ -1,27 +1,31 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Show Account Names Inside Platform Group Cards
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+### What
+Each platform group card currently shows the count badge (×6) but doesn't tell you *which accounts* those posts belong to. Add a list of unique `page_name` values inside each card so you can see at a glance which accounts have scheduled posts.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Changes
 
-### Plan
-Run a single database migration:
+**`src/components/social/SocialCalendar.tsx`**
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+Inside the platform group card rendering (lines 184-203), after the title line:
+
+1. Collect unique `page_name` values from the grouped posts: `const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))]`
+2. Render them as small muted text lines below the title, e.g.:
+   - "Ontario Steel Detailing"
+   - "CuSum Engineering"
+3. Each page name shown in `text-[10px] text-muted-foreground truncate` style
+4. If no `page_name` exists on any post, this section is simply not rendered
+
+### UI Result
+```text
+┌─────────────────────┐
+│ [FB] ×6             │
+│ True structural int…│
+│  · Ontario Steel    │
+│  · CuSum Eng        │
+│ Scheduled           │
+└─────────────────────┘
 ```
-
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
-
-No code changes needed — just the migration.
 
