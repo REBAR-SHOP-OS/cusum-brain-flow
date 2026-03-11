@@ -248,7 +248,7 @@ export function CutEngine({
                 darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
               )}
               onClick={() => { const n = Math.min(maxBars, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
-              disabled={bars >= maxBars || isRunning}
+              disabled={bars >= maxBars || (isRunning && !isSupervisor)}
             >
               <ChevronUp className="w-4 h-4" />
             </Button>
