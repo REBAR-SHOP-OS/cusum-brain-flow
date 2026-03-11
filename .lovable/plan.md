@@ -1,27 +1,31 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Add Select All & Bulk Delete to Social Media Calendar
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+### What
+Add a selection mode to the calendar view where users can select individual posts (via checkboxes) or use "Select All" to select all visible posts, then bulk delete them.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Changes
 
-### Plan
-Run a single database migration:
+**1. `src/pages/SocialMediaManager.tsx`**
+- Add state: `selectedPostIds: Set<string>`, `selectionMode: boolean`
+- Add a "Select" toggle button in the filter bar area that activates selection mode
+- When selection mode is active, show:
+  - "Select All" checkbox (toggles all `filteredPosts`)
+  - Selected count badge
+  - "Delete Selected" button (with confirmation dialog)
+- Pass `selectedPostIds` and `onToggleSelect` to `SocialCalendar`
+- Use `deletePost` from `useSocialPosts` to delete all selected posts
+- Exit selection mode after deletion
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
-```
+**2. `src/components/social/SocialCalendar.tsx`**
+- Add optional props: `selectedPostIds?: Set<string>`, `onToggleSelect?: (id: string) => void`
+- When `onToggleSelect` is provided, render a small checkbox overlay on each post card
+- Clicking the checkbox toggles selection (without opening the review panel)
+- Selected posts get a highlighted border/ring
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+**3. Confirmation Dialog**
+- Use existing `AlertDialog` component to confirm bulk deletion before executing
 
-No code changes needed — just the migration.
+No database or backend changes needed — uses existing `deletePost` mutation.
 
