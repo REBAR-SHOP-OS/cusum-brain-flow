@@ -603,7 +603,7 @@ export function PostReviewPanel({
                     onClick={async () => {
                       // Neel approval guard
                       if (!post.neel_approved) {
-                        toast({ title: "نیاز به تأیید Neel", description: "این پست قبل از انتشار باید توسط Neel تأیید شود.", variant: "destructive" });
+                        toast({ title: "Neel Approval Required", description: "This post must be approved by Neel before publishing.", variant: "destructive" });
                         return;
                       }
                       if (localPages.length === 0) {
