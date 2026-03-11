@@ -8,6 +8,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Strip Persian translation block — never store/publish Persian text */
+function stripPersianBlock(text: string): string {
+  let t = text;
+  const idx = t.indexOf("---PERSIAN---");
+  if (idx !== -1) t = t.slice(0, idx);
+  t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
+  t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+  return t.trim();
+}
+
 const PRODUCT_CATALOG = [
   "Rebar Fiberglass Straight", "Rebar Stirrups", "Rebar Cages", "Rebar Hooks",
   "Rebar Hooked Anchor Bar", "Wire Mesh", "Rebar Dowels", "Standard Dowels 4x16",
