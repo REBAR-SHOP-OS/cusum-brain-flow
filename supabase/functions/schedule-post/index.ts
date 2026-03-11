@@ -94,6 +94,25 @@ Deno.serve(async (req) => {
         console.log(`[schedule-post] Deleted original unassigned post=${post_id}`);
       }
 
+      // Clean up sibling unassigned posts with same title on same day
+      if (fullPost.title) {
+        const { data: siblings, error: sibErr } = await serviceClient
+          .from("social_posts")
+          .delete()
+          .eq("platform", "unassigned")
+          .eq("title", fullPost.title)
+          .eq("user_id", fullPost.user_id)
+          .gte("scheduled_date", `${scheduledDay}T00:00:00`)
+          .lte("scheduled_date", `${scheduledDay}T23:59:59`)
+          .select("id");
+
+        if (sibErr) {
+          console.error(`[schedule-post] Sibling cleanup error:`, sibErr.message);
+        } else if (siblings && siblings.length > 0) {
+          console.log(`[schedule-post] Cleaned up ${siblings.length} sibling unassigned posts`);
+        }
+      }
+
       return json({ success: true, post: { id: post_id, status: "deleted", qa_status: "deleted", scheduled_date }, cloned_ids: cloned });
     }
 
