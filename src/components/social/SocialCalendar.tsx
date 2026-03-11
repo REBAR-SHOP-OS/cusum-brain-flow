@@ -1,6 +1,33 @@
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import type { SocialPost } from "@/hooks/useSocialPosts";
+
+const PLATFORM_ORDER = ["facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
+
+const STATUS_PRIORITY: Record<string, number> = {
+  declined: 0, draft: 1, pending: 2, scheduled: 3, published: 4,
+};
+
+function groupByPlatform(posts: SocialPost[]) {
+  const map = new Map<string, SocialPost[]>();
+  for (const p of posts) {
+    const key = p.platform || "other";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(p);
+  }
+  return [...map.entries()].sort(
+    ([a], [b]) => (PLATFORM_ORDER.indexOf(a) === -1 ? 99 : PLATFORM_ORDER.indexOf(a)) - (PLATFORM_ORDER.indexOf(b) === -1 ? 99 : PLATFORM_ORDER.indexOf(b))
+  );
+}
+
+function worstStatus(posts: SocialPost[]) {
+  let worst = posts[0];
+  for (const p of posts) {
+    if ((STATUS_PRIORITY[p.status] ?? 2) < (STATUS_PRIORITY[worst.status] ?? 2)) worst = p;
+  }
+  return worst.status;
+}
 
 const platformIcons: Record<string, { bg: string; icon: JSX.Element }> = {
   facebook: {
@@ -107,32 +134,35 @@ export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds,
               )}
             </div>
 
-            {/* Individual Post Cards */}
+            {/* Platform-Grouped Cards */}
             <div className="space-y-2">
-              {dayPosts.map((post) => {
-                const isSelected = selectedPostIds?.has(post.id);
-                const pIcon = platformIcons[post.platform] || platformIcons.twitter;
+              {groupByPlatform(dayPosts).map(([platform, posts]) => {
+                const pIcon = platformIcons[platform] || platformIcons.twitter;
+                const groupIds = posts.map(p => p.id);
+                const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
+                const status = worstStatus(posts);
+                const firstPost = posts[0];
 
                 return (
                   <button
-                    key={post.id}
+                    key={platform}
                     onClick={() => {
                       if (onToggleSelect) {
-                        onToggleSelect(post.id);
+                        groupIds.forEach(id => onToggleSelect(id));
                       } else {
-                        onPostClick(post);
+                        onPostClick(firstPost);
                       }
                     }}
                     className={cn(
                       "w-full p-2 rounded-lg border text-left transition-all hover:shadow-md relative",
-                      isSelected && "ring-2 ring-primary",
-                      post.status === "published"
+                      allGroupSelected && "ring-2 ring-primary",
+                      status === "published"
                         ? "bg-green-500/10 border-green-500/40"
-                        : post.status === "scheduled"
+                        : status === "scheduled"
                         ? "bg-card border-primary/30"
-                        : post.status === "draft"
+                        : status === "draft"
                         ? "bg-muted/30 border-dashed border-muted-foreground/30"
-                        : post.status === "declined"
+                        : status === "declined"
                         ? "bg-destructive/5 border-destructive/30"
                         : "bg-muted/50 border-border"
                     )}
@@ -141,11 +171,11 @@ export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds,
                       <div className="absolute top-1.5 right-1.5">
                         <div className={cn(
                           "w-4 h-4 rounded-sm border flex items-center justify-center",
-                          isSelected
+                          allGroupSelected
                             ? "bg-primary border-primary text-primary-foreground"
                             : "border-muted-foreground/40"
                         )}>
-                          {isSelected && (
+                          {allGroupSelected && (
                             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                           )}
                         </div>
@@ -155,16 +185,21 @@ export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds,
                       <div className={cn("w-5 h-5 rounded flex items-center justify-center", pIcon.bg)}>
                         {pIcon.icon}
                       </div>
+                      {posts.length > 1 && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          ×{posts.length}
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-xs font-medium truncate">{post.title || "Untitled"}</p>
+                    <p className="text-xs font-medium truncate">{firstPost.title || "Untitled"}</p>
                     <p className={cn(
                       "text-xs capitalize",
-                      post.status === "published" ? "text-green-600 font-medium"
-                        : post.status === "scheduled" ? "text-primary"
-                        : post.status === "declined" ? "text-destructive"
+                      status === "published" ? "text-green-600 font-medium"
+                        : status === "scheduled" ? "text-primary"
+                        : status === "declined" ? "text-destructive"
                         : "text-muted-foreground"
                     )}>
-                      {post.status === "published" ? "Published ✅" : post.status}
+                      {status === "published" ? "Published ✅" : status}
                     </p>
                   </button>
                 );
