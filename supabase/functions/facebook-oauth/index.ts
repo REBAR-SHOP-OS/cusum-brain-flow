@@ -267,6 +267,9 @@ serve(async (req) => {
       const igInfo = instagramAccounts.length > 0
         ? ` + ${instagramAccounts.length} Instagram account(s)`
         : "";
+      const permWarning = !publishReady
+        ? ` ⚠️ Missing permissions: ${missingScopes.join(", ")}. Publishing may fail. Please ensure your Facebook App has these permissions approved.`
+        : "";
 
       return new Response(
         JSON.stringify({
@@ -274,7 +277,9 @@ serve(async (req) => {
           profileName,
           pagesCount: pages.length,
           instagramAccounts: instagramAccounts.length,
-          message: `${integration === "instagram" ? "Instagram" : "Facebook"} connected as ${profileName}! ${pages.length} page(s)${igInfo}`,
+          publish_ready: publishReady,
+          missing_scopes: missingScopes,
+          message: `${integration === "instagram" ? "Instagram" : "Facebook"} connected as ${profileName}! ${pages.length} page(s)${igInfo}${permWarning}`,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
