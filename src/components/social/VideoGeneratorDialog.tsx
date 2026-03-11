@@ -12,6 +12,8 @@ import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { supabase } from "@/integrations/supabase/client";
 import { VideoLibrary } from "./VideoLibrary";
 import { useBrandKit } from "@/hooks/useBrandKit";
+import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface VideoGeneratorDialogProps {
   open: boolean;
@@ -427,12 +429,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
 
   const isGenerating = status === "submitting" || status === "processing";
 
-  const promptSuggestions = [
-    "A cinematic aerial shot of a construction site at golden hour, cranes moving steel beams",
-    "Modern office timelapse with people working, natural lighting, professional atmosphere",
-    "Close-up of steel rebar being bent by machinery in a workshop, industrial, sparks flying",
-    "A drone shot over a completed building project, revealing the cityscape behind it",
-  ];
+  const { suggestions: promptSuggestions, isLoading: suggestionsLoading } = useSeoSuggestions("video");
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -524,15 +521,21 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Try a suggestion</Label>
                     <div className="flex flex-wrap gap-1.5">
-                      {promptSuggestions.map((s, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setPrompt(s)}
-                          className="text-xs px-2.5 py-1.5 rounded-full border bg-card hover:bg-muted transition-colors text-left leading-tight"
-                        >
-                          {s.slice(0, 50)}…
-                        </button>
-                      ))}
+                      {suggestionsLoading ? (
+                        Array.from({ length: 4 }).map((_, i) => (
+                          <Skeleton key={i} className="h-7 w-36 rounded-full" />
+                        ))
+                      ) : (
+                        promptSuggestions.map((s, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setPrompt(s)}
+                            className="text-xs px-2.5 py-1.5 rounded-full border bg-card hover:bg-muted transition-colors text-left leading-tight"
+                          >
+                            {s.slice(0, 50)}…
+                          </button>
+                        ))
+                      )}
                     </div>
                   </div>
 

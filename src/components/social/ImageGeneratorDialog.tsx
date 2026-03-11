@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
+import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
@@ -139,12 +141,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     }
   };
 
-  const promptSuggestions = [
-    "Professional social media banner for a construction company, modern geometric design, steel blue tones",
-    "Flat illustration of a team working together in an office, warm colors, friendly atmosphere",
-    "Product photography style shot of steel rebar bundles, dramatic studio lighting, clean background",
-    "Minimalist infographic background with abstract shapes, gradient from navy to teal, corporate feel",
-  ];
+  const { suggestions: promptSuggestions, isLoading: suggestionsLoading } = useSeoSuggestions("image");
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -209,15 +206,21 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Try a suggestion</Label>
                 <div className="flex flex-wrap gap-1.5">
-                  {promptSuggestions.map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setPrompt(s)}
-                      className="text-xs px-2.5 py-1.5 rounded-full border bg-card hover:bg-muted transition-colors text-left leading-tight"
-                    >
-                      {s.slice(0, 50)}…
-                    </button>
-                  ))}
+                  {suggestionsLoading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-7 w-36 rounded-full" />
+                    ))
+                  ) : (
+                    promptSuggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setPrompt(s)}
+                        className="text-xs px-2.5 py-1.5 rounded-full border bg-card hover:bg-muted transition-colors text-left leading-tight"
+                      >
+                        {s.slice(0, 50)}…
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
 

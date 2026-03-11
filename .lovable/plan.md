@@ -1,49 +1,27 @@
 
 
-## Smart SEO-Driven Media Suggestions
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
-Replace hardcoded prompt suggestions in both Video and Image generators with AI-generated ones based on your SEO keywords and brand kit.
+### Problem
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Architecture
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-```text
-Client (hook) → fetches top 10 keywords from seo_keyword_ai
-              → fetches brand_kit data
-              → calls ai-media-suggestions edge function
-              → receives 4 tailored prompts
-              → displays in UI (with skeleton loading + fallback)
+### Plan
+Run a single database migration:
+
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-Uses your existing **GEMINI_API_KEY** via the shared `aiRouter.ts` (gemini-2.5-flash-lite for speed/cost).
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
 
-### Files to create/modify
-
-| File | Action |
-|------|--------|
-| `supabase/functions/ai-media-suggestions/index.ts` | **New** — edge function that takes `type`, `keywords[]`, `brand_context` and returns 4 prompt suggestions via Gemini |
-| `src/hooks/useSeoSuggestions.ts` | **New** — React Query hook that fetches SEO keywords + brand kit, calls the edge function, caches 10 min |
-| `src/components/social/VideoGeneratorDialog.tsx` | **Update** — use `useSeoSuggestions("video")`, show skeletons while loading, fallback to hardcoded |
-| `src/components/social/ImageGeneratorDialog.tsx` | **Update** — same pattern with `useSeoSuggestions("image")` |
-| `supabase/config.toml` | **Update** — add `[functions.ai-media-suggestions]` entry |
-
-### Edge function logic
-
-- Receives `{ type: "video"|"image", keywords: [{keyword, opportunity_score, impressions_28d, intent}], brand_context: {business_name, description, value_prop} }`
-- Builds a system prompt instructing Gemini to generate 4 creative media prompts that naturally incorporate the top SEO keywords
-- Uses `callAI` from `_shared/aiRouter.ts` with `gemini-2.5-flash-lite`
-- Returns `{ suggestions: string[] }`
-
-### Hook logic (`useSeoSuggestions`)
-
-- Fetches user's company → domain → top 10 keywords from `seo_keyword_ai` ordered by `opportunity_score DESC`, then `impressions_28d DESC`
-- Fetches brand kit via `useBrandKit()`
-- Calls `supabase.functions.invoke("ai-media-suggestions", { body: { type, keywords, brand_context } })`
-- React Query with `staleTime: 10 * 60 * 1000`
-- Returns `{ suggestions: string[], isLoading: boolean }`
-
-### UI changes
-
-- Replace `const promptSuggestions = [...]` with data from the hook
-- While loading: show 4 small skeleton pills (same size as suggestion buttons)
-- If no SEO data or error: fall back to current hardcoded suggestions
+No code changes needed — just the migration.
 
