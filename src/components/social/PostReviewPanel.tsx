@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -142,6 +142,8 @@ export function PostReviewPanel({
   const [uploading, setUploading] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [fbPublishReady, setFbPublishReady] = useState<boolean | null>(null);
+  const [fbMissingScopes, setFbMissingScopes] = useState<string[]>([]);
 
   const isPublished = post?.status === "published";
 
@@ -157,6 +159,25 @@ export function PostReviewPanel({
   const [localContentType, setLocalContentType] = useState(post?.content_type || "post");
   const [localPages, setLocalPages] = useState<string[]>(post?.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
   const [localPlatforms, setLocalPlatforms] = useState<string[]>([post?.platform || "facebook"]);
+
+  // Check Facebook publish_ready status
+  useEffect(() => {
+    if (!post) return;
+    const hasFb = localPlatforms.some(p => p === "facebook" || p === "instagram" || p === "instagram_fb");
+    if (!hasFb) { setFbPublishReady(null); return; }
+
+    supabase
+      .from("integration_connections")
+      .select("config")
+      .eq("integration_id", "facebook")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data?.config) { setFbPublishReady(null); return; }
+        const cfg = data.config as any;
+        setFbPublishReady(cfg.publish_ready ?? null);
+        setFbMissingScopes(cfg.missing_scopes ?? []);
+      });
+  }, [post?.id, localPlatforms]);
 
   // Sync local state when post changes (navigation or refresh)
   useEffect(() => {
@@ -568,6 +589,15 @@ export function PostReviewPanel({
               )}
               {!editing && !isPublished && (
                 <div className="p-4 border-t space-y-2">
+                  {/* Facebook permission warning */}
+                  {fbPublishReady === false && (
+                    <div className="w-full rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-center space-y-1">
+                      <span className="text-sm font-medium text-amber-700">⚠️ Facebook Permissions Incomplete</span>
+                      <p className="text-xs text-amber-600">
+                        Missing: {fbMissingScopes.join(", ")}. Publishing may fail. Please reconnect Facebook from Integrations to grant publishing permissions.
+                      </p>
+                    </div>
+                  )}
                   {/* Neel Approval Gate */}
                   {post.neel_approved ? (
                     <Button

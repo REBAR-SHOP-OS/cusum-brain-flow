@@ -186,7 +186,32 @@ serve(async (req) => {
         }
       }
 
-      // Step 6: Store tokens securely (per-user)
+      // Step 6: Verify granted permissions
+      let publishReady = false;
+      let grantedScopes: string[] = [];
+      let missingScopes: string[] = [];
+      try {
+        const permRes = await fetch(
+          `${GRAPH_API}/me/permissions?access_token=${longLivedToken}`
+        );
+        if (permRes.ok) {
+          const permData = await permRes.json();
+          grantedScopes = (permData.data || [])
+            .filter((p: any) => p.status === "granted")
+            .map((p: any) => p.permission);
+          const requiredForPublish = ["pages_read_engagement", "pages_manage_posts"];
+          missingScopes = requiredForPublish.filter(s => !grantedScopes.includes(s));
+          publishReady = missingScopes.length === 0;
+          console.log(`[facebook-oauth] Granted scopes: ${grantedScopes.join(", ")}`);
+          if (!publishReady) {
+            console.warn(`[facebook-oauth] Missing publish scopes: ${missingScopes.join(", ")}`);
+          }
+        }
+      } catch (permErr) {
+        console.error("[facebook-oauth] Permission check failed:", permErr);
+      }
+
+      // Step 7: Store tokens securely (per-user)
       const { error: upsertError } = await supabaseAdmin
         .from("user_meta_tokens")
         .upsert({
@@ -219,7 +244,7 @@ serve(async (req) => {
           }, { onConflict: "user_id,platform" });
       }
 
-      // Update per-user integration status
+      // Update per-user integration status with publish_ready flag
       await supabaseAdmin
         .from("integration_connections")
         .upsert({
@@ -228,16 +253,22 @@ serve(async (req) => {
           status: "connected",
           last_checked_at: new Date().toISOString(),
           last_sync_at: new Date().toISOString(),
-          error_message: null,
+          error_message: publishReady ? null : `Missing permissions: ${missingScopes.join(", ")}`,
           config: {
             profileName,
             pagesCount: pages.length,
             instagramAccounts: instagramAccounts.length,
+            publish_ready: publishReady,
+            granted_scopes: grantedScopes,
+            missing_scopes: missingScopes,
           },
         }, { onConflict: "user_id,integration_id" });
 
       const igInfo = instagramAccounts.length > 0
         ? ` + ${instagramAccounts.length} Instagram account(s)`
+        : "";
+      const permWarning = !publishReady
+        ? ` ⚠️ Missing permissions: ${missingScopes.join(", ")}. Publishing may fail. Please ensure your Facebook App has these permissions approved.`
         : "";
 
       return new Response(
@@ -246,7 +277,9 @@ serve(async (req) => {
           profileName,
           pagesCount: pages.length,
           instagramAccounts: instagramAccounts.length,
-          message: `${integration === "instagram" ? "Instagram" : "Facebook"} connected as ${profileName}! ${pages.length} page(s)${igInfo}`,
+          publish_ready: publishReady,
+          missing_scopes: missingScopes,
+          message: `${integration === "instagram" ? "Instagram" : "Facebook"} connected as ${profileName}! ${pages.length} page(s)${igInfo}${permWarning}`,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

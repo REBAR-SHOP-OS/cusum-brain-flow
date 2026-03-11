@@ -147,6 +147,20 @@ serve(async (req) => {
     let result: { id?: string; error?: string };
 
     if (platform === "facebook") {
+      // Pre-flight: verify page token has publish permissions
+      const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
+      const preflightData = await preflightRes.json();
+      if (preflightData.error) {
+        console.error("[social-publish] Facebook pre-flight failed:", preflightData.error);
+        const errMsg = preflightData.error.message || "Permission check failed";
+        if (post_id) {
+          await supabaseAdmin.from("social_posts").update({ last_error: `Facebook permission error: ${errMsg}` }).eq("id", post_id);
+        }
+        return new Response(
+          JSON.stringify({ error: `Facebook permissions error: ${errMsg}. Please reconnect Facebook from Integrations with pages_read_engagement and pages_manage_posts permissions.` }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       result = await publishToFacebook(pageId, pageAccessToken, message, image_url);
     } else if (platform === "instagram") {
       const igAccounts = (tokenData.instagram_accounts as Array<{ id: string; username: string; pageId: string }>) || [];
