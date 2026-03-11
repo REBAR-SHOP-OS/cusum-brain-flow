@@ -154,6 +154,25 @@ export function PostReviewPanel({
     });
   }, []);
 
+  // Check Facebook publish_ready status
+  useEffect(() => {
+    if (!post) return;
+    const hasFb = localPlatforms.some(p => p === "facebook" || p === "instagram" || p === "instagram_fb");
+    if (!hasFb) { setFbPublishReady(null); return; }
+
+    supabase
+      .from("integration_connections")
+      .select("config")
+      .eq("integration_id", "facebook")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data?.config) { setFbPublishReady(null); return; }
+        const cfg = data.config as any;
+        setFbPublishReady(cfg.publish_ready ?? null);
+        setFbMissingScopes(cfg.missing_scopes ?? []);
+      });
+  }, [post?.id, localPlatforms]);
+
   // Sub-panel state
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
   const [localContentType, setLocalContentType] = useState(post?.content_type || "post");
