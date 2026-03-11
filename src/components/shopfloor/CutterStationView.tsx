@@ -86,12 +86,13 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           .select("completed_pieces")
           .eq("id", machine.active_job_id)
           .single()
-          .then(({ data }) => {
-            if (data) setCompletedAtRunStart(data.completed_pieces ?? 0);
-          })
-          .catch(() => {
-            console.warn("[CutterStation] Failed to fetch completed_pieces for restore, falling back to 0");
-            setCompletedAtRunStart(0);
+          .then(({ data, error }) => {
+            if (error || !data) {
+              console.warn("[CutterStation] Failed to fetch completed_pieces for restore, falling back to 0");
+              setCompletedAtRunStart(0);
+            } else {
+              setCompletedAtRunStart(data.completed_pieces ?? 0);
+            }
           });
         console.log("[CutterStation] Restored active job from backend:", machine.active_job_id);
       }
