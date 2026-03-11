@@ -160,6 +160,8 @@ export function PostReviewPanel({
   const [uploading, setUploading] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
 
+  const isPublished = post?.status === "published";
+
   // Sub-panel state
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
   const [localContentType, setLocalContentType] = useState(post?.content_type || "post");
