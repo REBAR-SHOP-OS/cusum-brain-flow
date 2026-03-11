@@ -75,25 +75,29 @@ const defaultThemes: ContentTheme[] = [
 const defaultConnectedPages: Record<string, ConnectedPage[]> = {
   facebook: [
     { id: "fb1", name: "Ontario Steel Detailing", connected: true },
-    { id: "fb2", name: "Rebar.shop", connected: false },
-    { id: "fb3", name: "Ontario Digital Marketing", connected: false },
-    { id: "fb4", name: "Ontario Logistics", connected: false },
-    { id: "fb5", name: "Ontario Steels", connected: false },
-    { id: "fb6", name: "Rebar.shop Ontario", connected: false },
+    { id: "fb2", name: "Rebar.shop", connected: true },
+    { id: "fb3", name: "Ontario Digital Marketing", connected: true },
+    { id: "fb4", name: "Ontario Logistics", connected: true },
+    { id: "fb5", name: "Ontario Steels", connected: true },
+    { id: "fb6", name: "Rebar.shop Ontario", connected: true },
   ],
   instagram: [
-    { id: "ig1", name: "ontariosteeldetailing", connected: true },
-    { id: "ig2", name: "rebar.shop", connected: false },
-    { id: "ig3", name: "ontariodigitalmarketing", connected: false },
-    { id: "ig4", name: "ontariologistics.ca", connected: false },
-    { id: "ig5", name: "ontariosteels.ca", connected: false },
-    { id: "ig6", name: "rebar.shop_on", connected: false },
+    { id: "ig1", name: "Ontario Steel Detailing", connected: true },
+    { id: "ig2", name: "Rebar.shop", connected: true },
+    { id: "ig3", name: "Ontario Digital Marketing", connected: true },
+    { id: "ig4", name: "Ontario Logistics", connected: true },
+    { id: "ig5", name: "Ontario Steels", connected: true },
+    { id: "ig6", name: "Rebar.shop Ontario", connected: true },
   ],
   linkedin: [
-    { id: "li1", name: "ontariorebars@gmail.com", connected: true },
+    { id: "li1", name: "Ontario Steel Detailing", connected: false },
+    { id: "li2", name: "Ontario Logistics", connected: false },
   ],
   youtube: [
-    { id: "yt1", name: "Rebar Shop", connected: true },
+    { id: "yt1", name: "Ontario Steel Detailing", connected: false },
+  ],
+  tiktok: [
+    { id: "tt1", name: "Ontario Steel Detailing", connected: false },
   ],
 };
 
