@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
-  Sparkles, Loader2, BookOpen, ShieldCheck,
+  Sparkles, Loader2, BookOpen, ShieldCheck, CheckSquare, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, addDays, startOfWeek, parseISO, isBefore } from "date-fns";
