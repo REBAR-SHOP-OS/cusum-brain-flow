@@ -1,27 +1,18 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Remove Page Names & Add Scheduled Time to Calendar Cards
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+### Changes in `src/components/social/SocialCalendar.tsx`
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+1. **Remove page names list** (lines 199-208) — delete the IIFE that renders `· page_name` entries
+2. **Add scheduled time** — extract time from `firstPost.scheduled_date` using `format(parseISO(...), "h:mm a")` and display it as small muted text next to or below the status
 
-### Plan
-Run a single database migration:
-
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+### Result
+```text
+┌─────────────────────┐
+│ [FB] ×6             │
+│ True structural int…│
+│ 6:30 AM · Scheduled │
+└─────────────────────┘
 ```
-
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
-
-No code changes needed — just the migration.
 
