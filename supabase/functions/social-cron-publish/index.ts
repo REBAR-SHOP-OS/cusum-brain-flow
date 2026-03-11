@@ -221,12 +221,13 @@ serve(async (req) => {
         }
       } catch (err) {
         console.error(`Failed to publish post ${post.id}:`, err);
-        await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review" }).eq("id", post.id);
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
+        await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review", last_error: errMsg }).eq("id", post.id);
         results.push({
           postId: post.id,
           platform: post.platform,
           success: false,
-          error: err instanceof Error ? err.message : "Unknown error",
+          error: errMsg,
         });
       }
     }

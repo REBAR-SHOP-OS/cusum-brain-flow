@@ -563,6 +563,28 @@ export function PostReviewPanel({
               </div>
 
               {/* ── Footer Actions ── */}
+              {/* Failed status banner + retry */}
+              {!editing && post.status === "failed" && (
+                <div className="p-4 border-t space-y-2">
+                  <div className="w-full rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-center space-y-1">
+                    <span className="text-sm font-medium text-destructive">Publishing Failed ❌</span>
+                    {(post as any).last_error && (
+                      <p className="text-xs text-destructive/80 break-words">{(post as any).last_error}</p>
+                    )}
+                  </div>
+                  <Button
+                    className="w-full gap-1.5"
+                    variant="outline"
+                    onClick={async () => {
+                      await updatePost.mutateAsync({ id: post.id, status: "scheduled", qa_status: "scheduled", last_error: null } as any);
+                      queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                      toast({ title: "Post rescheduled", description: "Post has been moved back to scheduled for retry." });
+                    }}
+                  >
+                    <RefreshCw className="w-4 h-4" /> Retry Publishing
+                  </Button>
+                </div>
+              )}
               {!editing && isPublished && (
                 <div className="p-4 border-t">
                   <div className="w-full rounded-lg bg-green-600/10 border border-green-600/30 p-3 text-center">
