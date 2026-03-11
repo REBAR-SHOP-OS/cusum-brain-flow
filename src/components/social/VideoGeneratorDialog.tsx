@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save, X, Music, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { slideshowToVideo } from "@/lib/slideshowToVideo";
 import { supabase } from "@/integrations/supabase/client";
 import { VideoLibrary } from "./VideoLibrary";
 import { useBrandKit } from "@/hooks/useBrandKit";
@@ -448,6 +449,30 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
           return;
         }
 
+        // Slideshow fallback — compile images to video on client
+        if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
+          setProgressLabel("Compiling motion slideshow...");
+          setProgress(50);
+          try {
+            const blobUrl = await slideshowToVideo({
+              imageUrls: data.imageUrls,
+              durationPerImage: data.clipDuration || 5,
+              onProgress: (pct) => setProgress(50 + Math.round(pct * 0.5)),
+            });
+            setVideoUrl(blobUrl);
+            setSceneUrls([blobUrl]);
+            setStatus("completed");
+            toast({
+              title: "🎬 Motion Slideshow",
+              description: data.message || "Created free slideshow fallback since video providers were unavailable.",
+            });
+          } catch (compileErr: any) {
+            setError(`Slideshow compilation failed: ${compileErr.message}`);
+            setStatus("failed");
+          }
+          return;
+        }
+
         if (!Array.isArray(data?.jobs) || data.jobs.length === 0) {
           setError("No generation jobs were created.");
           setStatus("failed");
@@ -476,6 +501,30 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
             setError(msg);
           }
           setStatus("failed");
+          return;
+        }
+
+        // Slideshow fallback for single clip
+        if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
+          setProgressLabel("Compiling motion slideshow...");
+          setProgress(50);
+          try {
+            const blobUrl = await slideshowToVideo({
+              imageUrls: data.imageUrls,
+              durationPerImage: data.clipDuration || 5,
+              onProgress: (pct) => setProgress(50 + Math.round(pct * 0.5)),
+            });
+            setVideoUrl(blobUrl);
+            setSceneUrls([blobUrl]);
+            setStatus("completed");
+            toast({
+              title: "🎬 Motion Slideshow",
+              description: data.message || "Created free slideshow fallback since video providers were unavailable.",
+            });
+          } catch (compileErr: any) {
+            setError(`Slideshow compilation failed: ${compileErr.message}`);
+            setStatus("failed");
+          }
           return;
         }
 
