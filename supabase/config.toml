@@ -1,1 +1,4 @@
 project_id = "uavzziigfnqpfdkczbdo"
+
+[functions.semrush-api]
+verify_jwt = false
