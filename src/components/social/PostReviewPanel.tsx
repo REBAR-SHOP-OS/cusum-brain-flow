@@ -476,31 +476,19 @@ export function PostReviewPanel({
                           <DateSchedulePopover
                             post={post}
                            onSetDate={async (date) => {
-                              if ((post.content || "").length < 20) {
-                                toast({ title: "Content too short", description: "Post content must be at least 20 characters to schedule.", variant: "destructive" });
-                                return;
-                              }
-                              const postId = post.id;
-                              console.log(`[PostReviewPanel] Set Date — post=${postId} date=${date.toISOString()}`);
-                              const result = await schedulePost({
-                                post_id: postId,
-                                scheduled_date: date.toISOString(),
-                                status: "scheduled",
-                                qa_status: "scheduled",
-                                page_name: post.page_name || localPages[0] || null,
-                              });
-                              if (!result.success) {
-                                console.error("[PostReviewPanel] Set Date FAILED:", result.error, result.details);
-                                toast({
-                                  title: "Scheduling failed",
-                                  description: result.error || "Post could not be scheduled. Check permissions and try again.",
-                                  variant: "destructive",
-                                });
+                              console.log(`[PostReviewPanel] Set Date only — post=${post.id} date=${date.toISOString()}`);
+                              const { error } = await supabase
+                                .from("social_posts")
+                                .update({ scheduled_date: date.toISOString() })
+                                .eq("id", post.id);
+                              if (error) {
+                                console.error("[PostReviewPanel] Set Date FAILED:", error.message);
+                                toast({ title: "Failed to set date", description: error.message, variant: "destructive" });
                                 return;
                               }
                               queryClient.invalidateQueries({ queryKey: ["social_posts"] });
                               setDatePopoverOpen(false);
-                              toast({ title: "Date scheduled ✅", description: `Scheduled for ${format(date, "PPP p")}` });
+                              toast({ title: "Date set", description: format(date, "PPP p") });
                             }}
                           />
                         </PopoverContent>
