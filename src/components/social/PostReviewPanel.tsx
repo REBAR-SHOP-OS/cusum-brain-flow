@@ -24,6 +24,7 @@ import { schedulePost } from "@/lib/schedulePost";
 
 interface PostReviewPanelProps {
   post: SocialPost | null;
+  groupPages?: string[];
   postsToReview: number;
   onClose: () => void;
   onSchedule: () => void;

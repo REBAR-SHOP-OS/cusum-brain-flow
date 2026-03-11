@@ -486,8 +486,9 @@ export default function SocialMediaManager() {
       {/* Post Review Panel */}
       <PostReviewPanel
         post={selectedPost}
+        groupPages={groupPages}
         postsToReview={postsToReview}
-        onClose={() => setSelectedPost(null)}
+        onClose={() => { setSelectedPost(null); setGroupPages([]); }}
         onSchedule={() => selectedPost && handleSchedule(selectedPost)}
         onDecline={() => selectedPost && handleDecline(selectedPost)}
       />

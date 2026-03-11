@@ -150,6 +150,9 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                     onClick={() => {
                       if (onToggleSelect) {
                         groupIds.forEach(id => onToggleSelect(id));
+                      } else if (onGroupClick) {
+                        const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))] as string[];
+                        onGroupClick(firstPost, uniquePages);
                       } else {
                         onPostClick(firstPost);
                       }
