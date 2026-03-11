@@ -1,36 +1,27 @@
 
 
-## Fix: Auto-fallback from Veo to Sora on quota errors
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
-The Veo API is returning 429 (RESOURCE_EXHAUSTED). The fix adds automatic Sora fallback when Veo scenes fail, plus updates the GEMINI_API_KEY.
+### Problem
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Step 1 — Update GEMINI_API_KEY secret
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-Update the existing secret to the new key value you provided.
+### Plan
+Run a single database migration:
 
-### Step 2 — Modify `generate-video/index.ts` (lines ~499-513)
-
-In the `generate-multi` action, wrap each scene's `veoGenerate` call with a try/catch that detects 429 errors and retries with `soraGenerate` using `GPT_API_KEY`:
-
-```text
-for each scene prompt:
-  try veoGenerate(geminiKey, prompt, duration)
-  catch (429 / quota error):
-    if GPT_API_KEY exists → soraGenerate(gptKey, prompt, duration)
-    else → add to errors
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-Same pattern for single `generate` action (lines ~458-473): try Veo first, catch 429, fallback to Sora.
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
 
-### Step 3 — Update poll-multi to handle mixed providers
-
-The poll-multi action already handles mixed providers per-job (line 548: `job.provider === "veo" ? geminiKey : gptKey`), so no changes needed there.
-
-### Files modified
-
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-video/index.ts` | Add Veo→Sora fallback on 429 in `generate` and `generate-multi` actions |
-
-### No database changes needed
+No code changes needed — just the migration.
 
