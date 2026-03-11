@@ -1,30 +1,27 @@
 
 
-## Show Unassigned Posts on Calendar
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
 ### Problem
-The filter added in the previous step (`if (post.platform === "unassigned") return false`) hides ALL unassigned posts from the calendar. The user wants the 5 auto-generated posts (at 6:30, 7:30, 8:00, 12:30, 2:30) to appear as `?` cards on the calendar.
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Solution
-Remove the `unassigned` filter from `SocialCalendar.tsx` line 112. Unassigned posts will show with the existing `?` icon defined in `platformIcons.unassigned`.
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-### File: `src/components/social/SocialCalendar.tsx`
+### Plan
+Run a single database migration:
 
-**Line 112** — remove the filter line:
-```typescript
-// Before
-const dayPosts = posts.filter((post) => {
-  if (!post.scheduled_date) return false;
-  if (post.platform === "unassigned") return false;
-  return isSameDay(parseISO(post.scheduled_date), day);
-});
-
-// After
-const dayPosts = posts.filter((post) => {
-  if (!post.scheduled_date) return false;
-  return isSameDay(parseISO(post.scheduled_date), day);
-});
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-One line removal. The `?` icon is already defined in `platformIcons.unassigned`. Once a user assigns platforms to a post (changing its `platform` field), it will display with the correct platform icon instead.
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
+
+No code changes needed — just the migration.
 
