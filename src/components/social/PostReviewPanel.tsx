@@ -163,7 +163,7 @@ export function PostReviewPanel({
   onSchedule,
   onDecline,
 }: PostReviewPanelProps) {
-  const { updatePost, deletePost } = useSocialPosts();
+  const { posts: allPosts, updatePost, deletePost } = useSocialPosts();
   const { toast } = useToast();
   const { publishPost, publishing } = usePublishPost();
   const queryClient = useQueryClient();
