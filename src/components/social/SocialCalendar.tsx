@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { SocialPost } from "@/hooks/useSocialPosts";
@@ -54,14 +53,6 @@ const platformIcons: Record<string, { bg: string; icon: JSX.Element }> = {
   },
 };
 
-interface PostGroup {
-  key: string;
-  posts: SocialPost[];
-  title: string;
-  platforms: { platform: string; count: number }[];
-  status: string;
-}
-
 interface SocialCalendarProps {
   posts: SocialPost[];
   weekStart: Date;
@@ -69,30 +60,6 @@ interface SocialCalendarProps {
   selectedPostIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onSelectDay?: (dayPostIds: string[]) => void;
-}
-
-function groupPostsByContent(dayPosts: SocialPost[]): PostGroup[] {
-  const map = new Map<string, SocialPost[]>();
-  for (const post of dayPosts) {
-    const key = (post.title || "").trim().toLowerCase();
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(post);
-  }
-
-  return Array.from(map.entries()).map(([key, posts]) => {
-    const platformCounts = new Map<string, number>();
-    for (const p of posts) {
-      platformCounts.set(p.platform, (platformCounts.get(p.platform) || 0) + 1);
-    }
-    const platforms = Array.from(platformCounts.entries()).map(([platform, count]) => ({ platform, count }));
-    // Use worst status for display
-    const statusPriority: Record<string, number> = { declined: 0, draft: 1, scheduled: 2, published: 3 };
-    const status = posts.reduce((worst, p) => {
-      return (statusPriority[p.status] ?? 1) < (statusPriority[worst] ?? 1) ? p.status : worst;
-    }, posts[0].status);
-
-    return { key, posts, title: posts[0].title || "Untitled", platforms, status };
-  });
 }
 
 export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds, onToggleSelect, onSelectDay }: SocialCalendarProps) {
@@ -107,7 +74,6 @@ export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds,
           return isSameDay(parseISO(post.scheduled_date), day);
         });
         const isCurrentDay = isToday(day);
-        const groups = groupPostsByContent(dayPosts);
         const dayPostIds = dayPosts.map((p) => p.id);
         const allDaySelected = dayPostIds.length > 0 && dayPostIds.every((id) => selectedPostIds?.has(id));
 
@@ -141,34 +107,32 @@ export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds,
               )}
             </div>
 
-            {/* Grouped Posts */}
+            {/* Individual Post Cards */}
             <div className="space-y-2">
-              {groups.map((group) => {
-                const allGroupIds = group.posts.map((p) => p.id);
-                const anySelected = allGroupIds.some((id) => selectedPostIds?.has(id));
-                const allSelected = allGroupIds.every((id) => selectedPostIds?.has(id));
+              {dayPosts.map((post) => {
+                const isSelected = selectedPostIds?.has(post.id);
+                const pIcon = platformIcons[post.platform] || platformIcons.twitter;
 
                 return (
                   <button
-                    key={group.key}
+                    key={post.id}
                     onClick={() => {
                       if (onToggleSelect) {
-                        // Toggle all posts in group
-                        for (const id of allGroupIds) onToggleSelect(id);
+                        onToggleSelect(post.id);
                       } else {
-                        onPostClick(group.posts[0]);
+                        onPostClick(post);
                       }
                     }}
                     className={cn(
                       "w-full p-2 rounded-lg border text-left transition-all hover:shadow-md relative",
-                      anySelected && "ring-2 ring-primary",
-                      group.status === "published"
+                      isSelected && "ring-2 ring-primary",
+                      post.status === "published"
                         ? "bg-green-500/10 border-green-500/40"
-                        : group.status === "scheduled"
+                        : post.status === "scheduled"
                         ? "bg-card border-primary/30"
-                        : group.status === "draft"
+                        : post.status === "draft"
                         ? "bg-muted/30 border-dashed border-muted-foreground/30"
-                        : group.status === "declined"
+                        : post.status === "declined"
                         ? "bg-destructive/5 border-destructive/30"
                         : "bg-muted/50 border-border"
                     )}
@@ -177,43 +141,30 @@ export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds,
                       <div className="absolute top-1.5 right-1.5">
                         <div className={cn(
                           "w-4 h-4 rounded-sm border flex items-center justify-center",
-                          allSelected
+                          isSelected
                             ? "bg-primary border-primary text-primary-foreground"
-                            : anySelected
-                            ? "bg-primary/50 border-primary text-primary-foreground"
                             : "border-muted-foreground/40"
                         )}>
-                          {allSelected && (
+                          {isSelected && (
                             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                           )}
                         </div>
                       </div>
                     )}
-                    {/* Platform icons row */}
-                    <div className="flex items-center gap-1 mb-1 flex-wrap">
-                      {group.platforms.map(({ platform: pName, count }) => {
-                        const pIcon = platformIcons[pName] || platformIcons.twitter;
-                        return (
-                          <div key={pName} className="flex items-center gap-0.5">
-                            <div className={cn("w-5 h-5 rounded flex items-center justify-center", pIcon.bg)}>
-                              {pIcon.icon}
-                            </div>
-                            {count > 1 && (
-                              <span className="text-[10px] text-muted-foreground font-medium">×{count}</span>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className={cn("w-5 h-5 rounded flex items-center justify-center", pIcon.bg)}>
+                        {pIcon.icon}
+                      </div>
                     </div>
-                    <p className="text-xs font-medium truncate">{group.title}</p>
+                    <p className="text-xs font-medium truncate">{post.title || "Untitled"}</p>
                     <p className={cn(
                       "text-xs capitalize",
-                      group.status === "published" ? "text-green-600 font-medium"
-                        : group.status === "scheduled" ? "text-primary"
-                        : group.status === "declined" ? "text-destructive"
+                      post.status === "published" ? "text-green-600 font-medium"
+                        : post.status === "scheduled" ? "text-primary"
+                        : post.status === "declined" ? "text-destructive"
                         : "text-muted-foreground"
                     )}>
-                      {group.status === "published" ? "Published ✅" : group.status}
+                      {post.status === "published" ? "Published ✅" : post.status}
                     </p>
                   </button>
                 );
