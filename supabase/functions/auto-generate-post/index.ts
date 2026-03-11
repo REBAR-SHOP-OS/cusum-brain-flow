@@ -282,7 +282,7 @@ Return an array of 5 objects:
               user_id: userId,
               platform,
               title: post.title || "Untitled",
-              content: post.content || "",
+              content: stripPersianBlock(post.content || ""),
               hashtags: post.hashtags || [],
               image_url: null,
               status: "pending_approval",
