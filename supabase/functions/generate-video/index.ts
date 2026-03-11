@@ -40,6 +40,25 @@ function snapDuration(raw: number, valid: number[]): number {
   );
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function isProviderCapacityError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("billing") ||
+    lower.includes("hard limit") ||
+    lower.includes("quota") ||
+    lower.includes("resource_exhausted") ||
+    lower.includes("rate limit") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("billing_hard_limit_reached") ||
+    lower.includes("429")
+  );
+}
+
 // ─── Veo helpers ────────────────────────────────────────────
 
 async function veoGenerate(apiKey: string, prompt: string, duration: number) {
