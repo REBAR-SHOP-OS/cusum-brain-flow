@@ -235,8 +235,20 @@ export function PostReviewPanel({
     tiktok: "tiktok",
   };
 
+  const filteredPageOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return localPlatforms.flatMap(p => PLATFORM_PAGES[p] || []).filter(o => {
+      if (seen.has(o.value)) return false;
+      seen.add(o.value);
+      return true;
+    });
+  }, [localPlatforms]);
+
   const handlePlatformsSaveMulti = (values: string[]) => {
     setLocalPlatforms(values);
+    // Reset pages to only valid ones for new platform selection
+    const validPages = new Set(values.flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value)));
+    setLocalPages(prev => prev.filter(p => validPages.has(p)));
     // Update the primary post's platform to the first selected
     if (values.length > 0) {
       const dbPlatform = platformMap[values[0]] || values[0];
