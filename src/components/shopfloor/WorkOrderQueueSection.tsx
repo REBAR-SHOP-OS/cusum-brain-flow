@@ -27,7 +27,7 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
   const groups = useMemo(() => {
     const map = new Map<string, SupabaseWorkOrder[]>();
     for (const wo of activeOrders) {
-      const key = wo.workstation || "Unassigned";
+      const key = wo.customer_name || "Unassigned";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(wo);
     }
