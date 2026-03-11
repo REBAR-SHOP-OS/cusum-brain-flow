@@ -437,6 +437,23 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
           model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
         });
 
+        if (data?.status === "failed") {
+          const msg = data.error || "Failed to start multi-scene generation.";
+          if (msg.toLowerCase().includes("billing") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("limit")) {
+            setError("⚠️ AI provider billing limits reached. Please increase limits or switch provider.");
+          } else {
+            setError(msg);
+          }
+          setStatus("failed");
+          return;
+        }
+
+        if (!Array.isArray(data?.jobs) || data.jobs.length === 0) {
+          setError("No generation jobs were created.");
+          setStatus("failed");
+          return;
+        }
+
         multiJobsRef.current = data.jobs;
         setStatus("processing");
         setProgress(5);
@@ -451,6 +468,23 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
           model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
         });
 
+        if (data?.status === "failed") {
+          const msg = data.error || "Failed to start video generation.";
+          if (msg.toLowerCase().includes("billing") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("limit")) {
+            setError("⚠️ AI provider billing limits reached. Please increase limits or switch provider.");
+          } else {
+            setError(msg);
+          }
+          setStatus("failed");
+          return;
+        }
+
+        if (!data?.jobId || !data?.provider) {
+          setError("No generation job was returned.");
+          setStatus("failed");
+          return;
+        }
+
         jobRef.current = { id: data.jobId, provider: data.provider };
         setStatus("processing");
         setProgress(5);
@@ -461,7 +495,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       console.error("Generate error:", err);
       const msg = err?.message || "Failed to start video generation.";
       if (msg.toLowerCase().includes("billing") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("limit")) {
-        setError("⚠️ AI provider billing limits reached. Both Google Veo and OpenAI Sora accounts need their billing limits increased. Please check your API provider dashboards.");
+        setError("⚠️ AI provider billing limits reached. Please increase limits or switch provider.");
       } else {
         setError(msg);
       }

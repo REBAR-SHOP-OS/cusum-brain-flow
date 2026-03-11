@@ -40,6 +40,25 @@ function snapDuration(raw: number, valid: number[]): number {
   );
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function isProviderCapacityError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("billing") ||
+    lower.includes("hard limit") ||
+    lower.includes("quota") ||
+    lower.includes("resource_exhausted") ||
+    lower.includes("rate limit") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("billing_hard_limit_reached") ||
+    lower.includes("429")
+  );
+}
+
 // ─── Veo helpers ────────────────────────────────────────────
 
 async function veoGenerate(apiKey: string, prompt: string, duration: number) {
@@ -465,20 +484,42 @@ serve(async (req) => {
       }
 
       let result: { jobId: string; provider: string };
-      if (isVeo) {
-        try {
-          result = await veoGenerate(apiKey, prompt, duration || 8);
-        } catch (e) {
-          const isQuota = e instanceof Error && (e.message.includes("429") || e.message.includes("RESOURCE_EXHAUSTED") || e.message.includes("quota"));
-          if (isQuota && gptKey) {
-            console.warn("Veo quota exceeded on single generate, falling back to Sora");
-            result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
-          } else {
-            throw e;
+      try {
+        if (isVeo) {
+          try {
+            result = await veoGenerate(apiKey, prompt, duration || 8);
+          } catch (e) {
+            const message = getErrorMessage(e);
+            if (isProviderCapacityError(message) && gptKey) {
+              console.warn("Veo capacity reached on single generate, falling back to Sora");
+              result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
+            } else {
+              throw e;
+            }
+          }
+        } else {
+          try {
+            result = await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
+          } catch (e) {
+            const message = getErrorMessage(e);
+            if (isProviderCapacityError(message) && geminiKey) {
+              console.warn("Sora capacity reached on single generate, falling back to Veo");
+              result = await veoGenerate(geminiKey, prompt, duration || 8);
+            } else {
+              throw e;
+            }
           }
         }
-      } else {
-        result = await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
+      } catch (e) {
+        const message = getErrorMessage(e);
+        return new Response(
+          JSON.stringify({
+            status: "failed",
+            error: message,
+            errorCode: isProviderCapacityError(message) ? "provider_capacity_exhausted" : "generation_failed",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       return new Response(
@@ -522,28 +563,43 @@ serve(async (req) => {
               try {
                 result = await veoGenerate(apiKey, scenePrompt, clipDuration);
               } catch (e) {
-                const isQuota = e instanceof Error && (e.message.includes("429") || e.message.includes("RESOURCE_EXHAUSTED") || e.message.includes("quota"));
-                if (isQuota && gptKey) {
-                  console.warn(`Veo quota exceeded on scene ${i + 1}, falling back to Sora`);
+                const message = getErrorMessage(e);
+                if (isProviderCapacityError(message) && gptKey) {
+                  console.warn(`Veo capacity reached on scene ${i + 1}, falling back to Sora`);
                   result = await soraGenerate(gptKey, scenePrompt, clipDuration, model || "sora-2");
                 } else {
                   throw e;
                 }
               }
             } else {
-              result = await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+              try {
+                result = await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+              } catch (e) {
+                const message = getErrorMessage(e);
+                if (isProviderCapacityError(message) && geminiKey) {
+                  console.warn(`Sora capacity reached on scene ${i + 1}, falling back to Veo`);
+                  result = await veoGenerate(geminiKey, scenePrompt, clipDuration);
+                } else {
+                  throw e;
+                }
+              }
             }
             jobs.push({ id: result.jobId, provider: result.provider, sceneIndex: i });
           } catch (e) {
-            errors.push(`Scene ${i + 1}: ${e instanceof Error ? e.message : "Unknown error"}`);
+            errors.push(`Scene ${i + 1}: ${getErrorMessage(e)}`);
           }
         })
       );
 
       if (jobs.length === 0) {
+        const allCapacityErrors = errors.length > 0 && errors.every((msg) => isProviderCapacityError(msg));
         return new Response(
-          JSON.stringify({ error: `All scene generations failed: ${errors.join("; ")}` }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            status: "failed",
+            error: `All scene generations failed: ${errors.join("; ")}`,
+            errorCode: allCapacityErrors ? "provider_capacity_exhausted" : "generation_failed",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
