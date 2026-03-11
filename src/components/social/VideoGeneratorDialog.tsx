@@ -1,13 +1,3 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -16,14 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, BookmarkPlus, Library, X } from "lucide-react";
+import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { supabase } from "@/integrations/supabase/client";
 import { VideoLibrary } from "./VideoLibrary";
 import { useBrandKit } from "@/hooks/useBrandKit";
-import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
-import { VideoLibrary } from "./VideoLibrary";
 
 interface VideoGeneratorDialogProps {
   open: boolean;
