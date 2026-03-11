@@ -106,15 +106,29 @@ serve(async (req) => {
         if (post.platform === "facebook" || post.platform === "instagram") {
           // Get user token
           const tokenPlatform = post.platform === "instagram" ? "instagram" : "facebook";
-          const { data: tokenData } = await supabase
+          let tokenData = (await supabase
             .from("user_meta_tokens")
             .select("access_token, pages, instagram_accounts")
             .eq("user_id", post.user_id)
             .eq("platform", tokenPlatform)
-            .maybeSingle();
+            .maybeSingle()).data;
+
+          // Fallback: if post owner has no token, use any team member's token
+          if (!tokenData) {
+            console.log(`[social-cron-publish] No ${tokenPlatform} token for post owner ${post.user_id}, trying fallback`);
+            tokenData = (await supabase
+              .from("user_meta_tokens")
+              .select("access_token, pages, instagram_accounts, user_id")
+              .eq("platform", tokenPlatform)
+              .limit(1)
+              .maybeSingle()).data;
+            if (tokenData) {
+              console.log(`[social-cron-publish] Using fallback token from user ${(tokenData as any).user_id}`);
+            }
+          }
 
           if (!tokenData) {
-            publishResult = { error: `${post.platform} not connected for user` };
+            publishResult = { error: `${post.platform} not connected for any user` };
           } else {
             const pages = (tokenData.pages as Array<{ id: string }>) || [];
             if (pages.length === 0) {
@@ -127,12 +141,21 @@ serve(async (req) => {
                 if (matched) selectedPage = matched;
               }
               const pageId = selectedPage.id;
-              const { data: pageTokenData } = await supabase
+              let pageTokenData = (await supabase
                 .from("user_meta_tokens")
                 .select("access_token")
                 .eq("user_id", post.user_id)
                 .eq("platform", `${tokenPlatform}_page_${pageId}`)
-                .maybeSingle();
+                .maybeSingle()).data;
+              // Fallback: try any user's page token
+              if (!pageTokenData) {
+                pageTokenData = (await supabase
+                  .from("user_meta_tokens")
+                  .select("access_token")
+                  .eq("platform", `${tokenPlatform}_page_${pageId}`)
+                  .limit(1)
+                  .maybeSingle()).data;
+              }
               const pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
 
               if (post.platform === "facebook") {

@@ -1,51 +1,27 @@
 
 
-## Root Cause: Why Scheduled Posts Never Publish
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
-The cron job IS running correctly every 5 minutes and IS finding scheduled posts. The problem is a **user ID mismatch for token lookup**.
+### Problem
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Evidence
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-| What | Value |
-|------|-------|
-| Post owner (`user_id`) | `b0c1c3d5-...` |
-| Meta tokens belong to | `be3b9444-...` |
-| Cron looks up tokens by | `post.user_id` → finds nothing → **"instagram not connected for user"** |
+### Plan
+Run a single database migration:
 
-**Why manual publish works**: When you click "Publish" manually, the `social-publish` edge function uses your **logged-in session JWT** (`auth.getClaims`) to find the token — NOT the post's `user_id`. If the logged-in user (`be3b9444`) has the tokens, it works.
-
-**Why cron fails**: The cron job has no logged-in user. It uses `post.user_id` (`b0c1c3d5`) to look up tokens. That user has zero tokens in `user_meta_tokens` → instant failure.
-
-### Fix
-
-**File: `supabase/functions/social-cron-publish/index.ts`** — Add a fallback token lookup.
-
-When `post.user_id` has no token, search for **any team member's token** for that platform:
-
-```typescript
-// Current (line 109-114):
-const { data: tokenData } = await supabase
-  .from("user_meta_tokens")
-  .select("access_token, pages, instagram_accounts")
-  .eq("user_id", post.user_id)
-  .eq("platform", tokenPlatform)
-  .maybeSingle();
-
-// Fixed — add fallback:
-let tokenData = ...same query...;
-if (!tokenData) {
-  // Fallback: use any available token for this platform
-  const { data: fallback } = await supabase
-    .from("user_meta_tokens")
-    .select("access_token, pages, instagram_accounts")
-    .eq("platform", tokenPlatform)
-    .limit(1)
-    .maybeSingle();
-  tokenData = fallback;
-}
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-Same fallback for the page-specific token lookup at line 130-135.
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
 
-This is a single-file change in the cron function. The manual publish flow is unaffected.
+No code changes needed — just the migration.
 
