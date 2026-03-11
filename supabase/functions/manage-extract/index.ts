@@ -793,6 +793,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
       created_by: userId,
       project_name: session.name,
       project_id: projectId,
+      barlist_id: barlistId || null,
       status: "draft",
       optimization_mode: optimizerConfig?.selectedMode || "combination",
     })

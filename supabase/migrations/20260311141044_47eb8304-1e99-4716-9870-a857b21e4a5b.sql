@@ -1,0 +1,1 @@
+ALTER TABLE public.cut_plans ADD COLUMN barlist_id UUID REFERENCES public.barlists(id) ON DELETE SET NULL;

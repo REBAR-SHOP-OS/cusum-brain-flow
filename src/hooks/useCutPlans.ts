@@ -15,6 +15,7 @@ export interface CutPlan {
   project_name: string | null;
   project_id: string | null;
   machine_id: string | null;
+  barlist_id: string | null;
   customer_name?: string | null;
 }
 
