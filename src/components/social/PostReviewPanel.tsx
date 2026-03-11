@@ -635,6 +635,13 @@ export function PostReviewPanel({
                         // Primary post gets first combo
                         const [primary, ...rest] = combos;
                         const postId = post.id;
+
+                        // Block scheduling in the past
+                        if (!post.scheduled_date || new Date(post.scheduled_date) <= new Date()) {
+                          toast({ title: "زمان نامعتبر", description: "امکان زمان‌بندی در گذشته وجود ندارد. لطفاً زمان آینده انتخاب کنید.", variant: "destructive" });
+                          return;
+                        }
+
                         console.log(`[PostReviewPanel] Schedule button — post=${postId} platform=${primary.platform} page=${primary.page} date=${post.scheduled_date}`);
                         const result = await schedulePost({
                           post_id: postId,
