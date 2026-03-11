@@ -81,6 +81,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         setTrackedItemId(machine.active_job_id!);
         setIsRunning(true);
         setActiveRunId(machine.current_run_id);
+        setCompletedAtRunStart(0); // Immediate sync fallback — async fetch refines below
         // Fetch fresh completed count for snapshot
         supabase
           .from("cut_plan_items")
