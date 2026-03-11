@@ -51,7 +51,8 @@ export default function SocialMediaManager() {
   const { pendingApprovals } = useSocialApprovals();
   const [showApprovals, setShowApprovals] = useState(false);
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+   const [groupPages, setGroupPages] = useState<string[]>([]);
 
   // Derive selectedPost from fresh query data so it updates after mutations
   const selectedPost = useMemo(
