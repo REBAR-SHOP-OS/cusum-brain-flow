@@ -892,6 +892,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             onStockLengthChange={setSelectedStockLength}
             onBarsChange={setOperatorBars}
             onAbort={handleAbortRun}
+            onStopRun={handleCompleteRun}
             isRunning={machineIsRunning}
             canWrite={effectiveCanWrite}
             isDone={isDone}
