@@ -416,6 +416,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setProgress(0);
     setProgressLabel("");
     setVideoUrl(null);
+    setSceneUrls([]);
+    setCurrentScene(0);
+    setWatermarking(false);
     setSavedToLibrary(false);
     setError(null);
     jobRef.current = null;
