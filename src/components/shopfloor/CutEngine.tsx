@@ -14,6 +14,7 @@ interface CutEngineProps {
   onStockLengthChange?: (length: number) => void;
   onBarsChange?: (bars: number) => void;
   onAbort?: () => void;
+  onStopRun?: () => void;
   isRunning: boolean;
   canWrite: boolean;
   darkMode?: boolean;
