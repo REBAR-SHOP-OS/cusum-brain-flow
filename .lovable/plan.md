@@ -1,41 +1,51 @@
 
 
-## Root Cause: Scheduled posts never publish
+## Root Cause: Why Scheduled Posts Never Publish
 
-The cron job `social-cron-publish` is **failing with 401 Unauthorized on every single call**. Evidence from the `net._http_response` table shows continuous `{"error":"Unauthorized"}` responses.
+The cron job IS running correctly every 5 minutes and IS finding scheduled posts. The problem is a **user ID mismatch for token lookup**.
 
-**Two problems:**
+### Evidence
 
-1. **Missing vault secret**: The cron job SQL references `vault.decrypted_secrets WHERE name = 'service_role_key'` — but this secret does not exist in the vault. The query returns no rows, so the Authorization header is empty/null.
+| What | Value |
+|------|-------|
+| Post owner (`user_id`) | `b0c1c3d5-...` |
+| Meta tokens belong to | `be3b9444-...` |
+| Cron looks up tokens by | `post.user_id` → finds nothing → **"instagram not connected for user"** |
 
-2. **JWT verification enabled**: The edge function `social-cron-publish` does not have `verify_jwt = false` in `config.toml`, so even with a valid anon key it would still reject unauthenticated requests.
+**Why manual publish works**: When you click "Publish" manually, the `social-publish` edge function uses your **logged-in session JWT** (`auth.getClaims`) to find the token — NOT the post's `user_id`. If the logged-in user (`be3b9444`) has the tokens, it works.
+
+**Why cron fails**: The cron job has no logged-in user. It uses `post.user_id` (`b0c1c3d5`) to look up tokens. That user has zero tokens in `user_meta_tokens` → instant failure.
 
 ### Fix
 
-**Step 1**: Add `verify_jwt = false` to `supabase/config.toml` for the cron function:
-```toml
-[functions.social-cron-publish]
-verify_jwt = false
+**File: `supabase/functions/social-cron-publish/index.ts`** — Add a fallback token lookup.
+
+When `post.user_id` has no token, search for **any team member's token** for that platform:
+
+```typescript
+// Current (line 109-114):
+const { data: tokenData } = await supabase
+  .from("user_meta_tokens")
+  .select("access_token, pages, instagram_accounts")
+  .eq("user_id", post.user_id)
+  .eq("platform", tokenPlatform)
+  .maybeSingle();
+
+// Fixed — add fallback:
+let tokenData = ...same query...;
+if (!tokenData) {
+  // Fallback: use any available token for this platform
+  const { data: fallback } = await supabase
+    .from("user_meta_tokens")
+    .select("access_token, pages, instagram_accounts")
+    .eq("platform", tokenPlatform)
+    .limit(1)
+    .maybeSingle();
+  tokenData = fallback;
+}
 ```
 
-**Step 2**: Replace the cron job SQL to use the hardcoded anon key (per the established architecture pattern — the edge function already uses `SUPABASE_SERVICE_ROLE_KEY` internally):
-```sql
-SELECT cron.unschedule('social-cron-publish-every-5min');
+Same fallback for the page-specific token lookup at line 130-135.
 
-SELECT cron.schedule(
-  'social-cron-publish-every-5min',
-  '*/5 * * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/social-cron-publish',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhdnp6aWlnZm5xcGZka2N6YmRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMzA5MDYsImV4cCI6MjA4NTkwNjkwNn0.PPat1nPMvVVGu2hqihmS4pdJ73sBiRw5xdv8AkqNT9M"}'::jsonb,
-    body := '{"source": "cron"}'::jsonb
-  ) AS request_id;
-  $$
-);
-```
-
-**Step 3**: Also update the function to remove the auth requirement since it's called by cron (it already uses service role internally). The function currently uses `serve()` without auth gating, so this is just the config change.
-
-After these changes, the cron will successfully invoke the function every 5 minutes, find due scheduled posts, and publish them.
+This is a single-file change in the cron function. The manual publish flow is unaffected.
 
