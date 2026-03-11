@@ -1,21 +1,27 @@
 
 
-## Neel Approval — Add Visual Feedback on Click
-
-### Current State
-The approval system **already works correctly**: clicking "Neel Approval" saves `neel_approved: true` to the database and the button changes to "Approved by Neel ✅" after the query refreshes. The database confirms all current posts are `neel_approved: false` — they simply haven't been approved yet.
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
 ### Problem
-There's no immediate visual feedback when Neel clicks the button. The mutation runs silently and the button only changes after the query refetches (~500ms delay), which can make Neel unsure if it saved.
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Fix
-Add a local loading state to the "Neel Approval" button:
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-**`src/components/social/PostReviewPanel.tsx`**:
-1. Add `approvingNeel` state (`useState(false)`)
-2. Set it to `true` before the batch mutation loop, `false` after
-3. Show a spinner + "Approving..." text while saving
-4. Disable the button during the mutation to prevent double-clicks
+### Plan
+Run a single database migration:
 
-This gives Neel instant visual confirmation that his click registered and the save is in progress. Once the query refreshes, the button permanently changes to "Approved by Neel ✅".
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
+```
+
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
+
+No code changes needed — just the migration.
 
