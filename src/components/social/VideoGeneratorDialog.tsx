@@ -102,6 +102,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollCountRef = useRef(0);
   const blobUrlRef = useRef<string | null>(null);
+  const startedAtRef = useRef<number | null>(null);
+  const progressTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
   const { toast } = useToast();
 
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
