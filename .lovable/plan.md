@@ -1,27 +1,41 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Fix: Customer name resolution in Production Queue
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+Line 129 queries `v_customers_clean` selecting `customer_id, display_name` but casts the result as `{ id: string; name: string }`. Since Supabase returns the actual column names, `c.id` and `c.name` are `undefined`, causing all customer names to show as "Unknown Customer".
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Change
 
-### Plan
-Run a single database migration:
+**`src/components/office/ProductionQueueView.tsx`** — Line 129: Change the select to use the correct column names that match the expected type:
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+```typescript
+// BEFORE
+const { data, error } = await supabase.from("v_customers_clean" as any).select("customer_id, display_name").in("customer_id", projectCustomerIds);
+return ((data || []) as unknown) as Array<{ id: string; name: string }>;
+
+// AFTER
+const { data, error } = await supabase.from("v_customers_clean" as any).select("id, name").in("customer_id", projectCustomerIds);
+return ((data || []) as unknown) as Array<{ id: string; name: string }>;
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+Wait — the `in` filter uses `customer_id` which is the same as `id` in this view. Let me check if `id` equals `customer_id`.
 
-No code changes needed — just the migration.
+Actually, looking at the view columns, `id` and `customer_id` are separate columns. The `in` filter on `customer_id` is correct (projects store `customer_id`). But we need the `id` field (which is likely the same as `customer_id` in this view, since it's a clean/deduplicated view).
+
+The simplest fix: select columns aliased to match:
+
+```typescript
+const { data, error } = await supabase.from("v_customers_clean" as any)
+  .select("id:customer_id, name:display_name")
+  .in("customer_id", projectCustomerIds);
+return ((data || []) as unknown) as Array<{ id: string; name: string }>;
+```
+
+This aliases `customer_id` → `id` and `display_name` → `name`, matching the expected type.
+
+### Verification
+After this fix:
+- "Valard Construction LP" should display correctly instead of "Unknown Customer"
+- The Type 6 Chamber manifest count (2 manifests: 1 linked + 1 loose) should display correctly (this part was already working, only names were broken)
 
