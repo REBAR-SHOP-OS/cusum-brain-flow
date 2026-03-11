@@ -52,7 +52,7 @@ async function veoGenerate(apiKey: string, prompt: string, duration: number) {
         sampleCount: 1,
         durationSeconds: veoDuration,
         aspectRatio: "16:9",
-        personGeneration: "allow_adult",
+        personGeneration: "allow_all",
       },
     }),
   });
