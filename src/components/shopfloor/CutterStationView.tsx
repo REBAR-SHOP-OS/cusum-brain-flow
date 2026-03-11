@@ -285,6 +285,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     const finalBars = Math.max(1, Math.min(bars, maxBars));
     try {
       setIsRunning(true);
+      setCompletedAtRunStart(completedPieces); // Sync fallback — async fetch refines below
       // Fetch fresh completed_pieces from DB to avoid stale realtime data
       const { data: freshRow } = await supabase
         .from("cut_plan_items")
@@ -399,11 +400,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   // ── Record stroke ──
   const handleRecordStroke = useCallback(() => {
-    // GUARD: block strokes until completedAtRunStart snapshot is set
-    if (completedAtRunStart === null) {
-      toast({ title: "⏳ Initializing…", description: "Wait for run to fully start before cutting.", variant: "destructive" });
-      return;
-    }
+    // Graceful fallback: use current completedPieces if snapshot not yet set
+    const effectiveRunStart = completedAtRunStart ?? completedPieces;
 
     // Count active bars BEFORE the stroke (this is how many pieces this stroke produces)
     const activeBars = slotTracker.slots.filter(s => s.status === "active").length;
