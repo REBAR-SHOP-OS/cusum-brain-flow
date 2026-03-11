@@ -86,8 +86,13 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           .select("completed_pieces")
           .eq("id", machine.active_job_id)
           .single()
-          .then(({ data }) => {
-            if (data) setCompletedAtRunStart(data.completed_pieces ?? 0);
+          .then(({ data, error }) => {
+            if (error || !data) {
+              console.warn("[CutterStation] Failed to fetch completed_pieces for restore, falling back to 0");
+              setCompletedAtRunStart(0);
+            } else {
+              setCompletedAtRunStart(data.completed_pieces ?? 0);
+            }
           });
         console.log("[CutterStation] Restored active job from backend:", machine.active_job_id);
       }
@@ -151,14 +156,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [prevItemId, setPrevItemId] = useState<string | null>(null);
   useEffect(() => {
     if (currentItem && prevItemId !== currentItem.id) {
-      // Only reset if we actually changed items (not first render matching)
-      if (prevItemId !== null) {
+      // Only reset if we actually changed items (not first render or restore)
+      if (prevItemId !== null && restoredFromBackend) {
         setCompletedAtRunStart(null);
         setOperatorBars(null);
       }
       setPrevItemId(currentItem.id);
     }
-  }, [currentItem?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentItem?.id, restoredFromBackend]); // eslint-disable-line react-hooks/exhaustive-deps
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
   const cutPlanId = currentItem?.cut_plan_id || null;
   const barCode = currentItem?.bar_code;
@@ -355,6 +360,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       toast({ title: "Machine started", description: `Cutting ${currentItem.mark_number || "item"} — use slot tracker to record cuts` });
     } catch (err: any) {
       setIsRunning(false);
+      setCompletedAtRunStart(null);
       toast({ title: "Start failed", description: err.message, variant: "destructive" });
     } finally {
       startingRef.current = false;

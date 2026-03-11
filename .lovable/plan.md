@@ -1,44 +1,23 @@
 
+# اتصال عینک Ray-Ban Meta به Vizzy — وضعیت پیاده‌سازی
 
-## Bug Analysis: "Initializing..." Banner Persists on Cutter Station
+## ✅ انجام شده
+1. **جدول `glasses_captures`** — ساخته شد با RLS
+2. **Edge Function `vizzy-glasses-webhook`** — آماده و deploy شد
+3. **`GLASSES_WEBHOOK_KEY`** — Secret تنظیم شد
+4. **`config.toml`** — verify_jwt=false اضافه شد
 
-### Root Cause
-
-There is a **race condition** between two effects in `CutterStationView.tsx`:
-
-1. **Restore effect** (lines 68-96): On mount, detects an active locked job, sets `currentIndex`, and fires an async fetch to set `completedAtRunStart`.
-
-2. **Item-change effect** (lines 151-161): Watches `currentItem.id` changes. When the restore effect sets `currentIndex` (changing `currentItem`), this effect fires and **resets `completedAtRunStart` to null** — potentially AFTER the async fetch resolves and sets it.
-
-Timeline:
-```text
-1. Restore effect fires → setCurrentIndex(lockedIndex)
-2. React re-renders → currentItem changes
-3. Item-change effect fires → setPrevItemId(currentItem.id)
-   (prevItemId was null on first render, so the reset guard passes through)
-4. Async fetch resolves → setCompletedAtRunStart(value) ← MAY happen before or after #3
-5. If #3 fires AFTER #4 → completedAtRunStart is reset to null → stuck forever
+## Webhook URL
+```
+POST https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook
+Headers: x-webhook-key: [YOUR_KEY], Content-Type: application/json
+Body: { "imageBase64": "...", "prompt": "optional question" }
 ```
 
-Additionally, the restore fetch has **no `.catch()` handler**, so a network error silently leaves `completedAtRunStart` as null.
+## قدم‌های بعدی (کاربر)
+1. Meta View App را نصب و عینک را pair کنید
+2. iOS Shortcut بسازید با prompt زیر
+3. Automation تنظیم کنید
 
-### Fix Plan
-
-**File: `src/components/shopfloor/CutterStationView.tsx`**
-
-1. **Fix the item-change effect to skip reset during restoration**: Add a guard so the `prevItemId` effect does NOT reset `completedAtRunStart` when `restoredFromBackend` is false (i.e., during the initial restore sequence). This prevents the race.
-
-2. **Add `.catch()` to the restore fetch** (line 84-91): On error, fall back to `setCompletedAtRunStart(0)` so the station never gets permanently stuck.
-
-3. **Reset `completedAtRunStart` in the catch block of `handleLockAndStart`** (line 356-358): When start fails, also clear `completedAtRunStart` to prevent stale state.
-
-### Technical Changes
-
-```text
-Line 84-91: Add .catch() → setCompletedAtRunStart(currentItem.completed_pieces ?? 0)
-Line 152-161: Add guard: skip reset if !restoredFromBackend  
-Line 356-358: Add setCompletedAtRunStart(null) in the catch block
-```
-
-These are minimal, surgical changes that don't alter any other behavior.
-
+## پرامپت iOS Shortcut
+> "Build me an iOS Shortcut that: 1) Gets the latest photo from the 'Meta View' album. 2) Converts to base64. 3) POST to https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/vizzy-glasses-webhook with headers x-webhook-key: [YOUR_KEY], Content-Type: application/json. Body: {"imageBase64": [base64]}. 4) Shows 'analysis' as notification. Then create Automation for new photos in Meta View album."
