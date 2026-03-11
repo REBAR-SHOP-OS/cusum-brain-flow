@@ -193,6 +193,15 @@ export function PostReviewPanel({
     }
   };
 
+  const filteredPageOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return localPlatforms.flatMap(p => PLATFORM_PAGES[p] || []).filter(o => {
+      if (seen.has(o.value)) return false;
+      seen.add(o.value);
+      return true;
+    });
+  }, [localPlatforms]);
+
   if (!post) return null;
 
   const startEdit = () => {
@@ -234,15 +243,6 @@ export function PostReviewPanel({
     youtube: "youtube",
     tiktok: "tiktok",
   };
-
-  const filteredPageOptions = useMemo(() => {
-    const seen = new Set<string>();
-    return localPlatforms.flatMap(p => PLATFORM_PAGES[p] || []).filter(o => {
-      if (seen.has(o.value)) return false;
-      seen.add(o.value);
-      return true;
-    });
-  }, [localPlatforms]);
 
   const handlePlatformsSaveMulti = (values: string[]) => {
     setLocalPlatforms(values);
