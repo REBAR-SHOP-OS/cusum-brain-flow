@@ -108,17 +108,36 @@ export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds,
         });
         const isCurrentDay = isToday(day);
         const groups = groupPostsByContent(dayPosts);
+        const dayPostIds = dayPosts.map((p) => p.id);
+        const allDaySelected = dayPostIds.length > 0 && dayPostIds.every((id) => selectedPostIds?.has(id));
 
         return (
           <div key={day.toISOString()} className="min-h-[400px]">
             {/* Day Header */}
             <div className={cn(
-              "text-center py-2 mb-2 rounded-lg",
+              "text-center py-2 mb-2 rounded-lg relative",
               isCurrentDay && "bg-muted"
             )}>
               <p className="text-sm text-muted-foreground">{format(day, "EEE d")}</p>
               {isCurrentDay && (
                 <p className="text-xs font-medium text-primary">Today</p>
+              )}
+              {onSelectDay && dayPostIds.length > 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onSelectDay(dayPostIds); }}
+                  className="absolute top-1.5 right-1.5"
+                >
+                  <div className={cn(
+                    "w-4 h-4 rounded-sm border flex items-center justify-center transition-colors",
+                    allDaySelected
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : "border-muted-foreground/40 hover:border-primary"
+                  )}>
+                    {allDaySelected && (
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    )}
+                  </div>
+                </button>
               )}
             </div>
 
