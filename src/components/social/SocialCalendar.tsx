@@ -109,7 +109,6 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
       {days.map((day) => {
         const dayPosts = posts.filter((post) => {
           if (!post.scheduled_date) return false;
-          if (post.platform === "unassigned") return false;
           return isSameDay(parseISO(post.scheduled_date), day);
         });
         const isCurrentDay = isToday(day);
