@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save, X, Music, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { slideshowToVideo } from "@/lib/slideshowToVideo";
 import { supabase } from "@/integrations/supabase/client";
 import { VideoLibrary } from "./VideoLibrary";
 import { useBrandKit } from "@/hooks/useBrandKit";

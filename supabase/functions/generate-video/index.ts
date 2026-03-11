@@ -512,6 +512,71 @@ serve(async (req) => {
         }
       } catch (e) {
         const message = getErrorMessage(e);
+
+        // Slideshow fallback for single clip when both providers exhausted
+        if (isProviderCapacityError(message)) {
+          const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+          if (lovableKey) {
+            try {
+              const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${lovableKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-3.1-flash-image-preview",
+                  messages: [
+                    {
+                      role: "user",
+                      content: `Generate a high-quality, cinematic 16:9 photograph for this video scene. Photorealistic, dramatic lighting, professional composition. Scene: ${prompt}`,
+                    },
+                  ],
+                  modalities: ["image", "text"],
+                }),
+              });
+
+              if (imgResp.ok) {
+                const imgData = await imgResp.json();
+                const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+                if (b64Url) {
+                  const serviceClient = createClient(
+                    Deno.env.get("SUPABASE_URL")!,
+                    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                  );
+                  const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
+                  const binaryStr = atob(base64Data);
+                  const bytes = new Uint8Array(binaryStr.length);
+                  for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+
+                  const fileName = `${auth.userId}/${crypto.randomUUID()}.png`;
+                  await serviceClient.storage
+                    .from("generated-videos")
+                    .upload(fileName, bytes, { contentType: "image/png", upsert: false });
+
+                  const { data: pubData } = serviceClient.storage
+                    .from("generated-videos")
+                    .getPublicUrl(fileName);
+
+                  return new Response(
+                    JSON.stringify({
+                      status: "completed",
+                      mode: "slideshow",
+                      imageUrls: [pubData.publicUrl],
+                      clipDuration: duration || 8,
+                      totalScenes: 1,
+                      message: "Video providers unavailable — generated motion slideshow instead",
+                    }),
+                    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                  );
+                }
+              }
+            } catch (slideshowErr) {
+              console.error("Single clip slideshow fallback failed:", slideshowErr);
+            }
+          }
+        }
+
         return new Response(
           JSON.stringify({
             status: "failed",
