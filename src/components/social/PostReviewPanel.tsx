@@ -142,6 +142,8 @@ export function PostReviewPanel({
   const [uploading, setUploading] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [fbPublishReady, setFbPublishReady] = useState<boolean | null>(null);
+  const [fbMissingScopes, setFbMissingScopes] = useState<string[]>([]);
 
   const isPublished = post?.status === "published";
 
