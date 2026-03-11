@@ -27,6 +27,8 @@ export interface SocialPost {
   // Metadata
   content_type: string | null;
   page_name: string | null;
+  // Approval gate
+  neel_approved: boolean;
 }
 
 export type SocialPostInsert = Omit<SocialPost, "id" | "created_at" | "updated_at">;

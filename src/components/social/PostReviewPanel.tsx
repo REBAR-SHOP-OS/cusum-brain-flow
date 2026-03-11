@@ -170,8 +170,16 @@ export function PostReviewPanel({
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   const isPublished = post?.status === "published";
+
+  // Fetch current user email for Neel approval gate
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserEmail(data.user?.email ?? null);
+    });
+  }, []);
 
   // Sub-panel state
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
