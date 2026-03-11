@@ -3,6 +3,7 @@ import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, C
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { PLATFORM_PAGES } from "@/lib/socialConstants";
 
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -49,45 +50,7 @@ const PLATFORM_OPTIONS: SelectionOption[] = [
   { value: "tiktok", label: "TikTok", description: "Only single video posts supported" },
 ];
 
-const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
-  facebook: [
-    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-    { value: "Rebar.shop", label: "Rebar.shop" },
-    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
-    { value: "Ontario Logistics", label: "Ontario Logistics" },
-    { value: "Ontario Steels", label: "Ontario Steels" },
-    { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
-  ],
-  instagram: [
-    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-    { value: "Rebar.shop", label: "Rebar.shop" },
-    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
-    { value: "Ontario Logistics", label: "Ontario Logistics" },
-    { value: "Ontario Steels", label: "Ontario Steels" },
-    { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
-  ],
-  instagram_fb: [
-    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-    { value: "Rebar.shop", label: "Rebar.shop" },
-    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
-    { value: "Ontario Logistics", label: "Ontario Logistics" },
-    { value: "Ontario Steels", label: "Ontario Steels" },
-    { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
-  ],
-  linkedin: [
-    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-    { value: "Ontario Logistics", label: "Ontario Logistics" },
-  ],
-  linkedin_org: [
-    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-  ],
-  youtube: [
-    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-  ],
-  tiktok: [
-    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-  ],
-};
+// PLATFORM_PAGES imported from @/lib/socialConstants
 
 type SubPanelView = null | "content_type" | "platform" | "pages";
 
