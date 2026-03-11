@@ -53,7 +53,23 @@ Deno.serve(async (req) => {
         .single();
 
       if (fullPost) {
+        const scheduledDay = scheduled_date.substring(0, 10);
         for (const combo of extra_combos) {
+          // Server-side duplicate check before cloning
+          const { data: existing } = await serviceClient
+            .from("social_posts")
+            .select("id")
+            .eq("platform", combo.platform)
+            .eq("title", fullPost.title)
+            .gte("scheduled_date", `${scheduledDay}T00:00:00`)
+            .lte("scheduled_date", `${scheduledDay}T23:59:59`)
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            console.warn(`[schedule-post] Duplicate skipped for ${combo.platform}/${combo.page}: existing=${existing[0].id}`);
+            continue;
+          }
+
           const { data: clone, error: cloneErr } = await serviceClient
             .from("social_posts")
             .insert({
