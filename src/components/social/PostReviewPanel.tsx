@@ -169,6 +169,7 @@ export function PostReviewPanel({
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [approvingNeel, setApprovingNeel] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editHashtags, setEditHashtags] = useState("");
