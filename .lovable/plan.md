@@ -1,27 +1,27 @@
 
 
-## Fix: Allow Supervisor to Adjust Bars Mid-Run
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
 ### Problem
-In `CutEngine.tsx`, the up/down buttons for "Bars to Load" have `disabled={... || isRunning}`. This means even when Supervisor mode is active, the buttons are disabled during an active run. The purpose of supervisor mode is to allow overrides, so this `isRunning` guard should be relaxed for supervisors.
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Change in `src/components/shopfloor/CutEngine.tsx`
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-**Line 229** — Down button disabled condition:
-```
-// Before:
-disabled={bars <= 1 || isRunning}
-// After:
-disabled={bars <= 1 || (isRunning && !isSupervisor)}
-```
+### Plan
+Run a single database migration:
 
-**Line 251** — Up button disabled condition:
-```
-// Before:
-disabled={bars >= maxBars || isRunning}
-// After:
-disabled={bars >= maxBars || (isRunning && !isSupervisor)}
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-This allows supervisors to adjust bars even during an active run, while operators remain locked out as before.
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
+
+No code changes needed — just the migration.
 
