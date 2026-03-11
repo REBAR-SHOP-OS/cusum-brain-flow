@@ -1,27 +1,23 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Fix: Group Work Order Queue by Customer Name instead of Workstation
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+The Work Order Queue in `WorkOrderQueueSection.tsx` groups work orders by `wo.workstation`, but this field is always `null` in the database. This causes all work orders to appear under a single "UNASSIGNED" header, even though the customer name is available on each work order.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Solution
+Change the grouping key from `wo.workstation` to `wo.customer_name`, falling back to "Unassigned" only when no customer name exists.
 
-### Plan
-Run a single database migration:
+### File: `src/components/shopfloor/WorkOrderQueueSection.tsx`
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+**Line 30** — change grouping key:
+```typescript
+// Before
+const key = wo.workstation || "Unassigned";
+
+// After
+const key = wo.customer_name || "Unassigned";
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
-
-No code changes needed — just the migration.
+That's the only change needed. The `customer_name` field is already populated by the `useSupabaseWorkOrders` hook (via the `orders → customers` join). The group header will now display "Valard Construction LP" instead of "UNASSIGNED".
 
