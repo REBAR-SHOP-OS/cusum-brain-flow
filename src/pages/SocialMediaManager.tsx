@@ -278,8 +278,48 @@ export default function SocialMediaManager() {
           </div>
         </div>
 
-        {/* Search & Filters */}
+        {/* Search, Filters & Selection */}
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-thin mb-4">
+          {/* Selection mode toggle */}
+          <Button
+            variant={selectionMode ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
+          >
+            <CheckSquare className="w-4 h-4" />
+            <span className="hidden sm:inline">{selectionMode ? "Cancel" : "Select"}</span>
+          </Button>
+
+          {selectionMode && (
+            <>
+              <div className="flex items-center gap-1.5 shrink-0 px-2">
+                <Checkbox
+                  checked={filteredPosts.length > 0 && selectedPostIds.size === filteredPosts.length}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Select all</span>
+              </div>
+              {selectedPostIds.size > 0 && (
+                <>
+                  <span className="text-xs font-medium text-foreground shrink-0">
+                    {selectedPostIds.size} selected
+                  </span>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="gap-1.5 shrink-0"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </Button>
+                </>
+              )}
+              <div className="w-px h-6 bg-border mx-0.5 shrink-0" />
+            </>
+          )}
+
           {searchOpen ? (
             <div className="shrink-0 w-40 sm:w-52">
               <SmartSearchInput
