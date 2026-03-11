@@ -306,13 +306,6 @@ export default function SocialMediaManager() {
 
           {selectionMode && (
             <>
-              <div className="flex items-center gap-1.5 shrink-0 px-2">
-                <Checkbox
-                  checked={filteredPosts.length > 0 && selectedPostIds.size === filteredPosts.length}
-                  onCheckedChange={toggleSelectAll}
-                />
-                <span className="text-xs text-muted-foreground whitespace-nowrap">Select all</span>
-              </div>
               {selectedPostIds.size > 0 && (
                 <>
                   <span className="text-xs font-medium text-foreground shrink-0">
