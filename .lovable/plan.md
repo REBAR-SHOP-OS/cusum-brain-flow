@@ -1,27 +1,32 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Show All Platform Pages in PostReviewPanel
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+When clicking a platform-grouped card (e.g., Facebook ×6), only the first post is passed to `PostReviewPanel`. The Pages section then shows only that one post's `page_name`, not all 6 pages.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Solution
+Pass all posts belonging to the clicked platform group alongside the selected post, so `PostReviewPanel` can populate `localPages` with all unique page names from that group.
 
-### Plan
-Run a single database migration:
+### Changes
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
-```
+**`src/components/social/SocialCalendar.tsx`**
+- Add a new prop `onPostClickWithGroup?: (post: SocialPost, groupPosts: SocialPost[]) => void`
+- When clicking a platform group card (non-selection mode), call `onPostClick(firstPost)` **and** pass the full `posts` array via a new callback, OR change `onPostClick` signature to include sibling posts
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+Simpler approach — add an optional `onGroupClick` prop:
+- `onGroupClick?: (post: SocialPost, siblingPages: string[]) => void`
+- When present, use it instead of `onPostClick`; pass `firstPost` + unique page names from the group
 
-No code changes needed — just the migration.
+**`src/pages/SocialMediaManager.tsx`**
+- Add state: `const [groupPages, setGroupPages] = useState<string[]>([])`
+- Handle group click: `onGroupClick={(post, pages) => { setSelectedPost(post); setGroupPages(pages); }}`
+- Pass `groupPages` to `PostReviewPanel`
+
+**`src/components/social/PostReviewPanel.tsx`**
+- Add optional prop `groupPages?: string[]`
+- In the `useEffect` that syncs on `post?.id`, if `groupPages` is provided and non-empty, use it for `setLocalPages` instead of just `[post.page_name]`
+
+### Result
+Clicking a Facebook ×6 card opens the review panel with all 6 page names listed in the Pages section.
 
