@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link2, ExternalLink, AlertTriangle, CheckCircle, Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { Link2, ExternalLink, AlertTriangle, CheckCircle, Loader2, Sparkles, RefreshCw, Globe } from "lucide-react";
 import { toast } from "sonner";
+import { useSemrushSync } from "@/hooks/useSemrushApi";
 
 type StatusFilter = "all" | "broken" | "opportunity" | "fixed";
 
