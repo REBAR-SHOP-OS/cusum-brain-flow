@@ -340,7 +340,10 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setSavedToLibrary(false);
     pollCountRef.current = 0;
 
-    const brandedPrompt = `${prompt.trim()}. The video should feature a subtle gold circular coin logo watermark with a blue geometric "G" symbol in the bottom-right corner throughout.`;
+    const logoDesc = brandKit?.logo_url
+      ? `Include a subtle watermark of the ${brandKit.business_name || "company"} logo in the bottom-right corner throughout.`
+      : "";
+    const brandedPrompt = `${prompt.trim()}. ${logoDesc}`.trim();
     const requestedDuration = parseInt(duration);
     const isMultiScene = requestedDuration > currentModel.maxClipDuration;
 

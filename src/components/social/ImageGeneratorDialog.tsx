@@ -90,8 +90,11 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     setImageUrl(null);
     setRevisedPrompt(null);
 
-    // Auto-inject branding: always include company logo
-    const brandedPrompt = `${prompt.trim()}. IMPORTANT: Include a professional company logo watermark in one corner of the image — the logo is a gold circular coin/medallion with a blue geometric "G" letter symbol in the center. The logo should be subtle but clearly visible, positioned in the bottom-right corner.`;
+    // Auto-inject branding from brand kit
+    const logoDesc = brandKit?.logo_url
+      ? `IMPORTANT: Include a subtle but visible watermark of the ${brandKit.business_name || "company"} logo in the bottom-right corner.`
+      : "";
+    const brandedPrompt = `${prompt.trim()}. ${logoDesc}`.trim();
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("generate-image", {
