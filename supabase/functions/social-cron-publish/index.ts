@@ -89,6 +89,17 @@ serve(async (req) => {
 
     for (const post of duePosts) {
       try {
+        // Guard: re-check status to prevent duplicate publishing (race condition with manual publish)
+        const { data: freshPost } = await supabase
+          .from("social_posts")
+          .select("status")
+          .eq("id", post.id)
+          .single();
+        if (freshPost?.status === "published" || freshPost?.status === "publishing") {
+          console.log(`[social-cron-publish] Skipping ${post.id} — status is already ${freshPost.status}`);
+          continue;
+        }
+
         // Mark publish attempt to prevent retry storms
         await supabase
           .from("social_posts")

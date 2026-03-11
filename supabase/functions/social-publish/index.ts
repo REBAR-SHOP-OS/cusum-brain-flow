@@ -61,6 +61,21 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Guard: prevent duplicate publishing
+    if (post_id) {
+      const { data: existing } = await supabaseAdmin
+        .from("social_posts")
+        .select("status")
+        .eq("id", post_id)
+        .single();
+      if (existing?.status === "published") {
+        return new Response(
+          JSON.stringify({ error: "This post has already been published." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Get user token for the platform
     const tokenPlatform = platform === "instagram" ? "instagram" : "facebook";
     const { data: tokenData, error: tokenError } = await supabaseAdmin
