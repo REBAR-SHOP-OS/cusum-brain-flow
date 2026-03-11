@@ -18,10 +18,11 @@ async function verifyAuth(req: Request): Promise<string | null> {
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) return null;
-  return data.claims.sub as string;
+  const { data: { user }, error } = await supabase.auth.getUser(
+    authHeader.replace("Bearer ", "")
+  );
+  if (error || !user) return null;
+  return user.id;
 }
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -52,7 +53,7 @@ async function veoGenerate(apiKey: string, prompt: string, duration: number) {
         sampleCount: 1,
         durationSeconds: veoDuration,
         aspectRatio: "16:9",
-        personGeneration: "allow_adult",
+        personGeneration: "allow_all",
       },
     }),
   });

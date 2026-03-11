@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 interface VideoGeneratorDialogProps {
   open: boolean;
@@ -31,14 +32,15 @@ interface ModelOption {
 
 const modelOptions: ModelOption[] = [
   {
-    id: "veo-3",
+    id: "veo-3.1",
     provider: "veo",
-    label: "Google Veo 3",
+    label: "Google Veo 3.1",
     description: "High-quality cinematic video with native audio",
     pricing: "$0.75/sec",
     maxDuration: 8,
     durationOptions: [
-      { value: "5", label: "5 seconds" },
+      { value: "4", label: "4 seconds" },
+      { value: "6", label: "6 seconds" },
       { value: "8", label: "8 seconds" },
     ],
   },
@@ -70,9 +72,11 @@ const modelOptions: ModelOption[] = [
   },
 ];
 
+const MAX_POLL_COUNT = 60; // 60 × 5s = 5 minutes max
+
 export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: VideoGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState("veo-3");
+  const [selectedModel, setSelectedModel] = useState("veo-3.1");
   const [duration, setDuration] = useState("8");
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
@@ -80,6 +84,8 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
   const [error, setError] = useState<string | null>(null);
   const jobRef = useRef<{ id: string; provider: Provider } | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollCountRef = useRef(0);
+  const blobUrlRef = useRef<string | null>(null);
   const { toast } = useToast();
 
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
@@ -88,6 +94,11 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     if (pollTimerRef.current) {
       clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
+    }
+    // Revoke blob URL to prevent memory leak
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
     }
   }, []);
 
@@ -109,59 +120,81 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     onOpenChange(false);
     setTimeout(() => {
       setPrompt("");
-      setSelectedModel("veo-3");
-      setDuration("5");
+      setSelectedModel("veo-3.1");
+      setDuration("6");
       setStatus("idle");
       setProgress(0);
       setVideoUrl(null);
       setError(null);
       jobRef.current = null;
+      pollCountRef.current = 0;
     }, 300);
+  };
+
+  /** Proxy download through edge function (handles both Veo and Sora auth) */
+  const proxyDownload = async (provider: Provider, jobId: string, remoteVideoUrl?: string): Promise<string | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return null;
+
+    const downloadUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`;
+    try {
+      const dlResp = await fetch(downloadUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({
+          action: "download",
+          provider,
+          ...(provider === "veo" ? { videoUrl: remoteVideoUrl } : { jobId }),
+        }),
+      });
+      if (dlResp.ok) {
+        const blob = await dlResp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlRef.current = blobUrl;
+        return blobUrl;
+      }
+    } catch (e) {
+      console.error("Proxy download failed:", e);
+    }
+    return null;
   };
 
   const pollForResult = useCallback(async () => {
     if (!jobRef.current) return;
 
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke("generate-video", {
-        body: {
-          action: "poll",
-          provider: jobRef.current.provider,
-          jobId: jobRef.current.id,
-        },
-      });
+    pollCountRef.current += 1;
+    if (pollCountRef.current > MAX_POLL_COUNT) {
+      setError("Video generation timed out after 5 minutes. Please try again.");
+      setStatus("failed");
+      return;
+    }
 
-      if (fnError) throw fnError;
+    try {
+      const data = await invokeEdgeFunction("generate-video", {
+        action: "poll",
+        provider: jobRef.current.provider,
+        jobId: jobRef.current.id,
+      });
 
       if (data.status === "completed") {
         setStatus("completed");
         setProgress(100);
 
-        if (data.needsAuth && jobRef.current.provider === "sora") {
-          // For Sora, we need to proxy the download through our edge function
-          const downloadUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`;
-          // We'll use a blob fetch approach
-          try {
-            const dlResp = await fetch(downloadUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              },
-              body: JSON.stringify({
-                action: "download",
-                provider: "sora",
-                jobId: jobRef.current.id,
-              }),
-            });
-            if (dlResp.ok) {
-              const blob = await dlResp.blob();
-              const blobUrl = URL.createObjectURL(blob);
-              setVideoUrl(blobUrl);
-            } else {
-              setVideoUrl(data.videoUrl);
-            }
-          } catch {
+        const needsProxy = data.needsAuth || data.needsGeminiAuth;
+
+        if (needsProxy) {
+          const proxied = await proxyDownload(
+            jobRef.current.provider,
+            jobRef.current.id,
+            data.videoUrl,
+          );
+          if (proxied) {
+            setVideoUrl(proxied);
+          } else {
             setVideoUrl(data.videoUrl);
           }
         } else if (data.videoUrl) {
@@ -186,9 +219,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
         setProgress((prev) => Math.min(prev + 3, 90));
       }
       pollTimerRef.current = setTimeout(pollForResult, 5000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Poll error:", err);
-      setError("Failed to check video status. Please try again.");
+      setError(err?.message || "Failed to check video status. Please try again.");
       setStatus("failed");
     }
   }, []);
@@ -200,36 +233,26 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setProgress(0);
     setError(null);
     setVideoUrl(null);
+    pollCountRef.current = 0;
 
-    // Auto-inject branding: include company logo reference
     const brandedPrompt = `${prompt.trim()}. The video should feature a subtle gold circular coin logo watermark with a blue geometric "G" symbol in the bottom-right corner throughout.`;
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("generate-video", {
-        body: {
-          action: "generate",
-          provider: currentModel.provider,
-          prompt: brandedPrompt,
-          duration: parseInt(duration),
-          model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
-        },
+      const data = await invokeEdgeFunction("generate-video", {
+        action: "generate",
+        provider: currentModel.provider,
+        prompt: brandedPrompt,
+        duration: parseInt(duration),
+        model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
       });
-
-      if (fnError) throw fnError;
-
-      if (data.error) {
-        setError(data.error);
-        setStatus("failed");
-        return;
-      }
 
       jobRef.current = { id: data.jobId, provider: data.provider };
       setStatus("processing");
       setProgress(5);
       pollTimerRef.current = setTimeout(pollForResult, 5000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Generate error:", err);
-      setError("Failed to start video generation.");
+      setError(err?.message || "Failed to start video generation.");
       setStatus("failed");
     }
   };
@@ -241,6 +264,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setVideoUrl(null);
     setError(null);
     jobRef.current = null;
+    pollCountRef.current = 0;
   };
 
   const handleUseVideo = () => {
