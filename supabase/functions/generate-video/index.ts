@@ -559,7 +559,7 @@ serve(async (req) => {
       );
     }
 
-    // ── Poll Multi-Scene (poll all jobs, download & concat when all done) ──
+    // ── Poll Multi-Scene (progressive upload: one clip per poll) ──
     if (action === "poll-multi") {
       if (!jobIds || jobIds.length === 0) {
         return new Response(
@@ -568,9 +568,16 @@ serve(async (req) => {
         );
       }
 
+      // Accept already-uploaded scene URLs from client
+      const existingSceneUrls: Record<number, string> = body.existingSceneUrls || {};
+
       const results = await Promise.all(
         jobIds.map(async (job) => {
           try {
+            // If this scene already has a URL, skip polling
+            if (existingSceneUrls[job.sceneIndex]) {
+              return { ...job, status: "completed", storageUrl: existingSceneUrls[job.sceneIndex] };
+            }
             const jobApiKey = job.provider === "veo" ? geminiKey : gptKey;
             if (!jobApiKey) return { ...job, status: "failed", error: "API key missing" };
 
@@ -584,56 +591,69 @@ serve(async (req) => {
         })
       );
 
-      const allCompleted = results.every(r => r.status === "completed");
       const anyFailed = results.some(r => r.status === "failed");
       const completedCount = results.filter(r => r.status === "completed").length;
 
-      if (allCompleted) {
-        // Download each clip individually and upload to storage
+      // Progressive upload: pick ONE newly-completed scene that doesn't have a storageUrl yet, download + upload it
+      const newlyCompleted = results.find(
+        r => r.status === "completed" && !(r as any).storageUrl && !existingSceneUrls[r.sceneIndex]
+      );
+
+      const uploadedSceneUrls: Record<number, string> = { ...existingSceneUrls };
+
+      if (newlyCompleted) {
         try {
-          const sorted = results.sort((a, b) => a.sceneIndex - b.sceneIndex);
-          const sceneUrls: string[] = [];
+          const sceneApiKey = newlyCompleted.provider === "veo" ? geminiKey : gptKey;
+          if (!sceneApiKey) throw new Error("API key missing for download");
 
-          for (const scene of sorted) {
-            const sceneApiKey = scene.provider === "veo" ? geminiKey : gptKey;
-            if (!sceneApiKey) throw new Error("API key missing for download");
-
-            let clipBytes: Uint8Array;
-            if (scene.provider === "veo" && scene.videoUrl) {
-              clipBytes = await veoDownloadBytes(sceneApiKey, scene.videoUrl);
-            } else if (scene.provider === "sora") {
-              clipBytes = await soraDownloadBytes(sceneApiKey, scene.id);
-            } else {
-              continue;
-            }
-
-            const url = await uploadToStorage(auth.userId, clipBytes);
-            sceneUrls.push(url);
+          let clipBytes: Uint8Array;
+          if (newlyCompleted.provider === "veo" && (newlyCompleted as any).videoUrl) {
+            clipBytes = await veoDownloadBytes(sceneApiKey, (newlyCompleted as any).videoUrl);
+          } else if (newlyCompleted.provider === "sora") {
+            clipBytes = await soraDownloadBytes(sceneApiKey, newlyCompleted.id);
+          } else {
+            throw new Error("Cannot download scene");
           }
 
-          if (sceneUrls.length === 0) {
-            return new Response(
-              JSON.stringify({ status: "failed", error: "No clips downloaded" }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-
-          return new Response(
-            JSON.stringify({
-              status: "completed",
-              sceneUrls,
-              videoUrl: sceneUrls[0],
-              savedToLibrary: true,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          const url = await uploadToStorage(auth.userId, clipBytes);
+          uploadedSceneUrls[newlyCompleted.sceneIndex] = url;
         } catch (e) {
-          console.error("Multi-scene download error:", e);
+          console.error(`Scene ${newlyCompleted.sceneIndex} upload error:`, e);
+          // Don't fail the whole batch — retry next poll
+        }
+      }
+
+      // Copy any existing storageUrls from results
+      for (const r of results) {
+        if ((r as any).storageUrl) {
+          uploadedSceneUrls[r.sceneIndex] = (r as any).storageUrl;
+        }
+      }
+
+      const totalScenes = results.length;
+      const uploadedCount = Object.keys(uploadedSceneUrls).length;
+
+      // All scenes uploaded?
+      if (uploadedCount >= totalScenes && completedCount >= totalScenes) {
+        const sorted = results.sort((a, b) => a.sceneIndex - b.sceneIndex);
+        const sceneUrls = sorted.map(r => uploadedSceneUrls[r.sceneIndex]).filter(Boolean);
+
+        if (sceneUrls.length === 0) {
           return new Response(
-            JSON.stringify({ status: "failed", error: e instanceof Error ? e.message : "Download failed" }),
+            JSON.stringify({ status: "failed", error: "No clips downloaded" }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+
+        return new Response(
+          JSON.stringify({
+            status: "completed",
+            sceneUrls,
+            videoUrl: sceneUrls[0],
+            savedToLibrary: true,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       if (anyFailed && completedCount === 0) {
@@ -644,14 +664,16 @@ serve(async (req) => {
         );
       }
 
-      // Still processing
-      const overallProgress = Math.round((completedCount / results.length) * 100);
+      // Still processing — return progress + uploaded URLs so client sends them back
+      const overallProgress = Math.round((uploadedCount / totalScenes) * 100);
       return new Response(
         JSON.stringify({
           status: "processing",
           progress: overallProgress,
           completedScenes: completedCount,
-          totalScenes: results.length,
+          uploadedScenes: uploadedCount,
+          totalScenes,
+          uploadedSceneUrls,
           scenes: results.map(r => ({
             sceneIndex: r.sceneIndex,
             status: r.status,
