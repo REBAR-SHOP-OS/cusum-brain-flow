@@ -23,6 +23,7 @@ const TIME_SLOTS = [
 ];
 
 const PLATFORM_RULES: Record<string, string> = {
+  unassigned: "General social media: Write a versatile caption suitable for any platform. Medium length (200-400 words). Professional yet engaging tone. Strong CTA. Can be adapted later for specific platforms.",
   facebook: "Facebook: Longer captions OK (up to 500 words). Community-focused, conversational, storytelling. Tag pages, use emojis moderately. Image-first but text posts also work.",
   instagram: "Instagram: Visual-first. Caption max 2200 chars. Up to 30 hashtags (use 15-20 relevant ones). Strong CTA. Story-style hooks. Carousel-friendly formatting.",
   linkedin: "LinkedIn: Professional B2B tone. Thought leadership angle. Construction industry expertise. Longer-form OK (up to 1300 chars for high engagement). No hashtag spam (3-5 max). Hook in first line. Line breaks for readability. End with engagement question.",
