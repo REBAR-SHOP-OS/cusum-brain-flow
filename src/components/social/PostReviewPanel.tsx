@@ -49,14 +49,34 @@ const PLATFORM_OPTIONS: SelectionOption[] = [
   { value: "tiktok", label: "TikTok", description: "Only single video posts supported" },
 ];
 
-const PAGES_OPTIONS: SelectionOption[] = [
-  { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-  { value: "Rebar.shop", label: "Rebar.shop" },
-  { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
-  { value: "Ontario Logistics", label: "Ontario Logistics" },
-  { value: "Ontario Steels", label: "Ontario Steels" },
-  { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
-];
+const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
+  facebook: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+    { value: "Ontario Steels", label: "Ontario Steels" },
+  ],
+  instagram: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
+  ],
+  instagram_fb: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+  ],
+  linkedin: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Ontario Logistics", label: "Ontario Logistics" },
+  ],
+  linkedin_org: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  youtube: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  tiktok: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+};
 
 type SubPanelView = null | "content_type" | "platform" | "pages";
 
