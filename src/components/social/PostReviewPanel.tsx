@@ -305,7 +305,7 @@ export function PostReviewPanel({
           {subPanel === "pages" && (
             <SelectionSubPanel
               title="Pages"
-              options={PAGES_OPTIONS}
+              options={filteredPageOptions}
               multiSelect
               selectedMulti={localPages}
               onSaveMulti={handlePagesSaveMulti}
