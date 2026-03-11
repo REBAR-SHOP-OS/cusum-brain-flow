@@ -504,6 +504,30 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
           return;
         }
 
+        // Slideshow fallback for single clip
+        if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
+          setProgressLabel("Compiling motion slideshow...");
+          setProgress(50);
+          try {
+            const blobUrl = await slideshowToVideo({
+              imageUrls: data.imageUrls,
+              durationPerImage: data.clipDuration || 5,
+              onProgress: (pct) => setProgress(50 + Math.round(pct * 0.5)),
+            });
+            setVideoUrl(blobUrl);
+            setSceneUrls([blobUrl]);
+            setStatus("completed");
+            toast({
+              title: "🎬 Motion Slideshow",
+              description: data.message || "Created free slideshow fallback since video providers were unavailable.",
+            });
+          } catch (compileErr: any) {
+            setError(`Slideshow compilation failed: ${compileErr.message}`);
+            setStatus("failed");
+          }
+          return;
+        }
+
         if (!data?.jobId || !data?.provider) {
           setError("No generation job was returned.");
           setStatus("failed");
