@@ -5,10 +5,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { VideoLibrary } from "./VideoLibrary";
 
 interface VideoGeneratorDialogProps {
   open: boolean;
@@ -17,7 +19,6 @@ interface VideoGeneratorDialogProps {
 }
 
 type Status = "idle" | "submitting" | "processing" | "completed" | "failed";
-
 type Provider = "veo" | "sora";
 
 interface ModelOption {
@@ -26,7 +27,7 @@ interface ModelOption {
   label: string;
   description: string;
   pricing: string;
-  maxDuration: number;
+  maxClipDuration: number;
   durationOptions: { value: string; label: string }[];
 }
 
@@ -37,13 +38,13 @@ const modelOptions: ModelOption[] = [
     label: "Google Veo 3.1",
     description: "High-quality cinematic video with native audio",
     pricing: "$0.75/sec",
-    maxDuration: 60,
+    maxClipDuration: 8,
     durationOptions: [
       { value: "4", label: "4 seconds" },
       { value: "6", label: "6 seconds" },
       { value: "8", label: "8 seconds" },
-      { value: "30", label: "30 seconds" },
-      { value: "60", label: "60 seconds" },
+      { value: "30", label: "30 seconds (4 scenes)" },
+      { value: "60", label: "60 seconds (8 scenes)" },
     ],
   },
   {
@@ -52,13 +53,13 @@ const modelOptions: ModelOption[] = [
     label: "OpenAI Sora 2",
     description: "Fast iteration, great for social content",
     pricing: "Usage-based",
-    maxDuration: 60,
+    maxClipDuration: 12,
     durationOptions: [
       { value: "4", label: "4 seconds" },
       { value: "8", label: "8 seconds" },
       { value: "12", label: "12 seconds" },
-      { value: "30", label: "30 seconds" },
-      { value: "60", label: "60 seconds" },
+      { value: "30", label: "30 seconds (3 scenes)" },
+      { value: "60", label: "60 seconds (5 scenes)" },
     ],
   },
   {
@@ -67,18 +68,18 @@ const modelOptions: ModelOption[] = [
     label: "OpenAI Sora 2 Pro",
     description: "Production-quality, highest fidelity",
     pricing: "Premium",
-    maxDuration: 60,
+    maxClipDuration: 12,
     durationOptions: [
       { value: "4", label: "4 seconds" },
       { value: "8", label: "8 seconds" },
       { value: "12", label: "12 seconds" },
-      { value: "30", label: "30 seconds" },
-      { value: "60", label: "60 seconds" },
+      { value: "30", label: "30 seconds (3 scenes)" },
+      { value: "60", label: "60 seconds (5 scenes)" },
     ],
   },
 ];
 
-const MAX_POLL_COUNT = 60; // 60 × 5s = 5 minutes max
+const MAX_POLL_COUNT = 120; // 120 × 5s = 10 minutes max for multi-scene
 
 export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: VideoGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
@@ -86,9 +87,18 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
   const [duration, setDuration] = useState("8");
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [savedToLibrary, setSavedToLibrary] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("generate");
+
+  // Single clip refs
   const jobRef = useRef<{ id: string; provider: Provider } | null>(null);
+  // Multi-scene refs
+  const multiJobsRef = useRef<{ id: string; provider: Provider; sceneIndex: number }[] | null>(null);
+  const isMultiRef = useRef(false);
+
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollCountRef = useRef(0);
   const blobUrlRef = useRef<string | null>(null);
@@ -101,7 +111,6 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
-    // Revoke blob URL to prevent memory leak
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
@@ -112,9 +121,8 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     return cleanup;
   }, [cleanup]);
 
-  // Reset duration when model changes if current duration exceeds max
   useEffect(() => {
-    const maxDur = currentModel.maxDuration;
+    const maxDur = 60;
     if (parseInt(duration) > maxDur) {
       setDuration(String(maxDur));
     }
@@ -127,17 +135,21 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setTimeout(() => {
       setPrompt("");
       setSelectedModel("veo-3.1");
-      setDuration("6");
+      setDuration("8");
       setStatus("idle");
       setProgress(0);
+      setProgressLabel("");
       setVideoUrl(null);
+      setSavedToLibrary(false);
       setError(null);
       jobRef.current = null;
+      multiJobsRef.current = null;
+      isMultiRef.current = false;
       pollCountRef.current = 0;
     }, 300);
   };
 
-  /** Proxy download through edge function (handles both Veo and Sora auth) */
+  /** Proxy download through edge function (single clip) */
   const proxyDownload = async (provider: Provider, jobId: string, remoteVideoUrl?: string): Promise<string | null> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) return null;
@@ -169,12 +181,58 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     return null;
   };
 
+  // ── Multi-scene polling ──
+  const pollMultiScene = useCallback(async () => {
+    if (!multiJobsRef.current) return;
+
+    pollCountRef.current += 1;
+    if (pollCountRef.current > MAX_POLL_COUNT) {
+      setError("Multi-scene generation timed out. Please try again.");
+      setStatus("failed");
+      return;
+    }
+
+    try {
+      const data = await invokeEdgeFunction("generate-video", {
+        action: "poll-multi",
+        jobIds: multiJobsRef.current,
+      });
+
+      if (data.status === "completed") {
+        setStatus("completed");
+        setProgress(100);
+        setProgressLabel("All scenes complete!");
+        setVideoUrl(data.videoUrl);
+        setSavedToLibrary(!!data.savedToLibrary);
+        return;
+      }
+
+      if (data.status === "failed") {
+        setError(data.error || "Multi-scene generation failed.");
+        setStatus("failed");
+        return;
+      }
+
+      // Processing
+      const completed = data.completedScenes || 0;
+      const total = data.totalScenes || multiJobsRef.current.length;
+      setProgress(data.progress || Math.round((completed / total) * 100));
+      setProgressLabel(`Scene ${completed}/${total} completed`);
+      pollTimerRef.current = setTimeout(pollMultiScene, 5000);
+    } catch (err: any) {
+      console.error("Multi poll error:", err);
+      setError(err?.message || "Failed to check multi-scene status.");
+      setStatus("failed");
+    }
+  }, []);
+
+  // ── Single clip polling ──
   const pollForResult = useCallback(async () => {
     if (!jobRef.current) return;
 
     pollCountRef.current += 1;
     if (pollCountRef.current > MAX_POLL_COUNT) {
-      setError("Video generation timed out after 5 minutes. Please try again.");
+      setError("Video generation timed out. Please try again.");
       setStatus("failed");
       return;
     }
@@ -218,7 +276,6 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
         return;
       }
 
-      // Still processing
       if (data.progress != null) {
         setProgress(data.progress);
       } else {
@@ -227,7 +284,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       pollTimerRef.current = setTimeout(pollForResult, 5000);
     } catch (err: any) {
       console.error("Poll error:", err);
-      setError(err?.message || "Failed to check video status. Please try again.");
+      setError(err?.message || "Failed to check video status.");
       setStatus("failed");
     }
   }, []);
@@ -237,25 +294,53 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
 
     setStatus("submitting");
     setProgress(0);
+    setProgressLabel("");
     setError(null);
     setVideoUrl(null);
+    setSavedToLibrary(false);
     pollCountRef.current = 0;
 
     const brandedPrompt = `${prompt.trim()}. The video should feature a subtle gold circular coin logo watermark with a blue geometric "G" symbol in the bottom-right corner throughout.`;
+    const requestedDuration = parseInt(duration);
+    const isMultiScene = requestedDuration > currentModel.maxClipDuration;
+
+    isMultiRef.current = isMultiScene;
 
     try {
-      const data = await invokeEdgeFunction("generate-video", {
-        action: "generate",
-        provider: currentModel.provider,
-        prompt: brandedPrompt,
-        duration: parseInt(duration),
-        model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
-      });
+      if (isMultiScene) {
+        // Multi-scene generation
+        const sceneCount = Math.ceil(requestedDuration / currentModel.maxClipDuration);
+        setProgressLabel(`Generating ${sceneCount} scenes...`);
 
-      jobRef.current = { id: data.jobId, provider: data.provider };
-      setStatus("processing");
-      setProgress(5);
-      pollTimerRef.current = setTimeout(pollForResult, 5000);
+        const data = await invokeEdgeFunction("generate-video", {
+          action: "generate-multi",
+          provider: currentModel.provider,
+          prompt: brandedPrompt,
+          duration: requestedDuration,
+          model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
+        });
+
+        multiJobsRef.current = data.jobs;
+        setStatus("processing");
+        setProgress(5);
+        setProgressLabel(`Generating ${data.totalScenes} scenes (${data.clipDuration}s each)...`);
+        pollTimerRef.current = setTimeout(pollMultiScene, 5000);
+      } else {
+        // Single clip generation
+        const data = await invokeEdgeFunction("generate-video", {
+          action: "generate",
+          provider: currentModel.provider,
+          prompt: brandedPrompt,
+          duration: requestedDuration,
+          model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
+        });
+
+        jobRef.current = { id: data.jobId, provider: data.provider };
+        setStatus("processing");
+        setProgress(5);
+        setProgressLabel("Generating video...");
+        pollTimerRef.current = setTimeout(pollForResult, 5000);
+      }
     } catch (err: any) {
       console.error("Generate error:", err);
       setError(err?.message || "Failed to start video generation.");
@@ -263,13 +348,41 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     }
   };
 
+  const handleSaveToLibrary = async () => {
+    if (!videoUrl || savedToLibrary) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const resp = await fetch(videoUrl);
+      const blob = await resp.blob();
+      const fileName = `${user.id}/${crypto.randomUUID()}.mp4`;
+
+      const { error } = await supabase.storage
+        .from("generated-videos")
+        .upload(fileName, blob, { contentType: "video/mp4", upsert: false });
+
+      if (error) throw error;
+
+      setSavedToLibrary(true);
+      toast({ title: "Saved!", description: "Video saved to your library" });
+    } catch (err: any) {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    }
+  };
+
   const handleReset = () => {
     cleanup();
     setStatus("idle");
     setProgress(0);
+    setProgressLabel("");
     setVideoUrl(null);
+    setSavedToLibrary(false);
     setError(null);
     jobRef.current = null;
+    multiJobsRef.current = null;
+    isMultiRef.current = false;
     pollCountRef.current = 0;
   };
 
@@ -297,176 +410,224 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
               <Video className="w-4 h-4 text-white" />
             </div>
-            AI Video Generator
+            AI Video Studio
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Idle — input form */}
-          {status === "idle" && (
-            <>
-              {/* Model selector */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Model</Label>
-                <div className="grid gap-2">
-                  {modelOptions.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => setSelectedModel(m.id)}
-                      className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
-                        selectedModel === m.id
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                          : "hover:bg-muted/50"
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm">{m.label}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                            {m.pricing}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{m.description}</p>
-                      </div>
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                          selectedModel === m.id ? "border-primary" : "border-muted-foreground/30"
-                        }`}
-                      >
-                        {selectedModel === m.id && (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="w-full">
+            <TabsTrigger value="generate" className="flex-1 gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Generate
+            </TabsTrigger>
+            <TabsTrigger value="library" className="flex-1 gap-1.5">
+              <Library className="w-3.5 h-3.5" />
+              Library
+            </TabsTrigger>
+          </TabsList>
 
-              {/* Prompt */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Describe your video</Label>
-                <Textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="A cinematic drone shot over a modern construction site at sunset..."
-                  className="min-h-[100px] resize-none"
-                />
-              </div>
+          <TabsContent value="library">
+            <VideoLibrary
+              onSelectVideo={(url) => {
+                onVideoReady?.(url);
+                handleClose();
+              }}
+            />
+          </TabsContent>
 
-              {/* Quick suggestions */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Try a suggestion</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {promptSuggestions.map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setPrompt(s)}
-                      className="text-xs px-2.5 py-1.5 rounded-full border bg-card hover:bg-muted transition-colors text-left leading-tight"
-                    >
-                      {s.slice(0, 50)}…
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Duration */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Duration</Label>
-                <Select value={duration} onValueChange={setDuration}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currentModel.durationOptions.map((d) => (
-                      <SelectItem key={d.value} value={d.value}>
-                        {d.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Generate button */}
-              <Button
-                className="w-full gap-2"
-                disabled={!prompt.trim()}
-                onClick={handleGenerate}
-              >
-                <Sparkles className="w-4 h-4" />
-                Generate with {currentModel.label}
-              </Button>
-            </>
-          )}
-
-          {/* Progress */}
-          {isGenerating && (
-            <div className="space-y-4 py-6">
-              <div className="flex flex-col items-center text-center gap-3">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center">
-                  <Loader2 className="w-7 h-7 animate-spin text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">
-                    {status === "submitting" ? "Submitting request…" : `Generating with ${currentModel.label}…`}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    This typically takes 1-3 minutes. Please keep this window open.
-                  </p>
-                </div>
-              </div>
-              <Progress value={progress} className="h-2" />
-              <p className="text-xs text-center text-muted-foreground">{Math.round(progress)}% complete</p>
-            </div>
-          )}
-
-          {/* Completed */}
-          {status === "completed" && videoUrl && (
+          <TabsContent value="generate">
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-emerald-600">
-                <CheckCircle2 className="w-5 h-5" />
-                <span className="font-medium">Video generated with {currentModel.label}!</span>
-              </div>
+              {/* Idle — input form */}
+              {status === "idle" && (
+                <>
+                  {/* Model selector */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Model</Label>
+                    <div className="grid gap-2">
+                      {modelOptions.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => setSelectedModel(m.id)}
+                          className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
+                            selectedModel === m.id
+                              ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                              : "hover:bg-muted/50"
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{m.label}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                {m.pricing}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">{m.description}</p>
+                          </div>
+                          <div
+                            className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              selectedModel === m.id ? "border-primary" : "border-muted-foreground/30"
+                            }`}
+                          >
+                            {selectedModel === m.id && (
+                              <div className="w-2 h-2 rounded-full bg-primary" />
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-              <div className="rounded-lg overflow-hidden border bg-black">
-                <video
-                  src={videoUrl}
-                  controls
-                  autoPlay
-                  muted
-                  className="w-full aspect-video"
-                />
-              </div>
+                  {/* Prompt */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Describe your video</Label>
+                    <Textarea
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="A cinematic drone shot over a modern construction site at sunset..."
+                      className="min-h-[100px] resize-none"
+                    />
+                  </div>
 
-              <div className="flex gap-2">
-                <Button className="flex-1 gap-2" onClick={handleUseVideo}>
-                  <Video className="w-4 h-4" />
-                  Use in Post
-                </Button>
-                <Button variant="outline" asChild>
-                  <a href={videoUrl} download target="_blank" rel="noopener noreferrer">
-                    <Download className="w-4 h-4" />
-                  </a>
-                </Button>
-                <Button variant="outline" onClick={handleReset}>
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              </div>
+                  {/* Quick suggestions */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Try a suggestion</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {promptSuggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setPrompt(s)}
+                          className="text-xs px-2.5 py-1.5 rounded-full border bg-card hover:bg-muted transition-colors text-left leading-tight"
+                        >
+                          {s.slice(0, 50)}…
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Duration */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Duration</Label>
+                    <Select value={duration} onValueChange={setDuration}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentModel.durationOptions.map((d) => (
+                          <SelectItem key={d.value} value={d.value}>
+                            {d.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {parseInt(duration) > currentModel.maxClipDuration && (
+                      <p className="text-xs text-amber-600">
+                        ⚡ Multi-scene: {Math.ceil(parseInt(duration) / currentModel.maxClipDuration)} clips
+                        will be generated and stitched together automatically
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Generate button */}
+                  <Button
+                    className="w-full gap-2"
+                    disabled={!prompt.trim()}
+                    onClick={handleGenerate}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Generate with {currentModel.label}
+                  </Button>
+                </>
+              )}
+
+              {/* Progress */}
+              {isGenerating && (
+                <div className="space-y-4 py-6">
+                  <div className="flex flex-col items-center text-center gap-3">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center">
+                      <Loader2 className="w-7 h-7 animate-spin text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">
+                        {status === "submitting"
+                          ? "Submitting request…"
+                          : isMultiRef.current
+                          ? "Generating multi-scene video…"
+                          : `Generating with ${currentModel.label}…`}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {progressLabel || "This typically takes 1-3 minutes. Please keep this window open."}
+                      </p>
+                    </div>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <p className="text-xs text-center text-muted-foreground">{Math.round(progress)}% complete</p>
+                </div>
+              )}
+
+              {/* Completed */}
+              {status === "completed" && videoUrl && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-emerald-600">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-medium">
+                      {isMultiRef.current ? "Multi-scene video ready!" : `Video generated with ${currentModel.label}!`}
+                    </span>
+                  </div>
+
+                  <div className="rounded-lg overflow-hidden border bg-black">
+                    <video
+                      src={videoUrl}
+                      controls
+                      autoPlay
+                      muted
+                      className="w-full aspect-video"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button className="flex-1 gap-2" onClick={handleUseVideo}>
+                      <Video className="w-4 h-4" />
+                      Use in Post
+                    </Button>
+                    {!savedToLibrary && (
+                      <Button variant="outline" onClick={handleSaveToLibrary} className="gap-1.5">
+                        <Save className="w-4 h-4" />
+                        Save
+                      </Button>
+                    )}
+                    {savedToLibrary && (
+                      <Button variant="outline" disabled className="gap-1.5 text-emerald-600">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Saved
+                      </Button>
+                    )}
+                    <Button variant="outline" asChild>
+                      <a href={videoUrl} download target="_blank" rel="noopener noreferrer">
+                        <Download className="w-4 h-4" />
+                      </a>
+                    </Button>
+                    <Button variant="outline" onClick={handleReset}>
+                      <RotateCcw className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Error */}
+              {status === "failed" && (
+                <div className="space-y-4 py-4">
+                  <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-center">
+                    <p className="text-sm font-medium text-destructive">{error}</p>
+                  </div>
+                  <Button variant="outline" className="w-full gap-2" onClick={handleReset}>
+                    <RotateCcw className="w-4 h-4" />
+                    Try Again
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
-
-          {/* Error */}
-          {status === "failed" && (
-            <div className="space-y-4 py-4">
-              <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-center">
-                <p className="text-sm font-medium text-destructive">{error}</p>
-              </div>
-              <Button variant="outline" className="w-full gap-2" onClick={handleReset}>
-                <RotateCcw className="w-4 h-4" />
-                Try Again
-              </Button>
-            </div>
-          )}
-        </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
