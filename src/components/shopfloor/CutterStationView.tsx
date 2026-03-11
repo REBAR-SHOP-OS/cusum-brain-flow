@@ -155,14 +155,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const [prevItemId, setPrevItemId] = useState<string | null>(null);
   useEffect(() => {
     if (currentItem && prevItemId !== currentItem.id) {
-      // Only reset if we actually changed items (not first render matching)
-      if (prevItemId !== null) {
+      // Only reset if we actually changed items (not first render or restore)
+      if (prevItemId !== null && restoredFromBackend) {
         setCompletedAtRunStart(null);
         setOperatorBars(null);
       }
       setPrevItemId(currentItem.id);
     }
-  }, [currentItem?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentItem?.id, restoredFromBackend]); // eslint-disable-line react-hooks/exhaustive-deps
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
   const cutPlanId = currentItem?.cut_plan_id || null;
   const barCode = currentItem?.bar_code;
