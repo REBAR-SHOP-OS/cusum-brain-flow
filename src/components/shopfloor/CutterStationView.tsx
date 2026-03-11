@@ -275,7 +275,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const startingRef = useRef(false);
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem || startingRef.current) return;
-    if (machine.current_run_id && machine.status === "running") {
+    if (!completedLocally && machine.current_run_id && machine.status === "running") {
       toast({ title: "Machine busy", description: "Complete or abort the current run first.", variant: "destructive" });
       startingRef.current = false;
       return;
