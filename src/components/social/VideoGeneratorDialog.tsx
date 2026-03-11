@@ -603,7 +603,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                     </Select>
                     {parseInt(duration) > currentModel.maxClipDuration && (
                       <p className="text-xs text-amber-600">
-                        ⚡ Multi-scene: {Math.ceil(parseInt(duration) / currentModel.maxClipDuration)} clips
+                        ⚡ Multi-scene: {Math.ceil(parseInt(duration) / currentModel.maxClipDuration)} clips will be generated as separate scenes
                         will be generated and stitched together automatically
                       </p>
                     )}
