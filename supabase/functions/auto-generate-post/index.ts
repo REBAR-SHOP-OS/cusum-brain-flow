@@ -66,6 +66,8 @@ async function verifyAuth(req: Request): Promise<string | null> {
 
 async function fetchBusinessIntelligence(authHeader: string): Promise<string> {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(
       `${Deno.env.get("SUPABASE_URL")}/functions/v1/social-intelligence`,
       {
@@ -75,8 +77,10 @@ async function fetchBusinessIntelligence(authHeader: string): Promise<string> {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({}),
+        signal: controller.signal,
       }
     );
+    clearTimeout(timeout);
     if (!res.ok) return "";
     const data = await res.json();
 
