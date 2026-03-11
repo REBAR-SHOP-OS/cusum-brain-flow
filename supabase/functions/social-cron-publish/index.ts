@@ -184,7 +184,15 @@ serve(async (req) => {
               const pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
 
               if (post.platform === "facebook") {
-                publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
+                // Pre-flight: verify page token has publish permissions
+                const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
+                const preflightData = await preflightRes.json();
+                if (preflightData.error) {
+                  console.error(`[social-cron-publish] Facebook pre-flight failed for post ${post.id}:`, preflightData.error);
+                  publishResult = { error: `Facebook permissions error: ${preflightData.error.message || "Token invalid"}. Reconnect Facebook with pages_read_engagement and pages_manage_posts.` };
+                } else {
+                  publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
+                }
               } else {
                 const igAccounts = (tokenData.instagram_accounts as Array<{ id: string; pageId?: string }>) || [];
                 if (igAccounts.length === 0) {

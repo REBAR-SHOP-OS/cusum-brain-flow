@@ -589,6 +589,15 @@ export function PostReviewPanel({
               )}
               {!editing && !isPublished && (
                 <div className="p-4 border-t space-y-2">
+                  {/* Facebook permission warning */}
+                  {fbPublishReady === false && (
+                    <div className="w-full rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-center space-y-1">
+                      <span className="text-sm font-medium text-amber-700">⚠️ Facebook Permissions Incomplete</span>
+                      <p className="text-xs text-amber-600">
+                        Missing: {fbMissingScopes.join(", ")}. Publishing may fail. Please reconnect Facebook from Integrations to grant publishing permissions.
+                      </p>
+                    </div>
+                  )}
                   {/* Neel Approval Gate */}
                   {post.neel_approved ? (
                     <Button
