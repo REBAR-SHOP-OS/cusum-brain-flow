@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
-  Sparkles, Loader2, BookOpen, ShieldCheck,
+  Sparkles, Loader2, BookOpen, ShieldCheck, CheckSquare, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, addDays, startOfWeek, parseISO, isBefore } from "date-fns";
@@ -44,7 +46,7 @@ const statusFilters = [
 export default function SocialMediaManager() {
   const navigate = useNavigate();
   const { generatePosts, generating } = useAutoGenerate();
-  const { posts, isLoading, updatePost } = useSocialPosts();
+  const { posts, isLoading, updatePost, deletePost } = useSocialPosts();
   const { completedChecklist, toggleChecklist } = useStrategyChecklist();
   const { pendingApprovals } = useSocialApprovals();
   const [showApprovals, setShowApprovals] = useState(false);
@@ -65,6 +67,25 @@ export default function SocialMediaManager() {
 
   // Strategy panel
   const [showStrategy, setShowStrategy] = useState(false);
+
+  // Selection mode
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const toggleSelectPost = useCallback((id: string) => {
+    setSelectedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedPostIds(new Set());
+  }, []);
 
   // Filters & search
   const [searchOpen, setSearchOpen] = useState(false);
@@ -93,6 +114,25 @@ export default function SocialMediaManager() {
     }
     return items;
   }, [posts, platformFilter, statusFilter, searchQuery]);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedPostIds.size === filteredPosts.length) {
+      setSelectedPostIds(new Set());
+    } else {
+      setSelectedPostIds(new Set(filteredPosts.map((p) => p.id)));
+    }
+  }, [filteredPosts, selectedPostIds.size]);
+
+  const handleBulkDelete = useCallback(async () => {
+    setBulkDeleting(true);
+    const ids = Array.from(selectedPostIds);
+    for (const id of ids) {
+      await deletePost.mutateAsync(id);
+    }
+    setBulkDeleting(false);
+    setShowDeleteConfirm(false);
+    exitSelectionMode();
+  }, [selectedPostIds, deletePost, exitSelectionMode]);
 
   const weekPosts = useMemo(() => {
     const wEnd = addDays(weekStart, 7);
@@ -238,8 +278,48 @@ export default function SocialMediaManager() {
           </div>
         </div>
 
-        {/* Search & Filters */}
+        {/* Search, Filters & Selection */}
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-thin mb-4">
+          {/* Selection mode toggle */}
+          <Button
+            variant={selectionMode ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
+          >
+            <CheckSquare className="w-4 h-4" />
+            <span className="hidden sm:inline">{selectionMode ? "Cancel" : "Select"}</span>
+          </Button>
+
+          {selectionMode && (
+            <>
+              <div className="flex items-center gap-1.5 shrink-0 px-2">
+                <Checkbox
+                  checked={filteredPosts.length > 0 && selectedPostIds.size === filteredPosts.length}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Select all</span>
+              </div>
+              {selectedPostIds.size > 0 && (
+                <>
+                  <span className="text-xs font-medium text-foreground shrink-0">
+                    {selectedPostIds.size} selected
+                  </span>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="gap-1.5 shrink-0"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </Button>
+                </>
+              )}
+              <div className="w-px h-6 bg-border mx-0.5 shrink-0" />
+            </>
+          )}
+
           {searchOpen ? (
             <div className="shrink-0 w-40 sm:w-52">
               <SmartSearchInput
@@ -379,6 +459,8 @@ export default function SocialMediaManager() {
               posts={filteredPosts}
               weekStart={weekStart}
               onPostClick={setSelectedPost}
+              selectedPostIds={selectionMode ? selectedPostIds : undefined}
+              onToggleSelect={selectionMode ? toggleSelectPost : undefined}
             />
             {weekPosts.length === 0 && filteredPosts.length > 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
@@ -409,6 +491,18 @@ export default function SocialMediaManager() {
 
       {/* Settings Sheet */}
       <SettingsSheet open={showSettings} onOpenChange={setShowSettings} />
+
+      {/* Bulk Delete Confirmation */}
+      <ConfirmActionDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete selected posts?"
+        description={`This will permanently delete ${selectedPostIds.size} post(s) from the database.`}
+        variant="destructive"
+        confirmLabel="Delete all"
+        onConfirm={handleBulkDelete}
+        loading={bulkDeleting}
+      />
     </div>
   );
 }

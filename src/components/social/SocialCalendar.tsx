@@ -57,9 +57,11 @@ interface SocialCalendarProps {
   posts: SocialPost[];
   weekStart: Date;
   onPostClick: (post: SocialPost) => void;
+  selectedPostIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
-export function SocialCalendar({ posts, weekStart, onPostClick }: SocialCalendarProps) {
+export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds, onToggleSelect }: SocialCalendarProps) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
@@ -92,9 +94,10 @@ export function SocialCalendar({ posts, weekStart, onPostClick }: SocialCalendar
                 return (
                   <button
                     key={post.id}
-                    onClick={() => onPostClick(post)}
+                    onClick={() => onToggleSelect ? onToggleSelect(post.id) : onPostClick(post)}
                     className={cn(
-                      "w-full p-2 rounded-lg border text-left transition-all hover:shadow-md",
+                      "w-full p-2 rounded-lg border text-left transition-all hover:shadow-md relative",
+                      selectedPostIds?.has(post.id) && "ring-2 ring-primary",
                       post.status === "published"
                         ? "bg-green-500/10 border-green-500/40"
                         : post.status === "scheduled"
@@ -106,6 +109,20 @@ export function SocialCalendar({ posts, weekStart, onPostClick }: SocialCalendar
                         : "bg-muted/50 border-border"
                     )}
                   >
+                    {onToggleSelect && (
+                      <div className="absolute top-1.5 right-1.5">
+                        <div className={cn(
+                          "w-4 h-4 rounded-sm border flex items-center justify-center",
+                          selectedPostIds?.has(post.id)
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-muted-foreground/40"
+                        )}>
+                          {selectedPostIds?.has(post.id) && (
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <div className={cn("w-6 h-6 rounded flex items-center justify-center mb-1", platform.bg)}>
                       {platform.icon}
                     </div>
