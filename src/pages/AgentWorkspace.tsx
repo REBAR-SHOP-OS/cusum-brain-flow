@@ -25,7 +25,6 @@ import { useUserRole, AppRole } from "@/hooks/useUserRole";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 // Agents restricted to specific roles (all others are open)
 const RESTRICTED_AGENTS: Record<string, AppRole[]> = {
