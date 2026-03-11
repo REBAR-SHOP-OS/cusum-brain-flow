@@ -459,7 +459,12 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       }
     } catch (err: any) {
       console.error("Generate error:", err);
-      setError(err?.message || "Failed to start video generation.");
+      const msg = err?.message || "Failed to start video generation.";
+      if (msg.toLowerCase().includes("billing") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("limit")) {
+        setError("⚠️ AI provider billing limits reached. Both Google Veo and OpenAI Sora accounts need their billing limits increased. Please check your API provider dashboards.");
+      } else {
+        setError(msg);
+      }
       setStatus("failed");
     }
   };
