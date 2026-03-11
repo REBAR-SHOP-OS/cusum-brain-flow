@@ -463,9 +463,22 @@ serve(async (req) => {
         );
       }
 
-      const result = isVeo
-        ? await veoGenerate(apiKey, prompt, duration || 8)
-        : await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
+      let result: { jobId: string; provider: string };
+      if (isVeo) {
+        try {
+          result = await veoGenerate(apiKey, prompt, duration || 8);
+        } catch (e) {
+          const isQuota = e instanceof Error && (e.message.includes("429") || e.message.includes("RESOURCE_EXHAUSTED") || e.message.includes("quota"));
+          if (isQuota && gptKey) {
+            console.warn("Veo quota exceeded on single generate, falling back to Sora");
+            result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
+          } else {
+            throw e;
+          }
+        }
+      } else {
+        result = await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
+      }
 
       return new Response(
         JSON.stringify({ ...result, status: "pending" }),
