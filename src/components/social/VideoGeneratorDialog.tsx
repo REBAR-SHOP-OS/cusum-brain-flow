@@ -712,7 +712,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                         ))}
                       </div>
                     </div>
-                  )
+                  )}
 
                   <div className="flex gap-2">
                     <Button className="flex-1 gap-2" onClick={handleUseVideo}>
