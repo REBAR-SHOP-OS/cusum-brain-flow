@@ -142,58 +142,47 @@ Deno.serve(async (req) => {
 
     console.log(`[schedule-post] PRIMARY updated:`, JSON.stringify(data));
 
-    // Handle extra platform×page combos (update-or-create siblings)
+    // Handle extra platform×page combos (clone post for each)
     if (extra_combos && Array.isArray(extra_combos) && extra_combos.length > 0 && fullPost) {
+      const scheduledDay = scheduled_date.substring(0, 10);
       for (const combo of extra_combos) {
-        // Find existing sibling with same platform + title + page (any date)
         const { data: existing } = await serviceClient
           .from("social_posts")
           .select("id")
           .eq("platform", combo.platform)
           .eq("title", fullPost.title)
           .eq("page_name", combo.page)
-          .eq("user_id", fullPost.user_id)
-          .neq("id", post_id)
+          .gte("scheduled_date", `${scheduledDay}T00:00:00`)
+          .lte("scheduled_date", `${scheduledDay}T23:59:59`)
           .limit(1);
 
         if (existing && existing.length > 0) {
-          // UPDATE existing sibling to new date/time
-          const { error: updErr } = await serviceClient
-            .from("social_posts")
-            .update({ scheduled_date, status: "scheduled", qa_status: "scheduled" })
-            .eq("id", existing[0].id);
+          console.warn(`[schedule-post] Duplicate skipped for ${combo.platform}/${combo.page}: existing=${existing[0].id}`);
+          continue;
+        }
 
-          if (updErr) {
-            console.error(`[schedule-post] Sibling update failed for ${combo.platform}/${combo.page}:`, updErr.message);
-          } else {
-            console.log(`[schedule-post] Sibling updated: ${existing[0].id} → ${scheduled_date}`);
-            cloned.push(existing[0].id);
-          }
-        } else {
-          // CREATE new clone
-          const { data: clone, error: cloneErr } = await serviceClient
-            .from("social_posts")
-            .insert({
-              user_id: fullPost.user_id,
-              platform: combo.platform,
-              status: "scheduled",
-              qa_status: "scheduled",
-              title: fullPost.title,
-              content: fullPost.content,
-              image_url: fullPost.image_url,
-              scheduled_date,
-              hashtags: fullPost.hashtags,
-              page_name: combo.page,
-              content_type: fullPost.content_type,
-            })
-            .select("id")
-            .single();
+        const { data: clone, error: cloneErr } = await serviceClient
+          .from("social_posts")
+          .insert({
+            user_id: fullPost.user_id,
+            platform: combo.platform,
+            status: "scheduled",
+            qa_status: "scheduled",
+            title: fullPost.title,
+            content: fullPost.content,
+            image_url: fullPost.image_url,
+            scheduled_date,
+            hashtags: fullPost.hashtags,
+            page_name: combo.page,
+            content_type: fullPost.content_type,
+          })
+          .select("id")
+          .single();
 
-          if (cloneErr) {
-            console.error(`[schedule-post] Clone failed for ${combo.platform}/${combo.page}:`, cloneErr.message);
-          } else if (clone) {
-            cloned.push(clone.id);
-          }
+        if (cloneErr) {
+          console.error(`[schedule-post] Clone failed for ${combo.platform}/${combo.page}:`, cloneErr.message);
+        } else if (clone) {
+          cloned.push(clone.id);
         }
       }
     }
