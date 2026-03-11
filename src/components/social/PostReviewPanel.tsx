@@ -258,9 +258,18 @@ export function PostReviewPanel({
 
   const handleDelete = async () => {
     setDeleting(true);
-    await deletePost.mutateAsync(post.id);
-    setDeleting(false);
-    onClose();
+    try {
+      const batchPosts = post.image_url
+        ? allPosts.filter(p => p.image_url === post.image_url && p.platform === post.platform)
+        : [post];
+      for (const p of batchPosts) {
+        await deletePost.mutateAsync(p.id);
+      }
+      toast({ title: "Deleted", description: `${batchPosts.length} post(s) deleted.` });
+    } finally {
+      setDeleting(false);
+      onClose();
+    }
   };
 
   const platformMap: Record<string, string> = {
