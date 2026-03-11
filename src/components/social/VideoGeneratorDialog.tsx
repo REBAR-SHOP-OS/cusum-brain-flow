@@ -237,11 +237,33 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       });
 
       if (data.status === "completed") {
-        setStatus("completed");
         setProgress(100);
         setProgressLabel("All scenes complete!");
-        setVideoUrl(data.videoUrl);
+
+        // Handle sceneUrls array for sequential playback
+        const urls: string[] = data.sceneUrls || (data.videoUrl ? [data.videoUrl] : []);
+        setSceneUrls(urls);
+        setCurrentScene(0);
         setSavedToLibrary(!!data.savedToLibrary);
+
+        // Apply logo watermark to first scene if brand kit has logo
+        const firstUrl = urls[0];
+        if (firstUrl && brandKit?.logo_url) {
+          setWatermarking(true);
+          setProgressLabel("Applying logo watermark...");
+          try {
+            const watermarked = await applyLogoWatermark(firstUrl, brandKit.logo_url, 80);
+            setVideoUrl(watermarked);
+          } catch (e) {
+            console.warn("Watermark failed, using original:", e);
+            setVideoUrl(firstUrl);
+          }
+          setWatermarking(false);
+        } else {
+          setVideoUrl(firstUrl || null);
+        }
+
+        setStatus("completed");
         return;
       }
 
