@@ -1,27 +1,23 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Hide Unassigned Posts from Calendar
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+Posts with `platform: "unassigned"` (shown with a `?` icon) appear on the calendar. The user wants these hidden — only posts with a real platform should be visible.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Solution
+Filter out `unassigned` posts in the `SocialCalendar` component when building `dayPosts`.
 
-### Plan
-Run a single database migration:
+### File: `src/components/social/SocialCalendar.tsx`
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+**Line 110-113** — add filter to exclude unassigned:
+```typescript
+const dayPosts = posts.filter((post) => {
+  if (!post.scheduled_date) return false;
+  if (post.platform === "unassigned") return false;
+  return isSameDay(parseISO(post.scheduled_date), day);
+});
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
-
-No code changes needed — just the migration.
+Single line addition. Unassigned posts remain in the database and are accessible via other views (e.g., post review panel), but won't clutter the calendar.
 
