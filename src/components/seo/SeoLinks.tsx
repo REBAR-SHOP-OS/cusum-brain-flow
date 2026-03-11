@@ -156,6 +156,9 @@ export function SeoLinks() {
             <TabsTrigger value="broken">Broken ({stats.broken})</TabsTrigger>
             <TabsTrigger value="opportunity">Opportunities ({stats.opportunities})</TabsTrigger>
             <TabsTrigger value="fixed">Fixed ({stats.fixed})</TabsTrigger>
+            <TabsTrigger value="backlinks">
+              <Globe className="w-3.5 h-3.5 mr-1" /> Backlinks
+            </TabsTrigger>
           </TabsList>
         </Tabs>
         {unfixedOpportunities.length > 0 && (
