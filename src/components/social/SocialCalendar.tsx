@@ -95,7 +95,7 @@ function groupPostsByContent(dayPosts: SocialPost[]): PostGroup[] {
   });
 }
 
-export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds, onToggleSelect }: SocialCalendarProps) {
+export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds, onToggleSelect, onSelectDay }: SocialCalendarProps) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
