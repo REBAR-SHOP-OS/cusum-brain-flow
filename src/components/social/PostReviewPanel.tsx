@@ -690,7 +690,7 @@ export function PostReviewPanel({
 
                         // Block scheduling in the past
                         if (!post.scheduled_date || new Date(post.scheduled_date) <= new Date()) {
-                          toast({ title: "زمان نامعتبر", description: "امکان زمان‌بندی در گذشته وجود ندارد. لطفاً زمان آینده انتخاب کنید.", variant: "destructive" });
+                          toast({ title: "Invalid Time", description: "Cannot schedule in the past. Please select a future time.", variant: "destructive" });
                           return;
                         }
 
