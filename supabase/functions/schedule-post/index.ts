@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
             .select("id")
             .eq("platform", combo.platform)
             .eq("title", fullPost.title)
+            .eq("page_name", combo.page)
             .gte("scheduled_date", `${scheduledDay}T00:00:00`)
             .lte("scheduled_date", `${scheduledDay}T23:59:59`)
             .limit(1);

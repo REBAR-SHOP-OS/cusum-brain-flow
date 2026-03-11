@@ -30,6 +30,7 @@ export async function schedulePost(params: SchedulePostParams): Promise<Schedule
       .select("id")
       .eq("platform", params.platform)
       .eq("title", params.title)
+      .eq("page_name", params.page_name || "")
       .gte("scheduled_date", `${scheduledDay}T00:00:00`)
       .lte("scheduled_date", `${scheduledDay}T23:59:59`)
       .neq("id", params.post_id)
