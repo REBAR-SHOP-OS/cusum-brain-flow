@@ -67,6 +67,7 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
       qa_status: "scheduled",
       platform: primaryPlatform,
       page_name: post.page_name,
+      title: post.title || undefined,
       extra_combos: extraCombos.length > 0 ? extraCombos : undefined,
     });
 
