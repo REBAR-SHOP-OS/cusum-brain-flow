@@ -114,11 +114,35 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
+    if (progressTickRef.current) {
+      clearInterval(progressTickRef.current);
+      progressTickRef.current = null;
+    }
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
     }
+    startedAtRef.current = null;
   }, []);
+
+  // Start elapsed timer when generation begins
+  useEffect(() => {
+    if (status === "processing" || status === "submitting") {
+      if (!startedAtRef.current) startedAtRef.current = Date.now();
+      setElapsedSecs(0);
+      progressTickRef.current = setInterval(() => {
+        if (startedAtRef.current) {
+          setElapsedSecs(Math.floor((Date.now() - startedAtRef.current) / 1000));
+        }
+      }, 1000);
+      return () => {
+        if (progressTickRef.current) {
+          clearInterval(progressTickRef.current);
+          progressTickRef.current = null;
+        }
+      };
+    }
+  }, [status]);
 
   useEffect(() => {
     return cleanup;
