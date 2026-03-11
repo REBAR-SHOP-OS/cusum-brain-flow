@@ -107,9 +107,15 @@ function DateSchedulePopover({
   const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
   const minutes = Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, "0"));
 
+  const { toast } = useToast();
+
   const handleSetDate = () => {
     const d = new Date(selectedDate);
     d.setHours(parseInt(hour), parseInt(minute), 0, 0);
+    if (d <= new Date()) {
+      toast({ title: "Invalid Time", description: "Cannot schedule in the past. Please select a future time.", variant: "destructive" });
+      return;
+    }
     onSetDate(d);
   };
 
