@@ -273,8 +273,11 @@ Return an array of 5 objects:
 
         if (!Array.isArray(generatedPosts) || generatedPosts.length === 0) continue;
 
-        // Create posts and generate images via Lovable AI
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+        // Resolve logo + recent images for dedup (once per platform loop)
+        const [logoUrl, recentImageNames] = await Promise.all([
+          resolveLogoUrl(),
+          fetchRecentPixelImages(supabaseAdmin),
+        ]);
 
         for (let i = 0; i < generatedPosts.length; i++) {
           const post = generatedPosts[i];
@@ -304,60 +307,59 @@ Return an array of 5 objects:
             continue;
           }
 
-          // Generate image via Lovable AI (gemini-2.5-flash-image)
-          if (LOVABLE_API_KEY && post.image_prompt) {
+          // Generate image using Pixel's full pipeline (retry + logo + dedup)
+          if (post.image_prompt) {
             try {
-              console.log(`Generating image for post ${i + 1}/${generatedPosts.length}...`);
-              const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: "google/gemini-2.5-flash-image",
-                  messages: [{ role: "user", content: post.image_prompt }],
-                  modalities: ["image", "text"],
-                }),
+              console.log(`Generating Pixel-quality image for post ${i + 1}/${generatedPosts.length}...`);
+
+              const { style: selectedStyle, index: selectedStyleIndex } = selectVisualStyle(recentImageNames);
+
+              const dedupHint = recentImageNames.length > 0
+                ? `\n\nPREVIOUSLY GENERATED (MUST NOT resemble any of these — use completely different composition, angle, color scheme): ${recentImageNames.slice(0, 15).join(", ")}`
+                : "";
+
+              const usedStyleIndices = new Set<number>();
+              for (const name of recentImageNames) {
+                const match = name.match(/-s(\d+)-/);
+                if (match) usedStyleIndices.add(parseInt(match[1]));
+              }
+              const forbiddenStyles = [...usedStyleIndices]
+                .map(idx => PIXEL_VISUAL_STYLES[idx])
+                .filter(Boolean)
+                .slice(0, 5);
+              const forbiddenHint = forbiddenStyles.length > 0
+                ? `\nFORBIDDEN STYLES (already used recently, DO NOT use): ${forbiddenStyles.join("; ")}`
+                : "";
+
+              const sessionSeed = `auto-${crypto.randomUUID()}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+              const pixelPrompt = buildPixelImagePrompt({
+                product: post.product || products[i] || "Rebar Products",
+                theme: slot.theme,
+                imageText: post.title || "REBAR.SHOP",
+                selectedStyle,
+                dedupHint,
+                forbiddenHint,
+                sessionSeed,
               });
 
-              if (imgResp.ok) {
-                const imgData = await imgResp.json();
-                const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+              const imgResult = await generatePixelImage(pixelPrompt, supabaseAdmin, logoUrl, { styleIndex: selectedStyleIndex });
 
-                if (b64Url) {
-                  // Upload base64 to storage
-                  const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
-                  const binaryStr = atob(base64Data);
-                  const bytes = new Uint8Array(binaryStr.length);
-                  for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
-                  const blob = new Blob([bytes], { type: "image/png" });
-
-                  const fileName = `images/${crypto.randomUUID()}.png`;
-                  const { error: uploadErr } = await supabaseAdmin.storage
-                    .from("social-media-assets")
-                    .upload(fileName, blob, { contentType: "image/png", upsert: false });
-
-                  if (!uploadErr) {
-                    const { data: pubUrl } = supabaseAdmin.storage
-                      .from("social-media-assets")
-                      .getPublicUrl(fileName);
-                    imageUrl = pubUrl.publicUrl;
-
-                    // Update post with image URL
-                    await supabaseAdmin
-                      .from("social_posts")
-                      .update({ image_url: imageUrl })
-                      .eq("id", insertedPost.id);
-
-                    console.log(`Image uploaded for post ${i + 1}: ${fileName}`);
-                  } else {
-                    console.error("Storage upload error:", uploadErr);
-                  }
-                }
+              if (imgResult.imageUrl) {
+                imageUrl = imgResult.imageUrl;
+                await supabaseAdmin
+                  .from("social_posts")
+                  .update({ image_url: imageUrl })
+                  .eq("id", insertedPost.id);
+                console.log(`Pixel image uploaded for post ${i + 1}`);
+                recentImageNames.unshift(`${Date.now()}-s${selectedStyleIndex}-batch.png`);
               } else {
-                console.error("Image generation failed:", imgResp.status, await imgResp.text());
+                console.error("Pixel image generation failed:", imgResult.error);
               }
+            } catch (imgErr) {
+              console.error("Image generation error (non-critical):", imgErr);
+            }
+          }
             } catch (imgErr) {
               console.error("Image generation error (non-critical):", imgErr);
             }
