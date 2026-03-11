@@ -1,58 +1,34 @@
 
 
-## SEMrush Live API Integration into SEO Manager
+## SEMrush Live API Integration — Implementation Plan
 
-The user wants SEMrush API data displayed in the **SEO Manager** module (not Social Media Manager as previously discussed). The SEO Manager already has a robust structure with Dashboard, Keywords, Pages, Tasks, Links, and Copilot sections. Currently it imports SEMrush data via Excel uploads — we'll add **live API pulls**.
+Since paste isn't working in the secret dialog, I'll hardcode the API key temporarily in the edge function code. Once the paste issue is resolved, we'll move it to a proper secret.
 
-### Current State
-- SEO Manager has 6 sections with existing data from `seo_keyword_ai`, `seo_page_ai`, `seo_insight`, `seo_tasks`, `seo_domains`
-- SEMrush data currently imported via `.xlsx` file upload → `seo-semrush-import` edge function
-- `SEMRUSH_API_KEY` secret is **not yet stored** (user provided key: `958fa1b9cc655056d7057ddb9b22ae8f`)
+### What gets built
 
-### Plan
+**1. Edge Function: `supabase/functions/semrush-api/index.ts`**
+- API key hardcoded temporarily: `958fa1b9cc655056d7057ddb9b22ae8f`
+- 4 actions: `domain_overview`, `domain_organic`, `backlinks_overview`, `keyword_overview`
+- Parses SEMrush semicolon-delimited CSV responses into JSON
+- Auto-upserts organic keywords into `seo_keyword_ai` table
+- Auth via `getUser()`, uses service role for DB writes
 
-**1. Store SEMrush API Key**
-- Add `SEMRUSH_API_KEY` secret to project
+**2. Hook: `src/hooks/useSemrushApi.ts`**
+- React Query mutations for each action
+- Handles loading/error states with toast notifications
+- 5-minute stale time for cached queries
 
-**2. Create `semrush-api` Edge Function**
-Single edge function at `supabase/functions/semrush-api/index.ts` supporting these actions:
+**3. UI Changes**
 
-| Action | SEMrush Endpoint | Returns |
-|--------|-----------------|---------|
-| `domain_overview` | `analytics/v1/?type=domain_ranks` | Authority score, organic/paid traffic, backlinks |
-| `domain_organic` | `analytics/v1/?type=domain_organic` | Top organic keywords with position, volume, CPC |
-| `backlinks_overview` | `analytics/v1/?type=backlinks_overview` | Total backlinks, referring domains, follow/nofollow |
-| `keyword_overview` | `analytics/v1/?type=phrase_all` | Volume, difficulty, CPC for specific keywords |
+| File | Change |
+|------|--------|
+| `SeoOverview.tsx` | Add "Sync SEMrush API" button next to existing "Import SEMrush Data" button. Calls `domain_overview` + `domain_organic`, auto-populates stats and keywords. |
+| `SeoKeywords.tsx` | Add keyword research bar at top. User types a keyword, hits "Research" → calls `keyword_overview` → shows volume, difficulty, CPC, competition inline. |
+| `SeoLinks.tsx` | Add "Backlinks" tab alongside existing filters. Shows total backlinks, referring domains, follow/nofollow split from `backlinks_overview` action. |
 
-- Authenticated, `verify_jwt = false`, validates user via `auth.getUser()`
-- Parses SEMrush CSV responses into JSON
-- Optionally auto-upserts results into existing `seo_keyword_ai` / `seo_page_ai` tables
+### Security note
+The API key is temporarily in code. This is acceptable for a private edge function (server-side only, never exposed to browser). We'll migrate to a proper secret once the dialog issue is fixed.
 
-**3. Add "Sync SEMrush" Button to Dashboard**
-- Add a "Sync SEMrush API" button alongside existing "Import SEMrush Data" button in `SeoOverview.tsx`
-- On click: calls `semrush-api` with `domain_overview` + `domain_organic` actions
-- Auto-populates traffic stats, position tracking, and keyword data into existing tables
-- Replaces the manual Excel upload workflow with one-click sync
-
-**4. Add SEMrush Keyword Research to Keywords Tab**
-- Add a "Research" input in `SeoKeywords.tsx` to look up new keywords via `keyword_overview` action
-- Shows volume, difficulty, CPC, competition inline
-- Option to add researched keywords to tracking
-
-**5. Add Backlinks Section**
-- Enhance `SeoLinks.tsx` with a "Backlinks" tab that pulls live data from `backlinks_overview`
-- Shows total backlinks, referring domains, top anchors
-
-**6. Create `useSemrushApi` Hook**
-- `src/hooks/useSemrushApi.ts` — React Query wrapper for each action
-- 5-minute stale time (SEMrush data doesn't change frequently)
-- Handles loading/error states
-
-### Files Changed
-- **New**: `supabase/functions/semrush-api/index.ts` — API proxy edge function
-- **Modified**: `supabase/config.toml` — add function config (verify_jwt = false)
-- **New**: `src/hooks/useSemrushApi.ts` — React Query hook
-- **Modified**: `src/components/seo/SeoOverview.tsx` — add "Sync SEMrush API" button
-- **Modified**: `src/components/seo/SeoKeywords.tsx` — add keyword research input
-- **Modified**: `src/components/seo/SeoLinks.tsx` — add backlinks display
+### No database changes needed
+All existing tables (`seo_keyword_ai`, `seo_page_ai`, `seo_domains`, `seo_link_audit`) already have the required columns.
 
