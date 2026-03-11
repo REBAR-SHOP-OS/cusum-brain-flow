@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save, X } from "lucide-react";
+import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save, X, Music, Volume2, Merge } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,8 @@ import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { applyLogoWatermark } from "@/lib/videoWatermark";
+import { mergeVideoAudio } from "@/lib/videoAudioMerge";
+import { Input } from "@/components/ui/input";
 
 interface VideoGeneratorDialogProps {
   open: boolean;
@@ -83,7 +85,7 @@ const modelOptions: ModelOption[] = [
   },
 ];
 
-const MAX_POLL_COUNT = 120; // 120 × 5s = 10 minutes max for multi-scene
+const MAX_POLL_COUNT = 120;
 
 export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: VideoGeneratorDialogProps) {
   const { brandKit } = useBrandKit();
@@ -101,11 +103,23 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("generate");
 
+  // Audio state
+  const [audioPrompt, setAudioPrompt] = useState("");
+  const [audioType, setAudioType] = useState<"music" | "sfx">("music");
+  const [audioDuration, setAudioDuration] = useState("30");
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioGenerating, setAudioGenerating] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+
   // Single clip refs
   const jobRef = useRef<{ id: string; provider: Provider } | null>(null);
   // Multi-scene refs
   const multiJobsRef = useRef<{ id: string; provider: Provider; sceneIndex: number }[] | null>(null);
   const isMultiRef = useRef(false);
+  // Progressive upload tracking
+  const uploadedSceneUrlsRef = useRef<Record<number, string>>({});
 
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollCountRef = useRef(0);
@@ -133,7 +147,6 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     startedAtRef.current = null;
   }, []);
 
-  // Start elapsed timer when generation begins
   useEffect(() => {
     if (status === "processing" || status === "submitting") {
       if (!startedAtRef.current) startedAtRef.current = Date.now();
@@ -163,9 +176,17 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     }
   }, [selectedModel]);
 
+  // Auto-suggest audio prompt when video completes
+  useEffect(() => {
+    if (status === "completed" && prompt && !audioPrompt) {
+      setAudioPrompt(`Background music for: ${prompt.slice(0, 100)}`);
+    }
+  }, [status, prompt]);
+
   const handleClose = () => {
     if (status === "submitting" || status === "processing") return;
     cleanup();
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     onOpenChange(false);
     setTimeout(() => {
       setPrompt("");
@@ -180,14 +201,19 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       setWatermarking(false);
       setSavedToLibrary(false);
       setError(null);
+      setAudioPrompt("");
+      setAudioUrl(null);
+      setAudioGenerating(false);
+      setAudioPlaying(false);
+      setMerging(false);
       jobRef.current = null;
       multiJobsRef.current = null;
       isMultiRef.current = false;
+      uploadedSceneUrlsRef.current = {};
       pollCountRef.current = 0;
     }, 300);
   };
 
-  /** Proxy download through edge function (single clip) */
   const proxyDownload = async (provider: Provider, jobId: string, remoteVideoUrl?: string): Promise<string | null> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) return null;
@@ -219,7 +245,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     return null;
   };
 
-  // ── Multi-scene polling ──
+  // ── Multi-scene polling with progressive upload ──
   const pollMultiScene = useCallback(async () => {
     if (!multiJobsRef.current) return;
 
@@ -231,22 +257,34 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     }
 
     try {
+      // Convert numeric keys to string keys for JSON
+      const existingUrls: Record<string, string> = {};
+      for (const [k, v] of Object.entries(uploadedSceneUrlsRef.current)) {
+        existingUrls[String(k)] = v;
+      }
+
       const data = await invokeEdgeFunction("generate-video", {
         action: "poll-multi",
         jobIds: multiJobsRef.current,
+        existingSceneUrls: existingUrls,
       });
+
+      // Track progressively uploaded scene URLs
+      if (data.uploadedSceneUrls) {
+        for (const [k, v] of Object.entries(data.uploadedSceneUrls)) {
+          uploadedSceneUrlsRef.current[Number(k)] = v as string;
+        }
+      }
 
       if (data.status === "completed") {
         setProgress(100);
         setProgressLabel("All scenes complete!");
 
-        // Handle sceneUrls array for sequential playback
         const urls: string[] = data.sceneUrls || (data.videoUrl ? [data.videoUrl] : []);
         setSceneUrls(urls);
         setCurrentScene(0);
         setSavedToLibrary(!!data.savedToLibrary);
 
-        // Apply logo watermark to first scene if brand kit has logo
         const firstUrl = urls[0];
         if (firstUrl && brandKit?.logo_url) {
           setWatermarking(true);
@@ -273,11 +311,11 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
         return;
       }
 
-      // Processing
       const completed = data.completedScenes || 0;
+      const uploaded = data.uploadedScenes || 0;
       const total = data.totalScenes || multiJobsRef.current.length;
-      setProgress(data.progress || Math.round((completed / total) * 100));
-      setProgressLabel(`Scene ${completed}/${total} completed`);
+      setProgress(data.progress || Math.round((uploaded / total) * 100));
+      setProgressLabel(`Scene ${completed}/${total} generated, ${uploaded} uploaded`);
       pollTimerRef.current = setTimeout(pollMultiScene, 5000);
     } catch (err: any) {
       console.error("Multi poll error:", err);
@@ -327,7 +365,6 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
           return;
         }
 
-        // Apply logo watermark if available
         if (brandKit?.logo_url) {
           setWatermarking(true);
           setProgressLabel("Applying logo watermark...");
@@ -376,6 +413,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setError(null);
     setVideoUrl(null);
     setSavedToLibrary(false);
+    setAudioUrl(null);
+    setAudioPrompt("");
+    uploadedSceneUrlsRef.current = {};
     pollCountRef.current = 0;
 
     const brandedPrompt = prompt.trim();
@@ -386,7 +426,6 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
 
     try {
       if (isMultiScene) {
-        // Multi-scene generation
         const sceneCount = Math.ceil(requestedDuration / currentModel.maxClipDuration);
         setProgressLabel(`Generating ${sceneCount} scenes...`);
 
@@ -404,7 +443,6 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
         setProgressLabel(`Generating ${data.totalScenes} scenes (${data.clipDuration}s each)...`);
         pollTimerRef.current = setTimeout(pollMultiScene, 5000);
       } else {
-        // Single clip generation
         const data = await invokeEdgeFunction("generate-video", {
           action: "generate",
           provider: currentModel.provider,
@@ -452,6 +490,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
 
   const handleReset = () => {
     cleanup();
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     setStatus("idle");
     setProgress(0);
     setProgressLabel("");
@@ -461,9 +500,15 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setWatermarking(false);
     setSavedToLibrary(false);
     setError(null);
+    setAudioUrl(null);
+    setAudioPrompt("");
+    setAudioGenerating(false);
+    setAudioPlaying(false);
+    setMerging(false);
     jobRef.current = null;
     multiJobsRef.current = null;
     isMultiRef.current = false;
+    uploadedSceneUrlsRef.current = {};
     pollCountRef.current = 0;
   };
 
@@ -471,6 +516,79 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     if (videoUrl) {
       onVideoReady?.(videoUrl);
       handleClose();
+    }
+  };
+
+  // ── Audio generation ──
+  const handleGenerateAudio = async () => {
+    if (!audioPrompt.trim()) return;
+    setAudioGenerating(true);
+    setAudioUrl(null);
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-music`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            prompt: audioPrompt,
+            duration: parseInt(audioDuration),
+            type: audioType,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        throw new Error(errData?.error || `Audio generation failed (${response.status})`);
+      }
+
+      const audioBlob = await response.blob();
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
+      toast({ title: "Audio ready!", description: `${audioType === "music" ? "Music" : "Sound effect"} generated successfully` });
+    } catch (err: any) {
+      toast({ title: "Audio generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setAudioGenerating(false);
+    }
+  };
+
+  const toggleAudioPlayback = () => {
+    if (!audioUrl) return;
+    if (audioPlaying && audioRef.current) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+    } else {
+      const audio = new Audio(audioUrl);
+      audio.onended = () => setAudioPlaying(false);
+      audio.play();
+      audioRef.current = audio;
+      setAudioPlaying(true);
+    }
+  };
+
+  const handleMergeAudioVideo = async () => {
+    if (!videoUrl || !audioUrl) return;
+    setMerging(true);
+    try {
+      const mergedUrl = await mergeVideoAudio(videoUrl, audioUrl);
+      setVideoUrl(mergedUrl);
+      setSavedToLibrary(false); // needs re-saving
+      toast({ title: "Merged!", description: "Audio has been added to your video" });
+    } catch (err: any) {
+      toast({ title: "Merge failed", description: err.message, variant: "destructive" });
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -604,7 +722,6 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                     {parseInt(duration) > currentModel.maxClipDuration && (
                       <p className="text-xs text-amber-600">
                         ⚡ Multi-scene: {Math.ceil(parseInt(duration) / currentModel.maxClipDuration)} clips will be generated as separate scenes
-                        will be generated and stitched together automatically
                       </p>
                     )}
                   </div>
@@ -626,7 +743,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                 const sceneCount = isMultiRef.current
                   ? Math.ceil(parseInt(duration) / currentModel.maxClipDuration)
                   : 1;
-                const estPerScene = currentModel.provider === "sora" ? 240 : 120; // seconds
+                const estPerScene = currentModel.provider === "sora" ? 240 : 120;
                 const estTotal = sceneCount * estPerScene;
                 const simulated = Math.min(85, (elapsedSecs / estTotal) * 85);
                 const displayProgress = Math.max(progress, simulated);
@@ -675,6 +792,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                         jobRef.current = null;
                         multiJobsRef.current = null;
                         isMultiRef.current = false;
+                        uploadedSceneUrlsRef.current = {};
                         pollCountRef.current = 0;
                       }}
                     >
@@ -702,7 +820,6 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                       muted
                       className="w-full aspect-video"
                       onEnded={() => {
-                        // Auto-advance to next scene for multi-scene
                         if (sceneUrls.length > 1 && currentScene < sceneUrls.length - 1) {
                           const next = currentScene + 1;
                           setCurrentScene(next);
@@ -731,6 +848,101 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                       </div>
                     </div>
                   )}
+
+                  {/* Audio Generation Section */}
+                  <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <Music className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-medium">Add Audio / Music</span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setAudioType("music")}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                          audioType === "music" ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
+                        }`}
+                      >
+                        🎵 Music
+                      </button>
+                      <button
+                        onClick={() => setAudioType("sfx")}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                          audioType === "sfx" ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
+                        }`}
+                      >
+                        🔊 Sound Effect
+                      </button>
+                    </div>
+
+                    <Input
+                      value={audioPrompt}
+                      onChange={(e) => setAudioPrompt(e.target.value)}
+                      placeholder={audioType === "music" ? "Upbeat corporate background music..." : "Construction machinery ambient sounds..."}
+                      className="text-sm"
+                    />
+
+                    {audioType === "music" && (
+                      <Select value={audioDuration} onValueChange={setAudioDuration}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10 seconds</SelectItem>
+                          <SelectItem value="15">15 seconds</SelectItem>
+                          <SelectItem value="30">30 seconds</SelectItem>
+                          <SelectItem value="60">60 seconds</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 gap-1.5"
+                        disabled={!audioPrompt.trim() || audioGenerating}
+                        onClick={handleGenerateAudio}
+                      >
+                        {audioGenerating ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Music className="w-3.5 h-3.5" />
+                        )}
+                        {audioGenerating ? "Generating..." : "Generate Audio"}
+                      </Button>
+                    </div>
+
+                    {/* Audio preview + merge */}
+                    {audioUrl && (
+                      <div className="flex items-center gap-2 p-2 rounded bg-background border">
+                        <Button size="sm" variant="ghost" onClick={toggleAudioPlayback} className="h-8 w-8 p-0">
+                          <Volume2 className={`w-4 h-4 ${audioPlaying ? "text-primary" : ""}`} />
+                        </Button>
+                        <span className="text-xs text-muted-foreground flex-1">
+                          {audioPlaying ? "Playing..." : "Audio ready"}
+                        </span>
+                        <Button
+                          size="sm"
+                          className="gap-1.5 h-7 text-xs"
+                          disabled={merging}
+                          onClick={handleMergeAudioVideo}
+                        >
+                          {merging ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-3 h-3" />
+                          )}
+                          {merging ? "Merging..." : "Add to Video"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                          <a href={audioUrl} download="audio.mp3">
+                            <Download className="w-3 h-3" />
+                          </a>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex gap-2">
                     <Button className="flex-1 gap-2" onClick={handleUseVideo}>
