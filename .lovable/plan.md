@@ -1,27 +1,48 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Show Individual Cards for Unassigned Posts
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+Currently, `groupByPlatform()` in `SocialCalendar.tsx` groups all unassigned posts into ONE card showing `? ×5`. The user wants each unassigned post to appear as its own separate card with the `?` icon and its specific time (6:30, 7:30, 8:00, 12:30, 2:30).
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+When a platform is assigned to a post, it naturally stops being "unassigned" and the `?` card disappears — this already works via the existing `handlePlatformsSaveMulti` + realtime subscription.
 
-### Plan
-Run a single database migration:
+### Solution
+Modify `groupByPlatform()` to treat each `unassigned` post as its own group (keyed by post ID) instead of grouping them together.
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+### File: `src/components/social/SocialCalendar.tsx`
+
+**Change `groupByPlatform` function (lines 13-23)**:
+
+```typescript
+function groupByPlatform(posts: SocialPost[]) {
+  const map = new Map<string, SocialPost[]>();
+  for (const p of posts) {
+    // Each unassigned post gets its own group (separate card)
+    const key = p.platform === "unassigned" ? `unassigned_${p.id}` : (p.platform || "other");
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(p);
+  }
+  return [...map.entries()].sort(
+    ([a], [b]) => {
+      // Normalize keys back to platform names for ordering
+      const aPlatform = a.startsWith("unassigned") ? "unassigned" : a;
+      const bPlatform = b.startsWith("unassigned") ? "unassigned" : b;
+      return (PLATFORM_ORDER.indexOf(aPlatform) === -1 ? 99 : PLATFORM_ORDER.indexOf(aPlatform))
+           - (PLATFORM_ORDER.indexOf(bPlatform) === -1 ? 99 : PLATFORM_ORDER.indexOf(bPlatform));
+    }
+  );
+}
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+And update the platform icon lookup (line 151) to handle the `unassigned_xxx` key:
 
-No code changes needed — just the migration.
+```typescript
+const pIcon = platformIcons[platform.startsWith("unassigned") ? "unassigned" : platform] || platformIcons.twitter;
+```
+
+### Result
+- Auto-generate → 5 individual `?` cards, each showing its scheduled time (6:30 AM, 7:30 AM, etc.)
+- Assign platform → `?` card disappears, replaced by platform-specific card
+- Other platforms (facebook, instagram, etc.) still group normally
 
