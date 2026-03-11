@@ -491,6 +491,18 @@ export default function SocialMediaManager() {
 
       {/* Settings Sheet */}
       <SettingsSheet open={showSettings} onOpenChange={setShowSettings} />
+
+      {/* Bulk Delete Confirmation */}
+      <ConfirmActionDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete selected posts?"
+        description={`This will permanently delete ${selectedPostIds.size} post(s) from the database.`}
+        variant="destructive"
+        confirmLabel="Delete all"
+        onConfirm={handleBulkDelete}
+        loading={bulkDeleting}
+      />
     </div>
   );
 }
