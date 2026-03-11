@@ -348,6 +348,18 @@ export function SlotTracker({
           </Button>
         )}
 
+        {/* Stop run mid-way (partial completion) */}
+        {!allDone && totalCutsDone > 0 && canWrite && (
+          <Button
+            variant="destructive"
+            className="gap-2 font-bold h-12 text-base"
+            onClick={onCompleteRun}
+          >
+            <MinusCircle className="w-5 h-5" />
+            Stop ({totalCutsDone} pcs)
+          </Button>
+        )}
+
         {/* Complete run */}
         {allDone && canWrite && (
           <Button

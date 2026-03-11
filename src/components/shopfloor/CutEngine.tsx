@@ -307,14 +307,27 @@ export function CutEngine({
       )}
 
       {isRunning && strokesDone !== 0 && (
-        <Badge
-          className={cn(
-            "w-full justify-center py-1.5",
-            "bg-primary/20 text-primary border-primary/30"
+        <div className="flex gap-2 w-full">
+          <Badge
+            className={cn(
+              "flex-1 justify-center py-1.5",
+              "bg-primary/20 text-primary border-primary/30"
+            )}
+          >
+            Machine Active
+          </Badge>
+          {onStopRun && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1.5 font-bold"
+              onClick={onStopRun}
+            >
+              <XCircle className="w-4 h-4" />
+              Stop Run
+            </Button>
           )}
-        >
-          Machine Active
-        </Badge>
+        </div>
       )}
 
       {/* ── LIVE COUNTER (visible during run) ── */}
