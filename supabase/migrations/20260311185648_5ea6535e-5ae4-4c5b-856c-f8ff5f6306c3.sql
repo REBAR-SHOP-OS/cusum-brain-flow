@@ -1,0 +1,2 @@
+ALTER TABLE public.social_posts DROP CONSTRAINT social_posts_platform_check;
+ALTER TABLE public.social_posts ADD CONSTRAINT social_posts_platform_check CHECK (platform = ANY (ARRAY['facebook','instagram','linkedin','twitter','tiktok','youtube','unassigned']));
