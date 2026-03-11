@@ -359,6 +359,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       toast({ title: "Machine started", description: `Cutting ${currentItem.mark_number || "item"} — use slot tracker to record cuts` });
     } catch (err: any) {
       setIsRunning(false);
+      setCompletedAtRunStart(null);
       toast({ title: "Start failed", description: err.message, variant: "destructive" });
     } finally {
       startingRef.current = false;
