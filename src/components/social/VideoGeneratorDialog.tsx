@@ -474,7 +474,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     }
   };
 
-  const isGenerating = status === "submitting" || status === "processing";
+  const isGenerating = status === "submitting" || status === "processing" || watermarking;
 
   const { suggestions: promptSuggestions, isLoading: suggestionsLoading } = useSeoSuggestions("video");
 
