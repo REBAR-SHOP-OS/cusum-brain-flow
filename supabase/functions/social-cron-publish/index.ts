@@ -141,12 +141,21 @@ serve(async (req) => {
                 if (matched) selectedPage = matched;
               }
               const pageId = selectedPage.id;
-              const { data: pageTokenData } = await supabase
+              let pageTokenData = (await supabase
                 .from("user_meta_tokens")
                 .select("access_token")
                 .eq("user_id", post.user_id)
                 .eq("platform", `${tokenPlatform}_page_${pageId}`)
-                .maybeSingle();
+                .maybeSingle()).data;
+              // Fallback: try any user's page token
+              if (!pageTokenData) {
+                pageTokenData = (await supabase
+                  .from("user_meta_tokens")
+                  .select("access_token")
+                  .eq("platform", `${tokenPlatform}_page_${pageId}`)
+                  .limit(1)
+                  .maybeSingle()).data;
+              }
               const pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
 
               if (post.platform === "facebook") {
