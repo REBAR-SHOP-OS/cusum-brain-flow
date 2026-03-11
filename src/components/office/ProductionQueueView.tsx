@@ -29,6 +29,7 @@ interface PlanNode {
   status: string;
   project_name: string | null;
   project_id: string | null;
+  barlist_id: string | null;
 }
 
 interface BarlistNode {
