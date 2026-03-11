@@ -174,7 +174,48 @@ export function SeoLinks() {
         )}
       </div>
 
-      {/* Results table */}
+      {/* Backlinks panel */}
+      {filter === "backlinks" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Globe className="w-4 h-4 text-primary" /> Backlink Overview (SEMrush API)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button
+              size="sm"
+              onClick={() => domain && fetchBacklinks.mutate({ domain: domain.domain })}
+              disabled={fetchBacklinks.isPending || !domain}
+              className="mb-4"
+            >
+              {fetchBacklinks.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+              Fetch Backlinks
+            </Button>
+            {fetchBacklinks.data?.data && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Backlinks", value: Number(fetchBacklinks.data.data.total || 0).toLocaleString() },
+                  { label: "Referring Domains", value: Number(fetchBacklinks.data.data.domains_num || 0).toLocaleString() },
+                  { label: "Follow Links", value: Number(fetchBacklinks.data.data.follows_num || 0).toLocaleString() },
+                  { label: "Nofollow Links", value: Number(fetchBacklinks.data.data.nofollows_num || 0).toLocaleString() },
+                ].map((item) => (
+                  <Card key={item.label}>
+                    <CardContent className="py-4 text-center">
+                      <p className="text-xs text-muted-foreground">{item.label}</p>
+                      <p className="text-2xl font-bold mt-1">{item.value}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+            {!fetchBacklinks.data && !fetchBacklinks.isPending && (
+              <p className="text-sm text-muted-foreground">Click "Fetch Backlinks" to load data from SEMrush API.</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+      /* Results table */
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : filtered.length === 0 ? (
