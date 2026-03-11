@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers, Globe, Link2, CheckCircle, Mail, Upload, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { useSemrushSync } from "@/hooks/useSemrushApi";
 import * as XLSX from "@e965/xlsx";
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -32,6 +33,7 @@ export function SeoOverview() {
   const [googleStatus, setGoogleStatus] = useState<"checking" | "connected" | "not_connected">("checking");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+  const { syncDomain } = useSemrushSync();
 
   // Check Google connection status
   useEffect(() => {
@@ -343,6 +345,10 @@ export function SeoOverview() {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importSemrush.isPending || !domain}>
             {importSemrush.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
             Import SEMrush Data
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => domain && syncDomain.mutate({ domain_id: domain.id, domain: domain.domain })} disabled={syncDomain.isPending || !domain}>
+            {syncDomain.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <BarChart3 className="w-4 h-4 mr-1" />}
+            Sync SEMrush API
           </Button>
           <Button variant="outline" size="sm" onClick={() => syncGsc.mutate()} disabled={syncGsc.isPending || !domain || googleStatus !== "connected"}>
             {syncGsc.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}

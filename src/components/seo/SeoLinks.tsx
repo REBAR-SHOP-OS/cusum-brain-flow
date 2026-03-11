@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link2, ExternalLink, AlertTriangle, CheckCircle, Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { Link2, ExternalLink, AlertTriangle, CheckCircle, Loader2, Sparkles, RefreshCw, Globe } from "lucide-react";
 import { toast } from "sonner";
+import { useSemrushSync } from "@/hooks/useSemrushApi";
 
-type StatusFilter = "all" | "broken" | "opportunity" | "fixed";
+type StatusFilter = "all" | "broken" | "opportunity" | "fixed" | "backlinks";
 
 const statusBadge: Record<string, { label: string; className: string }> = {
   ok: { label: "OK", className: "bg-green-500/10 text-green-600" },
@@ -28,6 +29,7 @@ const typeBadge: Record<string, { label: string; className: string }> = {
 export function SeoLinks() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const qc = useQueryClient();
+  const { fetchBacklinks } = useSemrushSync();
 
   // Get domain
   const { data: domain } = useQuery({
@@ -154,6 +156,9 @@ export function SeoLinks() {
             <TabsTrigger value="broken">Broken ({stats.broken})</TabsTrigger>
             <TabsTrigger value="opportunity">Opportunities ({stats.opportunities})</TabsTrigger>
             <TabsTrigger value="fixed">Fixed ({stats.fixed})</TabsTrigger>
+            <TabsTrigger value="backlinks">
+              <Globe className="w-3.5 h-3.5 mr-1" /> Backlinks
+            </TabsTrigger>
           </TabsList>
         </Tabs>
         {unfixedOpportunities.length > 0 && (
@@ -169,8 +174,49 @@ export function SeoLinks() {
         )}
       </div>
 
-      {/* Results table */}
-      {isLoading ? (
+      {/* Backlinks panel */}
+      {filter === "backlinks" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Globe className="w-4 h-4 text-primary" /> Backlink Overview (SEMrush API)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button
+              size="sm"
+              onClick={() => domain && fetchBacklinks.mutate({ domain: domain.domain })}
+              disabled={fetchBacklinks.isPending || !domain}
+              className="mb-4"
+            >
+              {fetchBacklinks.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+              Fetch Backlinks
+            </Button>
+            {fetchBacklinks.data?.data && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Backlinks", value: Number(fetchBacklinks.data.data.total || 0).toLocaleString() },
+                  { label: "Referring Domains", value: Number(fetchBacklinks.data.data.domains_num || 0).toLocaleString() },
+                  { label: "Follow Links", value: Number(fetchBacklinks.data.data.follows_num || 0).toLocaleString() },
+                  { label: "Nofollow Links", value: Number(fetchBacklinks.data.data.nofollows_num || 0).toLocaleString() },
+                ].map((item) => (
+                  <Card key={item.label}>
+                    <CardContent className="py-4 text-center">
+                      <p className="text-xs text-muted-foreground">{item.label}</p>
+                      <p className="text-2xl font-bold mt-1">{item.value}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+            {!fetchBacklinks.data && !fetchBacklinks.isPending && (
+              <p className="text-sm text-muted-foreground">Click "Fetch Backlinks" to load data from SEMrush API.</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+      /* Results table */
+      isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : filtered.length === 0 ? (
         <Card>
@@ -235,6 +281,7 @@ export function SeoLinks() {
             </TableBody>
           </Table>
         </Card>
+      )
       )}
     </div>
   );

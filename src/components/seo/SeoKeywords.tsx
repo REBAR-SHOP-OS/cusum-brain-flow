@@ -3,10 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, Search, Sparkles } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Search, Sparkles, Loader2 } from "lucide-react";
+import { useSemrushSync } from "@/hooks/useSemrushApi";
 
 const statusColors: Record<string, string> = {
   winner: "bg-green-500/10 text-green-600",
@@ -42,6 +44,8 @@ export function SeoKeywords() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [sortBy, setSortBy] = useState("opportunity");
+  const [researchInput, setResearchInput] = useState("");
+  const { researchKeyword } = useSemrushSync();
 
   const { data: domain } = useQuery({
     queryKey: ["seo-domain"],
@@ -94,6 +98,35 @@ export function SeoKeywords() {
           </h1>
           <p className="text-sm text-muted-foreground">Keyword opportunities ranked by impact, sourced from Search Console and ERP data</p>
         </div>
+
+        {/* Keyword Research Bar */}
+        <Card className="border-primary/20">
+          <CardContent className="py-3 flex items-center gap-3">
+            <Sparkles className="w-4 h-4 text-primary shrink-0" />
+            <Input
+              placeholder="Research a keyword (SEMrush API)..."
+              value={researchInput}
+              onChange={(e) => setResearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && researchInput.trim()) researchKeyword.mutate({ keyword: researchInput.trim() }); }}
+              className="flex-1"
+            />
+            <Button size="sm" onClick={() => researchInput.trim() && researchKeyword.mutate({ keyword: researchInput.trim() })} disabled={researchKeyword.isPending || !researchInput.trim()}>
+              {researchKeyword.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
+              Research
+            </Button>
+          </CardContent>
+          {researchKeyword.data && (
+            <CardContent className="pt-0 pb-3">
+              <div className="flex gap-4 text-sm">
+                <span><strong>Keyword:</strong> {researchKeyword.data.keyword}</span>
+                <span><strong>Volume:</strong> {researchKeyword.data.volume?.toLocaleString()}</span>
+                <span><strong>Difficulty:</strong> {researchKeyword.data.difficulty}</span>
+                <span><strong>CPC:</strong> ${researchKeyword.data.cpc?.toFixed(2)}</span>
+                <span><strong>Competition:</strong> {researchKeyword.data.competition?.toFixed(2)}</span>
+              </div>
+            </CardContent>
+          )}
+        </Card>
 
         {/* Filters */}
         <div className="flex gap-2 flex-wrap">
