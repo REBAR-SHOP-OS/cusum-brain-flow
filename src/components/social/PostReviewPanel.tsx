@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -49,14 +49,34 @@ const PLATFORM_OPTIONS: SelectionOption[] = [
   { value: "tiktok", label: "TikTok", description: "Only single video posts supported" },
 ];
 
-const PAGES_OPTIONS: SelectionOption[] = [
-  { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
-  { value: "Rebar.shop", label: "Rebar.shop" },
-  { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
-  { value: "Ontario Logistics", label: "Ontario Logistics" },
-  { value: "Ontario Steels", label: "Ontario Steels" },
-  { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
-];
+const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
+  facebook: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+    { value: "Ontario Steels", label: "Ontario Steels" },
+  ],
+  instagram: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
+  ],
+  instagram_fb: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+  ],
+  linkedin: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Ontario Logistics", label: "Ontario Logistics" },
+  ],
+  linkedin_org: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  youtube: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  tiktok: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+};
 
 type SubPanelView = null | "content_type" | "platform" | "pages";
 
@@ -173,6 +193,15 @@ export function PostReviewPanel({
     }
   };
 
+  const filteredPageOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return localPlatforms.flatMap(p => PLATFORM_PAGES[p] || []).filter(o => {
+      if (seen.has(o.value)) return false;
+      seen.add(o.value);
+      return true;
+    });
+  }, [localPlatforms]);
+
   if (!post) return null;
 
   const startEdit = () => {
@@ -217,6 +246,9 @@ export function PostReviewPanel({
 
   const handlePlatformsSaveMulti = (values: string[]) => {
     setLocalPlatforms(values);
+    // Reset pages to only valid ones for new platform selection
+    const validPages = new Set(values.flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value)));
+    setLocalPages(prev => prev.filter(p => validPages.has(p)));
     // Update the primary post's platform to the first selected
     if (values.length > 0) {
       const dbPlatform = platformMap[values[0]] || values[0];
@@ -273,7 +305,7 @@ export function PostReviewPanel({
           {subPanel === "pages" && (
             <SelectionSubPanel
               title="Pages"
-              options={PAGES_OPTIONS}
+              options={filteredPageOptions}
               multiSelect
               selectedMulti={localPages}
               onSaveMulti={handlePagesSaveMulti}
