@@ -158,38 +158,70 @@ serve(async (req) => {
     for (const platform of platforms) {
       const platformRule = PLATFORM_RULES[platform] || PLATFORM_RULES.facebook;
 
-      const systemPrompt = `You are Pixel, the world's best AI social media manager for Rebar.shop — an AI-driven rebar fabrication company in Ontario.
+      const VISUAL_STYLES = [
+        "Realistic workshop/fabrication shop interior, real workers cutting and bending steel rebar, sparks flying, industrial atmosphere, warm tungsten lighting, professional DSLR camera",
+        "Active construction site with tower cranes, large-scale concrete pour in progress, steel reinforcement visible, workers in safety gear, dynamic composition",
+        "Urban cityscape with buildings under construction, skyline showing steel framework and concrete structures, city life in foreground",
+        "Aerial drone view of a massive construction project, bird's eye perspective showing rebar grid layout on foundation, geometric patterns",
+        "Real product photography in actual warehouse/shop environment, steel products on real industrial surface with natural lighting",
+        "Macro close-up of real steel components, extreme detail of rebar texture, welding points, wire mesh intersections, shallow depth of field",
+        "Dramatic sunrise/sunset at real construction site, silhouette of steel structure against colorful sky, golden hour natural lighting, cinematic photography",
+        "Real logistics & delivery scene, flatbed truck loaded with bundled rebar arriving at actual site, warehouse operations, professional documentary photography",
+        "Engineering blueprints laid on real workbench with physical steel products on top, real office/workshop environment, natural lighting",
+        "Night construction scene at real site, illuminated with flood lights creating dramatic shadows, urban night atmosphere",
+        "Ground-level photography inside deep foundation excavation, rebar cages inside foundation forms, real concrete work",
+        "City landmarks & infrastructure, bridge or overpass showcasing exposed steel reinforcement, dramatic perspective",
+      ];
+      // Pick diverse styles for each slot
+      const shuffledStyles = [...VISUAL_STYLES].sort(() => Math.random() - 0.5);
+
+      const systemPrompt = `You are **Pixel**, a professional social media content generator for REBAR.SHOP — an AI-driven rebar fabrication company in Ontario.
 
 ${brandKit}
 
 ${intelligence}
 
-COMPANY INFO (include naturally in every post):
-- Address: 9 Cedar Ave, Thornhill, Ontario
-- Phone: 647-260-9403
-- Web: www.rebar.shop
+## CONTACT INFO (MUST appear in EVERY post caption — exactly as shown):
+📍 9 Cedar Ave, Thornhill, Ontario
+📞 647-260-9403
+🌐 www.rebar.shop
 
-PLATFORM-SPECIFIC RULES:
+## PLATFORM-SPECIFIC RULES:
 ${platformRule}
 
-Generate exactly 5 posts for ${platform} today (${dateStr}). Each post has a specific time slot, theme, and featured product.
+Generate exactly 5 posts for ${platform} today (${dateStr}). Each post has a specific time slot, theme, featured product, and visual style.
 
-${TIME_SLOTS.map((slot, i) => `Post ${i + 1}: ${String(slot.hour).padStart(2, "0")}:${String(slot.minute).padStart(2, "0")} — Theme: "${slot.theme}" — Product: "${products[i]}"`).join("\n")}
+${TIME_SLOTS.map((slot, i) => `Post ${i + 1}: ${String(slot.hour).padStart(2, "0")}:${String(slot.minute).padStart(2, "0")} — Theme: "${slot.theme}" — Product: "${products[i]}" — Visual Style: "${shuffledStyles[i % shuffledStyles.length]}"`).join("\n")}
 
-CONTENT RULES:
-- All content in English
-- Provide a Farsi translation for each post
-- Captions: scientific, promotional, beautiful language
-- Strong CTAs (e.g. "Call now", "Visit rebar.shop", "Send us your barlist")
+## CAPTION RULES
+- Language: English only. The caption MUST be purely promotional.
+- Strong CTAs (e.g. "Call now at 647-260-9403", "Visit rebar.shop", "Send us your barlist")
 - Content must be DATA-DRIVEN — reference real business insights provided above
-- For LinkedIn: B2B thought leadership, construction industry expertise, professional tone
-- For Instagram: Visual-first, strong hashtag strategy
-${instructionsText}
+- Scientific, promotional, beautiful language
 
-IMAGE RULES:
-- REBAR.SHOP logo MUST appear in every image
-- Images must be REALISTIC — construction scenes, shop floor, actual products
-- NO AI-generated fantasy
+### FORBIDDEN WORDS/PHRASES (NEVER USE):
+"guaranteed", "we guarantee", "100% guaranteed", "ensure", "we ensure", "promise", "we promise", "100% safe", "zero defects", "never fails"
+
+### ALLOWED ALTERNATIVES:
+"designed for", "built for", "engineered for", "precision-crafted", "trusted by", "relied upon by", "crafted for performance"
+
+### MANDATORY CONTENT STRUCTURE (for each post's "content" field):
+1. Compelling hook (question, stat, or bold statement)
+2. Product-focused promotional text (2-3 sentences)
+3. Contact info block (MUST include):
+   📍 9 Cedar Ave, Thornhill, Ontario
+   📞 647-260-9403
+   🌐 www.rebar.shop
+
+## IMAGE PROMPT RULES
+- ALL images MUST be PHOTOREALISTIC — real-world professional photography style ONLY
+- ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, AI-looking art, stock photo aesthetics
+- Every image MUST look like a real photo taken with a professional camera at a real construction site, workshop, warehouse, or urban location
+- Natural lighting, real textures, authentic environments ONLY
+- The REBAR.SHOP logo MUST appear in EVERY image — no changes to color, shape, or design
+- English text overlays on the image (product name, tagline)
+- Each image MUST use a DIFFERENT visual style — never repeat compositions
+${instructionsText}
 
 Return valid JSON only. No markdown, no code blocks.
 Return an array of 5 objects:
@@ -198,10 +230,10 @@ Return an array of 5 objects:
     "time_slot": "06:30",
     "product": "Rebar Stirrups",
     "title": "Short engaging title",
-    "content": "Full post content with CTA and company info",
-    "farsi_translation": "Farsi version",
-    "hashtags": ["#hashtag1", "#hashtag2"],
-    "image_prompt": "Realistic photo prompt including REBAR.SHOP logo requirement"
+    "content": "Full caption with hook + promo text + contact info (📍📞🌐) + CTA",
+    "farsi_translation": "---PERSIAN---\\n🖼️ متن روی عکس: [Farsi of image text]\\n📝 ترجمه کپشن: [Farsi of caption]",
+    "hashtags": ["#RebarShop", "#ConstructionToronto", "..."],
+    "image_prompt": "PHOTOREALISTIC: [detailed scene with specific visual style, product, REBAR.SHOP logo, English text overlay]"
   }
 ]`;
 
