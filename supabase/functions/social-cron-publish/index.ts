@@ -66,6 +66,7 @@ serve(async (req) => {
         .from("social_posts")
         .select("*")
         .eq("status", "scheduled")
+        .eq("neel_approved", true)
         .lte("scheduled_date", now)
         .order("scheduled_date", { ascending: true })
         .limit(20);

@@ -76,6 +76,21 @@ serve(async (req) => {
       }
     }
 
+    // Server-side Neel approval guard
+    if (post_id) {
+      const { data: postCheck } = await supabaseAdmin
+        .from("social_posts")
+        .select("neel_approved")
+        .eq("id", post_id)
+        .single();
+      if (!postCheck?.neel_approved) {
+        return new Response(
+          JSON.stringify({ error: "This post requires Neel's approval before publishing." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Get user token for the platform
     const tokenPlatform = platform === "instagram" ? "instagram" : "facebook";
     const { data: tokenData, error: tokenError } = await supabaseAdmin
