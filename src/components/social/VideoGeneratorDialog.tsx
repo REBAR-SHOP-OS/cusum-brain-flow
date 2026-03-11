@@ -52,11 +52,13 @@ const modelOptions: ModelOption[] = [
     label: "OpenAI Sora 2",
     description: "Fast iteration, great for social content",
     pricing: "Usage-based",
-    maxDuration: 12,
+    maxDuration: 60,
     durationOptions: [
       { value: "4", label: "4 seconds" },
       { value: "8", label: "8 seconds" },
       { value: "12", label: "12 seconds" },
+      { value: "30", label: "30 seconds" },
+      { value: "60", label: "60 seconds" },
     ],
   },
   {
@@ -65,11 +67,13 @@ const modelOptions: ModelOption[] = [
     label: "OpenAI Sora 2 Pro",
     description: "Production-quality, highest fidelity",
     pricing: "Premium",
-    maxDuration: 12,
+    maxDuration: 60,
     durationOptions: [
       { value: "4", label: "4 seconds" },
       { value: "8", label: "8 seconds" },
       { value: "12", label: "12 seconds" },
+      { value: "30", label: "30 seconds" },
+      { value: "60", label: "60 seconds" },
     ],
   },
 ];

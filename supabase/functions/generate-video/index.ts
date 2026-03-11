@@ -227,7 +227,7 @@ serve(async (req) => {
       prompt: z.string().max(5000).optional(),
       jobId: z.string().max(500).optional(),
       videoUrl: z.string().max(2000).optional(),
-      duration: z.number().min(1).max(30).optional(),
+      duration: z.number().min(1).max(60).optional(),
       model: z.string().max(50).optional(),
     });
     const parsed = videoSchema.safeParse(await req.json());
