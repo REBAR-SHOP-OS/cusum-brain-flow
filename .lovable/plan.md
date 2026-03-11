@@ -1,27 +1,23 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Convert Neel Approval to a Proper Button & Translate All Persian Text to English
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+### Changes
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+**`src/components/social/PostReviewPanel.tsx`**
 
-### Plan
-Run a single database migration:
+1. **Neel Approval section (lines 568-590)** — Replace all three states with English text and make the "approved" and "awaiting" states look like proper buttons:
+   - `neel_approved = true` → Green button style: "Approved by Neel ✅"
+   - Current user is neel → Clickable amber button: "Neel Approval" (keep as-is but English)
+   - Other users → Disabled/outline button: "Awaiting Neel's Approval"
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
-```
+2. **Toast on approval (line 579)** → `title: "Approved"`, `description: "Post approved by Neel."`
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+3. **Publish guard toast (line 599)** → `title: "Neel Approval Required"`, `description: "This post must be approved by Neel before publishing."`
 
-No code changes needed — just the migration.
+4. **Schedule guard toast (line 679)** → `title: "Invalid Time"`, `description: "Cannot schedule in the past. Please select a future time."`
+
+**`src/components/social/SchedulePopover.tsx`**
+
+5. **Past-time toast (line 59)** → `title: "Invalid Time"`, `description: "Cannot schedule in the past. Please select a future time."`
 
