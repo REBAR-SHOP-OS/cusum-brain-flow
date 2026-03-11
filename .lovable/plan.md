@@ -1,41 +1,27 @@
 
 
-## حذف کامل کارت و تمام پست‌های مرتبط
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
-### مشکل فعلی
-`handleDelete` فقط پست‌هایی با همان `image_url` **و** همان `platform` را حذف می‌کند. پس اگر یک محتوا روی فیسبوک، اینستاگرام و لینکدین باشد، حذف کارت فیسبوک فقط پست‌های فیسبوک را پاک می‌کند و بقیه باقی می‌مانند و ممکن است پابلیش شوند.
+### Problem
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### تغییر
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-**`src/components/social/PostReviewPanel.tsx`** — آپدیت `handleDelete`:
+### Plan
+Run a single database migration:
 
-فیلتر batch را تغییر می‌دهیم تا **تمام پست‌ها با همان `image_url` یا همان `title`** (بدون محدودیت پلتفرم) حذف شوند:
-
-```typescript
-const handleDelete = async () => {
-  setDeleting(true);
-  try {
-    // Find ALL related posts across ALL platforms
-    const batchPosts = allPosts.filter(p =>
-      (post.image_url && p.image_url === post.image_url) ||
-      (post.title && p.title === post.title)
-    );
-    const toDelete = batchPosts.length > 0 ? batchPosts : [post];
-    
-    for (const p of toDelete) {
-      await deletePost.mutateAsync(p.id);
-    }
-    toast({ title: "Deleted", description: `${toDelete.length} post(s) deleted across all platforms.` });
-  } finally {
-    setDeleting(false);
-    onClose();
-  }
-};
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-این تغییر باعث می‌شود:
-- وقتی یک کارت حذف شود، تمام کپی‌های آن روی تمام پلتفرم‌ها و پیج‌ها حذف شوند
-- هیچ پست زمان‌بندی‌شده‌ای باقی نماند که بعداً پابلیش شود
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
 
-فقط یک فایل تغییر می‌کند: `PostReviewPanel.tsx`
+No code changes needed — just the migration.
 
