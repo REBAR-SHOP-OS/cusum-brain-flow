@@ -222,9 +222,11 @@ export function PostReviewPanel({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const batchPosts = post.image_url
-        ? allPosts.filter(p => p.image_url === post.image_url && p.platform === post.platform)
-        : [post];
+      const batchPosts = allPosts.filter(p =>
+        (post.image_url && p.image_url === post.image_url) ||
+        (post.title && p.title === post.title)
+      );
+      const toDelete = batchPosts.length > 0 ? batchPosts : [post];
       for (const p of batchPosts) {
         await deletePost.mutateAsync(p.id);
       }
