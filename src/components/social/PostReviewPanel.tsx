@@ -154,6 +154,12 @@ export function PostReviewPanel({
     });
   }, []);
 
+  // Sub-panel state
+  const [subPanel, setSubPanel] = useState<SubPanelView>(null);
+  const [localContentType, setLocalContentType] = useState(post?.content_type || "post");
+  const [localPages, setLocalPages] = useState<string[]>(post?.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
+  const [localPlatforms, setLocalPlatforms] = useState<string[]>([post?.platform || "facebook"]);
+
   // Check Facebook publish_ready status
   useEffect(() => {
     if (!post) return;
@@ -172,12 +178,6 @@ export function PostReviewPanel({
         setFbMissingScopes(cfg.missing_scopes ?? []);
       });
   }, [post?.id, localPlatforms]);
-
-  // Sub-panel state
-  const [subPanel, setSubPanel] = useState<SubPanelView>(null);
-  const [localContentType, setLocalContentType] = useState(post?.content_type || "post");
-  const [localPages, setLocalPages] = useState<string[]>(post?.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
-  const [localPlatforms, setLocalPlatforms] = useState<string[]>([post?.platform || "facebook"]);
 
   // Sync local state when post changes (navigation or refresh)
   useEffect(() => {
