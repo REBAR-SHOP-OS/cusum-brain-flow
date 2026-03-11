@@ -119,6 +119,7 @@ function DateSchedulePopover({
 
 export function PostReviewPanel({
   post,
+  groupPages,
   postsToReview,
   onClose,
   onSchedule,
@@ -149,9 +150,13 @@ export function PostReviewPanel({
   useEffect(() => {
     if (!post) return;
     setLocalPlatforms([post.platform]);
-    setLocalPages(post.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
+    if (groupPages && groupPages.length > 0) {
+      setLocalPages(groupPages);
+    } else {
+      setLocalPages(post.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
+    }
     setLocalContentType(post.content_type || "post");
-  }, [post?.id]);
+  }, [post?.id, groupPages]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
