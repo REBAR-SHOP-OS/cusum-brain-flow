@@ -459,6 +459,8 @@ export default function SocialMediaManager() {
               posts={filteredPosts}
               weekStart={weekStart}
               onPostClick={setSelectedPost}
+              selectedPostIds={selectionMode ? selectedPostIds : undefined}
+              onToggleSelect={selectionMode ? toggleSelectPost : undefined}
             />
             {weekPosts.length === 0 && filteredPosts.length > 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
