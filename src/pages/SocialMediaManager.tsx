@@ -115,7 +115,25 @@ export default function SocialMediaManager() {
     return items;
   }, [posts, platformFilter, statusFilter, searchQuery]);
 
-  const weekPosts = useMemo(() => {
+  const toggleSelectAll = useCallback(() => {
+    if (selectedPostIds.size === filteredPosts.length) {
+      setSelectedPostIds(new Set());
+    } else {
+      setSelectedPostIds(new Set(filteredPosts.map((p) => p.id)));
+    }
+  }, [filteredPosts, selectedPostIds.size]);
+
+  const handleBulkDelete = useCallback(async () => {
+    setBulkDeleting(true);
+    const ids = Array.from(selectedPostIds);
+    for (const id of ids) {
+      await deletePost.mutateAsync(id);
+    }
+    setBulkDeleting(false);
+    setShowDeleteConfirm(false);
+    exitSelectionMode();
+  }, [selectedPostIds, deletePost, exitSelectionMode]);
+
     const wEnd = addDays(weekStart, 7);
     return filteredPosts.filter((p) => {
       if (!p.scheduled_date) return false;
