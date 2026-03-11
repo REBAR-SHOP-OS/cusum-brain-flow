@@ -22,6 +22,25 @@ interface SchedulePostResult {
 export async function schedulePost(params: SchedulePostParams): Promise<SchedulePostResult> {
   console.log("[schedulePost] Calling edge function with:", JSON.stringify(params));
 
+  // Frontend duplicate check: same title + platform + same day
+  if (params.title && params.platform) {
+    const scheduledDay = params.scheduled_date.substring(0, 10); // YYYY-MM-DD
+    const { data: dupes } = await supabase
+      .from("social_posts")
+      .select("id")
+      .eq("platform", params.platform)
+      .eq("title", params.title)
+      .gte("scheduled_date", `${scheduledDay}T00:00:00`)
+      .lte("scheduled_date", `${scheduledDay}T23:59:59`)
+      .neq("id", params.post_id)
+      .limit(1);
+
+    if (dupes && dupes.length > 0) {
+      console.warn("[schedulePost] Duplicate detected on frontend:", dupes[0].id);
+      return { success: false, error: "This post is already scheduled on this platform for this date." };
+    }
+  }
+
   try {
     const { data, error } = await supabase.functions.invoke("schedule-post", {
       body: params,
