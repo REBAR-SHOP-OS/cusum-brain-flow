@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import type { SocialPost } from "@/hooks/useSocialPosts";
 
-const PLATFORM_ORDER = ["facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
+const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
 
 const STATUS_PRIORITY: Record<string, number> = {
   declined: 0, draft: 1, pending: 2, scheduled: 3, published: 4,
