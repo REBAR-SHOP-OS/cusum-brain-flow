@@ -15,6 +15,8 @@ export function useAutoGenerate() {
     scheduledDate?: string;
   }) => {
     setGenerating(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000);
     try {
       const { data, error } = await supabase.functions.invoke("auto-generate-post", {
         body: {
@@ -24,6 +26,7 @@ export function useAutoGenerate() {
           scheduledDate: options?.scheduledDate,
         },
       });
+      clearTimeout(timeout);
 
       if (error) throw new Error(error.message);
 
