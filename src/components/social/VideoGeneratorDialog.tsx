@@ -429,12 +429,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
 
   const isGenerating = status === "submitting" || status === "processing";
 
-  const promptSuggestions = [
-    "A cinematic aerial shot of a construction site at golden hour, cranes moving steel beams",
-    "Modern office timelapse with people working, natural lighting, professional atmosphere",
-    "Close-up of steel rebar being bent by machinery in a workshop, industrial, sparks flying",
-    "A drone shot over a completed building project, revealing the cityscape behind it",
-  ];
+  const { suggestions: promptSuggestions, isLoading: suggestionsLoading } = useSeoSuggestions("video");
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
