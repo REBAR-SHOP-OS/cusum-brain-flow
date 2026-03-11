@@ -9,6 +9,7 @@ interface SchedulePostParams {
   page_name?: string | null;
   extra_combos?: { platform: string; page: string }[];
   title?: string;
+  delete_original?: boolean;
 }
 
 interface SchedulePostResult {

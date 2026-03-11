@@ -705,15 +705,18 @@ export function PostReviewPanel({
                           return;
                         }
 
-                        console.log(`[PostReviewPanel] Schedule button — post=${postId} platform=${primary.platform} page=${primary.page} date=${post.scheduled_date}`);
+                        const isUnassigned = post.platform === "unassigned";
+                        const allCombos = combos.map(c => ({ platform: c.platform, page: c.page }));
+                        console.log(`[PostReviewPanel] Schedule button — post=${postId} platform=${primary.platform} page=${primary.page} date=${post.scheduled_date} unassigned=${isUnassigned}`);
                         const result = await schedulePost({
                           post_id: postId,
                           scheduled_date: post.scheduled_date!,
                           status: "scheduled",
                           qa_status: "scheduled",
-                          platform: primary.platform,
-                          page_name: primary.page,
-                          extra_combos: rest.length > 0 ? rest.map(c => ({ platform: c.platform, page: c.page })) : undefined,
+                          platform: isUnassigned ? "unassigned" : primary.platform,
+                          page_name: isUnassigned ? undefined : primary.page,
+                          extra_combos: isUnassigned ? allCombos : (rest.length > 0 ? rest.map(c => ({ platform: c.platform, page: c.page })) : undefined),
+                          delete_original: isUnassigned,
                         });
                         if (!result.success) {
                           console.error("[PostReviewPanel] Schedule FAILED:", result.error, result.details);
