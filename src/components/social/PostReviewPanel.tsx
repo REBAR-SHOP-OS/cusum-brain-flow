@@ -678,7 +678,6 @@ export function PostReviewPanel({
                   </Button>
                 </div>
               )}
-              )}
             </>
           )}
         </SheetContent>
