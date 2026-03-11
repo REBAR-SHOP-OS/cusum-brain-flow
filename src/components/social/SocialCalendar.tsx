@@ -54,14 +54,6 @@ const platformIcons: Record<string, { bg: string; icon: JSX.Element }> = {
   },
 };
 
-interface PostGroup {
-  key: string;
-  posts: SocialPost[];
-  title: string;
-  platforms: { platform: string; count: number }[];
-  status: string;
-}
-
 interface SocialCalendarProps {
   posts: SocialPost[];
   weekStart: Date;
@@ -69,30 +61,6 @@ interface SocialCalendarProps {
   selectedPostIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onSelectDay?: (dayPostIds: string[]) => void;
-}
-
-function groupPostsByContent(dayPosts: SocialPost[]): PostGroup[] {
-  const map = new Map<string, SocialPost[]>();
-  for (const post of dayPosts) {
-    const key = (post.title || "").trim().toLowerCase();
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(post);
-  }
-
-  return Array.from(map.entries()).map(([key, posts]) => {
-    const platformCounts = new Map<string, number>();
-    for (const p of posts) {
-      platformCounts.set(p.platform, (platformCounts.get(p.platform) || 0) + 1);
-    }
-    const platforms = Array.from(platformCounts.entries()).map(([platform, count]) => ({ platform, count }));
-    // Use worst status for display
-    const statusPriority: Record<string, number> = { declined: 0, draft: 1, scheduled: 2, published: 3 };
-    const status = posts.reduce((worst, p) => {
-      return (statusPriority[p.status] ?? 1) < (statusPriority[worst] ?? 1) ? p.status : worst;
-    }, posts[0].status);
-
-    return { key, posts, title: posts[0].title || "Untitled", platforms, status };
-  });
 }
 
 export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds, onToggleSelect, onSelectDay }: SocialCalendarProps) {
