@@ -54,7 +54,17 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { platform, message, image_url, post_id, page_name } = parsed.data;
+    const { platform, message: rawMessage, image_url, post_id, page_name } = parsed.data;
+
+    // Strip Persian translation block — server-side safety net
+    let message = rawMessage;
+    {
+      const idx = message.indexOf("---PERSIAN---");
+      if (idx !== -1) message = message.slice(0, idx);
+      message = message.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
+      message = message.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+      message = message.trim();
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
