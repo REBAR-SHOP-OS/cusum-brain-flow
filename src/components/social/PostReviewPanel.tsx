@@ -170,8 +170,16 @@ export function PostReviewPanel({
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   const isPublished = post?.status === "published";
+
+  // Fetch current user email for Neel approval gate
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserEmail(data.user?.email ?? null);
+    });
+  }, []);
 
   // Sub-panel state
   const [subPanel, setSubPanel] = useState<SubPanelView>(null);
@@ -556,11 +564,41 @@ export function PostReviewPanel({
               )}
               {!editing && !isPublished && (
                 <div className="p-4 border-t space-y-2">
+                  {/* Neel Approval Gate */}
+                  {post.neel_approved ? (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-green-50 border border-green-200 text-green-700 text-sm font-medium">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      تأیید شده توسط Neel ✅
+                    </div>
+                  ) : currentUserEmail === "neel@rebar.shop" ? (
+                    <Button
+                      variant="outline"
+                      className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 gap-1.5"
+                      onClick={() => {
+                        updatePost.mutate({ id: post.id, neel_approved: true } as any);
+                        toast({ title: "تأیید شد", description: "پست توسط Neel تأیید شد." });
+                      }}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                      تأیید Neel
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted border text-muted-foreground text-sm">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      در انتظار تأیید Neel
+                    </div>
+                  )}
+
                   {/* Publish Now */}
                   <Button
                     className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
                     disabled={publishing}
                     onClick={async () => {
+                      // Neel approval guard
+                      if (!post.neel_approved) {
+                        toast({ title: "نیاز به تأیید Neel", description: "این پست قبل از انتشار باید توسط Neel تأیید شود.", variant: "destructive" });
+                        return;
+                      }
                       if (localPages.length === 0) {
                         toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
                         return;
