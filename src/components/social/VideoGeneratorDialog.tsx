@@ -1,16 +1,17 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { supabase } from "@/integrations/supabase/client";
 import { VideoLibrary } from "./VideoLibrary";
+import { useBrandKit } from "@/hooks/useBrandKit";
 
 interface VideoGeneratorDialogProps {
   open: boolean;
@@ -82,6 +83,7 @@ const modelOptions: ModelOption[] = [
 const MAX_POLL_COUNT = 120; // 120 × 5s = 10 minutes max for multi-scene
 
 export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: VideoGeneratorDialogProps) {
+  const { brandKit } = useBrandKit();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("veo-3.1");
   const [duration, setDuration] = useState("8");
@@ -327,7 +329,10 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setSavedToLibrary(false);
     pollCountRef.current = 0;
 
-    const brandedPrompt = `${prompt.trim()}. The video should feature a subtle gold circular coin logo watermark with a blue geometric "G" symbol in the bottom-right corner throughout.`;
+    const logoDesc = brandKit?.logo_url
+      ? `Include a subtle watermark of the ${brandKit.business_name || "company"} logo in the bottom-right corner throughout.`
+      : "";
+    const brandedPrompt = `${prompt.trim()}. ${logoDesc}`.trim();
     const requestedDuration = parseInt(duration);
     const isMultiScene = requestedDuration > currentModel.maxClipDuration;
 
