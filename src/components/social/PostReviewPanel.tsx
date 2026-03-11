@@ -566,27 +566,34 @@ export function PostReviewPanel({
                 <div className="p-4 border-t space-y-2">
                   {/* Neel Approval Gate */}
                   {post.neel_approved ? (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-green-50 border border-green-200 text-green-700 text-sm font-medium">
+                    <Button
+                      disabled
+                      className="w-full bg-green-50 border border-green-200 text-green-700 hover:bg-green-50 gap-1.5"
+                    >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      تأیید شده توسط Neel ✅
-                    </div>
+                      Approved by Neel ✅
+                    </Button>
                   ) : currentUserEmail === "neel@rebar.shop" ? (
                     <Button
                       variant="outline"
                       className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 gap-1.5"
                       onClick={() => {
                         updatePost.mutate({ id: post.id, neel_approved: true } as any);
-                        toast({ title: "تأیید شد", description: "پست توسط Neel تأیید شد." });
+                        toast({ title: "Approved", description: "Post approved by Neel." });
                       }}
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                      تأیید Neel
+                      Neel Approval
                     </Button>
                   ) : (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted border text-muted-foreground text-sm">
+                    <Button
+                      disabled
+                      variant="outline"
+                      className="w-full gap-1.5"
+                    >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      در انتظار تأیید Neel
-                    </div>
+                      Awaiting Neel's Approval
+                    </Button>
                   )}
 
                   {/* Publish Now */}
