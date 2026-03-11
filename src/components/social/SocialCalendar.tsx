@@ -12,13 +12,15 @@ const STATUS_PRIORITY: Record<string, number> = {
 function groupByPlatform(posts: SocialPost[]) {
   const map = new Map<string, SocialPost[]>();
   for (const p of posts) {
-    const key = p.platform === "unassigned" ? `unassigned_${p.id}` : (p.platform || "other");
+    const key = p.platform === "unassigned"
+      ? `unassigned_${p.id}`
+      : `${p.platform || "other"}_${p.title || p.id}`;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(p);
   }
   return [...map.entries()].sort(([a], [b]) => {
-    const aPlatform = a.startsWith("unassigned") ? "unassigned" : a;
-    const bPlatform = b.startsWith("unassigned") ? "unassigned" : b;
+    const aPlatform = a.startsWith("unassigned") ? "unassigned" : a.split("_")[0];
+    const bPlatform = b.startsWith("unassigned") ? "unassigned" : b.split("_")[0];
     return (PLATFORM_ORDER.indexOf(aPlatform) === -1 ? 99 : PLATFORM_ORDER.indexOf(aPlatform))
          - (PLATFORM_ORDER.indexOf(bPlatform) === -1 ? 99 : PLATFORM_ORDER.indexOf(bPlatform));
   });
