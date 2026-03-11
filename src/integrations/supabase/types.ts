@@ -2879,6 +2879,7 @@ export type Database = {
       }
       cut_plans: {
         Row: {
+          barlist_id: string | null
           company_id: string
           created_at: string
           created_by: string | null
@@ -2892,6 +2893,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          barlist_id?: string | null
           company_id: string
           created_at?: string
           created_by?: string | null
@@ -2905,6 +2907,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          barlist_id?: string | null
           company_id?: string
           created_at?: string
           created_by?: string | null
@@ -2918,6 +2921,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "cut_plans_barlist_id_fkey"
+            columns: ["barlist_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cut_plans_machine_id_fkey"
             columns: ["machine_id"]
