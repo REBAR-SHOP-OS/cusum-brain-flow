@@ -305,10 +305,10 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       });
 
       if (data.status === "completed") {
-        setStatus("completed");
         setProgress(100);
 
         const needsProxy = data.needsAuth || data.needsGeminiAuth;
+        let finalUrl: string | null = null;
 
         if (needsProxy) {
           const proxied = await proxyDownload(
@@ -316,17 +316,35 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
             jobRef.current.id,
             data.videoUrl,
           );
-          if (proxied) {
-            setVideoUrl(proxied);
-          } else {
-            setVideoUrl(data.videoUrl);
-          }
+          finalUrl = proxied || data.videoUrl;
         } else if (data.videoUrl) {
-          setVideoUrl(data.videoUrl);
-        } else {
+          finalUrl = data.videoUrl;
+        }
+
+        if (!finalUrl) {
           setError("Video generated but no URL returned.");
           setStatus("failed");
+          return;
         }
+
+        // Apply logo watermark if available
+        if (brandKit?.logo_url) {
+          setWatermarking(true);
+          setProgressLabel("Applying logo watermark...");
+          try {
+            const watermarked = await applyLogoWatermark(finalUrl, brandKit.logo_url, 80);
+            setVideoUrl(watermarked);
+          } catch (e) {
+            console.warn("Watermark failed, using original:", e);
+            setVideoUrl(finalUrl);
+          }
+          setWatermarking(false);
+        } else {
+          setVideoUrl(finalUrl);
+        }
+
+        setSceneUrls([finalUrl]);
+        setStatus("completed");
         return;
       }
 
