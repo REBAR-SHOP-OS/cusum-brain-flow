@@ -563,28 +563,43 @@ serve(async (req) => {
               try {
                 result = await veoGenerate(apiKey, scenePrompt, clipDuration);
               } catch (e) {
-                const isQuota = e instanceof Error && (e.message.includes("429") || e.message.includes("RESOURCE_EXHAUSTED") || e.message.includes("quota"));
-                if (isQuota && gptKey) {
-                  console.warn(`Veo quota exceeded on scene ${i + 1}, falling back to Sora`);
+                const message = getErrorMessage(e);
+                if (isProviderCapacityError(message) && gptKey) {
+                  console.warn(`Veo capacity reached on scene ${i + 1}, falling back to Sora`);
                   result = await soraGenerate(gptKey, scenePrompt, clipDuration, model || "sora-2");
                 } else {
                   throw e;
                 }
               }
             } else {
-              result = await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+              try {
+                result = await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+              } catch (e) {
+                const message = getErrorMessage(e);
+                if (isProviderCapacityError(message) && geminiKey) {
+                  console.warn(`Sora capacity reached on scene ${i + 1}, falling back to Veo`);
+                  result = await veoGenerate(geminiKey, scenePrompt, clipDuration);
+                } else {
+                  throw e;
+                }
+              }
             }
             jobs.push({ id: result.jobId, provider: result.provider, sceneIndex: i });
           } catch (e) {
-            errors.push(`Scene ${i + 1}: ${e instanceof Error ? e.message : "Unknown error"}`);
+            errors.push(`Scene ${i + 1}: ${getErrorMessage(e)}`);
           }
         })
       );
 
       if (jobs.length === 0) {
+        const allCapacityErrors = errors.length > 0 && errors.every((msg) => isProviderCapacityError(msg));
         return new Response(
-          JSON.stringify({ error: `All scene generations failed: ${errors.join("; ")}` }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            status: "failed",
+            error: `All scene generations failed: ${errors.join("; ")}`,
+            errorCode: allCapacityErrors ? "provider_capacity_exhausted" : "generation_failed",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
