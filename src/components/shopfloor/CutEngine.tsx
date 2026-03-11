@@ -42,6 +42,7 @@ export function CutEngine({
   onStockLengthChange,
   onBarsChange,
   onAbort,
+  onStopRun,
   isRunning,
   canWrite,
   darkMode = false,
