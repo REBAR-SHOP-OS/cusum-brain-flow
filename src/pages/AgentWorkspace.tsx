@@ -408,21 +408,31 @@ export default function AgentWorkspace() {
       const slotTime = SLOT_TIMES[slotIdx] || SLOT_TIMES[0];
       scheduledDate.setHours(slotTime.hour, slotTime.minute, 0, 0);
 
-      const { error } = await supabase.from("social_posts").insert({
-        platform: post.platform || "instagram",
-        status: "draft",
-        title,
-        content,
-        image_url: post.imageUrl || null,
-        hashtags,
-        scheduled_date: scheduledDate.toISOString(),
-        user_id: user.id,
-      });
+      // Create separate rows for each platform × page
+      const rows: any[] = [];
+      for (const platform of PIXEL_APPROVE_PLATFORMS) {
+        const pages = PLATFORM_PAGES[platform] || [];
+        for (const page of pages) {
+          rows.push({
+            platform,
+            status: "draft",
+            title,
+            content,
+            image_url: post.imageUrl || null,
+            hashtags,
+            scheduled_date: scheduledDate.toISOString(),
+            user_id: user.id,
+            page_name: page.value,
+          });
+        }
+      }
+
+      const { error } = await supabase.from("social_posts").insert(rows);
       if (error) {
-        console.error("Failed to save post:", error);
-        toast.error("Failed to save post to calendar");
+        console.error("Failed to save posts:", error);
+        toast.error("Failed to save posts to calendar");
       } else {
-        toast.success("Post saved to calendar ✅");
+        toast.success(`${rows.length} posts saved to calendar ✅`);
       }
     } catch (err) {
       console.error("Error saving post:", err);
