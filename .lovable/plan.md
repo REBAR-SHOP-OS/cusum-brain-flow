@@ -1,26 +1,27 @@
 
 
-## Improve Video Generation Progress UI
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
-The video generation is working correctly -- Sora just takes 3-5 minutes per scene and doesn't report granular progress. The UI shows "0% complete" the entire time, making it look stuck.
+### Problem
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Changes to `VideoGeneratorDialog.tsx`
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-1. **Add a `startedAt` ref** to track when generation began
-2. **Show elapsed time** instead of misleading "0% complete" when no scene progress exists
-3. **Show a time-based fake progress bar** that smoothly fills to ~80% over the expected duration (Sora ~4min/scene, Veo ~2min), then holds until real completion
-4. **Add provider-specific messaging**: "Sora typically takes 3-5 minutes per scene" vs "Veo typically takes 1-2 minutes"
-5. **Add a subtle pulsing animation** to the progress text so it's clear something is happening
-6. **Show a "Cancel" button** during generation so users aren't trapped
+### Plan
+Run a single database migration:
 
-### Specific UI updates (lines 542-564):
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
+```
 
-- Replace static `{Math.round(progress)}% complete` with elapsed time: "2m 15s elapsed"
-- When `progress === 0` and `completedScenes === 0`, show estimated time based on provider + scene count instead of the meaningless 0%
-- Simulate smooth progress: `min(80, (elapsed / estimatedTotal) * 80)` so the bar moves
-- Add provider context: "Sora processes each scene independently (3-5 min each)"
-- Add cancel button to `cleanup()` and reset state
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
 
-### No backend changes needed
-The polling logic is correct. This is purely a frontend UX improvement.
+No code changes needed — just the migration.
 

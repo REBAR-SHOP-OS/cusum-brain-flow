@@ -102,6 +102,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollCountRef = useRef(0);
   const blobUrlRef = useRef<string | null>(null);
+  const startedAtRef = useRef<number | null>(null);
+  const progressTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
   const { toast } = useToast();
 
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
@@ -111,11 +114,35 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
+    if (progressTickRef.current) {
+      clearInterval(progressTickRef.current);
+      progressTickRef.current = null;
+    }
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
     }
+    startedAtRef.current = null;
   }, []);
+
+  // Start elapsed timer when generation begins
+  useEffect(() => {
+    if (status === "processing" || status === "submitting") {
+      if (!startedAtRef.current) startedAtRef.current = Date.now();
+      setElapsedSecs(0);
+      progressTickRef.current = setInterval(() => {
+        if (startedAtRef.current) {
+          setElapsedSecs(Math.floor((Date.now() - startedAtRef.current) / 1000));
+        }
+      }, 1000);
+      return () => {
+        if (progressTickRef.current) {
+          clearInterval(progressTickRef.current);
+          progressTickRef.current = null;
+        }
+      };
+    }
+  }, [status]);
 
   useEffect(() => {
     return cleanup;
@@ -540,29 +567,67 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
               )}
 
               {/* Progress */}
-              {isGenerating && (
-                <div className="space-y-4 py-6">
-                  <div className="flex flex-col items-center text-center gap-3">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center">
-                      <Loader2 className="w-7 h-7 animate-spin text-primary" />
+              {isGenerating && (() => {
+                const sceneCount = isMultiRef.current
+                  ? Math.ceil(parseInt(duration) / currentModel.maxClipDuration)
+                  : 1;
+                const estPerScene = currentModel.provider === "sora" ? 240 : 120; // seconds
+                const estTotal = sceneCount * estPerScene;
+                const simulated = Math.min(85, (elapsedSecs / estTotal) * 85);
+                const displayProgress = Math.max(progress, simulated);
+                const mins = Math.floor(elapsedSecs / 60);
+                const secs = elapsedSecs % 60;
+                const elapsed = mins > 0 ? `${mins}m ${secs.toString().padStart(2, "0")}s` : `${secs}s`;
+                const estMins = Math.ceil(estTotal / 60);
+                const providerHint = currentModel.provider === "sora"
+                  ? `Sora typically takes 3–5 min per scene`
+                  : `Veo typically takes 1–2 min per scene`;
+
+                return (
+                  <div className="space-y-4 py-6">
+                    <div className="flex flex-col items-center text-center gap-3">
+                      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center">
+                        <Loader2 className="w-7 h-7 animate-spin text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {status === "submitting"
+                            ? "Submitting request…"
+                            : isMultiRef.current
+                            ? `Generating ${sceneCount} scenes…`
+                            : `Generating with ${currentModel.label}…`}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1 animate-pulse">
+                          {progressLabel || providerHint}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">
-                        {status === "submitting"
-                          ? "Submitting request…"
-                          : isMultiRef.current
-                          ? "Generating multi-scene video…"
-                          : `Generating with ${currentModel.label}…`}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {progressLabel || "This typically takes 1-3 minutes. Please keep this window open."}
-                      </p>
+                    <Progress value={displayProgress} className="h-2" />
+                    <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                      <span>{elapsed} elapsed</span>
+                      <span>~{estMins} min estimated</span>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-muted-foreground"
+                      onClick={() => {
+                        cleanup();
+                        setStatus("idle");
+                        setProgress(0);
+                        setProgressLabel("");
+                        setElapsedSecs(0);
+                        jobRef.current = null;
+                        multiJobsRef.current = null;
+                        isMultiRef.current = false;
+                        pollCountRef.current = 0;
+                      }}
+                    >
+                      Cancel
+                    </Button>
                   </div>
-                  <Progress value={progress} className="h-2" />
-                  <p className="text-xs text-center text-muted-foreground">{Math.round(progress)}% complete</p>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Completed */}
               {status === "completed" && videoUrl && (
