@@ -593,6 +593,83 @@ serve(async (req) => {
 
       if (jobs.length === 0) {
         const allCapacityErrors = errors.length > 0 && errors.every((msg) => isProviderCapacityError(msg));
+
+        // ── Slideshow fallback: generate images via Lovable AI gateway ──
+        if (allCapacityErrors) {
+          console.warn("All video providers exhausted — falling back to image slideshow");
+          const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+          if (lovableKey) {
+            try {
+              const imageUrls: string[] = [];
+              const serviceClient = createClient(
+                Deno.env.get("SUPABASE_URL")!,
+                Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+              );
+
+              for (const scenePrompt of scenePrompts) {
+                const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${lovableKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "google/gemini-3.1-flash-image-preview",
+                    messages: [
+                      {
+                        role: "user",
+                        content: `Generate a high-quality, cinematic 16:9 photograph for this video scene. Photorealistic, dramatic lighting, professional composition. Scene: ${scenePrompt}`,
+                      },
+                    ],
+                    modalities: ["image", "text"],
+                  }),
+                });
+
+                if (!imgResp.ok) {
+                  console.error("Lovable AI image generation failed:", imgResp.status);
+                  continue;
+                }
+
+                const imgData = await imgResp.json();
+                const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+                if (!b64Url) continue;
+
+                // Upload to storage
+                const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
+                const binaryStr = atob(base64Data);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+
+                const fileName = `${auth.userId}/${crypto.randomUUID()}.png`;
+                await serviceClient.storage
+                  .from("generated-videos")
+                  .upload(fileName, bytes, { contentType: "image/png", upsert: false });
+
+                const { data: pubData } = serviceClient.storage
+                  .from("generated-videos")
+                  .getPublicUrl(fileName);
+                imageUrls.push(pubData.publicUrl);
+              }
+
+              if (imageUrls.length > 0) {
+                return new Response(
+                  JSON.stringify({
+                    status: "completed",
+                    mode: "slideshow",
+                    imageUrls,
+                    clipDuration,
+                    totalScenes: sceneCount,
+                    message: "Video providers unavailable — generated motion slideshow instead",
+                  }),
+                  { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+              }
+            } catch (slideshowErr) {
+              console.error("Slideshow fallback failed:", slideshowErr);
+            }
+          }
+        }
+
         return new Response(
           JSON.stringify({
             status: "failed",
