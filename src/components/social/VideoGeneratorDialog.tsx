@@ -683,8 +683,36 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                       autoPlay
                       muted
                       className="w-full aspect-video"
+                      onEnded={() => {
+                        // Auto-advance to next scene for multi-scene
+                        if (sceneUrls.length > 1 && currentScene < sceneUrls.length - 1) {
+                          const next = currentScene + 1;
+                          setCurrentScene(next);
+                          setVideoUrl(sceneUrls[next]);
+                        }
+                      }}
                     />
                   </div>
+
+                  {/* Scene navigation for multi-scene */}
+                  {sceneUrls.length > 1 && (
+                    <div className="flex items-center gap-2 justify-center">
+                      <span className="text-xs text-muted-foreground">
+                        Scene {currentScene + 1} of {sceneUrls.length}
+                      </span>
+                      <div className="flex gap-1">
+                        {sceneUrls.map((url, i) => (
+                          <button
+                            key={i}
+                            onClick={() => { setCurrentScene(i); setVideoUrl(url); }}
+                            className={`w-2 h-2 rounded-full transition-colors ${
+                              i === currentScene ? "bg-primary" : "bg-muted-foreground/30"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )
 
                   <div className="flex gap-2">
                     <Button className="flex-1 gap-2" onClick={handleUseVideo}>
