@@ -9,6 +9,16 @@ const corsHeaders = {
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+/** Strip Persian translation block — never publish Persian text */
+function stripPersianBlock(text: string): string {
+  let t = text;
+  const idx = t.indexOf("---PERSIAN---");
+  if (idx !== -1) t = t.slice(0, idx);
+  t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
+  t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+  return t.trim();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
