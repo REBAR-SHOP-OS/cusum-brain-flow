@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useBrandKit } from "@/hooks/useBrandKit";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
