@@ -99,6 +99,35 @@ export function SeoKeywords() {
           <p className="text-sm text-muted-foreground">Keyword opportunities ranked by impact, sourced from Search Console and ERP data</p>
         </div>
 
+        {/* Keyword Research Bar */}
+        <Card className="border-primary/20">
+          <CardContent className="py-3 flex items-center gap-3">
+            <Sparkles className="w-4 h-4 text-primary shrink-0" />
+            <Input
+              placeholder="Research a keyword (SEMrush API)..."
+              value={researchInput}
+              onChange={(e) => setResearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && researchInput.trim()) researchKeyword.mutate({ keyword: researchInput.trim() }); }}
+              className="flex-1"
+            />
+            <Button size="sm" onClick={() => researchInput.trim() && researchKeyword.mutate({ keyword: researchInput.trim() })} disabled={researchKeyword.isPending || !researchInput.trim()}>
+              {researchKeyword.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
+              Research
+            </Button>
+          </CardContent>
+          {researchKeyword.data && (
+            <CardContent className="pt-0 pb-3">
+              <div className="flex gap-4 text-sm">
+                <span><strong>Keyword:</strong> {researchKeyword.data.keyword}</span>
+                <span><strong>Volume:</strong> {researchKeyword.data.volume?.toLocaleString()}</span>
+                <span><strong>Difficulty:</strong> {researchKeyword.data.difficulty}</span>
+                <span><strong>CPC:</strong> ${researchKeyword.data.cpc?.toFixed(2)}</span>
+                <span><strong>Competition:</strong> {researchKeyword.data.competition?.toFixed(2)}</span>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+
         {/* Filters */}
         <div className="flex gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[200px]">
