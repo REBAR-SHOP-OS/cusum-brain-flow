@@ -57,9 +57,11 @@ interface SocialCalendarProps {
   posts: SocialPost[];
   weekStart: Date;
   onPostClick: (post: SocialPost) => void;
+  selectedPostIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
-export function SocialCalendar({ posts, weekStart, onPostClick }: SocialCalendarProps) {
+export function SocialCalendar({ posts, weekStart, onPostClick, selectedPostIds, onToggleSelect }: SocialCalendarProps) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
