@@ -36,15 +36,25 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [trackedItemId, setTrackedItemId] = useState<string | null>(
+    items[initialIndex]?.id ?? null
+  );
   const [submitting, setSubmitting] = useState(false);
   const [unitCount, setUnitCount] = useState(1);
 
-  // Keep currentIndex in bounds when items change (e.g. completed item removed)
+  // ID-based reconciliation: when items refresh, find the tracked item's new index
   useEffect(() => {
-    if (items.length > 0 && currentIndex >= items.length) {
-      setCurrentIndex(items.length - 1);
+    if (!trackedItemId || items.length === 0) return;
+    const newIdx = items.findIndex((i) => i.id === trackedItemId);
+    if (newIdx >= 0 && newIdx !== currentIndex) {
+      setCurrentIndex(newIdx);
+    } else if (newIdx < 0) {
+      // Tracked item removed (completed) — clamp index
+      const clamped = Math.min(currentIndex, items.length - 1);
+      setCurrentIndex(clamped);
+      setTrackedItemId(items[clamped]?.id ?? null);
     }
-  }, [items.length, currentIndex]);
+  }, [items, trackedItemId]);
 
   const currentItem = items[currentIndex] || null;
   const cutPlanId = currentItem?.cut_plan_id || null;

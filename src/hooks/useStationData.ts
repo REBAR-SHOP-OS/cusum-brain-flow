@@ -61,7 +61,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
           benderQuery = benderQuery.eq("cut_plans.project_id", projectId);
         }
 
-        const { data: items, error: itemsError } = await benderQuery;
+        const { data: items, error: itemsError } = await benderQuery.order("id", { ascending: true });
 
         if (itemsError) throw itemsError;
 
