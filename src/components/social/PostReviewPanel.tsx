@@ -227,10 +227,10 @@ export function PostReviewPanel({
         (post.title && p.title === post.title)
       );
       const toDelete = batchPosts.length > 0 ? batchPosts : [post];
-      for (const p of batchPosts) {
+      for (const p of toDelete) {
         await deletePost.mutateAsync(p.id);
       }
-      toast({ title: "Deleted", description: `${batchPosts.length} post(s) deleted.` });
+      toast({ title: "Deleted", description: `${toDelete.length} post(s) deleted across all platforms.` });
     } finally {
       setDeleting(false);
       onClose();
