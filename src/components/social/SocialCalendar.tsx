@@ -196,25 +196,21 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       )}
                     </div>
                     <p className="text-xs font-medium truncate">{firstPost.title || "Untitled"}</p>
-                    {(() => {
-                      const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))];
-                      return uniquePages.length > 0 ? (
-                        <div className="mt-0.5 space-y-0">
-                          {uniquePages.map(name => (
-                            <p key={name} className="text-[10px] text-muted-foreground truncate">· {name}</p>
-                          ))}
-                        </div>
-                      ) : null;
-                    })()}
-                    <p className={cn(
-                      "text-xs capitalize",
-                      status === "published" ? "text-green-600 font-medium"
-                        : status === "scheduled" ? "text-primary"
-                        : status === "declined" ? "text-destructive"
-                        : "text-muted-foreground"
-                    )}>
-                      {status === "published" ? "Published ✅" : status}
-                    </p>
+                    <div className="flex items-center gap-1 mt-0.5 text-[10px]">
+                      {firstPost.scheduled_date && (
+                        <span className="text-muted-foreground">{format(parseISO(firstPost.scheduled_date), "h:mm a")}</span>
+                      )}
+                      {firstPost.scheduled_date && <span className="text-muted-foreground">·</span>}
+                      <span className={cn(
+                        "capitalize",
+                        status === "published" ? "text-green-600 font-medium"
+                          : status === "scheduled" ? "text-primary"
+                          : status === "declined" ? "text-destructive"
+                          : "text-muted-foreground"
+                      )}>
+                        {status === "published" ? "Published ✅" : status}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
