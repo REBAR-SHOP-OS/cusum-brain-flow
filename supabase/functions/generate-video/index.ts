@@ -516,9 +516,22 @@ serve(async (req) => {
       await Promise.all(
         scenePrompts.map(async (scenePrompt, i) => {
           try {
-            const result = isVeo
-              ? await veoGenerate(apiKey, scenePrompt, clipDuration)
-              : await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+            let result: { jobId: string; provider: string };
+            if (isVeo) {
+              try {
+                result = await veoGenerate(apiKey, scenePrompt, clipDuration);
+              } catch (e) {
+                const isQuota = e instanceof Error && (e.message.includes("429") || e.message.includes("RESOURCE_EXHAUSTED") || e.message.includes("quota"));
+                if (isQuota && gptKey) {
+                  console.warn(`Veo quota exceeded on scene ${i + 1}, falling back to Sora`);
+                  result = await soraGenerate(gptKey, scenePrompt, clipDuration, model || "sora-2");
+                } else {
+                  throw e;
+                }
+              }
+            } else {
+              result = await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+            }
             jobs.push({ id: result.jobId, provider: result.provider, sceneIndex: i });
           } catch (e) {
             errors.push(`Scene ${i + 1}: ${e instanceof Error ? e.message : "Unknown error"}`);
