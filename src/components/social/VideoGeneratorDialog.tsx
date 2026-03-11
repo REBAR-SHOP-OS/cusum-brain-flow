@@ -14,6 +14,7 @@ import { VideoLibrary } from "./VideoLibrary";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { applyLogoWatermark } from "@/lib/videoWatermark";
 
 interface VideoGeneratorDialogProps {
   open: boolean;
@@ -93,6 +94,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [sceneUrls, setSceneUrls] = useState<string[]>([]);
+  const [currentScene, setCurrentScene] = useState(0);
+  const [watermarking, setWatermarking] = useState(false);
   const [savedToLibrary, setSavedToLibrary] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("generate");
@@ -171,6 +175,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       setProgress(0);
       setProgressLabel("");
       setVideoUrl(null);
+      setSceneUrls([]);
+      setCurrentScene(0);
+      setWatermarking(false);
       setSavedToLibrary(false);
       setError(null);
       jobRef.current = null;
@@ -230,11 +237,33 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       });
 
       if (data.status === "completed") {
-        setStatus("completed");
         setProgress(100);
         setProgressLabel("All scenes complete!");
-        setVideoUrl(data.videoUrl);
+
+        // Handle sceneUrls array for sequential playback
+        const urls: string[] = data.sceneUrls || (data.videoUrl ? [data.videoUrl] : []);
+        setSceneUrls(urls);
+        setCurrentScene(0);
         setSavedToLibrary(!!data.savedToLibrary);
+
+        // Apply logo watermark to first scene if brand kit has logo
+        const firstUrl = urls[0];
+        if (firstUrl && brandKit?.logo_url) {
+          setWatermarking(true);
+          setProgressLabel("Applying logo watermark...");
+          try {
+            const watermarked = await applyLogoWatermark(firstUrl, brandKit.logo_url, 80);
+            setVideoUrl(watermarked);
+          } catch (e) {
+            console.warn("Watermark failed, using original:", e);
+            setVideoUrl(firstUrl);
+          }
+          setWatermarking(false);
+        } else {
+          setVideoUrl(firstUrl || null);
+        }
+
+        setStatus("completed");
         return;
       }
 
@@ -276,10 +305,10 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       });
 
       if (data.status === "completed") {
-        setStatus("completed");
         setProgress(100);
 
         const needsProxy = data.needsAuth || data.needsGeminiAuth;
+        let finalUrl: string | null = null;
 
         if (needsProxy) {
           const proxied = await proxyDownload(
@@ -287,17 +316,35 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
             jobRef.current.id,
             data.videoUrl,
           );
-          if (proxied) {
-            setVideoUrl(proxied);
-          } else {
-            setVideoUrl(data.videoUrl);
-          }
+          finalUrl = proxied || data.videoUrl;
         } else if (data.videoUrl) {
-          setVideoUrl(data.videoUrl);
-        } else {
+          finalUrl = data.videoUrl;
+        }
+
+        if (!finalUrl) {
           setError("Video generated but no URL returned.");
           setStatus("failed");
+          return;
         }
+
+        // Apply logo watermark if available
+        if (brandKit?.logo_url) {
+          setWatermarking(true);
+          setProgressLabel("Applying logo watermark...");
+          try {
+            const watermarked = await applyLogoWatermark(finalUrl, brandKit.logo_url, 80);
+            setVideoUrl(watermarked);
+          } catch (e) {
+            console.warn("Watermark failed, using original:", e);
+            setVideoUrl(finalUrl);
+          }
+          setWatermarking(false);
+        } else {
+          setVideoUrl(finalUrl);
+        }
+
+        setSceneUrls([finalUrl]);
+        setStatus("completed");
         return;
       }
 
@@ -331,10 +378,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setSavedToLibrary(false);
     pollCountRef.current = 0;
 
-    const logoDesc = brandKit?.logo_url
-      ? `Include a subtle watermark of the ${brandKit.business_name || "company"} logo in the bottom-right corner throughout.`
-      : "";
-    const brandedPrompt = `${prompt.trim()}. ${logoDesc}`.trim();
+    const brandedPrompt = prompt.trim();
     const requestedDuration = parseInt(duration);
     const isMultiScene = requestedDuration > currentModel.maxClipDuration;
 
@@ -412,6 +456,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setProgress(0);
     setProgressLabel("");
     setVideoUrl(null);
+    setSceneUrls([]);
+    setCurrentScene(0);
+    setWatermarking(false);
     setSavedToLibrary(false);
     setError(null);
     jobRef.current = null;
@@ -427,7 +474,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     }
   };
 
-  const isGenerating = status === "submitting" || status === "processing";
+  const isGenerating = status === "submitting" || status === "processing" || watermarking;
 
   const { suggestions: promptSuggestions, isLoading: suggestionsLoading } = useSeoSuggestions("video");
 
@@ -556,7 +603,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                     </Select>
                     {parseInt(duration) > currentModel.maxClipDuration && (
                       <p className="text-xs text-amber-600">
-                        ⚡ Multi-scene: {Math.ceil(parseInt(duration) / currentModel.maxClipDuration)} clips
+                        ⚡ Multi-scene: {Math.ceil(parseInt(duration) / currentModel.maxClipDuration)} clips will be generated as separate scenes
                         will be generated and stitched together automatically
                       </p>
                     )}
@@ -654,8 +701,36 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                       autoPlay
                       muted
                       className="w-full aspect-video"
+                      onEnded={() => {
+                        // Auto-advance to next scene for multi-scene
+                        if (sceneUrls.length > 1 && currentScene < sceneUrls.length - 1) {
+                          const next = currentScene + 1;
+                          setCurrentScene(next);
+                          setVideoUrl(sceneUrls[next]);
+                        }
+                      }}
                     />
                   </div>
+
+                  {/* Scene navigation for multi-scene */}
+                  {sceneUrls.length > 1 && (
+                    <div className="flex items-center gap-2 justify-center">
+                      <span className="text-xs text-muted-foreground">
+                        Scene {currentScene + 1} of {sceneUrls.length}
+                      </span>
+                      <div className="flex gap-1">
+                        {sceneUrls.map((url, i) => (
+                          <button
+                            key={i}
+                            onClick={() => { setCurrentScene(i); setVideoUrl(url); }}
+                            className={`w-2 h-2 rounded-full transition-colors ${
+                              i === currentScene ? "bg-primary" : "bg-muted-foreground/30"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex gap-2">
                     <Button className="flex-1 gap-2" onClick={handleUseVideo}>
