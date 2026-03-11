@@ -55,6 +55,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
   const [revisedPrompt, setRevisedPrompt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const { brandKit } = useBrandKit();
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
   const handleClose = () => {
