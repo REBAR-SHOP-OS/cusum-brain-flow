@@ -11886,6 +11886,7 @@ export type Database = {
           image_url: string | null
           impressions: number | null
           likes: number | null
+          neel_approved: boolean
           page_name: string | null
           platform: string
           qa_status: string
@@ -11909,6 +11910,7 @@ export type Database = {
           image_url?: string | null
           impressions?: number | null
           likes?: number | null
+          neel_approved?: boolean
           page_name?: string | null
           platform: string
           qa_status?: string
@@ -11932,6 +11934,7 @@ export type Database = {
           image_url?: string | null
           impressions?: number | null
           likes?: number | null
+          neel_approved?: boolean
           page_name?: string | null
           platform?: string
           qa_status?: string
