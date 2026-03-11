@@ -1,27 +1,70 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Prevent Duplicate Publishing
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+There is no guard against publishing a post that has already been published. A user could click "Publish Now" on an already-published post, or the cron job could pick up a post that was just published manually. This could lead to duplicate content on social platforms.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Current Gaps
+1. **`usePublishPost.ts`** (frontend): No status check before calling the edge function
+2. **`social-publish/index.ts`** (edge function): Updates status to "published" but never checks if it's already published
+3. **`social-cron-publish/index.ts`**: Queries `status = "scheduled"` which is safer, but has no lock against race conditions with manual publishing
+4. **`PostReviewPanel.tsx`**: The `isPublished` guard already hides the button, but the hook itself has no protection
 
-### Plan
-Run a single database migration:
+### Changes
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+#### 1. `src/hooks/usePublishPost.ts`
+Add a pre-check: fetch the post's current status before invoking the edge function. If `status === "published"`, abort with a toast warning.
+
+```typescript
+// Before calling social-publish:
+const { data: current } = await supabase
+  .from("social_posts")
+  .select("status")
+  .eq("id", post.id)
+  .single();
+
+if (current?.status === "published") {
+  toast({ title: "Already published", description: "This post has already been published.", variant: "destructive" });
+  return false;
+}
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+#### 2. `supabase/functions/social-publish/index.ts`
+Add a server-side guard after parsing the request body: if `post_id` is provided, check its current status. If already "published", return an error immediately without calling any external API.
 
-No code changes needed — just the migration.
+```typescript
+if (post_id) {
+  const { data: existing } = await supabaseAdmin
+    .from("social_posts")
+    .select("status")
+    .eq("id", post_id)
+    .single();
+  if (existing?.status === "published") {
+    return new Response(
+      JSON.stringify({ error: "This post has already been published." }),
+      { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+}
+```
+
+#### 3. `supabase/functions/social-cron-publish/index.ts`
+Add a re-check before each post is published in the loop: re-fetch the post status to guard against race conditions where a manual publish happened between the initial query and the actual publish call.
+
+```typescript
+// Inside the for loop, before publishing:
+const { data: freshPost } = await supabase
+  .from("social_posts")
+  .select("status")
+  .eq("id", post.id)
+  .single();
+if (freshPost?.status === "published") {
+  console.log(`Skipping ${post.id} — already published`);
+  continue;
+}
+```
+
+### Summary
+Three layers of protection: frontend pre-check, edge function guard, and cron job re-verification. This ensures no post is ever sent to a social platform twice.
 
