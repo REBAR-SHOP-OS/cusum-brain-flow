@@ -20,7 +20,7 @@ export function useAutoGenerate() {
     try {
       const { data, error } = await supabase.functions.invoke("auto-generate-post", {
         body: {
-          platforms: options?.platforms ?? ["facebook", "instagram", "linkedin"],
+          platforms: options?.platforms ?? ["unassigned"],
           themes: options?.themes ?? [],
           customInstructions: options?.customInstructions ?? "",
           scheduledDate: options?.scheduledDate,
