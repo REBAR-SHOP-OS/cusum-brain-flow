@@ -1,42 +1,27 @@
 
 
-## Fix: Bulk delete should cascade to all sibling posts
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
 ### Problem
-When using Selection Mode to delete posts, only the explicitly selected post IDs are deleted. But the established deletion logic (used in PostReviewPanel) requires that deleting a post also removes all sibling posts sharing the same `image_url` or `title`. This leaves orphan copies in the database.
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Solution
-Update `handleBulkDelete` in `SocialMediaManager.tsx` to expand the selected IDs to include all sibling posts before deleting.
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-**`src/pages/SocialMediaManager.tsx`** — `handleBulkDelete` (line 140-149):
+### Plan
+Run a single database migration:
 
-```typescript
-const handleBulkDelete = useCallback(async () => {
-  setBulkDeleting(true);
-  
-  // Expand selection to include all sibling posts (same image_url or title)
-  const selectedPosts = posts.filter(p => selectedPostIds.has(p.id));
-  const allIdsToDelete = new Set<string>(selectedPostIds);
-  
-  for (const sp of selectedPosts) {
-    for (const p of posts) {
-      if (allIdsToDelete.has(p.id)) continue;
-      if ((sp.image_url && p.image_url === sp.image_url) ||
-          (sp.title && p.title === sp.title)) {
-        allIdsToDelete.add(p.id);
-      }
-    }
-  }
-  
-  for (const id of allIdsToDelete) {
-    await deletePost.mutateAsync(id);
-  }
-  
-  setBulkDeleting(false);
-  setShowDeleteConfirm(false);
-  exitSelectionMode();
-}, [selectedPostIds, posts, deletePost, exitSelectionMode]);
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-This mirrors the same sibling-matching logic from `PostReviewPanel.handleDelete`, ensuring consistent behavior across single and bulk deletion.
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
+
+No code changes needed — just the migration.
 
