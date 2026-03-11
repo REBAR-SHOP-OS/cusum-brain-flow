@@ -19,6 +19,18 @@ export function usePublishPost() {
   }) => {
     setPublishing(true);
     try {
+      // Guard: prevent duplicate publishing
+      const { data: current } = await supabase
+        .from("social_posts")
+        .select("status")
+        .eq("id", post.id)
+        .single();
+
+      if (current?.status === "published") {
+        toast({ title: "Already published", description: "This post has already been published.", variant: "destructive" });
+        return false;
+      }
+
       const message = [
         post.content,
         post.hashtags.length > 0 ? "\n\n" + post.hashtags.join(" ") : "",
