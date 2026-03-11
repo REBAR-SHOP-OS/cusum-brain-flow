@@ -285,6 +285,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     const finalBars = Math.max(1, Math.min(bars, maxBars));
     try {
       setIsRunning(true);
+      setCompletedAtRunStart(completedPieces); // Sync fallback — async fetch refines below
       // Fetch fresh completed_pieces from DB to avoid stale realtime data
       const { data: freshRow } = await supabase
         .from("cut_plan_items")
