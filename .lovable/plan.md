@@ -1,29 +1,27 @@
 
 
-## Fix: Abort button stays red after clicking abort
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
 ### Problem
-After clicking "ABORT — FIX SETTINGS", the button remains visible (red) because `machineIsRunning` stays `true`. The local `isRunning` is set to `false`, but `machine.status` from the database still reads `"running"` until the next realtime/poll update arrives. Since `machineIsRunning = isRunning || (machine.status === "running" && ...)`, it remains truthy.
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Root Cause
-Line 208 in `CutterStationView.tsx`:
-```
-const machineIsRunning = isRunning || (machine.status === "running" && machine.current_run_id != null);
-```
-The `completedLocally` flag already exists and is set to `true` on abort (line 388), but it's not used to suppress the stale backend status.
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-### Fix
-**File: `src/components/shopfloor/CutterStationView.tsx`** — Line 208
+### Plan
+Run a single database migration:
 
-Change `machineIsRunning` to exclude stale backend status when a local completion/abort has occurred:
-
-```typescript
-const machineIsRunning = isRunning || (!completedLocally && machine.status === "running" && machine.current_run_id != null);
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-This single-line change ensures that once an abort (or completion) sets `completedLocally = true`, the UI immediately reflects the idle state. When the DB catches up and `machine.status` changes to something other than `"running"`, the existing `useEffect` on line 211–214 clears `completedLocally`.
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
 
-### Impact
-- No other files affected
-- Existing completion flow already sets `completedLocally = true` (line 569), so this also prevents brief "ghost running" state after normal run completion
+No code changes needed — just the migration.
 
