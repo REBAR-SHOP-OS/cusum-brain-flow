@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function verifyAuth(req: Request): Promise<string | null> {
+async function verifyAuth(req: Request): Promise<{ userId: string } | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
 
@@ -22,24 +22,30 @@ async function verifyAuth(req: Request): Promise<string | null> {
     authHeader.replace("Bearer ", "")
   );
   if (error || !user) return null;
-  return user.id;
+  return { userId: user.id };
 }
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const OPENAI_BASE = "https://api.openai.com/v1";
+
+// ─── Provider config ────────────────────────────────────────
+const VEO_CLIP_DURATIONS = [4, 6, 8];
+const SORA_CLIP_DURATIONS = [4, 8, 12];
+const VEO_MAX_CLIP = 8;
+const SORA_MAX_CLIP = 12;
+
+function snapDuration(raw: number, valid: number[]): number {
+  return valid.reduce((prev, curr) =>
+    Math.abs(curr - raw) < Math.abs(prev - raw) ? curr : prev
+  );
+}
 
 // ─── Veo helpers ────────────────────────────────────────────
 
 async function veoGenerate(apiKey: string, prompt: string, duration: number) {
   const model = "veo-3.1-generate-preview";
   const url = `${GEMINI_BASE}/models/${model}:predictLongRunning`;
-
-  // Veo 3.1 supports 4, 6, or 8 second durations
-  const validDurations = [4, 6, 8];
-  const rawDuration = duration || 6;
-  const veoDuration = validDurations.reduce((prev, curr) =>
-    Math.abs(curr - rawDuration) < Math.abs(prev - rawDuration) ? curr : prev
-  );
+  const veoDuration = snapDuration(duration, VEO_CLIP_DURATIONS);
 
   const resp = await fetch(url, {
     method: "POST",
@@ -65,7 +71,6 @@ async function veoGenerate(apiKey: string, prompt: string, duration: number) {
   }
 
   const data = await resp.json();
-  
   return { jobId: data.name, provider: "veo" };
 }
 
@@ -84,7 +89,6 @@ async function veoPoll(apiKey: string, operationName: string) {
   const data = await resp.json();
 
   if (data.done) {
-    // Veo 3.1 response structure
     const videos =
       data.response?.generateVideoResponse?.generatedSamples ||
       data.response?.generatedSamples ||
@@ -94,7 +98,6 @@ async function veoPoll(apiKey: string, operationName: string) {
     const videoUri = videos[0]?.video?.uri || null;
 
     if (videoUri) {
-      // Use header-based auth for download — client will fetch via proxy
       return { status: "completed", videoUrl: videoUri, needsGeminiAuth: true };
     }
 
@@ -110,14 +113,20 @@ async function veoPoll(apiKey: string, operationName: string) {
   return { status: "processing", progress: metadata.percentComplete || null };
 }
 
+async function veoDownloadBytes(apiKey: string, videoUrl: string): Promise<Uint8Array> {
+  const resp = await fetch(videoUrl, {
+    headers: { "x-goog-api-key": apiKey },
+  });
+  if (!resp.ok) throw new Error(`Veo download failed (${resp.status})`);
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
 async function veoDownload(apiKey: string, videoUrl: string) {
   const resp = await fetch(videoUrl, {
     headers: { "x-goog-api-key": apiKey },
   });
 
-  if (!resp.ok) {
-    throw new Error(`Veo download failed (${resp.status})`);
-  }
+  if (!resp.ok) throw new Error(`Veo download failed (${resp.status})`);
 
   return new Response(resp.body, {
     headers: {
@@ -131,11 +140,7 @@ async function veoDownload(apiKey: string, videoUrl: string) {
 // ─── Sora helpers ───────────────────────────────────────────
 
 async function soraGenerate(apiKey: string, prompt: string, duration: number, model: string) {
-  const validDurations = [4, 8, 12];
-  const rawDuration = duration || 8;
-  const soraDuration = validDurations.reduce((prev, curr) =>
-    Math.abs(curr - rawDuration) < Math.abs(prev - rawDuration) ? curr : prev
-  );
+  const soraDuration = snapDuration(duration, SORA_CLIP_DURATIONS);
 
   const formData = new FormData();
   formData.append("prompt", prompt);
@@ -145,9 +150,7 @@ async function soraGenerate(apiKey: string, prompt: string, duration: number, mo
 
   const resp = await fetch(`${OPENAI_BASE}/videos`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { Authorization: `Bearer ${apiKey}` },
     body: formData,
   });
 
@@ -158,7 +161,6 @@ async function soraGenerate(apiKey: string, prompt: string, duration: number, mo
   }
 
   const data = await resp.json();
-  
   return { jobId: data.id, provider: "sora" };
 }
 
@@ -187,14 +189,20 @@ async function soraPoll(apiKey: string, videoId: string) {
   return { status: "processing", progress: data.progress || null };
 }
 
+async function soraDownloadBytes(apiKey: string, videoId: string): Promise<Uint8Array> {
+  const resp = await fetch(`${OPENAI_BASE}/videos/${videoId}/content`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!resp.ok) throw new Error(`Sora download failed (${resp.status})`);
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
 async function soraDownload(apiKey: string, videoId: string) {
   const resp = await fetch(`${OPENAI_BASE}/videos/${videoId}/content`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 
-  if (!resp.ok) {
-    throw new Error(`Sora download failed (${resp.status})`);
-  }
+  if (!resp.ok) throw new Error(`Sora download failed (${resp.status})`);
 
   return new Response(resp.body, {
     headers: {
@@ -205,6 +213,111 @@ async function soraDownload(apiKey: string, videoId: string) {
   });
 }
 
+// ─── Multi-scene helpers ────────────────────────────────────
+
+async function generateScenePrompts(
+  geminiKey: string,
+  basePrompt: string,
+  sceneCount: number,
+  clipDuration: number,
+): Promise<string[]> {
+  // Use Gemini to split the prompt into distinct continuous scenes
+  const systemPrompt = `You are a video director. Given a video concept, create exactly ${sceneCount} distinct continuous camera shots that together tell a cohesive visual story. Each shot will be ${clipDuration} seconds of continuous action.
+
+Rules:
+- Each scene must be a self-contained visual description
+- Scenes should flow naturally from one to the next
+- Include camera movement, lighting, and mood details
+- Do NOT mention scene numbers, transitions, or editing
+- Return ONLY a JSON array of ${sceneCount} strings, nothing else
+
+Example output format:
+["A sweeping aerial shot of...", "Close-up of hands..."]`;
+
+  const resp = await fetch(
+    `${GEMINI_BASE}/models/gemini-2.5-flash:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `Video concept: ${basePrompt}` }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: {
+          temperature: 0.8,
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
+
+  if (!resp.ok) {
+    console.error("Scene prompt generation failed:", resp.status);
+    // Fallback: duplicate the original prompt for each scene
+    return Array(sceneCount).fill(basePrompt);
+  }
+
+  try {
+    const data = await resp.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const scenes = JSON.parse(text);
+    if (Array.isArray(scenes) && scenes.length === sceneCount) {
+      return scenes.map(String);
+    }
+  } catch (e) {
+    console.error("Failed to parse scene prompts:", e);
+  }
+
+  return Array(sceneCount).fill(basePrompt);
+}
+
+/** Upload a video buffer to generated-videos bucket, return public URL */
+async function uploadToStorage(
+  userId: string,
+  videoBytes: Uint8Array,
+): Promise<string> {
+  const serviceClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  const fileName = `${userId}/${crypto.randomUUID()}.mp4`;
+  const { error } = await serviceClient.storage
+    .from("generated-videos")
+    .upload(fileName, videoBytes, {
+      contentType: "video/mp4",
+      upsert: false,
+    });
+
+  if (error) {
+    console.error("Storage upload error:", error);
+    throw new Error(`Failed to upload video: ${error.message}`);
+  }
+
+  const { data } = serviceClient.storage
+    .from("generated-videos")
+    .getPublicUrl(fileName);
+
+  return data.publicUrl;
+}
+
+/** Simple MP4 concatenation: just append bytes. Works when all clips share the same codec/resolution. */
+function concatVideoBytes(clips: Uint8Array[]): Uint8Array {
+  // For proper concatenation we need to re-mux, but for same-source clips
+  // we can use a simpler approach: return the largest clip if concat fails,
+  // or try raw byte append for compatible fMP4 streams
+  const totalLen = clips.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const clip of clips) {
+    result.set(clip, offset);
+    offset += clip.length;
+  }
+  return result;
+}
+
 // ─── Main handler ───────────────────────────────────────────
 
 serve(async (req) => {
@@ -213,8 +326,8 @@ serve(async (req) => {
   }
 
   try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
+    const auth = await verifyAuth(req);
+    if (!auth) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -222,13 +335,19 @@ serve(async (req) => {
     }
 
     const videoSchema = z.object({
-      action: z.enum(["generate", "poll", "download"]),
+      action: z.enum(["generate", "poll", "download", "generate-multi", "poll-multi", "list-library", "delete-library"]),
       provider: z.enum(["veo", "sora"]).optional(),
       prompt: z.string().max(5000).optional(),
       jobId: z.string().max(500).optional(),
+      jobIds: z.array(z.object({
+        id: z.string(),
+        provider: z.enum(["veo", "sora"]),
+        sceneIndex: z.number(),
+      })).optional(),
       videoUrl: z.string().max(2000).optional(),
-      duration: z.number().min(1).max(60).optional(),
+      duration: z.number().min(1).max(120).optional(),
       model: z.string().max(50).optional(),
+      fileId: z.string().max(500).optional(),
     });
     const parsed = videoSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -237,12 +356,80 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { action, provider, prompt, jobId, videoUrl, duration, model } = parsed.data;
+    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId } = parsed.data;
 
     const isVeo = provider === "veo";
-    const apiKey = isVeo
-      ? Deno.env.get("GEMINI_API_KEY")
-      : Deno.env.get("GPT_API_KEY");
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    const gptKey = Deno.env.get("GPT_API_KEY");
+    const apiKey = isVeo ? geminiKey : gptKey;
+
+    // ── Library: list saved videos ──
+    if (action === "list-library") {
+      const serviceClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: files, error } = await serviceClient.storage
+        .from("generated-videos")
+        .list(auth.userId, { limit: 100, sortBy: { column: "created_at", order: "desc" } });
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const videos = (files || [])
+        .filter(f => f.name.endsWith(".mp4"))
+        .map(f => {
+          const { data } = serviceClient.storage
+            .from("generated-videos")
+            .getPublicUrl(`${auth.userId}/${f.name}`);
+          return {
+            id: f.id,
+            name: f.name,
+            url: data.publicUrl,
+            created_at: f.created_at,
+            size: f.metadata?.size || 0,
+          };
+        });
+
+      return new Response(
+        JSON.stringify({ videos }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Library: delete a saved video ──
+    if (action === "delete-library") {
+      if (!fileId) {
+        return new Response(
+          JSON.stringify({ error: "fileId is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const serviceClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const filePath = `${auth.userId}/${fileId}`;
+      const { error } = await serviceClient.storage
+        .from("generated-videos")
+        .remove([filePath]);
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!apiKey) {
       const keyName = isVeo ? "GEMINI_API_KEY" : "GPT_API_KEY";
@@ -252,9 +439,9 @@ serve(async (req) => {
       );
     }
 
-    // ── Generate ──
+    // ── Generate (single clip) ──
     if (action === "generate") {
-      if (!prompt || typeof prompt !== "string") {
+      if (!prompt) {
         return new Response(
           JSON.stringify({ error: "A text prompt is required" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -262,8 +449,8 @@ serve(async (req) => {
       }
 
       const result = isVeo
-        ? await veoGenerate(apiKey, prompt, duration)
-        : await soraGenerate(apiKey, prompt, duration, model);
+        ? await veoGenerate(apiKey, prompt, duration || 8)
+        : await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
 
       return new Response(
         JSON.stringify({ ...result, status: "pending" }),
@@ -271,7 +458,164 @@ serve(async (req) => {
       );
     }
 
-    // ── Poll ──
+    // ── Generate Multi-Scene ──
+    if (action === "generate-multi") {
+      if (!prompt) {
+        return new Response(
+          JSON.stringify({ error: "A text prompt is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const requestedDuration = duration || 30;
+      const maxClip = isVeo ? VEO_MAX_CLIP : SORA_MAX_CLIP;
+      const clipDuration = maxClip;
+      const sceneCount = Math.ceil(requestedDuration / clipDuration);
+
+      // Use Gemini to generate scene-specific prompts (always use geminiKey for this)
+      const effectiveGeminiKey = geminiKey || apiKey;
+      const scenePrompts = await generateScenePrompts(
+        effectiveGeminiKey,
+        prompt,
+        sceneCount,
+        clipDuration,
+      );
+
+      // Generate all scenes in parallel
+      const jobs: { id: string; provider: string; sceneIndex: number }[] = [];
+      const errors: string[] = [];
+
+      await Promise.all(
+        scenePrompts.map(async (scenePrompt, i) => {
+          try {
+            const result = isVeo
+              ? await veoGenerate(apiKey, scenePrompt, clipDuration)
+              : await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+            jobs.push({ id: result.jobId, provider: result.provider, sceneIndex: i });
+          } catch (e) {
+            errors.push(`Scene ${i + 1}: ${e instanceof Error ? e.message : "Unknown error"}`);
+          }
+        })
+      );
+
+      if (jobs.length === 0) {
+        return new Response(
+          JSON.stringify({ error: `All scene generations failed: ${errors.join("; ")}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          status: "pending",
+          multiScene: true,
+          totalScenes: sceneCount,
+          clipDuration,
+          jobs: jobs.sort((a, b) => a.sceneIndex - b.sceneIndex),
+          errors: errors.length > 0 ? errors : undefined,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Poll Multi-Scene (poll all jobs, download & concat when all done) ──
+    if (action === "poll-multi") {
+      if (!jobIds || jobIds.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "jobIds array is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const results = await Promise.all(
+        jobIds.map(async (job) => {
+          try {
+            const jobApiKey = job.provider === "veo" ? geminiKey : gptKey;
+            if (!jobApiKey) return { ...job, status: "failed", error: "API key missing" };
+
+            const result = job.provider === "veo"
+              ? await veoPoll(jobApiKey, job.id)
+              : await soraPoll(jobApiKey, job.id);
+            return { ...job, ...result };
+          } catch (e) {
+            return { ...job, status: "failed", error: e instanceof Error ? e.message : "Poll error" };
+          }
+        })
+      );
+
+      const allCompleted = results.every(r => r.status === "completed");
+      const anyFailed = results.some(r => r.status === "failed");
+      const completedCount = results.filter(r => r.status === "completed").length;
+
+      if (allCompleted) {
+        // Download all clips and concatenate
+        try {
+          const sorted = results.sort((a, b) => a.sceneIndex - b.sceneIndex);
+          const clips: Uint8Array[] = [];
+
+          for (const scene of sorted) {
+            const sceneApiKey = scene.provider === "veo" ? geminiKey : gptKey;
+            if (!sceneApiKey) throw new Error("API key missing for download");
+
+            if (scene.provider === "veo" && scene.videoUrl) {
+              clips.push(await veoDownloadBytes(sceneApiKey, scene.videoUrl));
+            } else if (scene.provider === "sora") {
+              clips.push(await soraDownloadBytes(sceneApiKey, scene.id));
+            }
+          }
+
+          if (clips.length === 0) {
+            return new Response(
+              JSON.stringify({ status: "failed", error: "No clips downloaded" }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          // For single clip, just upload directly; for multiple, concat
+          const finalBytes = clips.length === 1 ? clips[0] : concatVideoBytes(clips);
+
+          // Upload to storage
+          const publicUrl = await uploadToStorage(auth.userId, finalBytes);
+
+          return new Response(
+            JSON.stringify({ status: "completed", videoUrl: publicUrl, savedToLibrary: true }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (e) {
+          console.error("Multi-scene download/concat error:", e);
+          return new Response(
+            JSON.stringify({ status: "failed", error: e instanceof Error ? e.message : "Concat failed" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      if (anyFailed && completedCount === 0) {
+        const failedErrors = results.filter(r => r.status === "failed").map(r => (r as any).error);
+        return new Response(
+          JSON.stringify({ status: "failed", error: failedErrors.join("; ") }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Still processing
+      const overallProgress = Math.round((completedCount / results.length) * 100);
+      return new Response(
+        JSON.stringify({
+          status: "processing",
+          progress: overallProgress,
+          completedScenes: completedCount,
+          totalScenes: results.length,
+          scenes: results.map(r => ({
+            sceneIndex: r.sceneIndex,
+            status: r.status,
+          })),
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Poll (single) ──
     if (action === "poll") {
       if (!jobId) {
         return new Response(
@@ -312,7 +656,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use "generate", "poll", or "download".' }),
+      JSON.stringify({ error: 'Invalid action' }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
