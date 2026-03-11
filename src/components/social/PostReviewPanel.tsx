@@ -444,7 +444,20 @@ export function PostReviewPanel({
 
                     {/* ── Fields Section ── */}
                     <div className="px-4 pt-4 pb-4 space-y-3">
-                      {/* Publish date */}
+                    {/* Publish date */}
+                      {isPublished ? (
+                        <div className="w-full rounded-lg border bg-card p-3 opacity-60 cursor-not-allowed">
+                          <p className="text-xs text-muted-foreground mb-1">Publish date</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">
+                              {post.scheduled_date
+                                ? format(new Date(post.scheduled_date), "MMMM d, yyyy 'at' h:mm a")
+                                : "Not scheduled"}
+                            </span>
+                            <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                      ) : (
                       <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
                         <PopoverTrigger asChild>
                           <button className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors">
@@ -492,11 +505,12 @@ export function PostReviewPanel({
                           />
                         </PopoverContent>
                       </Popover>
+                      )}
 
                       {/* Content type – clickable */}
                       <button
-                        onClick={() => setSubPanel("content_type")}
-                        className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors"
+                        onClick={() => !isPublished && setSubPanel("content_type")}
+                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
                       >
                         <p className="text-xs text-muted-foreground mb-1">Content type</p>
                         <div className="flex items-center justify-between">
@@ -507,8 +521,8 @@ export function PostReviewPanel({
 
                       {/* Platform – clickable (multi) */}
                       <button
-                        onClick={() => setSubPanel("platform")}
-                        className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors"
+                        onClick={() => !isPublished && setSubPanel("platform")}
+                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
                       >
                         <p className="text-xs text-muted-foreground mb-1">Platforms ({localPlatforms.length})</p>
                         <div className="flex items-center justify-between">
@@ -519,8 +533,8 @@ export function PostReviewPanel({
 
                       {/* Pages – clickable */}
                       <button
-                        onClick={() => setSubPanel("pages")}
-                        className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors"
+                        onClick={() => !isPublished && setSubPanel("pages")}
+                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
                       >
                         <p className="text-xs text-muted-foreground mb-1">Pages ({localPages.length})</p>
                         <div className="flex items-center justify-between">
