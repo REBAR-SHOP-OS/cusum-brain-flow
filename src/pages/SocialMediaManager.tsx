@@ -139,14 +139,29 @@ export default function SocialMediaManager() {
 
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleting(true);
-    const ids = Array.from(selectedPostIds);
-    for (const id of ids) {
+
+    // Expand selection to include all sibling posts (same image_url or title)
+    const selectedPosts = posts.filter(p => selectedPostIds.has(p.id));
+    const allIdsToDelete = new Set<string>(selectedPostIds);
+
+    for (const sp of selectedPosts) {
+      for (const p of posts) {
+        if (allIdsToDelete.has(p.id)) continue;
+        if ((sp.image_url && p.image_url === sp.image_url) ||
+            (sp.title && p.title === sp.title)) {
+          allIdsToDelete.add(p.id);
+        }
+      }
+    }
+
+    for (const id of allIdsToDelete) {
       await deletePost.mutateAsync(id);
     }
+
     setBulkDeleting(false);
     setShowDeleteConfirm(false);
     exitSelectionMode();
-  }, [selectedPostIds, deletePost, exitSelectionMode]);
+  }, [selectedPostIds, posts, deletePost, exitSelectionMode]);
 
   const weekPosts = useMemo(() => {
     const wEnd = addDays(weekStart, 7);
