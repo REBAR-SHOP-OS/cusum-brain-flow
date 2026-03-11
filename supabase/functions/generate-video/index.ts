@@ -570,7 +570,7 @@ serve(async (req) => {
       }
 
       // Accept already-uploaded scene URLs from client
-      const existingSceneUrls: Record<number, string> = body.existingSceneUrls || {};
+      const existingSceneUrls: Record<number, string> = parsedExistingSceneUrls || {};
 
       const results = await Promise.all(
         jobIds.map(async (job) => {
