@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
+import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
