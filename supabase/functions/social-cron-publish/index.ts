@@ -109,8 +109,10 @@ serve(async (req) => {
           .eq("id", post.id)
           .eq("status", "scheduled");
 
+        // Strip Persian translation block — never publish Persian text
+        const cleanContent = stripPersianBlock(post.content || "");
         const message = [
-          post.content || "",
+          cleanContent,
           (post.hashtags || []).length > 0 ? "\n\n" + (post.hashtags || []).join(" ") : "",
         ].join("");
 
