@@ -141,12 +141,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     }
   };
 
-  const promptSuggestions = [
-    "Professional social media banner for a construction company, modern geometric design, steel blue tones",
-    "Flat illustration of a team working together in an office, warm colors, friendly atmosphere",
-    "Product photography style shot of steel rebar bundles, dramatic studio lighting, clean background",
-    "Minimalist infographic background with abstract shapes, gradient from navy to teal, corporate feel",
-  ];
+  const { suggestions: promptSuggestions, isLoading: suggestionsLoading } = useSeoSuggestions("image");
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
