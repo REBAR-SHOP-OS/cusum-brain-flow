@@ -29,6 +29,7 @@ const typeBadge: Record<string, { label: string; className: string }> = {
 export function SeoLinks() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const qc = useQueryClient();
+  const { fetchBacklinks } = useSemrushSync();
 
   // Get domain
   const { data: domain } = useQuery({
