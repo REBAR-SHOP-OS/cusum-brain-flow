@@ -125,6 +125,7 @@ function DateSchedulePopover({
         mode="single"
         selected={selectedDate}
         onSelect={(d) => d && setSelectedDate(d)}
+        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
         initialFocus
         className={cn("p-3 pointer-events-auto")}
       />
