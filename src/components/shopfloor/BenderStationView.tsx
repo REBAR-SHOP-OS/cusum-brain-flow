@@ -142,7 +142,11 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
         });
         // Auto-advance
         if (currentIndex < items.length - 1) {
-          setTimeout(() => setCurrentIndex((i) => i + 1), 800);
+          const nextIdx = currentIndex + 1;
+          setTimeout(() => {
+            setCurrentIndex(nextIdx);
+            setTrackedItemId(items[nextIdx]?.id ?? null);
+          }, 800);
         }
       }
     } catch (err: any) {
