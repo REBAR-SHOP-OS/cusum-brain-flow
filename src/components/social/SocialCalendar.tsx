@@ -1,6 +1,33 @@
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import type { SocialPost } from "@/hooks/useSocialPosts";
+
+const PLATFORM_ORDER = ["facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
+
+const STATUS_PRIORITY: Record<string, number> = {
+  declined: 0, draft: 1, pending: 2, scheduled: 3, published: 4,
+};
+
+function groupByPlatform(posts: SocialPost[]) {
+  const map = new Map<string, SocialPost[]>();
+  for (const p of posts) {
+    const key = p.platform || "other";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(p);
+  }
+  return [...map.entries()].sort(
+    ([a], [b]) => (PLATFORM_ORDER.indexOf(a) === -1 ? 99 : PLATFORM_ORDER.indexOf(a)) - (PLATFORM_ORDER.indexOf(b) === -1 ? 99 : PLATFORM_ORDER.indexOf(b))
+  );
+}
+
+function worstStatus(posts: SocialPost[]) {
+  let worst = posts[0];
+  for (const p of posts) {
+    if ((STATUS_PRIORITY[p.status] ?? 2) < (STATUS_PRIORITY[worst.status] ?? 2)) worst = p;
+  }
+  return worst.status;
+}
 
 const platformIcons: Record<string, { bg: string; icon: JSX.Element }> = {
   facebook: {
