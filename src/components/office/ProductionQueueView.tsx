@@ -248,7 +248,7 @@ function buildCustomerTree(
       const matched = pPlans.filter(p => {
         if (usedPlanIds.has(p.id)) return false;
         // Primary: FK match; Fallback: name match for legacy data
-        if ((p as any).barlist_id && (p as any).barlist_id === b.id) return true;
+        if (p.barlist_id && p.barlist_id === b.id) return true;
         return p.name === b.name || p.project_name === b.name;
       });
       matched.forEach(p => usedPlanIds.add(p.id));
