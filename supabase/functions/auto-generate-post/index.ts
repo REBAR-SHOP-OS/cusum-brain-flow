@@ -360,10 +360,6 @@ Return an array of 5 objects:
               console.error("Image generation error (non-critical):", imgErr);
             }
           }
-            } catch (imgErr) {
-              console.error("Image generation error (non-critical):", imgErr);
-            }
-          }
 
           // Create approval record for configured approvers
           try {
