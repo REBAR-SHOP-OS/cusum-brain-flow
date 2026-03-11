@@ -10,7 +10,7 @@ import { Link2, ExternalLink, AlertTriangle, CheckCircle, Loader2, Sparkles, Ref
 import { toast } from "sonner";
 import { useSemrushSync } from "@/hooks/useSemrushApi";
 
-type StatusFilter = "all" | "broken" | "opportunity" | "fixed";
+type StatusFilter = "all" | "broken" | "opportunity" | "fixed" | "backlinks";
 
 const statusBadge: Record<string, { label: string; className: string }> = {
   ok: { label: "OK", className: "bg-green-500/10 text-green-600" },
