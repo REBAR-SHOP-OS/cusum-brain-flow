@@ -56,7 +56,7 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
     scheduledDateTime.setHours(parseInt(hour), parseInt(minute), 0, 0);
 
     if (scheduledDateTime <= new Date()) {
-      toast({ title: "زمان نامعتبر", description: "امکان زمان‌بندی در گذشته وجود ندارد. لطفاً زمان آینده انتخاب کنید.", variant: "destructive" });
+      toast({ title: "Invalid Time", description: "Cannot schedule in the past. Please select a future time.", variant: "destructive" });
       return;
     }
 
