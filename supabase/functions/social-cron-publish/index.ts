@@ -189,8 +189,31 @@ serve(async (req) => {
           publishResult = await publishToLinkedIn(supabase, post.user_id, message, post.image_url);
         }
 
+        // Image fallback: if publish with image failed, retry text-only
+        if (publishResult.error && post.image_url && (post.platform === "facebook" || post.platform === "linkedin")) {
+          console.error(`[social-cron-publish] Image publish failed for ${post.id}: ${publishResult.error}. Retrying text-only...`);
+          if (post.platform === "facebook") {
+            // Re-derive pageId and token for text-only retry
+            const tokenPlatform = "facebook";
+            let tokenData2 = (await supabase.from("user_meta_tokens").select("access_token, pages").eq("user_id", post.user_id).eq("platform", tokenPlatform).maybeSingle()).data;
+            if (!tokenData2) tokenData2 = (await supabase.from("user_meta_tokens").select("access_token, pages, user_id").eq("platform", tokenPlatform).limit(1).maybeSingle()).data;
+            if (tokenData2) {
+              const pages2 = (tokenData2.pages as Array<{ id: string; name?: string }>) || [];
+              let selectedPage2 = pages2[0];
+              if (post.page_name) { const m = pages2.find(p => p.name === post.page_name); if (m) selectedPage2 = m; }
+              if (selectedPage2) {
+                let pt2 = (await supabase.from("user_meta_tokens").select("access_token").eq("user_id", post.user_id).eq("platform", `${tokenPlatform}_page_${selectedPage2.id}`).maybeSingle()).data;
+                if (!pt2) pt2 = (await supabase.from("user_meta_tokens").select("access_token").eq("platform", `${tokenPlatform}_page_${selectedPage2.id}`).limit(1).maybeSingle()).data;
+                const pat2 = pt2?.access_token || tokenData2.access_token;
+                publishResult = await publishToFacebook(selectedPage2.id, pat2, message, null);
+              }
+            }
+          }
+        }
+
         if (publishResult.error) {
-          await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review" }).eq("id", post.id);
+          console.error(`[social-cron-publish] FINAL FAILURE for post ${post.id}: ${publishResult.error}`);
+          await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review", last_error: publishResult.error }).eq("id", post.id);
           results.push({ postId: post.id, platform: post.platform, success: false, error: publishResult.error });
         } else {
           await supabase.from("social_posts").update({ status: "published", qa_status: "published" }).eq("id", post.id);
@@ -198,12 +221,13 @@ serve(async (req) => {
         }
       } catch (err) {
         console.error(`Failed to publish post ${post.id}:`, err);
-        await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review" }).eq("id", post.id);
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
+        await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review", last_error: errMsg }).eq("id", post.id);
         results.push({
           postId: post.id,
           platform: post.platform,
           success: false,
-          error: err instanceof Error ? err.message : "Unknown error",
+          error: errMsg,
         });
       }
     }
