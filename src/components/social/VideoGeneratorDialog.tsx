@@ -83,6 +83,7 @@ const modelOptions: ModelOption[] = [
 const MAX_POLL_COUNT = 120; // 120 × 5s = 10 minutes max for multi-scene
 
 export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: VideoGeneratorDialogProps) {
+  const { brandKit } = useBrandKit();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("veo-3.1");
   const [duration, setDuration] = useState("8");
