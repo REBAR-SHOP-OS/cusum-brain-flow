@@ -153,7 +153,8 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
             {/* Platform-Grouped Cards */}
             <div className="space-y-2">
               {groupByPlatform(dayPosts).map(([platform, posts]) => {
-                const pIcon = platformIcons[platform.startsWith("unassigned") ? "unassigned" : platform] || platformIcons.twitter;
+                const platformName = platform.startsWith("unassigned") ? "unassigned" : platform.split("_")[0];
+                const pIcon = platformIcons[platformName] || platformIcons.twitter;
                 const groupIds = posts.map(p => p.id);
                 const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
                 const status = worstStatus(posts);
