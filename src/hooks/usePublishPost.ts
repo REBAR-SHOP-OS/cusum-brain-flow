@@ -31,8 +31,10 @@ export function usePublishPost() {
         return false;
       }
 
+      // Strip Persian translation block — never publish Persian text
+      const cleanContent = stripPersian(post.content);
       const message = [
-        post.content,
+        cleanContent,
         post.hashtags.length > 0 ? "\n\n" + post.hashtags.join(" ") : "",
       ].join("");
 
