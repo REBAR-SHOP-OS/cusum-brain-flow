@@ -82,29 +82,10 @@ export default function SocialMediaManager() {
     });
   }, []);
 
-  const toggleSelectAll = useCallback(() => {
-    if (selectedPostIds.size === filteredPosts.length) {
-      setSelectedPostIds(new Set());
-    } else {
-      setSelectedPostIds(new Set(filteredPosts.map((p) => p.id)));
-    }
-  }, [filteredPosts, selectedPostIds.size]);
-
   const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
     setSelectedPostIds(new Set());
   }, []);
-
-  const handleBulkDelete = useCallback(async () => {
-    setBulkDeleting(true);
-    const ids = Array.from(selectedPostIds);
-    for (const id of ids) {
-      await deletePost.mutateAsync(id);
-    }
-    setBulkDeleting(false);
-    setShowDeleteConfirm(false);
-    exitSelectionMode();
-  }, [selectedPostIds, deletePost, exitSelectionMode]);
 
   // Filters & search
   const [searchOpen, setSearchOpen] = useState(false);
