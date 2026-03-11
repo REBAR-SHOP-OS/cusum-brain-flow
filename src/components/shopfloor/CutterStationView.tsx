@@ -67,11 +67,12 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // On mount, if machine has an active locked job, restore state from backend
   useEffect(() => {
     if (restoredFromBackend) return;
+    // Don't finalize restoration until items have loaded
+    if (items.length === 0) return;
     if (
       machine.cut_session_status === "running" &&
       machine.active_job_id &&
-      machine.machine_lock &&
-      items.length > 0
+      machine.machine_lock
     ) {
       // Find the item matching the locked job
       const lockedIndex = items.findIndex(i => i.id === machine.active_job_id);
@@ -98,7 +99,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       }
     }
     setRestoredFromBackend(true);
-  }, [machine.cut_session_status, machine.active_job_id, machine.machine_lock, restoredFromBackend]);
+  }, [machine.cut_session_status, machine.active_job_id, machine.machine_lock, restoredFromBackend, items.length]);
 
   // ID-based reconciliation: after items refresh, find the tracked item and fix index
   useEffect(() => {
