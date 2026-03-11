@@ -1,27 +1,29 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Group Posts by Platform in Calendar
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+When multiple posts are scheduled on the same day across many accounts, individual cards clutter the view. The user wants posts sorted and grouped by platform, showing one card per platform with a count badge.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Changes
 
-### Plan
-Run a single database migration:
+**`src/components/social/SocialCalendar.tsx`**
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
-```
+1. Sort `dayPosts` by platform name so same-platform posts appear together
+2. Group posts by platform into a `Map<string, SocialPost[]>`
+3. Render one card per platform group showing:
+   - Platform icon
+   - Post title (from first post in group)
+   - Count badge if >1 post (e.g. "×3")
+   - Status (worst status takes priority)
+4. Clicking the grouped card opens the first post; selection mode selects all posts in that platform group
+5. `onSelectDay` and `onToggleSelect` work on all post IDs within the platform group
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+### UI Result
+Instead of 7 separate cards (3 Instagram + 2 Facebook + 2 LinkedIn), the user sees 3 compact cards:
+- Facebook (×2)
+- Instagram (×3)  
+- LinkedIn (×2)
 
-No code changes needed — just the migration.
+Platform order: facebook, instagram, linkedin, twitter, tiktok, youtube.
 
