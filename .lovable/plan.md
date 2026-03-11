@@ -1,27 +1,24 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Cancel 4 Scheduled Posts (March 11)
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+### What
+Change the status of all 4 scheduled Instagram posts from `scheduled` back to `draft` so the cron job does not publish them.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
-
-### Plan
-Run a single database migration:
+### How
+Run a single database update on the `social_posts` table:
 
 ```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+UPDATE social_posts
+SET status = 'draft', qa_status = 'needs_review'
+WHERE status = 'scheduled'
+  AND id IN (
+    '04b73c43-5cac-46ed-a4b2-0f53903f64d6',
+    'b89c8d2f-92e6-4239-836c-8e253ff3f5f1',
+    'aea50175-ebc2-464e-84e3-aea4ae0a5001',
+    'd32fcd46-8cfb-4da1-a3e0-15a7893fd884'
+  );
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
-
-No code changes needed — just the migration.
+This resets all 4 posts to draft/needs_review so nothing gets auto-published. No code changes needed — just a data update.
 
