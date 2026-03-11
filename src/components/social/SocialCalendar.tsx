@@ -68,6 +68,7 @@ interface SocialCalendarProps {
   onPostClick: (post: SocialPost) => void;
   selectedPostIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  onSelectDay?: (dayPostIds: string[]) => void;
 }
 
 function groupPostsByContent(dayPosts: SocialPost[]): PostGroup[] {
