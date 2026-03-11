@@ -1,27 +1,62 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Filter Pages by Selected Platform
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+Currently `PAGES_OPTIONS` is a single hardcoded list showing all pages regardless of platform. The user wants each platform to show only its own accounts/pages.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Solution
+Replace the flat `PAGES_OPTIONS` with a platform-to-pages mapping, then compute the filtered pages list based on `localPlatforms`.
 
-### Plan
-Run a single database migration:
+### Changes in `src/components/social/PostReviewPanel.tsx`
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+1. **Replace `PAGES_OPTIONS` with a platform-keyed map:**
+```typescript
+const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
+  facebook: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+    { value: "Ontario Steels", label: "Ontario Steels" },
+  ],
+  instagram: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Ontario Digital Marketing", label: "Ontario Digital Marketing" },
+  ],
+  instagram_fb: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
+  ],
+  linkedin: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+    { value: "Ontario Logistics", label: "Ontario Logistics" },
+  ],
+  linkedin_org: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  youtube: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+  tiktok: [
+    { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
+  ],
+};
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+2. **Compute filtered pages** inside the component based on `localPlatforms`:
+```typescript
+const filteredPageOptions = useMemo(() => {
+  const seen = new Set<string>();
+  return localPlatforms.flatMap(p => PLATFORM_PAGES[p] || []).filter(o => {
+    if (seen.has(o.value)) return false;
+    seen.add(o.value);
+    return true;
+  });
+}, [localPlatforms]);
+```
 
-No code changes needed — just the migration.
+3. **Pass `filteredPageOptions`** instead of `PAGES_OPTIONS` to the pages `SelectionSubPanel`.
+
+4. **Reset `localPages`** when platforms change (in `handlePlatformsSaveMulti`) to avoid stale page selections.
+
+Since the exact accounts per platform aren't stored in a database table yet, I need the user to confirm the mapping. Let me ask.
 
