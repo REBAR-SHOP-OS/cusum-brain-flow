@@ -83,6 +83,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
   const [storyboard, setStoryboard] = useState<StoryboardScene[]>([]);
+  const storyboardRef = useRef<StoryboardScene[]>(storyboard);
+  useEffect(() => { storyboardRef.current = storyboard; }, [storyboard]);
   const [continuity, setContinuity] = useState<ContinuityProfile | null>(null);
   const [clips, setClips] = useState<ClipOutput[]>([]);
   // Derive generatingAny reactively from clips state
@@ -327,7 +329,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
 
   // ─── Generate Single Scene ──────────────────────────────
   const generateScene = useCallback(async (sceneId: string) => {
-    const scene = storyboard.find(s => s.id === sceneId);
+    const scene = storyboardRef.current.find(s => s.id === sceneId);
     if (!scene) return;
 
     // Calculate duration from script segment timing
