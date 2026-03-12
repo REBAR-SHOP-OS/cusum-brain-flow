@@ -1,46 +1,56 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Inject Event Calendar into Content Generation
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+The auto-generate function and Pixel agent currently ignore the Monthly Event Calendar. Posts should reference upcoming events/occasions when they're suitable for advertising.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Approach
+Embed the event calendar data directly in the edge functions (since it's static data defined in `contentStrategyData.ts` which is a frontend file). Add a helper that returns upcoming events for the target date, filtered for advertising suitability, and inject them into the AI prompts.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Changes
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. Create shared event helper (`supabase/functions/_shared/eventCalendar.ts`)
+- Copy the `yearlyEvents` array data from `contentStrategyData.ts` into a backend-accessible module
+- Add `getUpcomingEvents(date, days=7)` function that returns events within N days of the target date
+- Add `isAdvertisable(event)` filter — exclude somber/non-promotional events like "National Day of Mourning", "Day for Truth & Reconciliation", "World Mental Health Day" (keep a skip-list of event names unsuitable for ads)
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 2. Update `supabase/functions/auto-generate-post/index.ts`
+- Import the event helper
+- Before building the system prompt, call `getUpcomingEvents(postDate, 3)` to find events within 3 days
+- If events exist, inject an `## UPCOMING EVENTS` section into the system prompt instructing the AI to:
+  - Theme 1-2 of the 5 posts around the event
+  - Use the event's `contentTheme` and `hashtags`
+  - Keep the promotional angle — tie the event to Rebar.shop products/services
+  - Only use events that naturally support advertising
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 3. Update `supabase/functions/_shared/agents/marketing.ts` (Pixel agent prompt)
+- Add a dynamic event injection point in the prompt
+- The Pixel agent prompt is static, so we'll add instructions telling Pixel to check for events via a new section
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 4. Update `supabase/functions/ai-agent/index.ts` or `agentContext.ts`
+- When the agent is "social" (Pixel), compute upcoming events and inject them into the context passed to the agent
+- This way Pixel knows about current events when generating images/captions
+
+## Non-advertisable events (skip list)
+Events that should NOT be used for promotional content:
+- National Day of Mourning
+- National Day for Truth & Reconciliation  
+- World Mental Health Day
+- National Indigenous Peoples Day (respectful, not promotional)
+
+## Prompt injection example
+```
+## UPCOMING EVENTS (use these for themed content!)
+- Mar 17: St. Patrick's Day — Theme: "Lucky to have the best team, green builds" — Hashtags: #StPatricksDay #LuckyTeam
+- Mar 20: First Day of Spring — Theme: "Construction season kickoff, spring projects" — Hashtags: #SpringIsHere #ConstructionSeason
+
+INSTRUCTIONS: Incorporate these events into 1-2 posts. Tie the event theme to Rebar.shop products. Keep it promotional and celebratory.
+```
+
+## Files
+- **New**: `supabase/functions/_shared/eventCalendar.ts`
+- **Edit**: `supabase/functions/auto-generate-post/index.ts` — import events, inject into prompt
+- **Edit**: `supabase/functions/_shared/agents/marketing.ts` — add event awareness instructions
+- **Edit**: `supabase/functions/_shared/agentContext.ts` — inject upcoming events for social agent
+
