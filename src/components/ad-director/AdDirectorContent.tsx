@@ -403,8 +403,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
       return;
     }
 
-    // Calculate duration from script segment timing
-    const rawDur = segment ? segment.endTime - segment.startTime : 5;
+    // Use videoParams.duration if set, fallback to segment timing
+    const rawDur = videoParams.duration > 0 ? videoParams.duration : (segment ? segment.endTime - segment.startTime : 5);
     const sceneDuration = Math.min(Math.max(rawDur, 2), 15);
 
     // Enforce motion in prompt to avoid static zoom-only results
