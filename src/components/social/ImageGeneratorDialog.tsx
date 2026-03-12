@@ -57,7 +57,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     onOpenChange(false);
     setTimeout(() => {
       setPrompt("");
-      setSelectedModel("gpt-image-1");
+      setSelectedModel("google/gemini-3-pro-image-preview");
       setSize("1024x1024");
       setStatus("idle");
       setImageUrl(null);
