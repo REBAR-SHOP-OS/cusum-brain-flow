@@ -88,7 +88,7 @@ export function AdDirectorContent() {
       const promptResults = await Promise.all(
         rawStoryboard.map(async (scene, idx) => {
           try {
-            const res = await invokeEdgeFunction<{
+            const res = await withTimeout(invokeEdgeFunction<{
               result: { prompt: string; reasoning?: string };
               modelUsed: string;
             }>("ad-director-ai", {
@@ -98,7 +98,7 @@ export function AdDirectorContent() {
               continuityProfile,
               previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
               modelOverrides,
-            });
+            }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
           } catch {
             return { prompt: scene.prompt, modelUsed: "original" };
