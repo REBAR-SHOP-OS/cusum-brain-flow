@@ -721,6 +721,7 @@ async function handleSimpleTextTask(apiKey: string, taskType: TaskType, body: an
     undefined,
     undefined,
     modelOverride,
+    taskType,
   );
 
   return { result: { text: extractContent(data) }, modelUsed, fallbackUsed };
