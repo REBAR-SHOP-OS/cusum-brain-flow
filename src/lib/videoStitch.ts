@@ -73,9 +73,9 @@ async function loadImage(src: string): Promise<HTMLImageElement | null> {
 
 function drawSubtitle(ctx: CanvasRenderingContext2D, w: number, h: number, text: string) {
   if (!text) return;
-  const fontSize = Math.max(16, Math.round(h / 22));
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  const maxWidth = w * 0.85;
+  const fontSize = Math.max(18, Math.round(h / 20));
+  ctx.font = `700 ${fontSize}px 'Inter', 'SF Pro Display', -apple-system, sans-serif`;
+  const maxWidth = w * 0.8;
   const words = text.split(" ");
   const lines: string[] = [];
   let line = "";
@@ -90,16 +90,60 @@ function drawSubtitle(ctx: CanvasRenderingContext2D, w: number, h: number, text:
   }
   if (line) lines.push(line);
 
-  const lineHeight = fontSize * 1.3;
-  const blockH = lines.length * lineHeight + 16;
-  const y0 = h - blockH - 24;
+  const lineHeight = fontSize * 1.4;
+  const padX = fontSize * 1.8;
+  const padY = fontSize * 0.7;
 
-  ctx.fillStyle = "rgba(0,0,0,0.65)";
-  ctx.fillRect(0, y0, w, blockH);
-  ctx.fillStyle = "#ffffff";
+  // Measure widest line for pill width
+  let maxLineW = 0;
+  for (const ln of lines) {
+    const lw = ctx.measureText(ln).width;
+    if (lw > maxLineW) maxLineW = lw;
+  }
+
+  const pillW = maxLineW + padX * 2;
+  const pillH = lines.length * lineHeight + padY * 2;
+  const pillX = (w - pillW) / 2;
+  const pillY = h - pillH - 40;
+  const radius = 16;
+
+  // Gradient pill background
+  ctx.save();
+  const grad = ctx.createLinearGradient(pillX, pillY, pillX, pillY + pillH);
+  grad.addColorStop(0, "rgba(0, 0, 0, 0.72)");
+  grad.addColorStop(1, "rgba(8, 8, 8, 0.88)");
+  ctx.beginPath();
+  ctx.roundRect(pillX, pillY, pillW, pillH, radius);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Glass border
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Text with glow
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  lines.forEach((ln, i) => ctx.fillText(ln, w / 2, y0 + 8 + i * lineHeight));
+  ctx.shadowColor = "rgba(255, 255, 255, 0.45)";
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.fillStyle = "#ffffff";
+
+  // Apply letter spacing via manual character rendering would be heavy;
+  // use (letterSpacing) if supported, otherwise just render normally
+  try { (ctx as any).letterSpacing = "0.5px"; } catch {}
+
+  lines.forEach((ln, i) => {
+    ctx.fillText(ln, w / 2, pillY + padY + i * lineHeight);
+  });
+
+  // Reset
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  try { (ctx as any).letterSpacing = "0px"; } catch {}
+  ctx.restore();
   ctx.textAlign = "start";
   ctx.textBaseline = "alphabetic";
 }
