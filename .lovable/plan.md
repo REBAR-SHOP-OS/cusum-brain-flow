@@ -1,40 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Queue Open Shows "ABORT" + Error on Lock & Start
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-When opening a queue item from pool, the machine often has a stale run from a previous session. This triggers:
-1. Restoration logic (line 68-82) sets `isRunning=true` → shows "ABORT — FIX SETTINGS" immediately instead of "LOCK & START"
-2. After aborting, user tries LOCK & START → gets "Machine already has an active run" error because the stale run is < 30 minutes old, so the backend's auto-recovery (30-min threshold) doesn't trigger
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Root Cause
-The 30-minute stale threshold in `manage-machine` is too conservative. A run that was just "abort-completed" may not be fully cleared by the time the next start request arrives, or the machine's realtime state hasn't refreshed.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Fix (2 changes)
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 1. `src/components/shopfloor/CutterStationView.tsx` — Smarter restoration
-In the restoration effect (line 66-103), before blindly setting `isRunning=true`, verify the run is actually valid by checking if `machine.current_run_id` has an active `machine_runs` row with status `running`. If the run is stale/completed/canceled, auto-clear it client-side instead of forcing the user to manually abort.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-**New logic:**
-```
-On mount restoration:
-  - If machine has current_run_id + status=running:
-    → Fetch the actual machine_run row
-    → If run status is NOT 'running' (completed/canceled/paused) → call complete-run to reset, don't set isRunning
-    → If run IS running → restore as before (set isRunning=true)
-```
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### 2. `src/components/shopfloor/CutterStationView.tsx` — Force-clear before start
-In `handleLockAndStart` (line 276), if the machine still has a `current_run_id` but we know we just aborted (via `completedLocally`), explicitly send a `complete-run` with cleanup notes before starting the new run, ensuring the backend is clean.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-**New logic in handleLockAndStart:**
-```
-Before calling start-run:
-  - If machine.current_run_id exists AND completedLocally is true:
-    → await manageMachine({ action: "complete-run", machineId, outputQty: 0, scrapQty: 0, notes: "Pre-start cleanup" })
-    → Continue with start-run
-```
-
-## Files Changed
-- `src/components/shopfloor/CutterStationView.tsx` — smarter restoration + pre-start cleanup
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
