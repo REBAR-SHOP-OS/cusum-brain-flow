@@ -81,7 +81,9 @@ export function ExportDialog({
             <DialogTitle className="flex items-center gap-2 text-sm">
               <Share2 className="w-4 h-4 text-primary" /> Share to Social Media
             </DialogTitle>
-          </DialogHeader>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Prepare your video for social channels.
+            </DialogDescription>
           <VideoToSocialPanel
             videoUrl={finalVideoUrl}
             aspectRatio={aspectRatio}
