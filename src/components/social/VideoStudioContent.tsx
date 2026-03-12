@@ -603,8 +603,8 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const isGenerating = status === "transforming" || status === "submitting" || status === "processing" || watermarking || imageGenerating || standaloneAudioGenerating;
 
   return (
-    <div className={fullPage ? "flex flex-col h-full" : ""}>
-      <Tabs value={activeTab} onValueChange={setActiveTab} className={fullPage ? "flex flex-col h-full" : ""}>
+    <div className={fullPage ? "flex flex-col" : ""}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className={fullPage ? "flex flex-col" : ""}>
         <TabsList className="w-full mb-4 shrink-0">
           <TabsTrigger value="generate" className="flex-1 gap-1.5">
             <Clapperboard className="w-3.5 h-3.5" />

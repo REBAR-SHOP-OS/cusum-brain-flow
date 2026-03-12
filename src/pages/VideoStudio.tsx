@@ -3,7 +3,7 @@ import { VideoStudioContent } from "@/components/social/VideoStudioContent";
 
 export default function VideoStudio() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col overflow-y-auto">
       {/* Header */}
       <div className="max-w-5xl mx-auto w-full px-4 pt-6 pb-2">
         <div className="flex items-center gap-3">
