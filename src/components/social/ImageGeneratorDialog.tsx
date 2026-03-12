@@ -133,6 +133,13 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
       let finalImageUrl = data.imageUrl;
 
+      // Ensure 1:1 square for Instagram
+      try {
+        finalImageUrl = await ensureSquare(finalImageUrl);
+      } catch (e) {
+        console.warn("Square crop failed, using original:", e);
+      }
+
       // Apply brand logo overlay ONLY when Logo theme chip is explicitly selected
       if (selectedThemes.has("logo") && brandKit?.logo_url && finalImageUrl) {
         try {
