@@ -160,17 +160,26 @@ async function getInternalSenderToken(svc: ReturnType<typeof createClient>): Pro
 }
 
 function createRawEmail(to: string, subject: string, body: string, fromEmail: string): string {
+  // Use MIME encoded-word (RFC 2047) for subject to handle Unicode properly
+  const encoder = new TextEncoder();
+  const subjectBytes = encoder.encode(subject);
+  const subjectB64 = btoa(String.fromCharCode(...subjectBytes));
+  const encodedSubject = `=?UTF-8?B?${subjectB64}?=`;
+
   const lines = [
     `From: ${fromEmail}`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodedSubject}`,
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
     "",
-    body,
+    btoa(String.fromCharCode(...encoder.encode(body))),
   ];
   const raw = lines.join("\r\n");
-  const b64 = btoa(unescape(encodeURIComponent(raw)));
+  // Use URL-safe base64 for Gmail API
+  const rawBytes = encoder.encode(raw);
+  const b64 = btoa(String.fromCharCode(...rawBytes));
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
