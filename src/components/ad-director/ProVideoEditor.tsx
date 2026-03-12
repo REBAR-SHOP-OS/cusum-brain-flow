@@ -756,6 +756,12 @@ export function ProVideoEditor({
         onAddAudio={generateAllVoiceovers}
         textOverlays={textOverlays}
         audioTracks={audioTracks}
+        videoVolume={videoVolume}
+        onVideoVolumeChange={handleVideoVolumeChange}
+        onAudioTrackVolumeChange={handleAudioTrackVolumeChange}
+        onDeleteOverlay={handleDeleteOverlay}
+        onRemoveAudioTrack={handleRemoveAudioTrack}
+        onRegenerateScene={onRegenerateScene}
       />
 
       {/* Text Overlay Dialog */}
