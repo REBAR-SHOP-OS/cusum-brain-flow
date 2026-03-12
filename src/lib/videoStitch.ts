@@ -286,7 +286,7 @@ async function preloadAndValidate(
 
 // ─── Post-stitch validation ────────────────────────────────
 
-async function validateBlob(blob: Blob): Promise<{ valid: boolean; error?: string; duration?: number }> {
+async function validateBlob(blob: Blob, expectedDuration?: number): Promise<{ valid: boolean; error?: string; duration?: number }> {
   if (blob.size === 0) return { valid: false, error: "Output blob is empty (0 bytes)" };
   if (blob.size < 1000) return { valid: false, error: `Output blob suspiciously small (${blob.size} bytes)` };
 
