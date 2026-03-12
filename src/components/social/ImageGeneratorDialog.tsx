@@ -52,7 +52,7 @@ const modelOptions: ModelOption[] = [
   },
 ];
 
-export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: ImageGeneratorDialogProps) {
+export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMode = false }: ImageGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("google/gemini-3-pro-image-preview");
   const [status, setStatus] = useState<Status>("idle");
