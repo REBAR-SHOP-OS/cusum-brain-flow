@@ -1,46 +1,30 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Add Logo Watermark Overlay to Scene Previews & Improve Intro/Outro Logo Handling
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+1. **Scene previews show no logo** — Individual scene thumbnails/videos in SceneCard display the raw AI-generated video without any logo watermark. The logo is only applied during the final export stitch.
+2. **Intro and outro scenes don't show the actual logo** — The AI prompt tells the video model to "include the brand logo" but text-to-video models can't render a real uploaded logo. The result is garbled text approximations (as seen in the screenshots).
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Solution
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. Add CSS logo overlay on scene preview videos (`SceneCard.tsx`)
+Overlay the brand logo on top of each scene's video preview using absolute positioning, matching the watermark position used in the stitch pipeline (bottom-right, 70% opacity). This gives users visual confirmation that the logo will appear on every scene.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 2. Add CSS logo overlay on ProVideoEditor player (`ProVideoEditor.tsx`)
+Same overlay on the main video player in the editor so users always see their logo positioned on the video.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 3. Fix AI prompts to stop asking video models to render logos (`ad-director-ai/index.ts`)
+Update the `ANALYZE_SCRIPT_PROMPT`:
+- **Intro scene**: Remove any mention of rendering the logo in the video. The intro is a pure cinematic establishing shot — the logo watermark is handled by the overlay system.
+- **Outro/End Card**: Change `generationMode` guidance to explicitly state that the end card is rendered by the stitching engine (Canvas), not by the video model. The AI should NOT generate a video for the end card — it should produce metadata (brand name, tagline, CTA, colors) that the existing `drawEndCard` function uses.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 4. Skip video generation for end card scenes (`AdDirectorContent.tsx`)
+When `generateScene` is called for a scene with `generationMode: "static-card"` or segment type `"closing"`, skip the video generation API call entirely. Instead, generate a canvas-rendered end card preview image using the brand data, and set it as the clip's thumbnail directly.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+## Files Modified
+- `src/components/ad-director/SceneCard.tsx` — add logo overlay on video preview
+- `src/components/ad-director/ProVideoEditor.tsx` — add logo overlay on main player
+- `supabase/functions/ad-director-ai/index.ts` — fix prompts to not ask video models to render logos
+- `src/components/ad-director/AdDirectorContent.tsx` — skip video gen for end card scenes, render canvas preview instead
+
