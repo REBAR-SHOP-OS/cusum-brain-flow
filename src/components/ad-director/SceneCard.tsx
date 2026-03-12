@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
   Video, Image as ImageIcon, Link2, FileText, Layers,
   Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock
 } from "lucide-react";
 import { type StoryboardScene, type ClipOutput, type GenerationMode } from "@/types/adDirector";
+import { PromptQualityBadge } from "./PromptQualityBadge";
+import { SceneIntelligenceBar } from "./SceneIntelligenceBar";
 import { cn } from "@/lib/utils";
 
 const modeIcons: Record<GenerationMode, React.ReactNode> = {
@@ -54,11 +55,14 @@ interface SceneCardProps {
   onContinuityToggle: (id: string) => void;
   onRegenerate: (id: string) => void;
   canRegenerate: boolean;
+  onImprovePrompt?: (id: string) => void;
+  improvingSceneId?: string | null;
 }
 
 export function SceneCard({
   scene, clip, index, startTime, endTime, segmentLabel,
   onPromptChange, onContinuityToggle, onRegenerate, canRegenerate,
+  onImprovePrompt, improvingSceneId,
 }: SceneCardProps) {
   const [editing, setEditing] = useState(false);
   const [editPrompt, setEditPrompt] = useState(scene.prompt);
@@ -162,6 +166,13 @@ export function SceneCard({
           )}
         </div>
 
+        {/* Prompt Quality Badge */}
+        <PromptQualityBadge
+          quality={scene.promptQuality}
+          onImprove={onImprovePrompt ? () => onImprovePrompt(scene.id) : undefined}
+          improving={improvingSceneId === scene.id}
+        />
+
         {/* Completed video thumbnail */}
         {clip.status === "completed" && clip.videoUrl && (
           <video
@@ -191,6 +202,9 @@ export function SceneCard({
             {clip.status === "completed" ? "Regenerate" : "Generate"}
           </Button>
         </div>
+
+        {/* Scene Intelligence Bar */}
+        <SceneIntelligenceBar intelligence={scene.sceneIntelligence} />
       </div>
     </div>
   );

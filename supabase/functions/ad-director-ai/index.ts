@@ -1,0 +1,550 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+// ─── Model Routing Table ────────────────────────────────────────
+type TaskType =
+  | "analyze-script"
+  | "generate-storyboard"
+  | "write-cinematic-prompt"
+  | "score-prompt-quality"
+  | "improve-prompt"
+  | "analyze-reference"
+  | "continuity-check"
+  | "rewrite-cta"
+  | "generate-subtitles"
+  | "generate-voiceover"
+  | "classify-scene"
+  | "quality-review"
+  | "optimize-ad";
+
+interface ModelRoute {
+  model: string;
+  fallback: string;
+  temperature: number;
+  maxTokens: number;
+}
+
+const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
+  "analyze-script":         { model: "google/gemini-2.5-pro", fallback: "openai/gpt-5", temperature: 0.1, maxTokens: 8192 },
+  "generate-storyboard":    { model: "google/gemini-2.5-pro", fallback: "openai/gpt-5", temperature: 0.2, maxTokens: 8192 },
+  "write-cinematic-prompt": { model: "openai/gpt-5",          fallback: "google/gemini-2.5-pro", temperature: 0.7, maxTokens: 2048 },
+  "score-prompt-quality":   { model: "google/gemini-2.5-flash", fallback: "google/gemini-2.5-flash-lite", temperature: 0.1, maxTokens: 1024 },
+  "improve-prompt":         { model: "openai/gpt-5",          fallback: "google/gemini-2.5-pro", temperature: 0.6, maxTokens: 2048 },
+  "analyze-reference":      { model: "google/gemini-2.5-pro", fallback: "openai/gpt-5", temperature: 0.2, maxTokens: 4096 },
+  "continuity-check":       { model: "google/gemini-2.5-flash", fallback: "google/gemini-2.5-flash-lite", temperature: 0.1, maxTokens: 2048 },
+  "rewrite-cta":            { model: "openai/gpt-5-mini",     fallback: "google/gemini-2.5-flash", temperature: 0.5, maxTokens: 1024 },
+  "generate-subtitles":     { model: "google/gemini-2.5-flash-lite", fallback: "google/gemini-2.5-flash", temperature: 0.1, maxTokens: 2048 },
+  "generate-voiceover":     { model: "openai/gpt-5-mini",     fallback: "google/gemini-2.5-flash", temperature: 0.4, maxTokens: 2048 },
+  "classify-scene":         { model: "google/gemini-2.5-flash-lite", fallback: "google/gemini-2.5-flash", temperature: 0.1, maxTokens: 1024 },
+  "quality-review":         { model: "google/gemini-2.5-pro", fallback: "openai/gpt-5", temperature: 0.2, maxTokens: 4096 },
+  "optimize-ad":            { model: "openai/gpt-5",          fallback: "google/gemini-2.5-pro", temperature: 0.5, maxTokens: 4096 },
+};
+
+// ─── Auth Helper ────────────────────────────────────────────────
+async function verifyAuth(req: Request) {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+  if (error || !user) return null;
+  return { userId: user.id };
+}
+
+// ─── AI Gateway Call with Fallback ──────────────────────────────
+async function callAI(
+  apiKey: string,
+  route: ModelRoute,
+  messages: Array<{ role: string; content: string }>,
+  tools?: any[],
+  toolChoice?: any,
+  modelOverride?: string,
+): Promise<{ data: any; modelUsed: string; fallbackUsed: boolean }> {
+  const model = modelOverride || route.model;
+
+  const body: any = {
+    model,
+    messages,
+    temperature: route.temperature,
+    max_tokens: route.maxTokens,
+  };
+  if (tools) body.tools = tools;
+  if (toolChoice) body.tool_choice = toolChoice;
+
+  let response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  // If primary fails with 5xx or 429, try fallback
+  if (!response.ok && (response.status >= 500 || response.status === 429) && !modelOverride) {
+    console.warn(`Primary model ${model} failed (${response.status}), falling back to ${route.fallback}`);
+    body.model = route.fallback;
+    response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Fallback model also failed:", response.status, errText);
+      throw new Error(response.status === 429 ? "Rate limited — please try again." : response.status === 402 ? "AI credits exhausted." : "AI generation failed");
+    }
+
+    const data = await response.json();
+    return { data, modelUsed: route.fallback, fallbackUsed: true };
+  }
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("AI error:", response.status, errText);
+    throw new Error(response.status === 429 ? "Rate limited — please try again." : response.status === 402 ? "AI credits exhausted." : "AI generation failed");
+  }
+
+  const data = await response.json();
+  return { data, modelUsed: model, fallbackUsed: false };
+}
+
+function extractToolResult(data: any): any {
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall?.function?.arguments) throw new Error("AI did not return structured data");
+  return JSON.parse(toolCall.function.arguments);
+}
+
+function extractContent(data: any): string {
+  return data.choices?.[0]?.message?.content || "";
+}
+
+// ─── System Prompts ─────────────────────────────────────────────
+const ANALYZE_SCRIPT_PROMPT = `You are a world-class AI creative director specializing in B2B industrial video advertising.
+
+Your job: Analyze a 30-second ad script and produce a professional storyboard with scene-by-scene generation instructions.
+
+For each script segment, produce:
+- segment identification (hook, problem, solution, service, credibility, cta, closing)
+- timing (startTime, endTime in seconds)
+- storyboard scene with:
+  - objective, visualStyle, shotType, cameraMovement, environment, subjectAction, emotionalTone, transitionNote
+  - generationMode: one of "text-to-video", "image-to-video", "reference-continuation", "static-card", "motion-graphics"
+  - continuityRequirements, prompt (detailed cinematic video generation prompt)
+
+Also produce a ContinuityProfile object with: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, motionRhythm, colorMood, lightingType, objectPlacement, lastFrameSummary, nextSceneBridge
+
+For clips after the first, always include in the prompt: "Continue seamlessly from the previous clip, preserving location, subject continuity, camera language, lighting, pacing, and cinematic tone."
+
+Optimize for: cinematic realism, dramatic industrial environments, premium B2B ad quality.`;
+
+const WRITE_CINEMATIC_PROMPT_SYSTEM = `You are a world-class cinematic prompt engineer specializing in AI video generation for premium B2B advertising.
+
+Your job: Take a scene plan and rewrite its prompt into a highly specific, visually rich, cinematically precise generation prompt.
+
+Rules:
+- Be extremely specific about visual details: materials, textures, lighting angles, camera lens, movement speed
+- Avoid generic descriptions like "professional looking" or "high quality"
+- Include specific camera specs: "shot on ARRI Alexa, 35mm lens, f/2.8"
+- Specify exact lighting: "golden hour backlight with tungsten fill from 45° left"
+- Describe materials precisely: "weathered steel rebar bundles with rust patina, fresh concrete with moisture sheen"
+- Include motion details: "slow dolly forward at 2ft/s, slight crane up revealing scale"
+- Aim for 80-150 words per prompt
+- Must maintain brand consistency and emotional tone
+- For continuation scenes, explicitly reference visual elements from the previous scene`;
+
+const SCORE_QUALITY_PROMPT = `You are a quality evaluator for AI video generation prompts. Score each prompt on 7 dimensions (0-10 each):
+
+1. realism: How photorealistic and physically accurate are the described visuals?
+2. specificity: How precise and detailed are visual descriptions (vs generic)?
+3. visualRichness: How much visual depth, texture, and layered detail?
+4. continuityStrength: How well does it maintain visual consistency with adjacent scenes?
+5. brandRelevance: How well does it serve the brand message and target audience?
+6. emotionalPersuasion: How effectively does it create the intended emotional response?
+7. cinematicClarity: How clear and executable are the camera, lighting, and composition instructions?
+
+Return scores and a brief improvement suggestion if overall < 7.0.`;
+
+const IMPROVE_PROMPT_SYSTEM = `You are a cinematic prompt improvement specialist. You receive a video generation prompt that scored below quality threshold.
+
+Your job: Rewrite it to be significantly more specific, visually rich, and cinematically precise while preserving the scene's objective and emotional tone.
+
+Focus on:
+- Replace vague descriptions with precise visual details
+- Add specific camera, lens, and lighting information
+- Include material textures, environmental details, atmospheric conditions
+- Ensure strong continuity references if it's not the first scene
+- Maintain the original scene objective and emotional impact`;
+
+// ─── Tool Schemas ───────────────────────────────────────────────
+const ANALYZE_SCRIPT_TOOLS = [{
+  type: "function",
+  function: {
+    name: "create_storyboard",
+    description: "Create a structured storyboard from the ad script analysis",
+    parameters: {
+      type: "object",
+      properties: {
+        segments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              type: { type: "string", enum: ["hook", "problem", "consequence", "solution", "service", "credibility", "urgency", "cta", "closing"] },
+              label: { type: "string" },
+              text: { type: "string" },
+              startTime: { type: "number" },
+              endTime: { type: "number" },
+            },
+            required: ["id", "type", "label", "text", "startTime", "endTime"],
+          },
+        },
+        storyboard: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              segmentId: { type: "string" },
+              objective: { type: "string" },
+              visualStyle: { type: "string" },
+              shotType: { type: "string" },
+              cameraMovement: { type: "string" },
+              environment: { type: "string" },
+              subjectAction: { type: "string" },
+              emotionalTone: { type: "string" },
+              transitionNote: { type: "string" },
+              generationMode: { type: "string", enum: ["text-to-video", "image-to-video", "reference-continuation", "static-card", "motion-graphics"] },
+              continuityRequirements: { type: "string" },
+              prompt: { type: "string" },
+            },
+            required: ["id", "segmentId", "objective", "visualStyle", "shotType", "cameraMovement", "environment", "subjectAction", "emotionalTone", "transitionNote", "generationMode", "continuityRequirements", "prompt"],
+          },
+        },
+        continuityProfile: {
+          type: "object",
+          properties: {
+            subjectDescriptions: { type: "string" },
+            wardrobe: { type: "string" },
+            environment: { type: "string" },
+            timeOfDay: { type: "string" },
+            cameraStyle: { type: "string" },
+            motionRhythm: { type: "string" },
+            colorMood: { type: "string" },
+            lightingType: { type: "string" },
+            objectPlacement: { type: "string" },
+            lastFrameSummary: { type: "string" },
+            nextSceneBridge: { type: "string" },
+          },
+          required: ["subjectDescriptions", "wardrobe", "environment", "timeOfDay", "cameraStyle", "motionRhythm", "colorMood", "lightingType", "objectPlacement", "lastFrameSummary", "nextSceneBridge"],
+        },
+      },
+      required: ["segments", "storyboard", "continuityProfile"],
+    },
+  },
+}];
+
+const SCORE_QUALITY_TOOLS = [{
+  type: "function",
+  function: {
+    name: "score_prompt",
+    description: "Return quality scores for a video generation prompt",
+    parameters: {
+      type: "object",
+      properties: {
+        realism: { type: "number" },
+        specificity: { type: "number" },
+        visualRichness: { type: "number" },
+        continuityStrength: { type: "number" },
+        brandRelevance: { type: "number" },
+        emotionalPersuasion: { type: "number" },
+        cinematicClarity: { type: "number" },
+        overall: { type: "number" },
+        suggestion: { type: "string" },
+      },
+      required: ["realism", "specificity", "visualRichness", "continuityStrength", "brandRelevance", "emotionalPersuasion", "cinematicClarity", "overall"],
+    },
+  },
+}];
+
+const WRITE_PROMPT_TOOLS = [{
+  type: "function",
+  function: {
+    name: "write_prompt",
+    description: "Return the rewritten cinematic prompt",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: "The rewritten cinematic video generation prompt" },
+        reasoning: { type: "string", description: "Brief explanation of improvements made" },
+      },
+      required: ["prompt"],
+    },
+  },
+}];
+
+// ─── Action Handlers ────────────────────────────────────────────
+
+async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: string) {
+  const { script, brand, assetDescriptions } = body;
+  if (!script) throw new Error("Script is required");
+
+  const userPrompt = `Analyze this 30-second ad script and create a complete storyboard.
+
+Brand: ${brand?.name || "Rebar.Shop"}
+Website: ${brand?.website || "Rebar.Shop"}
+CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."}
+Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."}
+Target Audience: ${brand?.targetAudience || "Construction contractors and engineers"}
+${assetDescriptions ? `Available Assets: ${assetDescriptions}` : "No reference assets uploaded — use text-to-video for all scenes."}
+
+Script:
+${script}`;
+
+  const { data, modelUsed, fallbackUsed } = await callAI(
+    apiKey,
+    MODEL_ROUTES["analyze-script"],
+    [{ role: "system", content: ANALYZE_SCRIPT_PROMPT }, { role: "user", content: userPrompt }],
+    ANALYZE_SCRIPT_TOOLS,
+    { type: "function", function: { name: "create_storyboard" } },
+    modelOverride,
+  );
+
+  return { result: extractToolResult(data), modelUsed, fallbackUsed };
+}
+
+async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
+  const { scene, brand, continuityProfile, previousScene } = body;
+  if (!scene) throw new Error("Scene data is required");
+
+  const userPrompt = `Rewrite this scene's prompt into a premium cinematic video generation prompt.
+
+Scene Objective: ${scene.objective}
+Visual Style: ${scene.visualStyle}
+Shot Type: ${scene.shotType}
+Camera Movement: ${scene.cameraMovement}
+Environment: ${scene.environment}
+Subject Action: ${scene.subjectAction}
+Emotional Tone: ${scene.emotionalTone}
+Generation Mode: ${scene.generationMode}
+Continuity Requirements: ${scene.continuityRequirements}
+
+Original Prompt: ${scene.prompt}
+
+Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
+${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the first scene."}
+${continuityProfile ? `Continuity: ${JSON.stringify(continuityProfile)}` : ""}`;
+
+  const { data, modelUsed, fallbackUsed } = await callAI(
+    apiKey,
+    MODEL_ROUTES["write-cinematic-prompt"],
+    [{ role: "system", content: WRITE_CINEMATIC_PROMPT_SYSTEM }, { role: "user", content: userPrompt }],
+    WRITE_PROMPT_TOOLS,
+    { type: "function", function: { name: "write_prompt" } },
+    modelOverride,
+  );
+
+  return { result: extractToolResult(data), modelUsed, fallbackUsed };
+}
+
+async function handleScorePromptQuality(apiKey: string, body: any, modelOverride?: string) {
+  const { prompt, scene, brand } = body;
+  if (!prompt) throw new Error("Prompt is required");
+
+  const userPrompt = `Score this AI video generation prompt for quality.
+
+Prompt: "${prompt}"
+
+Scene Context:
+- Objective: ${scene?.objective || "N/A"}
+- Emotional Tone: ${scene?.emotionalTone || "N/A"}
+- Generation Mode: ${scene?.generationMode || "text-to-video"}
+
+Brand: ${brand?.name || "N/A"} targeting ${brand?.targetAudience || "B2B"}`;
+
+  const { data, modelUsed, fallbackUsed } = await callAI(
+    apiKey,
+    MODEL_ROUTES["score-prompt-quality"],
+    [{ role: "system", content: SCORE_QUALITY_PROMPT }, { role: "user", content: userPrompt }],
+    SCORE_QUALITY_TOOLS,
+    { type: "function", function: { name: "score_prompt" } },
+    modelOverride,
+  );
+
+  return { result: extractToolResult(data), modelUsed, fallbackUsed };
+}
+
+async function handleImprovePrompt(apiKey: string, body: any, modelOverride?: string) {
+  const { prompt, qualityScore, scene, brand } = body;
+  if (!prompt) throw new Error("Prompt is required");
+
+  const userPrompt = `Improve this video generation prompt. It scored ${qualityScore?.overall || "below threshold"}/10.
+
+Current prompt: "${prompt}"
+
+Quality breakdown:
+${qualityScore ? Object.entries(qualityScore).filter(([k]) => k !== "suggestion" && k !== "overall").map(([k, v]) => `- ${k}: ${v}/10`).join("\n") : "N/A"}
+${qualityScore?.suggestion ? `Suggestion: ${qualityScore.suggestion}` : ""}
+
+Scene: ${scene?.objective || "N/A"} — ${scene?.emotionalTone || "N/A"}
+Brand: ${brand?.name || "N/A"}`;
+
+  const { data, modelUsed, fallbackUsed } = await callAI(
+    apiKey,
+    MODEL_ROUTES["improve-prompt"],
+    [{ role: "system", content: IMPROVE_PROMPT_SYSTEM }, { role: "user", content: userPrompt }],
+    WRITE_PROMPT_TOOLS,
+    { type: "function", function: { name: "write_prompt" } },
+    modelOverride,
+  );
+
+  return { result: extractToolResult(data), modelUsed, fallbackUsed };
+}
+
+async function handleSimpleTextTask(apiKey: string, taskType: TaskType, body: any, systemPrompt: string, modelOverride?: string) {
+  const { input } = body;
+  if (!input) throw new Error("Input is required");
+
+  const { data, modelUsed, fallbackUsed } = await callAI(
+    apiKey,
+    MODEL_ROUTES[taskType],
+    [{ role: "system", content: systemPrompt }, { role: "user", content: input }],
+    undefined,
+    undefined,
+    modelOverride,
+  );
+
+  return { result: { text: extractContent(data) }, modelUsed, fallbackUsed };
+}
+
+// ─── Main Handler ───────────────────────────────────────────────
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const auth = await verifyAuth(req);
+    if (!auth) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const body = await req.json();
+    const { action, modelOverrides } = body;
+    if (!action) {
+      return new Response(JSON.stringify({ error: "action is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+    const taskType = action as TaskType;
+    if (!MODEL_ROUTES[taskType]) {
+      return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const modelOverride = modelOverrides?.[taskType];
+    let result: any;
+
+    switch (taskType) {
+      case "analyze-script":
+        result = await handleAnalyzeScript(LOVABLE_API_KEY, body, modelOverride);
+        break;
+
+      case "write-cinematic-prompt":
+        result = await handleWriteCinematicPrompt(LOVABLE_API_KEY, body, modelOverride);
+        break;
+
+      case "score-prompt-quality":
+        result = await handleScorePromptQuality(LOVABLE_API_KEY, body, modelOverride);
+        break;
+
+      case "improve-prompt":
+        result = await handleImprovePrompt(LOVABLE_API_KEY, body, modelOverride);
+        break;
+
+      case "rewrite-cta":
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
+          "You are a persuasive B2B copywriter. Rewrite this CTA to be more compelling, urgent, and action-oriented. Keep it under 15 words.", modelOverride);
+        break;
+
+      case "generate-subtitles":
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
+          "Extract timed subtitle segments from this ad script. Return one subtitle per line in SRT-like format: index, timestamp range, text.", modelOverride);
+        break;
+
+      case "generate-voiceover":
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
+          "Rewrite this ad script into smooth voiceover narration text. Natural conversational tone, concise, punchy. Remove stage directions.", modelOverride);
+        break;
+
+      case "classify-scene":
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
+          "Classify this scene description into one category: cinematic-hero, product-demo, testimonial, data-visual, cta-card, transition, b-roll. Return just the category.", modelOverride);
+        break;
+
+      case "quality-review":
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
+          "Review this full storyboard for quality issues: weak scenes, inconsistency, bland visuals, broken continuity, or off-brand messaging. Return a structured critique with scene-level notes.", modelOverride);
+        break;
+
+      case "optimize-ad":
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
+          "Polish and optimize this ad storyboard for maximum impact. Suggest pacing improvements, stronger emotional arcs, and visual upgrades.", modelOverride);
+        break;
+
+      case "continuity-check":
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
+          "Compare these two adjacent scene prompts and identify continuity issues: lighting changes, environment shifts, subject inconsistencies, camera style breaks. Return a list of issues found.", modelOverride);
+        break;
+
+      case "analyze-reference":
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
+          "Analyze this reference image/asset description and extract: dominant colors, environment type, lighting style, subjects present, mood, textures. Return structured analysis.", modelOverride);
+        break;
+
+      case "generate-storyboard":
+        // Reuse analyze-script handler for this action
+        result = await handleAnalyzeScript(LOVABLE_API_KEY, body, modelOverride);
+        break;
+
+      default:
+        return new Response(JSON.stringify({ error: `Unhandled action: ${action}` }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+    }
+
+    return new Response(JSON.stringify({
+      result: result.result,
+      modelUsed: result.modelUsed,
+      fallbackUsed: result.fallbackUsed,
+      taskType,
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (e) {
+    console.error("ad-director-ai error:", e);
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

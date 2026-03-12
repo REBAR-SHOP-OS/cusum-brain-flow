@@ -13,11 +13,14 @@ interface StoryboardTimelineProps {
   onRegenerate: (id: string) => void;
   onGenerateAll: () => void;
   generatingAny: boolean;
+  onImprovePrompt?: (id: string) => void;
+  improvingSceneId?: string | null;
 }
 
 export function StoryboardTimeline({
   segments, storyboard, clips,
   onPromptChange, onContinuityToggle, onRegenerate, onGenerateAll, generatingAny,
+  onImprovePrompt, improvingSceneId,
 }: StoryboardTimelineProps) {
   const completedCount = clips.filter(c => c.status === "completed").length;
   const totalCount = storyboard.length;
@@ -72,6 +75,8 @@ export function StoryboardTimeline({
               onContinuityToggle={onContinuityToggle}
               onRegenerate={onRegenerate}
               canRegenerate={!generatingAny}
+              onImprovePrompt={onImprovePrompt}
+              improvingSceneId={improvingSceneId}
             />
           );
         })}

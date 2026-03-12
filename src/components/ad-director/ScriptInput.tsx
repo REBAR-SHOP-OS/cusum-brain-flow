@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Upload, Sparkles, FileText, Image as ImageIcon, Music, Mic, Loader2 } from "lucide-react";
-import { DEMO_SCRIPT, type BrandProfile, DEFAULT_BRAND } from "@/types/adDirector";
+import { DEMO_SCRIPT, type BrandProfile, type ModelOverrides, DEFAULT_BRAND } from "@/types/adDirector";
+import { AdvancedModelSettings } from "./AdvancedModelSettings";
 import { cn } from "@/lib/utils";
 
 interface ScriptInputProps {
@@ -18,9 +19,11 @@ interface ScriptInputProps {
   analysisStatus?: string;
   assets: File[];
   onAssetsChange: (files: File[]) => void;
+  modelOverrides: ModelOverrides;
+  onModelOverridesChange: (overrides: ModelOverrides) => void;
 }
 
-export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange }: ScriptInputProps) {
+export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange, modelOverrides, onModelOverridesChange }: ScriptInputProps) {
   const [showBrand, setShowBrand] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,6 +120,12 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
           </div>
         )}
       </div>
+
+      {/* Advanced Model Settings */}
+      <AdvancedModelSettings
+        modelOverrides={modelOverrides}
+        onModelOverridesChange={onModelOverridesChange}
+      />
 
       {/* Asset Upload */}
       <div className="space-y-3">
