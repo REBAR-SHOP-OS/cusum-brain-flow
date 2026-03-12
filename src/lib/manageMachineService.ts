@@ -36,7 +36,8 @@ export interface ManageMachineParams {
  * Requires admin or workshop role. Office users are blocked server-side.
  */
 export async function manageMachine(
-  params: ManageMachineParams
+  params: ManageMachineParams,
+  options?: { timeoutMs?: number; retries?: number },
 ): Promise<{ success: boolean; machineId: string; action: string; machineRunId?: string }> {
   // Client-side input validation
   if (!params.machineId || params.machineId === "null" || params.machineId === "undefined") {
@@ -52,5 +53,5 @@ export async function manageMachine(
     throw new Error("scrapQty cannot be negative");
   }
 
-  return invokeEdgeFunction("manage-machine", params as any);
+  return invokeEdgeFunction("manage-machine", params as any, options);
 }
