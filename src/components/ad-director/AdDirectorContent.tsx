@@ -5,7 +5,8 @@ import { ScriptInput } from "./ScriptInput";
 import { StoryboardTimeline } from "./StoryboardTimeline";
 import { ContinuityInspector } from "./ContinuityInspector";
 import { FinalPreview } from "./FinalPreview";
-import { FileText, Layers, Film } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { FileText, Layers, Film, Loader2 } from "lucide-react";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
   type ContinuityProfile, type ClipOutput, type ModelOverrides,
