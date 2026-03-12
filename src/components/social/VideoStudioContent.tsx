@@ -402,9 +402,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         pollTimerRef.current = setTimeout(pollMultiScene, 5000);
       } else {
         const data = await invokeEdgeFunction("generate-video", {
-          action: "generate", provider: currentMode.provider, prompt: finalPrompt,
+          action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt,
           duration: requestedDuration,
-          model: currentMode.model === "sora-2-pro" ? "sora-2-pro" : currentMode.model === "sora-2" ? "sora-2" : undefined,
+          model: selectedModel,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
