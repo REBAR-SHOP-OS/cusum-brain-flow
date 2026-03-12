@@ -168,6 +168,7 @@ export function AdDirectorContent() {
 
       // Build final storyboard
       setAnalysisStatus("Assembling storyboard...");
+      setAnalysisProgress(95);
       const storyboardWithDefaults: StoryboardScene[] = rawStoryboard.map((s, idx) => ({
         ...s,
         prompt: finalPrompts[idx].prompt,
