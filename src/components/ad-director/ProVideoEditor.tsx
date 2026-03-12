@@ -58,6 +58,7 @@ interface ProVideoEditorProps {
   onBack: () => void;
   onExport: () => void;
   exporting: boolean;
+  onOpenExportDialog?: () => void;
   onRegenerateScene?: (sceneId: string) => void;
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
   onUpdateSegment?: (id: string, text: string) => void;
@@ -69,7 +70,7 @@ interface ProVideoEditorProps {
 
 export function ProVideoEditor({
   clips, storyboard, segments, brand,
-  finalVideoUrl, onBack, onExport, exporting,
+  finalVideoUrl, onBack, onExport, exporting, onOpenExportDialog,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming,
   onUpdateStoryboard, onUpdateBrand, onMusicSelect,
 }: ProVideoEditorProps) {
@@ -721,7 +722,7 @@ export function ProVideoEditor({
         <Button
           size="sm"
           className="gap-1.5 text-xs h-7 bg-gradient-to-r from-primary to-emerald-500 hover:from-primary/90 hover:to-emerald-400"
-          onClick={onExport}
+          onClick={() => onOpenExportDialog ? onOpenExportDialog() : onExport()}
           disabled={exporting || clips.every(c => c.status !== "completed")}
         >
           <Download className="w-3.5 h-3.5" />

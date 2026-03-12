@@ -6,6 +6,7 @@ import { ScriptInput } from "./ScriptInput";
 import { StoryboardTimeline } from "./StoryboardTimeline";
 import { ContinuityInspector } from "./ContinuityInspector";
 import { FinalPreview } from "./FinalPreview";
+import { ExportDialog } from "./ExportDialog";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
 import { FileText, Layers, Film, Loader2, ArrowLeft } from "lucide-react";
@@ -96,6 +97,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [endCardEnabled, setEndCardEnabled] = useState(true);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   // Logo watermark is always mandatory when logo exists — no toggle
   const logoEnabled = !!brand.logoUrl;
 
@@ -881,6 +883,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
                 onExport={handleExport}
                 exporting={exporting}
                 finalVideoUrl={finalVideoUrl}
+                onOpenExportDialog={() => setExportDialogOpen(true)}
               />
             </div>
           </>
@@ -897,6 +900,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
               onBack={() => setStep("storyboard")}
               onExport={handleExport}
               exporting={exporting}
+              onOpenExportDialog={() => setExportDialogOpen(true)}
               onRegenerateScene={generateScene}
               onUpdateClipUrl={(sceneId, url) => setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: url, progress: 100 } : c))}
               onUpdateSegment={(id, text) => setSegments(prev => prev.map(s => s.id === id ? { ...s, text } : s))}
@@ -908,6 +912,15 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
           </div>
         )}
       </div>
+
+      <ExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        finalVideoUrl={finalVideoUrl}
+        brandName={brand.name}
+        onExport={handleExport}
+        exporting={exporting}
+      />
     </div>
   );
 }

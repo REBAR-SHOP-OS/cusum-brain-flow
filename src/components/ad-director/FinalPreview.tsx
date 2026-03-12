@@ -21,6 +21,7 @@ interface FinalPreviewProps {
   onExport: () => void;
   exporting: boolean;
   finalVideoUrl: string | null;
+  onOpenExportDialog?: () => void;
   // Render pipeline state (optional — backward compatible)
   renderStatus?: RenderStatus;
   renderError?: { message: string; stage: string } | null;
@@ -66,7 +67,7 @@ export function FinalPreview({
   clips, storyboard, segments,
   subtitlesEnabled, logoEnabled, endCardEnabled,
   onToggleSubtitles, onToggleLogo, onToggleEndCard,
-  onExport, exporting, finalVideoUrl,
+  onExport, exporting, finalVideoUrl, onOpenExportDialog,
   renderStatus, renderError, renderProgress, renderLog,
   onRetry, onDownloadLog,
 }: FinalPreviewProps) {
@@ -199,7 +200,13 @@ export function FinalPreview({
 
       {/* Export */}
       <Button
-        onClick={onExport}
+        onClick={() => {
+          if (isAssembled && finalVideoUrl && onOpenExportDialog) {
+            onOpenExportDialog();
+          } else {
+            onExport();
+          }
+        }}
         disabled={!allCompleted || exporting || isRendering}
         className="w-full h-10 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-sm font-semibold"
       >
