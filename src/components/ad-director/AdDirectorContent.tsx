@@ -55,6 +55,8 @@ export function AdDirectorContent() {
       setBrand(savedBrand);
     }
   }, [savedBrand, brandLoading]);
+
+  const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
   const [analysisProgress, setAnalysisProgress] = useState(0);
