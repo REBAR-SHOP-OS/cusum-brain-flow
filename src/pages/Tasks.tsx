@@ -1035,6 +1035,15 @@ export default function Tasks() {
                               )}
                             </div>
                           </button>
+                          {currentProfileId === RADIN_PROFILE_ID && task.assigned_to === RADIN_PROFILE_ID && task.status !== "completed" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); transferToSattar(task.id); }}
+                              title="Transfer to Sattar"
+                              className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 text-muted-foreground hover:text-primary"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => deleteTask(task.id)}
                             className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 text-muted-foreground hover:text-destructive"
