@@ -1114,6 +1114,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 <div className="space-y-4 py-4">
                   <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-center">
                     <p className="text-sm font-medium text-destructive">{error}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Credits have been automatically refunded.</p>
                   </div>
                   <Button variant="outline" className="w-full gap-2" onClick={handleReset}>
                     <RotateCcw className="w-4 h-4" /> Try Again

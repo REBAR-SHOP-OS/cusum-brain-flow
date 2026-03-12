@@ -282,7 +282,7 @@ export function VideoEditor({
       {/* Tool Grid */}
       <div>
         <Label className="text-xs text-muted-foreground mb-2 block">Editing Tools</Label>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {editTools.map((tool) => (
             <button
               key={tool.id}
