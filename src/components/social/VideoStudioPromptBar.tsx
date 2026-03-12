@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 
 type GenerationMode = "fast" | "balanced" | "premium";
+type MediaType = "video" | "image" | "audio";
 
 interface ModeOption {
   id: GenerationMode;
@@ -34,11 +35,31 @@ const durationOptionsMap: Record<GenerationMode, { value: string; label: string 
   premium: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }],
 };
 
-const suggestions = [
+const audioDurationOptions = [
+  { value: "5", label: "5s" },
+  { value: "15", label: "15s" },
+  { value: "30", label: "30s" },
+];
+
+const videoSuggestions = [
   "drone shot of a construction site at golden hour",
   "machine cutting steel bars fast with sparks",
   "workers installing rebar cages on a bridge",
   "premium product showcase with cinematic lighting",
+];
+
+const imageSuggestions = [
+  "steel rebar cage close-up with dramatic lighting",
+  "modern construction site aerial view",
+  "industrial machinery product photo",
+  "team photo on a construction site",
+];
+
+const audioSuggestions = [
+  "upbeat corporate background music",
+  "construction site ambient sounds with machinery",
+  "cinematic epic orchestral score",
+  "industrial metallic sound effects",
 ];
 
 interface VideoStudioPromptBarProps {
@@ -63,6 +84,10 @@ interface VideoStudioPromptBarProps {
   onGenerate: () => void;
   referenceImage?: string | null;
   onReferenceImageChange?: (url: string | null) => void;
+  mediaType: MediaType;
+  onMediaTypeChange: (t: MediaType) => void;
+  audioType?: "music" | "sfx";
+  onAudioTypeChange?: (t: "music" | "sfx") => void;
 }
 
 export function VideoStudioPromptBar({
@@ -71,6 +96,7 @@ export function VideoStudioPromptBar({
   showEngineered, onToggleEngineered, engineeredPrompt, intent,
   isConstructionRelated, creditCost, remaining, canGenerate,
   isGenerating, isTransforming, onGenerate, referenceImage, onReferenceImageChange,
+  mediaType, onMediaTypeChange, audioType = "music", onAudioTypeChange,
 }: VideoStudioPromptBarProps) {
   const [modeOpen, setModeOpen] = useState(false);
   const [durationOpen, setDurationOpen] = useState(false);
@@ -80,6 +106,21 @@ export function VideoStudioPromptBar({
   const currentMode = modes.find(m => m.id === mode) || modes[1];
   const currentAspect = aspectOptions.find(a => a.value === aspectRatio) || aspectOptions[0];
   const currentDuration = durationOptionsMap[mode].find(d => d.value === duration) || durationOptionsMap[mode][0];
+  const currentAudioDuration = audioDurationOptions.find(d => d.value === duration) || audioDurationOptions[1];
+
+  const suggestions = mediaType === "image" ? imageSuggestions : mediaType === "audio" ? audioSuggestions : videoSuggestions;
+  const placeholder = mediaType === "image"
+    ? "Describe the image you want to create..."
+    : mediaType === "audio"
+    ? "Describe the sound or music you want..."
+    : "Describe the video you want to create...";
+
+  const generateLabel = mediaType === "image" ? "Generate" : mediaType === "audio" ? "Generate" : "Generate";
+  const footerText = mediaType === "image"
+    ? "⌘+Enter to generate • Powered by GPT Image & DALL-E"
+    : mediaType === "audio"
+    ? "⌘+Enter to generate • Powered by ElevenLabs"
+    : "⌘+Enter to generate • Powered by Google Veo 3.1 & OpenAI Sora";
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -90,7 +131,7 @@ export function VideoStudioPromptBar({
 
   return (
     <div className="w-full">
-      {/* Suggestion chips - shown when prompt is empty */}
+      {/* Suggestion chips */}
       {!rawPrompt.trim() && (
         <div className="flex flex-wrap gap-2 mb-3 px-1">
           {suggestions.map((s, i) => (
@@ -111,13 +152,40 @@ export function VideoStudioPromptBar({
         <div className="flex items-start gap-0">
           {/* Left icon strip */}
           <div className="flex flex-col gap-1 p-3 pr-0">
-            <button className="w-9 h-9 rounded-lg flex items-center justify-center bg-muted/50 text-muted-foreground/50 cursor-default" title="Image mode (coming soon)">
+            <button
+              onClick={() => onMediaTypeChange("image")}
+              className={cn(
+                "w-9 h-9 rounded-lg flex items-center justify-center transition-colors",
+                mediaType === "image"
+                  ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+              title="Image mode"
+            >
               <Image className="w-4 h-4" />
             </button>
-            <button className="w-9 h-9 rounded-lg flex items-center justify-center bg-primary/15 text-primary ring-1 ring-primary/30" title="Video mode">
+            <button
+              onClick={() => onMediaTypeChange("video")}
+              className={cn(
+                "w-9 h-9 rounded-lg flex items-center justify-center transition-colors",
+                mediaType === "video"
+                  ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+              title="Video mode"
+            >
               <Video className="w-4 h-4" />
             </button>
-            <button className="w-9 h-9 rounded-lg flex items-center justify-center bg-muted/50 text-muted-foreground/50 cursor-default" title="Audio mode (coming soon)">
+            <button
+              onClick={() => onMediaTypeChange("audio")}
+              className={cn(
+                "w-9 h-9 rounded-lg flex items-center justify-center transition-colors",
+                mediaType === "audio"
+                  ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+              title="Audio mode"
+            >
               <Music className="w-4 h-4" />
             </button>
           </div>
@@ -127,7 +195,7 @@ export function VideoStudioPromptBar({
             <textarea
               value={rawPrompt}
               onChange={(e) => onPromptChange(e.target.value)}
-              placeholder="Describe the video you want to create..."
+              placeholder={placeholder}
               disabled={isGenerating || isTransforming}
               rows={3}
               className="w-full bg-transparent text-foreground text-sm placeholder:text-muted-foreground/60 resize-none outline-none border-none focus:ring-0 leading-relaxed"
@@ -139,7 +207,7 @@ export function VideoStudioPromptBar({
               }}
             />
             {/* Reference image preview */}
-            {referenceImage && (
+            {referenceImage && (mediaType === "video" || mediaType === "image") && (
               <div className="flex items-center gap-2 mt-1">
                 <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50">
                   <img src={referenceImage} alt="Reference" className="w-full h-full object-cover" />
@@ -172,108 +240,168 @@ export function VideoStudioPromptBar({
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              {isTransforming ? "Engineering..." : isGenerating ? "Generating..." : "Generate"}
+              {isTransforming ? "Engineering..." : isGenerating ? "Generating..." : generateLabel}
             </button>
           </div>
         </div>
 
         {/* Bottom: Pill chips row */}
         <div className="flex items-center gap-2 px-3 pb-3 pt-0 flex-wrap">
-          {/* Mode pill */}
-          <Popover open={modeOpen} onOpenChange={setModeOpen}>
-            <PopoverTrigger asChild>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
-                {currentMode.icon}
-                {currentMode.label}
-                <ChevronDown className="w-3 h-3 opacity-50" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-44 p-1" align="start">
-              {modes.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => { onModeChange(m.id); setModeOpen(false); }}
-                  className={cn(
-                    "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-                    mode === m.id ? "bg-primary/10 text-primary" : "hover:bg-muted"
-                  )}
-                >
-                  {m.icon}
-                  <span className="flex-1 text-left">{m.label}</span>
-                  <span className="text-[10px] text-muted-foreground">{m.badge}</span>
+          {/* Mode pill — video only */}
+          {mediaType === "video" && (
+            <Popover open={modeOpen} onOpenChange={setModeOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
+                  {currentMode.icon}
+                  {currentMode.label}
+                  <ChevronDown className="w-3 h-3 opacity-50" />
                 </button>
-              ))}
-            </PopoverContent>
-          </Popover>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-1" align="start">
+                {modes.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => { onModeChange(m.id); setModeOpen(false); }}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+                      mode === m.id ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    {m.icon}
+                    <span className="flex-1 text-left">{m.label}</span>
+                    <span className="text-[10px] text-muted-foreground">{m.badge}</span>
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
 
-          {/* Aspect ratio pill */}
-          <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
-            <PopoverTrigger asChild>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
-                <span>{currentAspect.icon}</span>
-                {currentAspect.label}
-                <ChevronDown className="w-3 h-3 opacity-50" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-36 p-1" align="start">
-              {aspectOptions.map((a) => (
-                <button
-                  key={a.value}
-                  onClick={() => { onAspectRatioChange(a.value); setAspectOpen(false); }}
-                  className={cn(
-                    "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-                    aspectRatio === a.value ? "bg-primary/10 text-primary" : "hover:bg-muted"
-                  )}
-                >
-                  <span>{a.icon}</span>
-                  {a.label}
+          {/* Aspect ratio pill — video & image only */}
+          {(mediaType === "video" || mediaType === "image") && (
+            <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
+                  <span>{currentAspect.icon}</span>
+                  {currentAspect.label}
+                  <ChevronDown className="w-3 h-3 opacity-50" />
                 </button>
-              ))}
-            </PopoverContent>
-          </Popover>
+              </PopoverTrigger>
+              <PopoverContent className="w-36 p-1" align="start">
+                {aspectOptions.map((a) => (
+                  <button
+                    key={a.value}
+                    onClick={() => { onAspectRatioChange(a.value); setAspectOpen(false); }}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+                      aspectRatio === a.value ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    <span>{a.icon}</span>
+                    {a.label}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
 
-          {/* Duration pill */}
-          <Popover open={durationOpen} onOpenChange={setDurationOpen}>
-            <PopoverTrigger asChild>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
-                ⏱ {currentDuration.label}
-                <ChevronDown className="w-3 h-3 opacity-50" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-32 p-1" align="start">
-              {durationOptionsMap[mode].map((d) => (
-                <button
-                  key={d.value}
-                  onClick={() => { onDurationChange(d.value); setDurationOpen(false); }}
-                  className={cn(
-                    "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-                    duration === d.value ? "bg-primary/10 text-primary" : "hover:bg-muted"
-                  )}
-                >
-                  {d.label}
+          {/* Duration pill — video mode */}
+          {mediaType === "video" && (
+            <Popover open={durationOpen} onOpenChange={setDurationOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
+                  ⏱ {currentDuration.label}
+                  <ChevronDown className="w-3 h-3 opacity-50" />
                 </button>
-              ))}
-            </PopoverContent>
-          </Popover>
+              </PopoverTrigger>
+              <PopoverContent className="w-32 p-1" align="start">
+                {durationOptionsMap[mode].map((d) => (
+                  <button
+                    key={d.value}
+                    onClick={() => { onDurationChange(d.value); setDurationOpen(false); }}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+                      duration === d.value ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
 
-          {/* Reference image upload */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors"
-          >
-            <Upload className="w-3 h-3" />
-            {referenceImage ? "Change ref" : "Ref image"}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleImageUpload}
-            className="hidden"
-          />
+          {/* Audio duration pill — audio mode */}
+          {mediaType === "audio" && (
+            <Popover open={durationOpen} onOpenChange={setDurationOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
+                  ⏱ {currentAudioDuration.label}
+                  <ChevronDown className="w-3 h-3 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-32 p-1" align="start">
+                {audioDurationOptions.map((d) => (
+                  <button
+                    key={d.value}
+                    onClick={() => { onDurationChange(d.value); setDurationOpen(false); }}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+                      duration === d.value ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
 
-          {/* Engineered prompt toggle */}
-          {engineeredPrompt && (
+          {/* Music / SFX toggle — audio mode */}
+          {mediaType === "audio" && (
+            <div className="flex items-center gap-1 rounded-full border border-border/30 bg-muted/60 p-0.5">
+              <button
+                onClick={() => onAudioTypeChange?.("music")}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-xs font-medium transition-colors",
+                  audioType === "music" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                🎵 Music
+              </button>
+              <button
+                onClick={() => onAudioTypeChange?.("sfx")}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-xs font-medium transition-colors",
+                  audioType === "sfx" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                🔊 SFX
+              </button>
+            </div>
+          )}
+
+          {/* Reference image upload — video & image only */}
+          {(mediaType === "video" || mediaType === "image") && (
+            <>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors"
+              >
+                <Upload className="w-3 h-3" />
+                {referenceImage ? "Change ref" : "Ref image"}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+            </>
+          )}
+
+          {/* Engineered prompt toggle — video only */}
+          {mediaType === "video" && engineeredPrompt && (
             <button
               onClick={onToggleEngineered}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors"
@@ -283,13 +411,13 @@ export function VideoStudioPromptBar({
             </button>
           )}
 
-          {/* Intent badge */}
-          {intent && intent !== "cinematic_broll" && (
+          {/* Intent badge — video only */}
+          {mediaType === "video" && intent && intent !== "cinematic_broll" && (
             <Badge variant="outline" className="text-[10px] h-5 px-2 bg-primary/10 text-primary border-primary/20 rounded-full">
               {intent.replace(/_/g, " ")}
             </Badge>
           )}
-          {isConstructionRelated && (
+          {mediaType === "video" && isConstructionRelated && (
             <Badge variant="outline" className="text-[10px] h-5 px-2 bg-warning/10 text-warning border-warning/20 rounded-full">
               Construction
             </Badge>
@@ -309,7 +437,7 @@ export function VideoStudioPromptBar({
         </div>
 
         {/* Engineered prompt preview */}
-        {showEngineered && engineeredPrompt && (
+        {showEngineered && engineeredPrompt && mediaType === "video" && (
           <div className="px-3 pb-3">
             <div className="p-3 rounded-lg bg-muted/30 border border-border/30 text-xs text-muted-foreground leading-relaxed">
               {engineeredPrompt}
@@ -319,7 +447,7 @@ export function VideoStudioPromptBar({
       </div>
 
       <p className="text-[10px] text-center text-muted-foreground/50 mt-2">
-        ⌘+Enter to generate • Powered by Google Veo 3.1 &amp; OpenAI Sora
+        {footerText}
       </p>
     </div>
   );

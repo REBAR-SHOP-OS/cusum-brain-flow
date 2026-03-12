@@ -70,6 +70,8 @@ interface VideoStudioContentProps {
   onVideoReady?: (videoUrl: string) => void;
 }
 
+type MediaType = "video" | "image" | "audio";
+
 export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStudioContentProps) {
   const { brandKit } = useBrandKit();
   const { toast } = useToast();
@@ -87,6 +89,15 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [showEngineered, setShowEngineered] = useState(false);
   const [activeTab, setActiveTab] = useState("generate");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<MediaType>("video");
+
+  // Image generation state
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [imageGenerating, setImageGenerating] = useState(false);
+
+  // Standalone audio generation state (for audio mode)
+  const [standaloneAudioUrl, setStandaloneAudioUrl] = useState<string | null>(null);
+  const [standaloneAudioGenerating, setStandaloneAudioGenerating] = useState(false);
 
   // Generation state
   const [status, setStatus] = useState<Status>("idle");
