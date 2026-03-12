@@ -550,7 +550,7 @@ export function AdDirectorContent() {
             : "Exporting...";
         const progressValue = analyzing ? analysisProgress : generatingAny ? genProgress : undefined;
         return (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="flex items-center gap-3">
               <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
               <span className="text-sm font-medium text-foreground">{statusText}</span>
