@@ -639,14 +639,30 @@ export function ProVideoEditor({
       .map(x => x.i);
 
     const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
-    if (nextIdx !== undefined) {
+    if (nextIdx === undefined) {
+      setIsPlaying(false);
+      return;
+    }
+
+    // If voiceover is still playing, wait for it to finish before advancing
+    const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
+    if (voStillPlaying) {
+      if (videoRef.current) videoRef.current.pause();
+      audioRef.current!.onended = () => {
+        doAdvance(nextIdx);
+      };
+      return;
+    }
+
+    doAdvance(nextIdx);
+
+    function doAdvance(idx: number) {
       setSceneTransition(true);
       sceneTransitioning.current = true;
       setTimeout(() => {
         autoPlayPending.current = true;
-        setSelectedSceneIndex(nextIdx);
-        // Check if next scene is a static card — no video readyState to wait for
-        const nextScene = storyboard[nextIdx];
+        setSelectedSceneIndex(idx);
+        const nextScene = storyboard[idx];
         const nextClip = clips.find(c => c.sceneId === nextScene?.id);
         const nextIsStatic = nextScene?.generationMode === "static-card" || nextClip?.videoUrl?.startsWith("data:image/");
         if (nextIsStatic) {
@@ -655,7 +671,6 @@ export function ProVideoEditor({
           setIsPlaying(true);
           autoPlayPending.current = false;
         } else {
-          // Wait for new video to be ready before completing transition
           const checkReady = () => {
             if (videoRef.current && videoRef.current.readyState >= 3) {
               sceneTransitioning.current = false;
@@ -671,8 +686,6 @@ export function ProVideoEditor({
           setTimeout(checkReady, 50);
         }
       }, 500);
-    } else {
-      setIsPlaying(false);
     }
   }, [storyboard, clips, selectedSceneIndex]);
 
