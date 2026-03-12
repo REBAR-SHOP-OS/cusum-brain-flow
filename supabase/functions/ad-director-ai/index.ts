@@ -289,7 +289,7 @@ ALWAYS generate an opening establishing scene BEFORE the script narration begins
 - The brand logo will be overlaid automatically by the editing system — do NOT ask the video model to render any text or logo
 - Type this segment as "hook" with label "Cinematic Intro"
 - generationMode: "text-to-video"
-- Example: "Aerial drone shot descending through morning fog over a massive construction site, crane silhouettes against golden sunrise, shot on ARRI Alexa 35mm"
+- Example: "Aerial drone shot descending through morning fog over a massive construction site, crane silhouettes against golden sunrise, 35mm anamorphic lens, f/2.8, shallow depth of field"
 
 ### 2. BRANDED OUTRO / END CARD (Last Scene — last 3-4s)
 ALWAYS generate a closing branded end card as the FINAL scene:

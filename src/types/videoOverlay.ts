@@ -6,4 +6,5 @@ export interface VideoOverlay {
   content: string; // URL for logo, text string for text
   opacity: number; // 0-1
   sceneId: string;
+  animated?: boolean; // true = apply fade-in + scale animation
 }

@@ -1,29 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: "Animated Logo" Commands Trigger Regeneration Instead of Overlay
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problems Found
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-1. **Intent classification is too loose** — When the user types "create animated rebar.shop logo" in the AI command bar, the words "create" and "animated" cause the AI to classify it as a generative edit, triggering full video regeneration. The overlay classification rules don't mention animated logos explicitly.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-2. **ARRI Alexa example still in the prompt** (line 292) — Despite the rule on line 357 banning camera brand names, the intro scene example literally says `"shot on ARRI Alexa 35mm"`. The AI copies this example verbatim into generated prompts, causing brand names to render as garbled on-screen text.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Changes
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 1. `supabase/functions/edit-video-prompt/index.ts`
-- Expand the OVERLAY classification to explicitly include: "animated logo", "logo animation", "create logo", "logo intro", "brand intro animation"
-- Add a rule: any request mentioning "logo" is ALWAYS an overlay unless the user explicitly says to change the video content
-- Add an `"animated"` flag to the overlay response schema so the frontend can apply a CSS/JS animation (fade-in, scale, orbit, shimmer) to the logo overlay
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### 2. `supabase/functions/ad-director-ai/index.ts` (line 292)
-- Remove `"shot on ARRI Alexa 35mm"` from the intro example and replace with `"shot on 35mm anamorphic lens, f/2.8, shallow depth of field"`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 3. `src/components/ad-director/ProVideoEditor.tsx`
-- When an overlay response includes `animated: true`, apply a CSS animation class (e.g., `animate-fade-in` or a new `animate-logo-reveal`) to the overlay element instead of rendering it statically
-- Add animation keyframes for logo reveal: fade-in + slight scale from 0.8 to 1.0 over 1.5s
-
-## Files Modified
-- `supabase/functions/edit-video-prompt/index.ts` — expand overlay classification for logo/animation requests
-- `supabase/functions/ad-director-ai/index.ts` — fix ARRI example on line 292
-- `src/components/ad-director/ProVideoEditor.tsx` — add animated overlay rendering
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

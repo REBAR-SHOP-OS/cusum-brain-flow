@@ -103,6 +103,10 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.7" },
         },
+        "logo-reveal": {
+          "0%": { opacity: "0", transform: "scale(0.8)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -110,6 +114,7 @@ export default {
         "fade-in": "fade-in 0.2s ease-out",
         "slide-in": "slide-in 0.2s ease-out",
         "pulse-subtle": "pulse-subtle 2s ease-in-out infinite",
+        "logo-reveal": "logo-reveal 1.5s ease-out forwards",
       },
     },
   },
