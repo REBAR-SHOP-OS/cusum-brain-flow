@@ -1,23 +1,27 @@
 
 
-# Add 30s and 60s Duration Options to Video Studio
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
-## What changes
+### Problem
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-Add "30s" and "60s" duration options to all three video generation modes (Fast, Balanced, Premium). The existing multi-scene system already handles durations exceeding the per-clip max by splitting into multiple scenes and generating them in parallel.
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-## Technical changes
+### Plan
+Run a single database migration:
 
-### 1. `src/components/social/VideoStudioPromptBar.tsx`
-- Update `durationOptionsMap` for all three modes to include `30` and `60` values
-- These will appear in the duration popover dropdown
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
+```
 
-### 2. `src/components/social/VideoStudioContent.tsx`  
-- Update `modeConfigs` `durationOptions` arrays to include `30` and `60`
-- Update `maxClipDuration` — no change needed since multi-scene already kicks in when `requestedDuration > effectiveMaxClip`
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
 
-### How it works (already implemented)
-- When duration > `effectiveMaxClip` (8s for Wan, 8-12s for others), the system triggers `generate-multi` which splits into scenes automatically
-- For 30s: ~4 scenes of 8s each (Balanced/Wan) or 3 scenes of 12s (Fast/Premium)  
-- For 60s: ~8 scenes of 8s each (Balanced/Wan) or 5 scenes of 12s (Fast/Premium)
+No code changes needed — just the migration.
 

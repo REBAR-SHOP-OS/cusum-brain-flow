@@ -30,9 +30,9 @@ const aspectOptions = [
 ];
 
 const durationOptionsMap: Record<GenerationMode, { value: string; label: string }[]> = {
-  fast: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }],
-  balanced: [{ value: "4", label: "4s" }, { value: "6", label: "6s" }, { value: "8", label: "8s" }],
-  premium: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }],
+  fast: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
+  balanced: [{ value: "4", label: "4s" }, { value: "6", label: "6s" }, { value: "8", label: "8s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
+  premium: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
 };
 
 const audioDurationOptions = [
