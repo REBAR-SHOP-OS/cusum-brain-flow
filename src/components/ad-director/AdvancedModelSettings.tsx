@@ -80,6 +80,8 @@ export function AdvancedModelSettings({ modelOverrides, onModelOverridesChange }
                   {!manualMode && (
                     <span className="text-[9px] text-muted-foreground truncate block">
                       {AVAILABLE_MODELS.find(m => m.id === defaults.preferred)?.label || defaults.preferred}
+                      {" · "}
+                      <span className="text-foreground/50">{(defaults as any).provider}</span>
                     </span>
                   )}
                 </div>
