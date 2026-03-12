@@ -115,14 +115,21 @@ export function ProVideoEditor({
   const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
+  const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
+  const [voiceoverDurations, setVoiceoverDurations] = useState<Record<string, number>>({});
 
   // ─── Global timeline ───
   const sceneDurations = useMemo(() => {
-    return storyboard.map((scene, i) => {
+    return storyboard.map((scene) => {
+      const clipDur = clipDurations[scene.id];
+      const voDur = voiceoverDurations[scene.id];
       const seg = segments.find(s => s.id === scene.segmentId);
-      return seg ? seg.endTime - seg.startTime : 4;
+      const segDur = seg ? seg.endTime - seg.startTime : 4;
+      // Use the longest of clip vs voiceover duration, fall back to segment timing
+      const mediaDur = clipDur && voDur ? Math.max(clipDur, voDur) : (clipDur || voDur);
+      return mediaDur || segDur;
     });
-  }, [storyboard, segments]);
+  }, [storyboard, segments, clipDurations, voiceoverDurations]);
 
   const cumulativeStarts = useMemo(() => {
     const starts: number[] = [0];
@@ -236,6 +243,15 @@ export function ProVideoEditor({
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       const a = new Audio(vo.audioUrl);
       a.currentTime = videoRef.current?.currentTime ?? 0;
+      // Adjust voiceover playback rate if it's longer than the video clip
+      const sceneClipDur = clipDurations[sceneId!];
+      const sceneVoDur = voiceoverDurations[sceneId!];
+      if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
+        const ratio = sceneVoDur / sceneClipDur;
+        a.playbackRate = Math.min(ratio, 1.3); // cap at 1.3x speedup
+      } else {
+        a.playbackRate = 1;
+      }
       a.play().catch(() => {});
       audioRef.current = a;
       currentVoUrlRef.current = vo.audioUrl;
@@ -522,13 +538,20 @@ export function ProVideoEditor({
   };
 
   const handleLoaded = () => {
-    if (videoRef.current) setDuration(videoRef.current.duration);
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+      // Track actual clip duration keyed by scene ID
+      const sceneId = storyboard[selectedSceneIndex]?.id;
+      if (sceneId && videoRef.current.duration > 0) {
+        setClipDurations(prev => ({ ...prev, [sceneId]: videoRef.current!.duration }));
+      }
+    }
   };
 
   // ─── Auto-advance on video end with fade transition ───
   const [sceneTransition, setSceneTransition] = useState(false);
 
-  const handleVideoEnded = () => {
+  const advanceToNextScene = useCallback(() => {
     const completedIndices = storyboard
       .map((s, i) => ({ i, clip: clips.find(c => c.sceneId === s.id) }))
       .filter(x => x.clip?.status === "completed" && x.clip?.videoUrl)
@@ -536,17 +559,25 @@ export function ProVideoEditor({
 
     const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
     if (nextIdx !== undefined) {
-      // Fade out current scene
       setSceneTransition(true);
       setTimeout(() => {
         autoPlayPending.current = true;
         setSelectedSceneIndex(nextIdx);
-        // Fade in next scene
         setTimeout(() => setSceneTransition(false), 50);
       }, 300);
     } else {
       setIsPlaying(false);
     }
+  }, [storyboard, clips, selectedSceneIndex]);
+
+  const handleVideoEnded = () => {
+    // Check if voiceover is still playing — wait for it before advancing
+    const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
+    if (voStillPlaying) {
+      audioRef.current!.onended = () => advanceToNextScene();
+      return;
+    }
+    advanceToNextScene();
   };
 
   // ─── Global seek from timeline ───
@@ -604,6 +635,19 @@ export function ProVideoEditor({
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover" });
+        // Measure actual voiceover duration
+        try {
+          const tempAudio = new Audio(url);
+          await new Promise<void>((resolve) => {
+            tempAudio.addEventListener("loadedmetadata", () => {
+              if (tempAudio.duration && isFinite(tempAudio.duration)) {
+                setVoiceoverDurations(prev => ({ ...prev, [scene.id]: tempAudio.duration }));
+              }
+              resolve();
+            });
+            tempAudio.addEventListener("error", () => resolve());
+          });
+        } catch { /* ignore measurement errors */ }
       }
       // Replace voiceover tracks, keep music
       setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
