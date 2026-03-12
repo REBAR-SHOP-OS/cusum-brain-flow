@@ -131,7 +131,12 @@ async function callAI(
       throw new Error(response.status === 429 ? "Rate limited — please try again." : response.status === 402 ? "AI credits exhausted." : "AI generation failed");
     }
 
-    const data = await response.json();
+    const fallbackText = await response.text();
+    let data: any;
+    try { data = JSON.parse(fallbackText); } catch {
+      console.error("Fallback returned non-JSON:", fallbackText.slice(0, 300));
+      throw new Error("AI returned malformed response");
+    }
     return { data, modelUsed: route.fallback, fallbackUsed: true };
   }
 
