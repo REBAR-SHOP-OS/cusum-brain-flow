@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { VideoEditor } from "./VideoEditor";
 import { VideoToSocialPanel } from "./VideoToSocialPanel";
-import { VideoStudioPromptBar } from "./VideoStudioPromptBar";
+import { VideoStudioPromptBar, VIDEO_MODELS } from "./VideoStudioPromptBar";
 import { useVideoCredits } from "@/hooks/useVideoCredits";
 import { useGenerations } from "@/hooks/useGenerations";
 import { useToast } from "@/hooks/use-toast";
