@@ -900,6 +900,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
               onBack={() => setStep("storyboard")}
               onExport={handleExport}
               exporting={exporting}
+              onOpenExportDialog={() => setExportDialogOpen(true)}
               onRegenerateScene={generateScene}
               onUpdateClipUrl={(sceneId, url) => setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: url, progress: 100 } : c))}
               onUpdateSegment={(id, text) => setSegments(prev => prev.map(s => s.id === id ? { ...s, text } : s))}
