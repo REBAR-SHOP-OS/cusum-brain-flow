@@ -1,46 +1,57 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# LLM Token Usage Dashboard for CEO Portal
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## What
+Add a new card to the CEO Portal showing total AI/LLM token consumption broken down by 30/60/90 day windows, by provider (GPT vs Gemini), and by agent. This requires: a new logging table, updating the AI router to record usage after each call, and a new dashboard component.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Database
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### New table: `ai_usage_log`
+```sql
+CREATE TABLE public.ai_usage_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider text NOT NULL,        -- 'gpt' or 'gemini'
+  model text NOT NULL,            -- 'gemini-2.5-flash', 'gpt-4o', etc.
+  agent_name text,                -- which agent triggered it
+  prompt_tokens int NOT NULL DEFAULT 0,
+  completion_tokens int NOT NULL DEFAULT 0,
+  total_tokens int NOT NULL DEFAULT 0,
+  company_id uuid,
+  user_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+CREATE INDEX idx_ai_usage_created ON public.ai_usage_log(created_at);
+CREATE INDEX idx_ai_usage_provider ON public.ai_usage_log(provider);
+```
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+RLS: Allow authenticated select for super admin. Insert via service role only (edge functions).
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### New RPC: `get_ai_usage_summary`
+A database function that returns aggregated token counts grouped by provider and model for 30/60/90 day buckets, avoiding client-side aggregation of potentially thousands of rows.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+## Backend Changes
+
+### `supabase/functions/_shared/aiRouter.ts`
+After each successful `_callAISingle` call, extract `usage` from the API response (`data.usage.prompt_tokens`, `completion_tokens`, `total_tokens`) and insert a row into `ai_usage_log`. This is fire-and-forget (no await blocking the response). Add an optional `agentName` field to `AIRequestOptions` so callers can tag which agent made the call.
+
+## Frontend Changes
+
+### New: `src/components/ceo/AITokenUsageCard.tsx`
+A card component showing:
+- **Summary row**: Total tokens used in 30d / 60d / 90d with a tab or toggle selector
+- **By Provider**: Gemini vs GPT breakdown (bar or donut chart using Recharts)
+- **By Model**: Table showing each model's token usage
+- **By Agent**: Which agents consumed the most tokens
+- Trend sparkline showing daily usage over the selected period
+
+### `src/pages/CEOPortal.tsx`
+Add `<AITokenUsageCard />` after `BusinessHeartbeat`.
+
+## Files Changed
+- **Migration**: New `ai_usage_log` table + `get_ai_usage_summary` RPC
+- `supabase/functions/_shared/aiRouter.ts` — log usage after each call
+- `src/components/ceo/AITokenUsageCard.tsx` — new component
+- `src/pages/CEOPortal.tsx` — add card
+
