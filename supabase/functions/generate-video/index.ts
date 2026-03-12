@@ -874,12 +874,14 @@ serve(async (req) => {
             if (existingSceneUrls[job.sceneIndex]) {
               return { ...job, status: "completed", storageUrl: existingSceneUrls[job.sceneIndex] };
             }
-            const jobApiKey = job.provider === "veo" ? geminiKey : gptKey;
+            const jobApiKey = job.provider === "wan" ? dashscopeKey : job.provider === "veo" ? geminiKey : gptKey;
             if (!jobApiKey) return { ...job, status: "failed", error: "API key missing" };
 
-            const result = job.provider === "veo"
-              ? await veoPoll(jobApiKey, job.id)
-              : await soraPoll(jobApiKey, job.id);
+            const result = job.provider === "wan"
+              ? await wanPoll(jobApiKey, job.id)
+              : job.provider === "veo"
+                ? await veoPoll(jobApiKey, job.id)
+                : await soraPoll(jobApiKey, job.id);
             return { ...job, ...result };
           } catch (e) {
             return { ...job, status: "failed", error: e instanceof Error ? e.message : "Poll error" };
