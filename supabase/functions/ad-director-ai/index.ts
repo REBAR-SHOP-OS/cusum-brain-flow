@@ -615,7 +615,7 @@ Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
 ${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the first scene."}
 ${continuityProfile ? `Continuity: ${JSON.stringify(continuityProfile)}` : ""}`;
 
-  const { data, modelUsed, fallbackUsed } = await callAI(
+  return await callAIAndExtract(
     apiKey,
     MODEL_ROUTES["write-cinematic-prompt"],
     [{ role: "system", content: WRITE_CINEMATIC_PROMPT_SYSTEM }, { role: "user", content: userPrompt }],
@@ -623,8 +623,6 @@ ${continuityProfile ? `Continuity: ${JSON.stringify(continuityProfile)}` : ""}`;
     { type: "function", function: { name: "write_prompt" } },
     modelOverride,
   );
-
-  return { result: extractToolResult(data), modelUsed, fallbackUsed };
 }
 
 async function handleScorePromptQuality(apiKey: string, body: any, modelOverride?: string) {
