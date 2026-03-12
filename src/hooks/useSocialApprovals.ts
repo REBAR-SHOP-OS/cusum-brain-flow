@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +19,28 @@ export interface SocialApproval {
 export function useSocialApprovals() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Realtime: auto-refresh when any team member changes approvals
+  useEffect(() => {
+    const channel = supabase
+      .channel("social_approvals_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "social_approvals" },
+        () => {
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["social_approvals"] });
+          }, 500);
+        }
+      )
+      .subscribe();
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const { data: approvals, isLoading } = useQuery({
     queryKey: ["social_approvals"],
