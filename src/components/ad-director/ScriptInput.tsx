@@ -1,19 +1,16 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Upload, Sparkles, FileText, Image as ImageIcon, Music, Mic, Loader2,
-  Play, Palette, X, History, Trash2, FolderOpen
+  Play, X, History, Trash2, FolderOpen
 } from "lucide-react";
-import { DEMO_SCRIPT, type BrandProfile, type ModelOverrides, DEFAULT_BRAND } from "@/types/adDirector";
+import { DEMO_SCRIPT, type BrandProfile, type ModelOverrides } from "@/types/adDirector";
 import { VideoParameters, type VideoParams } from "./VideoParameters";
 import { cn } from "@/lib/utils";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { format } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface ScriptInputProps {
