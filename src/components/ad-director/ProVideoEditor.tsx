@@ -249,6 +249,27 @@ export function ProVideoEditor({
                 className="absolute bottom-14 right-4 h-10 w-auto object-contain opacity-70 pointer-events-none z-10"
               />
             )}
+            {/* AI-added overlays */}
+            {sceneOverlays.map(ov => (
+              <div
+                key={ov.id}
+                className="absolute pointer-events-none z-20"
+                style={{
+                  left: `${ov.position.x}%`,
+                  top: `${ov.position.y}%`,
+                  width: `${ov.size.w}%`,
+                  opacity: ov.opacity,
+                }}
+              >
+                {ov.kind === "logo" ? (
+                  <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain" />
+                ) : (
+                  <span className="text-white font-bold text-sm drop-shadow-lg bg-black/40 px-2 py-1 rounded">
+                    {ov.content}
+                  </span>
+                )}
+              </div>
+            ))}
           </>
         ) : (
           <div className="w-full aspect-video flex flex-col items-center justify-center bg-muted/10 gap-3">
