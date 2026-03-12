@@ -676,6 +676,8 @@ export function ProVideoEditor({
     }
     advanceToNextScene();
   }, [advanceToNextScene]);
+  // Keep ref in sync for static card timer
+  handleVideoEndedRef.current = handleVideoEnded;
 
   // ─── Global seek from timeline ───
   const handleGlobalSeek = (globalTimeSec: number) => {
