@@ -459,13 +459,27 @@ export function AdDirectorContent() {
 
       if (orderedClips.length === 0) throw new Error("No completed clips in storyboard order");
 
-      // 2. Stitch clips into one continuous video
-      let stitchedUrl: string;
-      if (orderedClips.length === 1) {
-        stitchedUrl = orderedClips[0].videoUrl;
-      } else {
-        stitchedUrl = await stitchClips(orderedClips);
-      }
+      // 2. Stitch clips into one continuous video with overlays
+      const stitchedUrl = await stitchClips(orderedClips, {
+        logo: {
+          url: brand.logoUrl || "",
+          enabled: logoEnabled && !!brand.logoUrl,
+          size: 80,
+        },
+        endCard: {
+          enabled: endCardEnabled,
+          brandName: brand.name,
+          tagline: brand.tagline,
+          website: brand.website,
+          primaryColor: brand.primaryColor,
+          bgColor: brand.secondaryColor,
+          logoUrl: brand.logoUrl,
+        },
+        subtitles: {
+          enabled: subtitlesEnabled,
+          segments: segments.map(s => ({ text: s.text, startTime: s.startTime, endTime: s.endTime })),
+        },
+      });
 
       // 3. Generate voiceover from full script and merge
       let finalUrl = stitchedUrl;
@@ -504,7 +518,7 @@ export function AdDirectorContent() {
     } finally {
       setExporting(false);
     }
-  }, [clips, storyboard, segments, toast]);
+  }, [clips, storyboard, segments, brand, logoEnabled, endCardEnabled, subtitlesEnabled, toast]);
 
   const handleDownload = () => {
     if (!finalVideoUrl) return;
