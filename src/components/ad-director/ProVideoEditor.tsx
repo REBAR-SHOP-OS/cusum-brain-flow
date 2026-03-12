@@ -180,14 +180,34 @@ export function ProVideoEditor({
     }
   }, [selectedSceneIndex]);
 
-  // Sync voiceover audio with playback
+  // Sync voiceover audio with video playback (time-locked)
   useEffect(() => {
     const sceneId = storyboard[selectedSceneIndex]?.id;
     const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
     if (vo && isPlaying && !isMuted) {
       const a = new Audio(vo.audioUrl);
+      a.currentTime = videoRef.current?.currentTime ?? 0;
       a.play().catch(() => {});
       audioRef.current = a;
+
+      // Keep voiceover in sync with video time
+      const syncHandler = () => {
+        if (audioRef.current && videoRef.current) {
+          const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
+          if (drift > 0.3) {
+            audioRef.current.currentTime = videoRef.current.currentTime;
+          }
+        }
+      };
+      const vid = videoRef.current;
+      vid?.addEventListener("timeupdate", syncHandler);
+      return () => {
+        vid?.removeEventListener("timeupdate", syncHandler);
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+      };
     }
     return () => {
       if (audioRef.current) {
@@ -259,9 +279,10 @@ export function ProVideoEditor({
     if (videoRef.current) setDuration(videoRef.current.duration);
   };
 
-  // ─── Auto-advance on video end ───
+  // ─── Auto-advance on video end with fade transition ───
+  const [sceneTransition, setSceneTransition] = useState(false);
+
   const handleVideoEnded = () => {
-    // Find the next completed clip
     const completedIndices = storyboard
       .map((s, i) => ({ i, clip: clips.find(c => c.sceneId === s.id) }))
       .filter(x => x.clip?.status === "completed" && x.clip?.videoUrl)
@@ -269,8 +290,14 @@ export function ProVideoEditor({
 
     const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
     if (nextIdx !== undefined) {
-      autoPlayPending.current = true;
-      setSelectedSceneIndex(nextIdx);
+      // Fade out current scene
+      setSceneTransition(true);
+      setTimeout(() => {
+        autoPlayPending.current = true;
+        setSelectedSceneIndex(nextIdx);
+        // Fade in next scene
+        setTimeout(() => setSceneTransition(false), 50);
+      }, 300);
     } else {
       setIsPlaying(false);
     }
@@ -576,7 +603,7 @@ export function ProVideoEditor({
                 <video
                   ref={videoRef}
                   src={videoSrc}
-                  className="max-w-full max-h-full object-contain"
+                  className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
                   muted={isMuted}
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoaded}
