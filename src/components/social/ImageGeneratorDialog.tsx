@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp, Bird, Building2, HardHat, Landmark, TreePine, Users, Bot, Package, type LucideIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: string }[] = [
   { id: "bird", label: "Birds", icon: Bird, promptTag: "birds in the sky" },
@@ -14,6 +15,7 @@ const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: s
   { id: "workers", label: "Workers", icon: Users, promptTag: "construction workers at work" },
   { id: "ai", label: "AI & Build", icon: Bot, promptTag: "AI technology in construction" },
   { id: "products", label: "Our Products", icon: Package, promptTag: "rebar stirrups, ties, and accessories" },
+  { id: "logo", label: "Logo", icon: Stamp, promptTag: "with company branding" },
 ];
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
@@ -131,8 +133,9 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
       let finalImageUrl = data.imageUrl;
 
-      // Apply brand logo overlay if available
-      if (brandKit?.logo_url && finalImageUrl) {
+      // Apply brand logo overlay if logo theme selected OR brandKit logo available
+      const forceLogoOverlay = selectedThemes.has("logo");
+      if ((forceLogoOverlay || brandKit?.logo_url) && brandKit?.logo_url && finalImageUrl) {
         try {
           setStatus("branding");
           finalImageUrl = await applyLogoToImage(finalImageUrl, brandKit.logo_url);
@@ -240,25 +243,48 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Visual Themes</Label>
                 <div className="flex flex-wrap gap-1.5">
+                  <TooltipProvider delayDuration={300}>
                   {VISUAL_THEMES.map((theme) => {
                     const Icon = theme.icon;
                     const isActive = selectedThemes.has(theme.id);
-                    return (
+                    const isLogo = theme.id === "logo";
+                    const logoDisabled = isLogo && !brandKit?.logo_url;
+
+                    const chip = (
                       <button
                         key={theme.id}
-                        onClick={() => toggleTheme(theme.id)}
+                        onClick={() => !logoDisabled && toggleTheme(theme.id)}
+                        disabled={logoDisabled}
                         className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
-                          isActive
-                            ? "border-primary bg-primary/10 text-primary font-medium"
-                            : "bg-card hover:bg-muted text-muted-foreground"
+                          logoDisabled
+                            ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground"
+                            : isActive
+                              ? "border-primary bg-primary/10 text-primary font-medium"
+                              : "bg-card hover:bg-muted text-muted-foreground"
                         }`}
                       >
-                        <Icon className="w-3.5 h-3.5" />
+                        {isLogo && brandKit?.logo_url ? (
+                          <img src={brandKit.logo_url} alt="Logo" className="w-4 h-4 object-contain rounded-sm" />
+                        ) : (
+                          <Icon className="w-3.5 h-3.5" />
+                        )}
                         {theme.label}
                         {isActive && <CheckCircle2 className="w-3 h-3" />}
                       </button>
                     );
+
+                    if (logoDisabled) {
+                      return (
+                        <Tooltip key={theme.id}>
+                          <TooltipTrigger asChild>{chip}</TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">Upload a logo in Brand Kit first</TooltipContent>
+                        </Tooltip>
+                      );
+                    }
+
+                    return chip;
                   })}
+                  </TooltipProvider>
                 </div>
               </div>
 
