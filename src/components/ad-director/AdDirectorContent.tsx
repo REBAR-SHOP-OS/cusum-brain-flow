@@ -520,8 +520,8 @@ export function AdDirectorContent() {
         audioUrl,
       });
 
-      setFinalVideoUrl(finalUrl);
-      toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched into your final ad.` });
+      setFinalVideoUrl(finalUrl.blobUrl);
+      toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched — ${finalUrl.duration.toFixed(1)}s, ${(finalUrl.blob.size / 1024 / 1024).toFixed(1)}MB` });
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
@@ -533,7 +533,7 @@ export function AdDirectorContent() {
     if (!finalVideoUrl) return;
     const a = document.createElement("a");
     a.href = finalVideoUrl;
-    a.download = `${brand.name.replace(/\s+/g, "-")}-30s-ad.mp4`;
+    a.download = `${brand.name.replace(/\s+/g, "-")}-30s-ad.webm`;
     a.click();
   };
 
@@ -690,7 +690,7 @@ export function AdDirectorContent() {
               <div className="mt-4 flex justify-center">
                 <Button onClick={handleDownload} variant="outline" className="gap-2 rounded-2xl px-6">
                   <Film className="w-4 h-4" />
-                  Download Final MP4
+                  Download Final Video
                 </Button>
               </div>
             )}
