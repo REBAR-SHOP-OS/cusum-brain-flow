@@ -27,8 +27,13 @@ export function FinalPreview({
   onToggleSubtitles, onToggleLogo, onToggleEndCard,
   onExport, exporting, finalVideoUrl,
 }: FinalPreviewProps) {
+  // When end card is enabled, the last scene is replaced (not appended)
+  const effectiveScenes = endCardEnabled && storyboard.length > 1
+    ? storyboard.slice(0, -1)
+    : storyboard;
   const completedClips = clips.filter(c => c.status === "completed" && c.videoUrl);
-  const allCompleted = completedClips.length === storyboard.length && storyboard.length > 0;
+  const completedForExport = completedClips.filter(c => effectiveScenes.some(s => s.id === c.sceneId));
+  const allCompleted = completedForExport.length === effectiveScenes.length && effectiveScenes.length > 0;
   const videoRef = useRef<HTMLVideoElement>(null);
 
   return (
