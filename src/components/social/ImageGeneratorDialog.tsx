@@ -157,6 +157,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     setImageUrl(null);
     setRevisedPrompt(null);
     setPexelsInspired(false);
+    setSelectedThemes(new Set());
     setError(null);
   };
 
