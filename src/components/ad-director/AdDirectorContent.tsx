@@ -6,6 +6,7 @@ import { ScriptInput } from "./ScriptInput";
 import { StoryboardTimeline } from "./StoryboardTimeline";
 import { ContinuityInspector } from "./ContinuityInspector";
 import { FinalPreview } from "./FinalPreview";
+import { ExportDialog } from "./ExportDialog";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
 import { FileText, Layers, Film, Loader2, ArrowLeft } from "lucide-react";
