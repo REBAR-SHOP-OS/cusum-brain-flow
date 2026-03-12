@@ -145,7 +145,7 @@ serve(async (req) => {
         .from("time_clock_entries")
         .update({
           clock_out: clockOutTime,
-          notes: "[auto-closed: 5 PM auto clock-out]",
+          notes: "[auto-closed: 6 PM auto clock-out]",
         })
         .in("id", idsToClose);
 
