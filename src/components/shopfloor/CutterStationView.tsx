@@ -323,6 +323,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           notes: "Pre-start cleanup after abort",
         });
         console.log("[CutterStation] Pre-start cleanup completed for stale run:", machine.current_run_id);
+        // Wait for DB to propagate the cleared state before starting new run
+        await new Promise(r => setTimeout(r, 800));
       } catch (e) {
         console.warn("[CutterStation] Pre-start cleanup failed (may already be cleared):", e);
       }
