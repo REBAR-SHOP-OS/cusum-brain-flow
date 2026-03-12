@@ -38,6 +38,7 @@ export function FaceCamera({ videoRef, isActive, scanning, className, stream }: 
         playsInline
         muted
         className="w-full h-full object-cover"
+        style={{ transform: 'scaleX(-1)' }}
       />
       {/* Circular face guide overlay */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

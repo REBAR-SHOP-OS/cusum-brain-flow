@@ -194,7 +194,7 @@ export function FaceEnrollment({ existingCount, onComplete }: FaceEnrollmentProp
 
               <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
                 {cameraActive ? (
-                  <video ref={videoCallbackRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                  <video ref={videoCallbackRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: 'scaleX(-1)' }} />
                 ) : (
                   <div className="flex items-center justify-center h-full">
                     <Camera className="w-12 h-12 text-muted-foreground/50" />
