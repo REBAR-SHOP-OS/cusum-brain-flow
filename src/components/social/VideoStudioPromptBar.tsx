@@ -117,6 +117,10 @@ interface VideoStudioPromptBarProps {
   onAudioTypeChange?: (t: "music" | "sfx") => void;
   selectedModel: string;
   onModelChange: (m: string) => void;
+  negativePrompt?: string;
+  onNegativePromptChange?: (val: string) => void;
+  customAudioFile?: File | null;
+  onCustomAudioFileChange?: (file: File | null) => void;
 }
 
 export function VideoStudioPromptBar({
