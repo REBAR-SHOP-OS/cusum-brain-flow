@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -140,6 +140,7 @@ export function PostReviewPanel({
   const [deleting, setDeleting] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
+  const [showStoryGen, setShowStoryGen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -435,6 +436,12 @@ export function PostReviewPanel({
                           </span>
                         </Button>
                       </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowStoryGen(true)}>
+                        <Smartphone className="w-3.5 h-3.5" />
+                        Auto Generate Story
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -851,6 +858,15 @@ export function PostReviewPanel({
         onVideoReady={(url) => {
           setShowVideoGen(false);
           handleMediaReady(url, "video");
+        }}
+      />
+      <ImageGeneratorDialog
+        open={showStoryGen}
+        onOpenChange={setShowStoryGen}
+        storyMode
+        onImageReady={(url) => {
+          setShowStoryGen(false);
+          handleMediaReady(url, "image");
         }}
       />
     </>

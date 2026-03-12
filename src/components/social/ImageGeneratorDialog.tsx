@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp, Bird, Building2, HardHat, Landmark, TreePine, Users, Bot, Package, type LucideIcon } from "lucide-react";
+import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp, Bird, Building2, HardHat, Landmark, TreePine, Users, Bot, Package, Smartphone, type LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: string }[] = [
@@ -22,12 +22,13 @@ import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { applyLogoToImage, ensureSquare } from "@/lib/imageWatermark";
+import { applyLogoToImage, ensureSquare, ensurePortrait } from "@/lib/imageWatermark";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImageReady?: (imageUrl: string) => void;
+  storyMode?: boolean;
 }
 
 type Status = "idle" | "searching" | "generating" | "branding" | "completed" | "failed";
@@ -51,7 +52,7 @@ const modelOptions: ModelOption[] = [
   },
 ];
 
-export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: ImageGeneratorDialogProps) {
+export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMode = false }: ImageGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("google/gemini-3-pro-image-preview");
   const [status, setStatus] = useState<Status>("idle");
@@ -113,6 +114,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
         body: {
           prompt: finalPrompt,
           model: selectedModel,
+          aspectRatio: storyMode ? "9:16" : "1:1",
           logoUrl: selectedThemes.has("logo") ? (brandKit?.logo_url || undefined) : undefined,
           brandContext: {
             business_name: brandKit?.business_name || undefined,
@@ -133,11 +135,11 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
       let finalImageUrl = data.imageUrl;
 
-      // Ensure 1:1 square for Instagram
+      // Ensure correct aspect ratio
       try {
-        finalImageUrl = await ensureSquare(finalImageUrl);
+        finalImageUrl = storyMode ? await ensurePortrait(finalImageUrl) : await ensureSquare(finalImageUrl);
       } catch (e) {
-        console.warn("Square crop failed, using original:", e);
+        console.warn("Aspect ratio crop failed, using original:", e);
       }
 
       // Apply brand logo overlay ONLY when Logo theme chip is explicitly selected
@@ -184,10 +186,10 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center">
-              <ImageIcon className="w-4 h-4 text-white" />
+            <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${storyMode ? "from-violet-500 to-fuchsia-500" : "from-emerald-500 to-cyan-500"} flex items-center justify-center`}>
+              {storyMode ? <Smartphone className="w-4 h-4 text-white" /> : <ImageIcon className="w-4 h-4 text-white" />}
             </div>
-            AI Ad Image Generator
+            {storyMode ? "AI Story Generator (9:16)" : "AI Ad Image Generator"}
             <Badge variant="secondary" className="text-[10px] gap-1 ml-auto">
               <Search className="w-3 h-3" />
               Pexels-powered
