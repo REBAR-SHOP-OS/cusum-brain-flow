@@ -620,6 +620,7 @@ ${script}`;
     ANALYZE_SCRIPT_TOOLS,
     { type: "function", function: { name: "create_storyboard" } },
     modelOverride,
+    "analyze-script",
   );
 }
 

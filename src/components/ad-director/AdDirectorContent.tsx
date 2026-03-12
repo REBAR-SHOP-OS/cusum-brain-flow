@@ -480,7 +480,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
           : c
       ));
     }
-  }, [storyboard, segments]);
+  }, [storyboard, segments, videoParams]);
 
   const pollGeneration = async (sceneId: string, generationId: string, provider: "wan" | "veo" | "sora" = "wan") => {
     const maxAttempts = 120;
