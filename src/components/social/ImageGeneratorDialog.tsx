@@ -135,11 +135,11 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
 
       let finalImageUrl = data.imageUrl;
 
-      // Ensure 1:1 square for Instagram
+      // Ensure correct aspect ratio
       try {
-        finalImageUrl = await ensureSquare(finalImageUrl);
+        finalImageUrl = storyMode ? await ensurePortrait(finalImageUrl) : await ensureSquare(finalImageUrl);
       } catch (e) {
-        console.warn("Square crop failed, using original:", e);
+        console.warn("Aspect ratio crop failed, using original:", e);
       }
 
       // Apply brand logo overlay ONLY when Logo theme chip is explicitly selected
