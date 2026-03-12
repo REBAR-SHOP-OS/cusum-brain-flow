@@ -17,7 +17,7 @@ interface ImageGeneratorDialogProps {
   onImageReady?: (imageUrl: string) => void;
 }
 
-type Status = "idle" | "searching" | "generating" | "completed" | "failed";
+type Status = "idle" | "searching" | "generating" | "branding" | "completed" | "failed";
 
 interface ModelOption {
   id: string;
