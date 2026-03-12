@@ -64,7 +64,14 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
   const { brandKit } = useBrandKit();
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
-  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
+  // Auto-select "logo" theme when brand logo exists
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(() => {
+    return new Set();
+  });
+
+  // Auto-enable logo theme when brandKit loads with a logo_url
+  const logoAutoApplied = brandKit?.logo_url ? true : false;
+
 
   const toggleTheme = (id: string) => {
     setSelectedThemes((prev) => {
@@ -115,12 +122,12 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
           prompt: finalPrompt,
           model: selectedModel,
           aspectRatio: storyMode ? "9:16" : "1:1",
-          logoUrl: selectedThemes.has("logo") ? (brandKit?.logo_url || undefined) : undefined,
+          logoUrl: brandKit?.logo_url || undefined,
           brandContext: {
             business_name: brandKit?.business_name || undefined,
             description: brandKit?.description || undefined,
             value_prop: brandKit?.value_prop || undefined,
-            tagline: undefined,
+            tagline: (brandKit as any)?.tagline || undefined,
           },
         },
       });
@@ -142,8 +149,8 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
         console.warn("Aspect ratio crop failed, using original:", e);
       }
 
-      // Apply brand logo overlay ONLY when Logo theme chip is explicitly selected
-      if (selectedThemes.has("logo") && brandKit?.logo_url && finalImageUrl) {
+      // Always apply brand logo overlay when logo exists
+      if (brandKit?.logo_url && finalImageUrl) {
         try {
           setStatus("branding");
           finalImageUrl = await applyLogoToImage(finalImageUrl, brandKit.logo_url);
