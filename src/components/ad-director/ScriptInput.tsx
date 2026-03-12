@@ -24,6 +24,8 @@ interface ScriptInputProps {
   onAssetsChange: (files: File[]) => void;
   modelOverrides: ModelOverrides;
   onModelOverridesChange: (overrides: ModelOverrides) => void;
+  onSaveBrandKit?: () => void;
+  savingBrandKit?: boolean;
 }
 
 function estimateDuration(text: string): number {
