@@ -137,12 +137,22 @@ serve(async (req) => {
       const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(jsonStr);
     } catch {
-      parsed = { editedPrompt: content.trim() };
+      // Fallback: treat as generative edit
+      parsed = { type: "generative", editedPrompt: content.trim() };
+    }
+
+    // Route based on intent type
+    if (parsed.type === "overlay" && parsed.overlay) {
+      return new Response(
+        JSON.stringify({ type: "overlay", overlay: parsed.overlay }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     return new Response(
       JSON.stringify({
-        editedPrompt: parsed.editedPrompt,
+        type: "generative",
+        editedPrompt: parsed.editedPrompt || content.trim(),
         editAction,
         editDetail,
       }),
