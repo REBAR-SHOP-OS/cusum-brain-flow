@@ -119,6 +119,7 @@ export function AdDirectorContent() {
 
       // Step 4: Auto-improve prompts below threshold
       setAnalysisStatus("Auto-improving weak prompts...");
+      setAnalysisProgress(75);
       const finalPrompts = await Promise.all(
         promptResults.map(async (pr, idx) => {
           const quality = qualityResults[idx]?.quality;
