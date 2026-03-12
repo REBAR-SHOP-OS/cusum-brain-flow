@@ -315,15 +315,30 @@ export function ProVideoEditor({
       toast({ title: "Cannot trim", description: "Scene is already at minimum duration", variant: "destructive" });
       return;
     }
-    onUpdateSegment?.(seg.id, seg.text); // keep text
-    // Shrink by adjusting segment endTime
     pushHistory(storyboard);
+    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.endTime - 1);
     toast({ title: "Scene trimmed", description: `Scene ${index + 1} shortened by 1s` });
-  }, [storyboard, segments, toast, pushHistory, onUpdateSegment]);
+  }, [storyboard, segments, toast, pushHistory, onUpdateSegmentTiming]);
 
   const handleStretchScene = useCallback((index: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+    pushHistory(storyboard);
+    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.endTime + 1);
     toast({ title: "Scene stretched", description: `Scene ${index + 1} extended by 1s` });
-  }, [toast]);
+  }, [storyboard, segments, toast, pushHistory, onUpdateSegmentTiming]);
+
+  const handleResizeScene = useCallback((index: number, newDuration: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+    const clamped = Math.max(1, Math.round(newDuration * 10) / 10);
+    pushHistory(storyboard);
+    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.startTime + clamped);
+  }, [storyboard, segments, pushHistory, onUpdateSegmentTiming]);
 
   const handleSplitScene = useCallback((index: number) => {
     const scene = storyboard[index];
