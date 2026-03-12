@@ -273,8 +273,6 @@ export function ProVideoEditor({
     voDebounceRef.current = setTimeout(() => {
       if (cancelled) return;
       const a = new Audio(vo.url);
-      // For static cards, start at 0; for video scenes, sync to video time
-      a.currentTime = isStaticCard ? 0 : (videoRef.current?.currentTime ?? 0);
       // Adjust voiceover playback rate if it's longer than the video clip
       const sceneClipDur = clipDurations[sceneId!];
       const sceneVoDur = voiceoverDurations[sceneId!];
@@ -287,12 +285,29 @@ export function ProVideoEditor({
       if (sceneId && mutedScenes.has(sceneId)) {
         a.volume = 0;
       }
-      a.play().catch(() => {});
       audioRef.current = a;
       currentVoUrlRef.current = vo.url;
 
-      // Sync only for video scenes, not static cards
+      // For video scenes, sync VO start to video's actual playing event
+      const currentClip = clips.find(c => c.sceneId === sceneId);
+      const isStaticCard = storyboard[selectedSceneIndex]?.generationMode === "static-card" || currentClip?.videoUrl?.startsWith("data:image/");
+
       if (!isStaticCard && videoRef.current) {
+        const onPlaying = () => {
+          if (cancelled || !audioRef.current) return;
+          audioRef.current.currentTime = videoRef.current?.currentTime ?? 0;
+          audioRef.current.play().catch(() => {});
+          videoRef.current?.removeEventListener("playing", onPlaying);
+        };
+        // If video is already playing, start immediately
+        if (!videoRef.current.paused && videoRef.current.readyState >= 3) {
+          a.currentTime = videoRef.current.currentTime ?? 0;
+          a.play().catch(() => {});
+        } else {
+          videoRef.current.addEventListener("playing", onPlaying);
+        }
+
+        // Sync drift correction
         syncHandler = () => {
           if (audioRef.current && videoRef.current) {
             const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
@@ -301,6 +316,10 @@ export function ProVideoEditor({
         };
         vid = videoRef.current;
         vid.addEventListener("timeupdate", syncHandler);
+      } else {
+        // Static card — play immediately
+        a.currentTime = 0;
+        a.play().catch(() => {});
       }
     }, 50);
 
@@ -644,11 +663,15 @@ export function ProVideoEditor({
       return;
     }
 
-    // If voiceover is still playing, wait for it to finish before advancing
+    // If voiceover is still playing, orphan it from audioRef so cleanup won't kill it
     const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
     if (voStillPlaying) {
       if (videoRef.current) videoRef.current.pause();
-      audioRef.current!.onended = () => {
+      const orphanedAudio = audioRef.current!;
+      audioRef.current = null; // Detach — cleanup effect won't touch it
+      currentVoUrlRef.current = null;
+      orphanedAudio.onended = () => {
+        orphanedAudio.onended = null;
         doAdvance(nextIdx);
       };
       return;
@@ -665,6 +688,15 @@ export function ProVideoEditor({
         const nextScene = storyboard[idx];
         const nextClip = clips.find(c => c.sceneId === nextScene?.id);
         const nextIsStatic = nextScene?.generationMode === "static-card" || nextClip?.videoUrl?.startsWith("data:image/");
+
+        // Preload next scene's voiceover
+        const nextVo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === nextScene?.id);
+        if (nextVo) {
+          const preload = new Audio(nextVo.audioUrl);
+          preload.preload = "auto";
+          preload.load();
+        }
+
         if (nextIsStatic) {
           sceneTransitioning.current = false;
           setSceneTransition(false);
@@ -687,7 +719,7 @@ export function ProVideoEditor({
         }
       }, 500);
     }
-  }, [storyboard, clips, selectedSceneIndex]);
+  }, [storyboard, clips, selectedSceneIndex, audioTracks]);
 
   const handleVideoEnded = useCallback(() => {
     advanceToNextScene();
@@ -734,7 +766,10 @@ export function ProVideoEditor({
         const scene = storyboard.find(s => s.segmentId === seg.id);
         if (!scene) continue;
 
-        const response = await fetch(
+        const clipDur = clipDurations[scene.id];
+
+        // First pass: generate VO at normal speed
+        let response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
           {
             method: "POST",
@@ -747,22 +782,39 @@ export function ProVideoEditor({
           }
         );
         if (!response.ok) throw new Error(`TTS failed for ${seg.label}`);
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        let blob = await response.blob();
+        let url = URL.createObjectURL(blob);
+
+        // Measure VO duration
+        let voDur = await measureAudioDuration(url);
+
+        // Two-pass fitting: if VO is >20% longer than clip, regenerate with speed param
+        if (clipDur && voDur && voDur > clipDur * 1.2) {
+          const targetSpeed = Math.min(voDur / clipDur, 1.2); // ElevenLabs max speed is 1.2
+          const retryResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: JSON.stringify({ text: seg.text, speed: parseFloat(targetSpeed.toFixed(2)) }),
+            }
+          );
+          if (retryResponse.ok) {
+            URL.revokeObjectURL(url); // Free old blob
+            blob = await retryResponse.blob();
+            url = URL.createObjectURL(blob);
+            voDur = await measureAudioDuration(url);
+          }
+        }
+
+        if (voDur && isFinite(voDur)) {
+          setVoiceoverDurations(prev => ({ ...prev, [scene.id]: voDur! }));
+        }
         newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover" });
-        // Measure actual voiceover duration
-        try {
-          const tempAudio = new Audio(url);
-          await new Promise<void>((resolve) => {
-            tempAudio.addEventListener("loadedmetadata", () => {
-              if (tempAudio.duration && isFinite(tempAudio.duration)) {
-                setVoiceoverDurations(prev => ({ ...prev, [scene.id]: tempAudio.duration }));
-              }
-              resolve();
-            });
-            tempAudio.addEventListener("error", () => resolve());
-          });
-        } catch { /* ignore measurement errors */ }
       }
       // Replace voiceover tracks, keep music
       setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
@@ -772,6 +824,17 @@ export function ProVideoEditor({
     } finally {
       setGeneratingVoiceovers(false);
     }
+  };
+
+  // Helper to measure audio duration from a blob URL
+  const measureAudioDuration = (url: string): Promise<number | null> => {
+    return new Promise((resolve) => {
+      const tempAudio = new Audio(url);
+      tempAudio.addEventListener("loadedmetadata", () => {
+        resolve(tempAudio.duration && isFinite(tempAudio.duration) ? tempAudio.duration : null);
+      });
+      tempAudio.addEventListener("error", () => resolve(null));
+    });
   };
 
   // Handle music selection — also add to audio tracks
