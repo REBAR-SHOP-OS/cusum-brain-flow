@@ -10,9 +10,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save,
   Music, Volume2, ChevronDown, ChevronUp, Wand2, Zap, Crown, Eye, EyeOff,
-  Film, Upload, ExternalLink, Clapperboard, Pencil
+  Film, Upload, ExternalLink, Clapperboard, Pencil, Share2, Gauge
 } from "lucide-react";
 import { VideoEditor } from "./VideoEditor";
+import { VideoToSocialPanel } from "./VideoToSocialPanel";
+import { useVideoCredits } from "@/hooks/useVideoCredits";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { slideshowToVideo } from "@/lib/slideshowToVideo";
