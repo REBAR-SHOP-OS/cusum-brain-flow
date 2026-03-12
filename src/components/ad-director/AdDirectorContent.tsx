@@ -633,7 +633,12 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
     setFinalVideoUrl(project.final_video_url);
     projectIdRef.current = project.id;
 
-    if (project.storyboard?.length > 0) {
+    const hasCompletedClips = (project.clips ?? []).some(
+      (c: any) => c.status === "completed" && c.videoUrl
+    );
+    if (hasCompletedClips) {
+      setStep("preview");
+    } else if (project.storyboard?.length > 0) {
       setStep("storyboard");
     }
     toast({ title: "Project loaded", description: project.name });
