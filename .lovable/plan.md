@@ -1,52 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Voiceover/Video Timing Imbalance and Playback Glitches
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problems Identified
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-1. **Video ends, voiceover gets cut**: When the video clip finishes and advances to the next scene, the voiceover cleanup kills the Audio instance mid-sentence. The `handleVideoEnded` tries to wait for VO, but the scene transition cleanup at line 256-261 runs and destroys the audio anyway — because `selectedSceneIndex` changes, triggering the playback effect cleanup.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-2. **`isMuted` defaults to `true` (line 98)**: Voiceover never plays until user explicitly unmutes, since line 267 returns early when `isMuted` is true. This causes confusion — user sees a VO track but hears nothing.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-3. **Playback rate cap too low**: When VO is longer than clip, max speedup is 1.3x (line 282). A 6s VO on a 4s clip needs 1.5x. The cap should be higher or the video should pause/extend.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-4. **Scene transition destroys audio prematurely**: `advanceToNextScene` sets `selectedSceneIndex` → triggers the playback effect → cleanup kills current VO before it finishes, even though `handleVideoEnded` tried to wait.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-5. **150ms debounce adds latency**: Every scene change delays VO start by 150ms while the video starts immediately, creating visible desync.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-## Solution
-
-### A. Let voiceover finish before advancing (don't rely on effect cleanup)
-In `advanceToNextScene`, **don't change `selectedSceneIndex` until VO ends**. Move the "wait for VO" logic into `advanceToNextScene` itself, not `handleVideoEnded`. Pause the video at its last frame while waiting.
-
-### B. Change `isMuted` default to `false`
-Users expect audio to play. Change line 98 from `true` to `false`.
-
-### C. Increase playback rate cap to 1.6x
-Change line 282 cap from `1.3` to `1.6` — still sounds natural but covers more timing gaps.
-
-### D. Reduce debounce from 150ms to 50ms
-The 150ms was to prevent double-trigger, but the `cancelled` flag + early-return guard already handle that. 50ms is enough buffer.
-
-### E. Sync voiceover start to video `canplay` event instead of debounce
-For video scenes, start the VO when the video actually begins playing (on `playing` event), not on a fixed timer. This eliminates the desync gap.
-
-### Concrete Changes — `src/components/ad-director/ProVideoEditor.tsx`
-
-**Line 98**: `isMuted` default `true` → `false`
-
-**Line 267**: Add a ref `voFinishingRef` to track when VO is completing across scene transition.
-
-**Lines 272-305 (debounce block)**: 
-- Reduce timeout to 50ms
-- For video scenes, listen for `playing` event on videoRef to start VO in sync
-- Increase playback rate cap from 1.3 → 1.6
-
-**Lines 640-677 (advanceToNextScene)**:
-- Before changing `selectedSceneIndex`, check if VO is still playing
-- If so, pause video at last frame, attach `onended` to VO, then advance when VO finishes
-- This prevents the scene index change from triggering cleanup while VO plays
-
-**Lines 679-687 (handleVideoEnded)**:
-- Simplify — the "wait for VO" logic moves into `advanceToNextScene`
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
