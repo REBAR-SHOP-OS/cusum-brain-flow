@@ -302,7 +302,7 @@ export function ProVideoEditor({
         vid = videoRef.current;
         vid.addEventListener("timeupdate", syncHandler);
       }
-    }, 150);
+    }, 50);
 
     return cleanup;
   }, [selectedSceneIndex, isPlaying, isMuted]);
