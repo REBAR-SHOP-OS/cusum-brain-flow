@@ -359,7 +359,7 @@ export function PostReviewPanel({
                       {isVideo ? (
                         <video src={post.image_url} controls className="w-full rounded-lg" style={{ maxHeight: '400px' }} />
                       ) : (
-                        <img src={post.image_url} alt="Post preview" className="w-full aspect-square object-cover" />
+                        <img src={post.image_url} alt="Post preview" className="w-full object-contain rounded-lg" />
                       )}
                     </div>
                   ) : uploading ? (
