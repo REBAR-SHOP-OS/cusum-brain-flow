@@ -175,7 +175,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               scene: rawStoryboard[idx],
               brand,
               modelOverrides,
-            }));
+            }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { quality: res.result, scoredBy: res.modelUsed };
           } catch {
             return { quality: undefined, scoredBy: "skipped" };
