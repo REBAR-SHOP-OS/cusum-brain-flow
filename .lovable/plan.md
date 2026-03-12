@@ -1,28 +1,33 @@
 
 
-# Fix: Script Analysis Timeout
 
-## Problem
-The `analyze-script` task uses `openai/gpt-5` (8192 tokens + tool calling), which is too slow for the edge function's ~60s timeout. The spinner hangs until the connection drops.
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-## Solution
-Switch `analyze-script` (and other GPT-led tasks) to use faster Gemini models via the Lovable AI gateway. Gemini 2.5 Pro handles structured tool-calling well and responds 3-5x faster than GPT-5.
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-### Changes to `supabase/functions/ad-director-ai/index.ts`
+## Completed: Add All Wan 2.6 Capabilities
 
-Update the `MODEL_ROUTES` table:
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-| Task | Before | After |
-|------|--------|-------|
-| analyze-script | `openai/gpt-5` → fallback `gemini-2.5-pro` | `google/gemini-2.5-pro` → fallback `google/gemini-2.5-flash` |
-| generate-storyboard | `openai/gpt-5` → fallback `gemini-2.5-pro` | `google/gemini-2.5-pro` → fallback `google/gemini-2.5-flash` |
-| write-cinematic-prompt | `openai/gpt-5` → fallback `gemini-2.5-pro` | `google/gemini-2.5-pro` → fallback `google/gemini-2.5-flash` |
-| improve-prompt | `openai/gpt-5` → fallback `gemini-2.5-pro` | `google/gemini-2.5-pro` → fallback `google/gemini-2.5-flash` |
-| rewrite-cta | `openai/gpt-5-mini` → fallback `gemini-2.5-flash` | `google/gemini-2.5-flash` → fallback `google/gemini-2.5-flash-lite` |
-| generate-voiceover | `openai/gpt-5-mini` → fallback `gemini-2.5-flash` | `google/gemini-2.5-flash` → fallback `google/gemini-2.5-flash-lite` |
-| optimize-ad | `openai/gpt-5` → fallback `gemini-2.5-pro` | `google/gemini-2.5-pro` → fallback `google/gemini-2.5-flash` |
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-This eliminates OpenAI models entirely from this function — all tasks use Gemini which is faster through the Lovable AI gateway and avoids the `temperature` / `max_tokens` parameter incompatibilities that have caused repeated 400/500 errors.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-The temperature-skip logic for OpenAI models becomes a no-op safety net (kept for future-proofing).
-
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
