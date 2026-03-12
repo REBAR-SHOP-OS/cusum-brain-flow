@@ -5,6 +5,7 @@ import { DailyAssignments } from "@/components/ceo/DailyAssignments";
 import { CEODashboards } from "@/components/dashboards/CEODashboards";
 import { FixRequestQueue } from "@/components/ceo/FixRequestQueue";
 import { BusinessHeartbeat } from "@/components/ceo/BusinessHeartbeat";
+import { AITokenUsageCard } from "@/components/ceo/AITokenUsageCard";
 
 import { OdooMigrationStatusCard } from "@/components/admin/OdooMigrationStatusCard";
 import { SLATrackerCard } from "@/components/ceo/SLATrackerCard";
@@ -30,6 +31,7 @@ export default function CEOPortal() {
     <ScrollArea className="h-full">
       <div className="p-6 space-y-5 max-w-[1440px] mx-auto">
         <BusinessHeartbeat />
+        <AITokenUsageCard />
         
         <DailyBriefingCard />
         <SLATrackerCard />

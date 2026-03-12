@@ -23,6 +23,9 @@ export interface AIRequestOptions {
   stream?: boolean;
   signal?: AbortSignal;
   fallback?: { provider: AIProvider; model: string };
+  agentName?: string;
+  companyId?: string;
+  userId?: string;
 }
 
 export interface AIResult {
@@ -105,6 +108,11 @@ async function _callAISingle(provider: AIProvider, model: string, opts: AIReques
   const data = await response.json();
   const choice = data.choices?.[0];
 
+  // Fire-and-forget token usage logging
+  _logUsage(provider, model, data.usage, opts).catch((e) =>
+    console.warn("AI usage log failed:", e.message)
+  );
+
   return {
     raw: data,
     content: choice?.message?.content || "",
@@ -156,6 +164,38 @@ export async function callAIStream(opts: AIRequestOptions): Promise<Response> {
     }
     throw e;
   }
+}
+
+async function _logUsage(
+  provider: AIProvider,
+  model: string,
+  usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined,
+  opts: AIRequestOptions
+) {
+  if (!usage) return;
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) return;
+
+  await fetch(`${url}/rest/v1/ai_usage_log`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      provider,
+      model,
+      agent_name: opts.agentName || null,
+      prompt_tokens: usage.prompt_tokens || 0,
+      completion_tokens: usage.completion_tokens || 0,
+      total_tokens: usage.total_tokens || 0,
+      company_id: opts.companyId || null,
+      user_id: opts.userId || null,
+    }),
+  });
 }
 
 export class AIError extends Error {
