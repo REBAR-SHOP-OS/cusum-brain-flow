@@ -1170,11 +1170,30 @@ export function ProVideoEditor({
             {videoSrc ? (
               <>
                 {isStaticCard ? (
-                  <img
-                    src={videoSrc}
-                    alt="End Card"
-                    className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                  />
+                  <>
+                    {currentCardSettings ? (
+                      <canvas
+                        ref={liveCanvasRef}
+                        width={1280}
+                        height={720}
+                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
+                      />
+                    ) : (
+                      <img
+                        src={videoSrc}
+                        alt="End Card"
+                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
+                      />
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="absolute bottom-20 right-4 z-20 gap-1.5 text-xs"
+                      onClick={openCardEditor}
+                    >
+                      <Palette className="w-3.5 h-3.5" /> Edit Card
+                    </Button>
+                  </>
                 ) : (
                   <video
                     ref={videoRef}
