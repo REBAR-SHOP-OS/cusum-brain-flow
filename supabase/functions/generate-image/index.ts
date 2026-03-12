@@ -184,7 +184,7 @@ serve(async (req) => {
       }
       if (logoUrl) {
         contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
-        contentParts.push({ type: "text", text: "Incorporate this company logo naturally as a branded watermark in the corner of the image — preserve its exact colors, shape, and design." });
+        contentParts.push({ type: "text", text: "Render this company logo prominently and clearly in the image — make it a visible, professional part of the design. Preserve its exact colors, shape, and design. Do NOT shrink it to a tiny corner watermark." });
       }
       const messageContent = contentParts.length === 1 ? adPrompt : contentParts;
 
