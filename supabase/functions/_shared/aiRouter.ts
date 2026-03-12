@@ -23,6 +23,9 @@ export interface AIRequestOptions {
   stream?: boolean;
   signal?: AbortSignal;
   fallback?: { provider: AIProvider; model: string };
+  agentName?: string;
+  companyId?: string;
+  userId?: string;
 }
 
 export interface AIResult {
