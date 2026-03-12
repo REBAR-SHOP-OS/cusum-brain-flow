@@ -542,7 +542,7 @@ export function ProVideoEditor({
   // ─── Auto-advance on video end with fade transition ───
   const [sceneTransition, setSceneTransition] = useState(false);
 
-  const handleVideoEnded = () => {
+  const advanceToNextScene = useCallback(() => {
     const completedIndices = storyboard
       .map((s, i) => ({ i, clip: clips.find(c => c.sceneId === s.id) }))
       .filter(x => x.clip?.status === "completed" && x.clip?.videoUrl)
@@ -550,17 +550,25 @@ export function ProVideoEditor({
 
     const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
     if (nextIdx !== undefined) {
-      // Fade out current scene
       setSceneTransition(true);
       setTimeout(() => {
         autoPlayPending.current = true;
         setSelectedSceneIndex(nextIdx);
-        // Fade in next scene
         setTimeout(() => setSceneTransition(false), 50);
       }, 300);
     } else {
       setIsPlaying(false);
     }
+  }, [storyboard, clips, selectedSceneIndex]);
+
+  const handleVideoEnded = () => {
+    // Check if voiceover is still playing — wait for it before advancing
+    const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
+    if (voStillPlaying) {
+      audioRef.current!.onended = () => advanceToNextScene();
+      return;
+    }
+    advanceToNextScene();
   };
 
   // ─── Global seek from timeline ───
