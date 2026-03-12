@@ -61,6 +61,8 @@ export const VIDEO_MODELS: ModelOption[] = [
   { id: "sora-2", label: "OpenAI Sora", provider: "sora", costLabel: "Credits", free: false },
   { id: "sora-2-pro", label: "Sora Pro", provider: "sora", costLabel: "Credits", free: false },
   { id: "wan-2.6", label: "Alibaba Wan 2.6", provider: "wan", costLabel: "~$0.10/s", free: false },
+  { id: "wan-2.6-i2v", label: "Wan 2.6 Image→Video", provider: "wan", costLabel: "~$0.10/s", free: false },
+  { id: "wan-2.6-i2v-flash", label: "Wan 2.6 I2V Flash", provider: "wan", costLabel: "~$0.05/s", free: false },
 ];
 
 export const AUDIO_MODELS: ModelOption[] = [
