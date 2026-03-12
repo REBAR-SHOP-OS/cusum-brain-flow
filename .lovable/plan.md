@@ -1,46 +1,66 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Voiceover Glitching and Repeating
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Root Causes
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+1. **Dead code after return** (line 290): `currentVoUrlRef.current = null` sits after `return cleanup` — unreachable but harmless. The real issue is elsewhere.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+2. **Effect re-triggers too aggressively**: The voiceover effect (line 230) depends on `[audioTracks, storyboard]` — both are arrays that get new references on state updates (e.g. volume changes, track additions). Each new reference triggers cleanup → 150ms debounce → new Audio instance. During the 150ms gap, another trigger can fire, creating overlapping instances.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+3. **Cleanup race with debounce**: When cleanup runs, it clears `audioRef.current` (line 238). But the debounced `setTimeout` (line 259) still fires 150ms later and creates a *new* Audio — now there are two playing. The debounce timeout is cleared in cleanup, but only if cleanup runs *before* the timeout fires. If cleanup and timeout fire in the same tick order, duplication occurs.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+4. **No guard inside debounce callback**: The callback at line 259 doesn't check if the effect has been superseded. It blindly creates and plays a new Audio.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+## Fixes — `src/components/ad-director/ProVideoEditor.tsx`
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### A. Add cancelled flag to prevent stale debounce callbacks
+Add a `let cancelled = false` flag at the top of the effect. Set it in cleanup. Check it inside the debounce callback before creating Audio.
+
+### B. Stabilize voiceover URL lookup with useRef
+Instead of depending on `audioTracks` array directly, store the current scene's voiceover URL in a ref that updates via a separate, non-destructive effect. The main playback effect only depends on `selectedSceneIndex, isPlaying, isMuted`.
+
+### C. Remove dead code at line 290
+
+### D. Concrete implementation
+
+```typescript
+// New ref to track current VO URL without re-triggering playback effect
+const currentSceneVoRef = useRef<{ url: string; volume: number } | null>(null);
+
+// Lightweight effect — updates ref, no Audio teardown
+useEffect(() => {
+  const sceneId = storyboard[selectedSceneIndex]?.id;
+  const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
+  currentSceneVoRef.current = vo ? { url: vo.audioUrl, volume: vo.volume ?? 1 } : null;
+}, [audioTracks, storyboard, selectedSceneIndex]);
+
+// Main playback effect — only re-runs on play state or scene change
+useEffect(() => {
+  let cancelled = false;
+  // ... cleanup, sceneTransitioning check, mute check same as before ...
+  
+  const vo = currentSceneVoRef.current;
+  if (vo && isPlaying && !isMuted) {
+    if (audioRef.current && currentVoUrlRef.current === vo.url && !audioRef.current.paused) {
+      return cleanup;
+    }
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    
+    voDebounceRef.current = setTimeout(() => {
+      if (cancelled) return; // Guard against stale callback
+      const a = new Audio(vo.url);
+      // ... rest of setup ...
+      audioRef.current = a;
+      currentVoUrlRef.current = vo.url;
+    }, 150);
+    return cleanup;
+  }
+  cleanup();
+  return cleanup;
+}, [selectedSceneIndex, isPlaying, isMuted, mutedScenes]);
+// Removed audioTracks and storyboard from deps
+```
+
+This eliminates the root cause: `audioTracks`/`storyboard` reference changes no longer tear down and rebuild the Audio instance.
+
