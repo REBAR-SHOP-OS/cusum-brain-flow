@@ -344,17 +344,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
     // Credit check
     const durationSecs = parseInt(duration);
+    const creditCost = getCost(durationSecs, mode);
     if (!canGenerate(durationSecs, mode)) {
-      const cost = getCost(durationSecs, mode);
-      toast({ title: "Not enough credits", description: `Need ${cost}s credits, have ${remaining}s remaining.`, variant: "destructive" });
-      return;
-    }
-
-    // Consume credits upfront
-    try {
-      await consumeCredits.mutateAsync({ durationSeconds: durationSecs, mode });
-    } catch (err: any) {
-      toast({ title: "Credit error", description: err.message, variant: "destructive" });
+      toast({ title: "Not enough credits", description: `Need ${creditCost}s credits, have ${remaining}s remaining.`, variant: "destructive" });
       return;
     }
 
@@ -371,11 +363,39 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
     const result = await transform(rawPrompt, aspectRatio, parseInt(duration));
     if (!result) {
-      // Fallback: use raw prompt if transform fails
       console.warn("Prompt transform failed, using raw prompt");
     }
 
     const finalPrompt = result?.engineeredPrompt || rawPrompt.trim();
+
+    // Create generation record
+    let genRecord: any = null;
+    try {
+      genRecord = await createGeneration.mutateAsync({
+        raw_prompt: rawPrompt.trim(),
+        engineered_prompt: finalPrompt,
+        intent: result?.intent,
+        mode,
+        duration_seconds: durationSecs,
+        aspect_ratio: aspectRatio,
+        provider: currentMode.provider,
+        estimated_credits: creditCost,
+        metadata: { elements: result?.elements, platform_intent: result?.platform_intent },
+      });
+      setCurrentGenerationId(genRecord.id);
+    } catch (err) {
+      console.error("Failed to create generation record:", err);
+    }
+
+    // Consume credits upfront
+    try {
+      await consumeCredits.mutateAsync({ durationSeconds: durationSecs, mode, generationId: genRecord?.id });
+    } catch (err: any) {
+      toast({ title: "Credit error", description: err.message, variant: "destructive" });
+      if (genRecord) updateGeneration.mutateAsync({ id: genRecord.id, status: "failed", error_message: err.message });
+      setStatus("idle");
+      return;
+    }
 
     // Step 2: Generate the video
     setStatus("submitting");
