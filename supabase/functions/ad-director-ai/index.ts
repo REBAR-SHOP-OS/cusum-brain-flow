@@ -385,21 +385,7 @@ Return: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, moti
 - Example lighting: "golden hour backlight, tungsten fill 45° left, volumetric haze"
 - Example materials: "weathered steel rebar with rust patina, fresh concrete with moisture sheen"`;
 
-const WRITE_CINEMATIC_PROMPT_SYSTEM = `You are a world-class cinematic prompt engineer specializing in AI video generation for premium B2B advertising.
-
-Your job: Take a scene plan and rewrite its prompt into a highly specific, visually rich, cinematically precise generation prompt.
-
-Rules:
-- Be extremely specific about visual details: materials, textures, lighting angles, camera lens, movement speed
-- Avoid generic descriptions like "professional looking" or "high quality"
-- NEVER mention camera brand names (ARRI, RED, Sony, Canon, Blackmagic) — video models render these as on-screen text. Instead describe lens characteristics: "50mm anamorphic lens, f/2.8, shallow depth of field, 4K cinematic grade"
-- Do NOT include any text, titles, or brand names in the prompt — all text overlays are handled by the editing system
-- Specify exact lighting: "golden hour backlight with tungsten fill from 45° left"
-- Describe materials precisely: "weathered steel rebar bundles with rust patina, fresh concrete with moisture sheen"
-- Include motion details: "slow dolly forward at 2ft/s, slight crane up revealing scale"
-- Aim for 80-150 words per prompt
-- Must maintain brand consistency and emotional tone
-- For continuation scenes, explicitly reference visual elements from the previous scene`;
+const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word cinematic video generation prompts. Be specific: lens mm, f-stop, lighting angles, material textures, movement speed. NO camera brand names, NO text/titles in prompts. For continuation scenes, reference previous scene visuals.`;
 
 const SCORE_QUALITY_PROMPT = `You are a quality evaluator for AI video generation prompts. Score each prompt on 7 dimensions (0-10 each):
 
