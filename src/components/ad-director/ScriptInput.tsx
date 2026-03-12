@@ -9,7 +9,7 @@ import {
   Play, Palette, X, History, Trash2, FolderOpen
 } from "lucide-react";
 import { DEMO_SCRIPT, type BrandProfile, type ModelOverrides, DEFAULT_BRAND } from "@/types/adDirector";
-import { AdvancedModelSettings } from "./AdvancedModelSettings";
+import { VideoParameters, type VideoParams } from "./VideoParameters";
 import { cn } from "@/lib/utils";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { format } from "date-fns";
