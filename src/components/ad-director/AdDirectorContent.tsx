@@ -344,14 +344,15 @@ export function AdDirectorContent() {
     }
   }, [storyboard]);
 
-  const pollGeneration = async (sceneId: string, generationId: string) => {
+  const pollGeneration = async (sceneId: string, generationId: string, provider: "wan" | "veo" | "sora" = "wan") => {
     const maxAttempts = 120;
+    let consecutiveErrors = 0;
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, 5000));
       try {
         const result = await invokeEdgeFunction<{ status?: string; videoUrl?: string; url?: string }>(
           "generate-video",
-          { action: "poll", jobId: generationId, provider: "wan" }
+          { action: "poll", jobId: generationId, provider }
         );
 
         if (result.status === "completed" || result.videoUrl || result.url) {
