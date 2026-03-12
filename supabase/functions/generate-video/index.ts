@@ -27,6 +27,7 @@ async function verifyAuth(req: Request): Promise<{ userId: string } | null> {
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const OPENAI_BASE = "https://api.openai.com/v1";
+const DASHSCOPE_BASE = "https://dashscope-intl.aliyuncs.com/api/v1";
 
 // ─── Provider config ────────────────────────────────────────
 const VEO_CLIP_DURATIONS = [4, 6, 8];
