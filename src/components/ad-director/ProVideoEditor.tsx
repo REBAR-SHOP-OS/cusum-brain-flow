@@ -766,7 +766,10 @@ export function ProVideoEditor({
         const scene = storyboard.find(s => s.segmentId === seg.id);
         if (!scene) continue;
 
-        const response = await fetch(
+        const clipDur = clipDurations[scene.id];
+
+        // First pass: generate VO at normal speed
+        let response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
           {
             method: "POST",
@@ -779,22 +782,39 @@ export function ProVideoEditor({
           }
         );
         if (!response.ok) throw new Error(`TTS failed for ${seg.label}`);
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        let blob = await response.blob();
+        let url = URL.createObjectURL(blob);
+
+        // Measure VO duration
+        let voDur = await measureAudioDuration(url);
+
+        // Two-pass fitting: if VO is >20% longer than clip, regenerate with speed param
+        if (clipDur && voDur && voDur > clipDur * 1.2) {
+          const targetSpeed = Math.min(voDur / clipDur, 1.2); // ElevenLabs max speed is 1.2
+          const retryResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: JSON.stringify({ text: seg.text, speed: parseFloat(targetSpeed.toFixed(2)) }),
+            }
+          );
+          if (retryResponse.ok) {
+            URL.revokeObjectURL(url); // Free old blob
+            blob = await retryResponse.blob();
+            url = URL.createObjectURL(blob);
+            voDur = await measureAudioDuration(url);
+          }
+        }
+
+        if (voDur && isFinite(voDur)) {
+          setVoiceoverDurations(prev => ({ ...prev, [scene.id]: voDur! }));
+        }
         newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover" });
-        // Measure actual voiceover duration
-        try {
-          const tempAudio = new Audio(url);
-          await new Promise<void>((resolve) => {
-            tempAudio.addEventListener("loadedmetadata", () => {
-              if (tempAudio.duration && isFinite(tempAudio.duration)) {
-                setVoiceoverDurations(prev => ({ ...prev, [scene.id]: tempAudio.duration }));
-              }
-              resolve();
-            });
-            tempAudio.addEventListener("error", () => resolve());
-          });
-        } catch { /* ignore measurement errors */ }
       }
       // Replace voiceover tracks, keep music
       setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
@@ -804,6 +824,17 @@ export function ProVideoEditor({
     } finally {
       setGeneratingVoiceovers(false);
     }
+  };
+
+  // Helper to measure audio duration from a blob URL
+  const measureAudioDuration = (url: string): Promise<number | null> => {
+    return new Promise((resolve) => {
+      const tempAudio = new Audio(url);
+      tempAudio.addEventListener("loadedmetadata", () => {
+        resolve(tempAudio.duration && isFinite(tempAudio.duration) ? tempAudio.duration : null);
+      });
+      tempAudio.addEventListener("error", () => resolve(null));
+    });
   };
 
   // Handle music selection — also add to audio tracks

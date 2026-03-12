@@ -152,7 +152,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
         {/* ── Right Column: Brand Kit ── */}
         <div className="lg:col-span-2 space-y-4">
           {/* Brand Identity Card */}
-          <div className="rounded-2xl border border-border/30 bg-card/30 backdrop-blur-sm p-4 space-y-3 ring-1 ring-white/5">
+          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl p-4 space-y-3 ring-1 ring-white/5">
             <div className="flex items-center gap-2 mb-1">
               <Palette className="w-4 h-4 text-primary" />
               <Label className="text-sm font-semibold">Brand Kit</Label>
