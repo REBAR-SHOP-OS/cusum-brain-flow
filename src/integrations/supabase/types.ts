@@ -10943,6 +10943,57 @@ export type Database = {
           },
         ]
       }
+      render_jobs: {
+        Row: {
+          completed_scenes: number | null
+          created_at: string | null
+          error_message: string | null
+          error_stage: string | null
+          final_file_size: number | null
+          final_video_url: string | null
+          id: string
+          music_url: string | null
+          render_log: Json | null
+          scene_count: number | null
+          status: string
+          updated_at: string | null
+          user_id: string
+          voice_url: string | null
+        }
+        Insert: {
+          completed_scenes?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          error_stage?: string | null
+          final_file_size?: number | null
+          final_video_url?: string | null
+          id?: string
+          music_url?: string | null
+          render_log?: Json | null
+          scene_count?: number | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+          voice_url?: string | null
+        }
+        Update: {
+          completed_scenes?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          error_stage?: string | null
+          final_file_size?: number | null
+          final_video_url?: string | null
+          id?: string
+          music_url?: string | null
+          render_log?: Json | null
+          scene_count?: number | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+          voice_url?: string | null
+        }
+        Relationships: []
+      }
       salary_history: {
         Row: {
           approved_by: string | null

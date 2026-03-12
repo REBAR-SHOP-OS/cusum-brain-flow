@@ -64,7 +64,7 @@ export function useRenderPipeline() {
     addLog(stage, `❌ ERROR: ${message}`);
   }, [addLog]);
 
-  // Persist render job to database
+  // Persist render job to database (best-effort, non-blocking)
   const persistJob = useCallback(async (updates: Record<string, unknown>) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -72,13 +72,13 @@ export function useRenderPipeline() {
 
       const jobId = state.jobId;
       if (jobId) {
-        await supabase.from("render_jobs").update(updates).eq("id", jobId);
+        await (supabase as any).from("render_jobs").update(updates).eq("id", jobId);
       } else {
-        const { data } = await supabase.from("render_jobs")
-          .insert({ user_id: user.id, ...updates } as any)
+        const { data } = await (supabase as any).from("render_jobs")
+          .insert({ user_id: user.id, ...updates })
           .select("id")
           .single();
-        if (data) setState(prev => ({ ...prev, jobId: data.id }));
+        if (data?.id) setState(prev => ({ ...prev, jobId: data.id }));
       }
     } catch (e) {
       console.warn("[RenderPipeline] DB persist failed:", e);

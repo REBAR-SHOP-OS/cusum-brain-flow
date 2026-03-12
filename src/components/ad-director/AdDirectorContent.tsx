@@ -520,8 +520,8 @@ export function AdDirectorContent() {
         audioUrl,
       });
 
-      setFinalVideoUrl(finalUrl);
-      toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched into your final ad.` });
+      setFinalVideoUrl(finalUrl.blobUrl);
+      toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched — ${finalUrl.duration.toFixed(1)}s, ${(finalUrl.blob.size / 1024 / 1024).toFixed(1)}MB` });
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
