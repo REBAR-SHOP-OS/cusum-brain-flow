@@ -31,7 +31,7 @@ const aspectOptions = [
 
 const durationOptionsMap: Record<GenerationMode, { value: string; label: string }[]> = {
   fast: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
-  balanced: [{ value: "4", label: "4s" }, { value: "6", label: "6s" }, { value: "8", label: "8s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
+  balanced: [{ value: "5", label: "5s" }, { value: "10", label: "10s" }, { value: "15", label: "15s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
   premium: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
 };
 
@@ -60,7 +60,7 @@ export const VIDEO_MODELS: ModelOption[] = [
   { id: "veo-3.1", label: "Google Veo 3.1", provider: "veo", costLabel: "Credits", free: false },
   { id: "sora-2", label: "OpenAI Sora", provider: "sora", costLabel: "Credits", free: false },
   { id: "sora-2-pro", label: "Sora Pro", provider: "sora", costLabel: "Credits", free: false },
-  { id: "wan-2.1", label: "Alibaba Wan 2.1", provider: "wan", costLabel: "~$0.07/s", free: false },
+  { id: "wan-2.6", label: "Alibaba Wan 2.6", provider: "wan", costLabel: "~$0.10/s", free: false },
 ];
 
 export const AUDIO_MODELS: ModelOption[] = [
