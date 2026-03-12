@@ -1,46 +1,31 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
+Goal assumed from latest screenshot: remove the recurring “Analysis failed — Request timed out” in Ad Director and ensure the new controls are truly wired (no placeholder behavior).
 
-## Completed: Add All Wan 2.6 Capabilities
+Plan:
+1) Confirm timeout hotspots and remove mixed timeout behavior
+- In `AdDirectorContent.tsx`, standardize one timeout constant for the whole analysis pipeline.
+- Pass `{ timeoutMs: EDGE_TIMEOUT_MS }` to every `invokeEdgeFunction("ad-director-ai", ...)` call inside `handleAnalyze` (not only the first call), so inner 30s defaults no longer silently abort later stages.
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+2) Make `ad-director-ai` resilient when tool calls fail
+- In `supabase/functions/ad-director-ai/index.ts`, change `callAIAndExtract` retry policy for `analyze-script`:
+  - stop doing multiple primary-model retries on malformed tool output;
+  - switch to fallback model immediately after first malformed/no-content response;
+  - cap total attempts for analyze route to keep response under client timeout.
+- Add per-attempt fetch timeout (AbortController) for gateway calls so a single model attempt cannot hang too long.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+3) Reduce timeout risk in storyboard analysis
+- Keep current structured output, but add a “compact fallback pass” if the primary extraction still fails (smaller output envelope, then normalize server-side) so analysis returns usable storyboard instead of timing out.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+4) Fully wire visible video controls (no fake settings)
+- `videoParams.ratio` -> pass to `generate-video` `aspectRatio` (replace hardcoded `"16:9"`).
+- `videoParams.duration` (+ unit conversion if frames) -> apply as clip duration policy (bounded to provider limits).
+- For controls not yet backend-supported (`resolution`, `buildQty`), either wire now where supported or explicitly mark as upcoming/disabled to avoid misleading UI state.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+5) Validation (end-to-end)
+- Re-run analysis with the same script payload and confirm no timeout toast.
+- Verify edge logs no longer show repeated malformed-tool retry loops for analyze route.
+- Verify selected ratio/duration actually reach generation payload and affect output behavior.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
-
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
-
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+Technical details:
+- Files targeted: `src/components/ad-director/AdDirectorContent.tsx`, `supabase/functions/ad-director-ai/index.ts` (and possibly `supabase/functions/generate-video/index.ts` only if needed for strict resolution/buildQty wiring).
+- Non-breaking strategy: localized changes to retry/timeout policy and payload mapping only; no schema migrations required.
