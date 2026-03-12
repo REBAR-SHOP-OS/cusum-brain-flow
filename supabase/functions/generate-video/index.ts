@@ -593,7 +593,7 @@ serve(async (req) => {
           }
         } else {
           try {
-            result = await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
+            result = await soraGenerate(apiKey, prompt, duration || 8, (model && model.startsWith("sora")) ? model : "sora-2");
           } catch (e) {
             const message = getErrorMessage(e);
             if (isProviderCapacityError(message) && geminiKey) {
