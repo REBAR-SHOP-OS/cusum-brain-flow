@@ -735,7 +735,7 @@ serve(async (req) => {
               }
             } else {
               try {
-                result = await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+                result = await soraGenerate(apiKey, scenePrompt, clipDuration, (model && model.startsWith("sora")) ? model : "sora-2");
               } catch (e) {
                 const message = getErrorMessage(e);
                 if (isProviderCapacityError(message) && geminiKey) {
