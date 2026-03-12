@@ -18,9 +18,7 @@ async function verifyAuth(req: Request): Promise<{ userId: string } | null> {
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  const { data: { user }, error } = await supabase.auth.getUser(
-    authHeader.replace("Bearer ", "")
-  );
+  const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return null;
   return { userId: user.id };
 }
