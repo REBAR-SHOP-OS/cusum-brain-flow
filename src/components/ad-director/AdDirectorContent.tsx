@@ -518,7 +518,7 @@ export function AdDirectorContent() {
     } finally {
       setExporting(false);
     }
-  }, [clips, storyboard, segments, toast]);
+  }, [clips, storyboard, segments, brand, logoEnabled, endCardEnabled, subtitlesEnabled, toast]);
 
   const handleDownload = () => {
     if (!finalVideoUrl) return;
