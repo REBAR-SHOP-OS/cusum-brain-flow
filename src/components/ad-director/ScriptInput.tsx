@@ -13,6 +13,8 @@ import { AdvancedModelSettings } from "./AdvancedModelSettings";
 import { cn } from "@/lib/utils";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ScriptInputProps {
   script: string;
