@@ -381,9 +381,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         const sceneCount = Math.ceil(requestedDuration / effectiveMaxClip);
         setProgressLabel(`Generating ${sceneCount} scenes...`);
         const data = await invokeEdgeFunction("generate-video", {
-          action: "generate-multi", provider: currentMode.provider, prompt: finalPrompt,
+          action: "generate-multi", provider: effectiveVideoProvider, prompt: finalPrompt,
           duration: requestedDuration,
-          model: currentMode.model === "sora-2-pro" ? "sora-2-pro" : currentMode.model === "sora-2" ? "sora-2" : undefined,
+          model: selectedModel,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
