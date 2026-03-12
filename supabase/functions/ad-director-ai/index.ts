@@ -380,6 +380,14 @@ For a 15-second ad, generate 4-5 scenes.
 For a 60-second ad, generate 10-14 scenes.
 Distribute time proportionally. Never create scenes shorter than 1.5s or longer than 6s.
 
+### 4b. VOICEOVER-AWARE DURATION (MANDATORY)
+- For every scene with narration text, calculate: minDuration = ceil(wordCount / 2.5)
+- Natural speech pace is ~2.5 words per second. NEVER assign a scene duration shorter than its narration requires
+- Final scene duration = max(visual pacing suggestion, voiceover minimum duration)
+- If total duration exceeds the ad length budget, shorten non-narrated scenes (intro, end card) or split long narration segments into two scenes
+- NEVER rely on speeding up voiceover playback to fit — the viewer must hear every word at natural pace
+- Example: A segment with 25 words needs at least ceil(25/2.5) = 10 seconds, regardless of visual pacing rules
+
 ## SCENE OUTPUT FORMAT
 
 For each scene, produce:
