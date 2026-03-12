@@ -781,7 +781,7 @@ export function AdDirectorContent() {
                 logoEnabled={logoEnabled}
                 endCardEnabled={endCardEnabled}
                 onToggleSubtitles={() => setSubtitlesEnabled(!subtitlesEnabled)}
-                onToggleLogo={() => setLogoEnabled(!logoEnabled)}
+                onToggleLogo={() => {}} // Logo is mandatory — no toggle
                 onToggleEndCard={() => setEndCardEnabled(!endCardEnabled)}
                 onExport={handleExport}
                 exporting={exporting}
