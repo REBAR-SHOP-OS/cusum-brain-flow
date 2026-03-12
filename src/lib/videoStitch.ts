@@ -19,6 +19,7 @@ export interface StitchOverlayOptions {
     enabled: boolean;
     segments: { text: string; startTime: number; endTime: number }[];
   };
+  audioUrl?: string;
 }
 
 async function fetchAsBlob(url: string): Promise<string> {
