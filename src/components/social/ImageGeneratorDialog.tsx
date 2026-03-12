@@ -238,7 +238,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
               {/* Visual Themes */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">تم‌های تصویری</Label>
+                <Label className="text-xs text-muted-foreground">Visual Themes</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {VISUAL_THEMES.map((theme) => {
                     const Icon = theme.icon;
