@@ -53,6 +53,7 @@ interface TimelineBarProps {
   onEditPrompt?: (index: number) => void;
   onEditVoiceover?: (index: number) => void;
   onMuteScene?: (index: number) => void;
+  onResizeScene?: (index: number, newDuration: number) => void;
   mutedScenes?: Set<string>;
   // Text overlay extras
   onEditOverlayPosition?: (id: string, position: "top" | "center" | "bottom") => void;

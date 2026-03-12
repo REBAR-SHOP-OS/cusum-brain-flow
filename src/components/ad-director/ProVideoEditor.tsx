@@ -946,6 +946,7 @@ export function ProVideoEditor({
         onEditPrompt={handleEditPrompt}
         onEditVoiceover={handleEditVoiceover}
         onMuteScene={handleMuteScene}
+        onResizeScene={handleResizeScene}
         mutedScenes={mutedScenes}
         onEditOverlayPosition={handleEditOverlayPosition}
         onResizeOverlay={handleResizeOverlay}
