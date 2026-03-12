@@ -1,7 +1,11 @@
-import { useRef } from "react";
-import { Badge } from "@/components/ui/badge";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, Maximize, Music, Type, Plus, Mic } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Slider } from "@/components/ui/slider";
+import {
+  ZoomIn, ZoomOut, Maximize, Music, Type, Plus, Mic,
+  Volume2, VolumeX, Trash2, RefreshCw, Edit3, Move,
+} from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
 
@@ -10,6 +14,7 @@ export interface AudioTrackItem {
   label: string;
   audioUrl: string;
   kind: "voiceover" | "music";
+  volume?: number; // 0-1, default 1
 }
 
 interface TimelineBarProps {
@@ -26,14 +31,28 @@ interface TimelineBarProps {
   onAddAudio?: () => void;
   textOverlays?: VideoOverlay[];
   audioTracks?: AudioTrackItem[];
+  // Volume controls
+  videoVolume?: number;
+  onVideoVolumeChange?: (v: number) => void;
+  onAudioTrackVolumeChange?: (index: number, v: number) => void;
+  // Edit actions
+  onDeleteOverlay?: (id: string) => void;
+  onEditOverlay?: (overlay: VideoOverlay) => void;
+  onRemoveAudioTrack?: (index: number) => void;
+  onRegenerateScene?: (sceneId: string) => void;
+  onDeleteScene?: (index: number) => void;
 }
 
 export function TimelineBar({
   clips, storyboard, segments, globalTime, totalDuration,
   cumulativeStarts, selectedSceneIndex, onSeek, onSelectScene,
   onAddText, onAddAudio, textOverlays = [], audioTracks = [],
+  videoVolume = 1, onVideoVolumeChange, onAudioTrackVolumeChange,
+  onDeleteOverlay, onEditOverlay, onRemoveAudioTrack,
+  onRegenerateScene, onDeleteScene,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const [textTrackMuted, setTextTrackMuted] = useState(false);
 
   const playheadPct = totalDuration > 0 ? (globalTime / totalDuration) * 100 : 0;
 
@@ -45,7 +64,6 @@ export function TimelineBar({
     onSeek(Math.max(0, Math.min(totalDuration, clickedTime)));
   };
 
-  // Get scene duration
   const getSceneDur = (i: number) => {
     const seg = segments.find(s => s.id === storyboard[i]?.segmentId);
     return seg ? seg.endTime - seg.startTime : 4;
@@ -67,9 +85,13 @@ export function TimelineBar({
 
       {/* Tracks */}
       <div className="px-3 py-2 space-y-1.5 relative">
-        {/* Video track */}
+        {/* ─── Video track ─── */}
         <div className="flex items-center gap-0.5">
-          <span className="text-[9px] text-muted-foreground w-12 shrink-0 truncate">Video</span>
+          <VolumeControl
+            label="Video"
+            volume={videoVolume}
+            onVolumeChange={onVideoVolumeChange}
+          />
           <div
             ref={trackRef}
             className="flex-1 flex gap-px h-12 relative cursor-pointer rounded overflow-hidden"
@@ -84,26 +106,49 @@ export function TimelineBar({
               const isGenerating = clip?.status === "generating";
 
               return (
-                <div
-                  key={scene.id}
-                  onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
-                  className={`relative h-full flex items-center justify-center transition-all cursor-pointer
-                    ${isSelected ? "ring-2 ring-primary ring-inset z-10" : ""}
-                    ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
-                  `}
-                  style={{ flex: dur }}
-                  title={seg?.label || `Scene ${i + 1}`}
-                >
-                  {clip?.videoUrl && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
-                  )}
-                  <span className="text-[8px] text-muted-foreground font-medium z-10 truncate px-1">
-                    {seg?.label || `S${i + 1}`}
-                  </span>
-                  {isSelected && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                  )}
-                </div>
+                <Popover key={scene.id}>
+                  <PopoverTrigger asChild>
+                    <div
+                      onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
+                      className={`relative h-full flex items-center justify-center transition-all cursor-pointer
+                        ${isSelected ? "ring-2 ring-primary ring-inset z-10" : ""}
+                        ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
+                      `}
+                      style={{ flex: dur }}
+                      title={seg?.label || `Scene ${i + 1}`}
+                    >
+                      {clip?.videoUrl && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
+                      )}
+                      <span className="text-[8px] text-muted-foreground font-medium z-10 truncate px-1">
+                        {seg?.label || `S${i + 1}`}
+                      </span>
+                      {isSelected && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                      )}
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-36 p-1.5" side="top" align="center">
+                    <div className="space-y-0.5">
+                      <button
+                        onClick={() => onSelectScene(i)}
+                        className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground"
+                      >Select</button>
+                      {onRegenerateScene && isCompleted && (
+                        <button
+                          onClick={() => onRegenerateScene(scene.id)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><RefreshCw className="w-2.5 h-2.5" />Regenerate</button>
+                      )}
+                      {onDeleteScene && (
+                        <button
+                          onClick={() => onDeleteScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-destructive/20 text-destructive flex items-center gap-1"
+                        ><Trash2 className="w-2.5 h-2.5" />Delete</button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               );
             })}
 
@@ -117,9 +162,14 @@ export function TimelineBar({
           </div>
         </div>
 
-        {/* Text track */}
+        {/* ─── Text track ─── */}
         <div className="flex items-center gap-0.5">
-          <span className="text-[9px] text-muted-foreground w-12 shrink-0 truncate">Text</span>
+          <VolumeControl
+            label="Text"
+            volume={textTrackMuted ? 0 : 1}
+            onVolumeChange={() => setTextTrackMuted(!textTrackMuted)}
+            hideSlider
+          />
           <div className="flex-1 h-7 rounded bg-muted/10 border border-dashed border-border/30 flex items-center relative overflow-hidden">
             {textOverlays.length > 0 ? (
               <>
@@ -131,14 +181,33 @@ export function TimelineBar({
                   const leftPct = totalDuration > 0 ? (start / totalDuration) * 100 : 0;
                   const widthPct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
                   return (
-                    <div
-                      key={ov.id}
-                      className="absolute h-5 top-1 rounded bg-amber-600/50 border border-amber-500/40 flex items-center px-1"
-                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-                      title={ov.content}
-                    >
-                      <span className="text-[7px] text-white truncate">{ov.content}</span>
-                    </div>
+                    <Popover key={ov.id}>
+                      <PopoverTrigger asChild>
+                        <div
+                          className="absolute h-5 top-1 rounded bg-amber-600/50 border border-amber-500/40 flex items-center px-1 cursor-pointer hover:bg-amber-600/70 transition-colors"
+                          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                          title={ov.content}
+                        >
+                          <span className="text-[7px] text-white truncate">{ov.content}</span>
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-36 p-1.5" side="top" align="center">
+                        <div className="space-y-0.5">
+                          {onEditOverlay && (
+                            <button
+                              onClick={() => onEditOverlay(ov)}
+                              className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                            ><Edit3 className="w-2.5 h-2.5" />Edit Text</button>
+                          )}
+                          {onDeleteOverlay && (
+                            <button
+                              onClick={() => onDeleteOverlay(ov.id)}
+                              className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-destructive/20 text-destructive flex items-center gap-1"
+                            ><Trash2 className="w-2.5 h-2.5" />Delete</button>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   );
                 })}
                 <button
@@ -161,24 +230,55 @@ export function TimelineBar({
           </div>
         </div>
 
-        {/* Audio track */}
+        {/* ─── Audio track ─── */}
         <div className="flex items-center gap-0.5">
-          <span className="text-[9px] text-muted-foreground w-12 shrink-0 truncate">Audio</span>
+          <VolumeControl
+            label="Audio"
+            volume={audioTracks.length > 0 ? (audioTracks[0]?.volume ?? 1) : 1}
+            onVolumeChange={(v) => {
+              // Apply to all audio tracks
+              audioTracks.forEach((_, idx) => onAudioTrackVolumeChange?.(idx, v));
+            }}
+          />
           <div className="flex-1 h-7 rounded bg-muted/10 border border-dashed border-border/30 flex items-center relative overflow-hidden">
             {audioTracks.length > 0 ? (
               <>
                 {audioTracks.map((at, idx) => {
                   if (at.kind === "music") {
                     return (
-                      <div
-                        key={`music-${idx}`}
-                        className="absolute h-5 top-1 rounded bg-purple-600/40 border border-purple-500/40 flex items-center px-1"
-                        style={{ left: 0, width: "100%" }}
-                        title="Background Music"
-                      >
-                        <Music className="w-2.5 h-2.5 text-purple-300 mr-0.5" />
-                        <span className="text-[7px] text-purple-200 truncate">Music</span>
-                      </div>
+                      <Popover key={`music-${idx}`}>
+                        <PopoverTrigger asChild>
+                          <div
+                            className="absolute h-5 top-1 rounded bg-purple-600/40 border border-purple-500/40 flex items-center px-1 cursor-pointer hover:bg-purple-600/60 transition-colors"
+                            style={{ left: 0, width: "100%" }}
+                            title="Background Music"
+                          >
+                            <Music className="w-2.5 h-2.5 text-purple-300 mr-0.5" />
+                            <span className="text-[7px] text-purple-200 truncate">Music</span>
+                            <span className="text-[7px] text-purple-300/60 ml-1">{Math.round((at.volume ?? 1) * 100)}%</span>
+                          </div>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-44 p-2" side="top" align="center">
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-medium text-foreground">Music Volume</p>
+                            <Slider
+                              value={[Math.round((at.volume ?? 1) * 100)]}
+                              min={0} max={100} step={1}
+                              onValueChange={([v]) => onAudioTrackVolumeChange?.(idx, v / 100)}
+                              className="w-full"
+                            />
+                            <div className="flex justify-between">
+                              <span className="text-[9px] text-muted-foreground">{Math.round((at.volume ?? 1) * 100)}%</span>
+                              {onRemoveAudioTrack && (
+                                <button
+                                  onClick={() => onRemoveAudioTrack(idx)}
+                                  className="text-[9px] text-destructive hover:underline flex items-center gap-0.5"
+                                ><Trash2 className="w-2.5 h-2.5" />Remove</button>
+                              )}
+                            </div>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     );
                   }
                   const sceneIdx = storyboard.findIndex(s => s.id === at.sceneId);
@@ -188,15 +288,39 @@ export function TimelineBar({
                   const leftPct = totalDuration > 0 ? (start / totalDuration) * 100 : 0;
                   const widthPct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
                   return (
-                    <div
-                      key={`vo-${idx}`}
-                      className="absolute h-5 top-1 rounded bg-sky-600/50 border border-sky-500/40 flex items-center px-1"
-                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-                      title={at.label}
-                    >
-                      <Mic className="w-2 h-2 text-sky-300 mr-0.5" />
-                      <span className="text-[7px] text-sky-200 truncate">{at.label}</span>
-                    </div>
+                    <Popover key={`vo-${idx}`}>
+                      <PopoverTrigger asChild>
+                        <div
+                          className="absolute h-5 top-1 rounded bg-sky-600/50 border border-sky-500/40 flex items-center px-1 cursor-pointer hover:bg-sky-600/70 transition-colors"
+                          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                          title={at.label}
+                        >
+                          <Mic className="w-2 h-2 text-sky-300 mr-0.5" />
+                          <span className="text-[7px] text-sky-200 truncate">{at.label}</span>
+                          <span className="text-[7px] text-sky-300/60 ml-1">{Math.round((at.volume ?? 1) * 100)}%</span>
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-44 p-2" side="top" align="center">
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-medium text-foreground">{at.label} Volume</p>
+                          <Slider
+                            value={[Math.round((at.volume ?? 1) * 100)]}
+                            min={0} max={100} step={1}
+                            onValueChange={([v]) => onAudioTrackVolumeChange?.(idx, v / 100)}
+                            className="w-full"
+                          />
+                          <div className="flex justify-between">
+                            <span className="text-[9px] text-muted-foreground">{Math.round((at.volume ?? 1) * 100)}%</span>
+                            {onRemoveAudioTrack && (
+                              <button
+                                onClick={() => onRemoveAudioTrack(idx)}
+                                className="text-[9px] text-destructive hover:underline flex items-center gap-0.5"
+                              ><Trash2 className="w-2.5 h-2.5" />Remove</button>
+                            )}
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   );
                 })}
                 <button
@@ -220,6 +344,57 @@ export function TimelineBar({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── Inline Volume Control ─── */
+function VolumeControl({
+  label,
+  volume,
+  onVolumeChange,
+  hideSlider,
+}: {
+  label: string;
+  volume: number;
+  onVolumeChange?: (v: number) => void;
+  hideSlider?: boolean;
+}) {
+  const isMuted = volume === 0;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="flex items-center gap-0.5 w-14 shrink-0 group" title={`${label} volume`}>
+          {isMuted
+            ? <VolumeX className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+            : <Volume2 className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+          }
+          <span className="text-[9px] text-muted-foreground group-hover:text-foreground truncate transition-colors">{label}</span>
+        </button>
+      </PopoverTrigger>
+      {!hideSlider && onVolumeChange && (
+        <PopoverContent className="w-40 p-2" side="top" align="start">
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-medium text-foreground">{label} Volume</p>
+            <Slider
+              value={[Math.round(volume * 100)]}
+              min={0} max={100} step={1}
+              onValueChange={([v]) => onVolumeChange(v / 100)}
+              className="w-full"
+            />
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] text-muted-foreground">{Math.round(volume * 100)}%</span>
+              <button
+                onClick={() => onVolumeChange(isMuted ? 1 : 0)}
+                className="text-[9px] text-muted-foreground hover:text-foreground"
+              >
+                {isMuted ? "Unmute" : "Mute"}
+              </button>
+            </div>
+          </div>
+        </PopoverContent>
+      )}
+    </Popover>
   );
 }
 
