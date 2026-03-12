@@ -27,8 +27,13 @@ export function FinalPreview({
   onToggleSubtitles, onToggleLogo, onToggleEndCard,
   onExport, exporting, finalVideoUrl,
 }: FinalPreviewProps) {
+  // When end card is enabled, the last scene is replaced (not appended)
+  const effectiveScenes = endCardEnabled && storyboard.length > 1
+    ? storyboard.slice(0, -1)
+    : storyboard;
   const completedClips = clips.filter(c => c.status === "completed" && c.videoUrl);
-  const allCompleted = completedClips.length === storyboard.length && storyboard.length > 0;
+  const completedForExport = completedClips.filter(c => effectiveScenes.some(s => s.id === c.sceneId));
+  const allCompleted = completedForExport.length === effectiveScenes.length && effectiveScenes.length > 0;
   const videoRef = useRef<HTMLVideoElement>(null);
 
   return (
@@ -38,7 +43,8 @@ export function FinalPreview({
           <Film className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold">Final Preview</h3>
           <Badge variant="outline" className="text-[10px]">
-            {completedClips.length}/{storyboard.length} clips ready
+            {completedForExport.length}/{effectiveScenes.length} clips ready
+            {endCardEnabled && storyboard.length > 1 && " (+end card)"}
           </Badge>
         </div>
       </div>
@@ -54,9 +60,14 @@ export function FinalPreview({
           />
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
             <Badge variant="secondary" className="text-[10px]">
-              ✅ Final ad assembled — {completedClips.length} scenes
+              ✅ Final ad assembled — {completedForExport.length} scenes{endCardEnabled ? " + end card" : ""}
             </Badge>
-            <span>Expected: ~{Math.round(segments.reduce((sum, s) => sum + (s.endTime - s.startTime), 0))}s</span>
+            <span>Expected: ~{Math.round(
+              effectiveScenes.reduce((sum, scene) => {
+                const seg = segments.find(s => s.id === scene.segmentId);
+                return sum + (seg ? seg.endTime - seg.startTime : 0);
+              }, 0) + (endCardEnabled ? 4 : 0)
+            )}s</span>
           </div>
         </div>
       ) : (() => {
@@ -70,14 +81,14 @@ export function FinalPreview({
                 <>
                   <Loader2 className="w-8 h-8 text-primary mx-auto animate-spin" />
                   <p className="text-xs text-muted-foreground">
-                    Generating scenes... {completedClips.length}/{storyboard.length} completed
+                    Generating scenes... {completedForExport.length}/{effectiveScenes.length} completed
                   </p>
                 </>
-              ) : completedClips.length > 0 ? (
+              ) : completedForExport.length > 0 ? (
                 <>
                   <Play className="w-8 h-8 text-muted-foreground mx-auto" />
                   <p className="text-xs text-muted-foreground">
-                    {allCompleted ? "Ready to stitch — click Export" : `${storyboard.length - completedClips.length} scenes remaining`}
+                    {allCompleted ? "Ready to stitch — click Export" : `${effectiveScenes.length - completedForExport.length} scenes remaining`}
                   </p>
                   {slideshowCount > 0 && (
                     <p className="text-[10px] text-yellow-500">
