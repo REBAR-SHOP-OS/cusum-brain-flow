@@ -1,46 +1,38 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Analysis Fails Due to Reasoning Tokens Exhausting Token Budget
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Root Cause
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+Gemini 2.5 Pro uses "thinking/reasoning" tokens internally. These count against `max_completion_tokens: 8192`. The model spends ~6K+ tokens reasoning ("Planning the Storyboard...", "Structuring the Video...") before generating the actual structured output, then hits MAX_TOKENS and returns `content: null`. The fallback attempt then gets killed by the client timeout.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Changes
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. `supabase/functions/ad-director-ai/index.ts` — Increase token budget for analyze-script
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+Increase `maxTokens` for `analyze-script` from **8,192 → 16,384** (restoring original value). The reasoning tokens need room. The previous reduction was counterproductive — it's what caused this failure.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+Also change the API field from `max_completion_tokens` back to `max_tokens` — Gemini via the OpenAI-compatible endpoint treats `max_completion_tokens` as a hard cap on output tokens *including* reasoning, while `max_tokens` is more lenient on some providers.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. `supabase/functions/ad-director-ai/index.ts` — Add `thinking` budget config
+
+For Gemini 2.5 Pro, we can set `"thinking": { "thinking_budget": 4096 }` to cap reasoning tokens and leave room for actual output. This prevents the model from burning the entire budget on internal thought.
+
+### 3. `src/components/ad-director/AdDirectorContent.tsx` — Client timeout already 180s
+
+No change needed — 180s is sufficient if the model doesn't exhaust tokens.
+
+## Summary of Token Budget Fix
+
+```text
+Before:  max_completion_tokens: 8192
+         Model uses ~6K on reasoning → only ~2K left for output → truncated → FAIL
+
+After:   max_tokens: 16384
+         thinking_budget: 4096 (caps reasoning)
+         Model uses ≤4K reasoning + up to 12K output → SUCCESS
+```
+
+## Files
+- `supabase/functions/ad-director-ai/index.ts` — restore analyze-script to 16384 tokens, switch to `max_tokens`, add thinking budget for Gemini Pro models
+
