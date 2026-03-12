@@ -651,7 +651,13 @@ serve(async (req) => {
       let result: { jobId: string; provider: string };
       try {
         if (isWan) {
-          result = await wanGenerate(apiKey, prompt, duration || 8);
+          // Check if this is an I2V request (image URL provided)
+          if (imageUrl) {
+            const isFlash = model === "wan2.6-i2v-flash";
+            result = await wanI2vGenerate(apiKey, prompt, imageUrl, duration || 8, aspectRatio, negativePrompt, isFlash);
+          } else {
+            result = await wanGenerate(apiKey, prompt, duration || 8, aspectRatio, negativePrompt, inputAudioUrl);
+          }
         } else if (isVeo) {
           try {
             result = await veoGenerate(apiKey, prompt, duration || 8);
