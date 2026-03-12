@@ -85,7 +85,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
             business_name: brandKit?.business_name || undefined,
             description: brandKit?.description || undefined,
             value_prop: brandKit?.value_prop || undefined,
-            tagline: brandKit?.tagline || undefined,
+            tagline: undefined,
           },
         },
       });
