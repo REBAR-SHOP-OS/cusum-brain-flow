@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Sparkles, FileText, Image as ImageIcon, Music, Mic } from "lucide-react";
+import { Upload, Sparkles, FileText, Image as ImageIcon, Music, Mic, Loader2 } from "lucide-react";
 import { DEMO_SCRIPT, type BrandProfile, DEFAULT_BRAND } from "@/types/adDirector";
 import { cn } from "@/lib/utils";
 
