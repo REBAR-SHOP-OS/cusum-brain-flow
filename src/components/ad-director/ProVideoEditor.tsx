@@ -119,6 +119,69 @@ export function ProVideoEditor({
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
   const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
   const [voiceoverDurations, setVoiceoverDurations] = useState<Record<string, number>>({});
+  const [cardSettingsMap, setCardSettingsMap] = useState<Record<string, IntroOutroCardSettings>>({});
+  const liveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
+
+  // Preload logo image for card rendering
+  useEffect(() => {
+    if (brand.logoUrl) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = brand.logoUrl;
+      img.onload = () => { logoImgRef.current = img; };
+    } else {
+      logoImgRef.current = null;
+    }
+  }, [brand.logoUrl]);
+
+  // Get or create card settings for current scene
+  const currentCardSettings = useMemo(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return null;
+    return cardSettingsMap[scene.id] || null;
+  }, [storyboard, selectedSceneIndex, cardSettingsMap]);
+
+  const handleCardSettingsChange = useCallback((s: IntroOutroCardSettings) => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    setCardSettingsMap(prev => ({ ...prev, [scene.id]: s }));
+  }, [storyboard, selectedSceneIndex]);
+
+  // Live canvas redraw when editing a static card
+  useEffect(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    const settings = cardSettingsMap[scene.id];
+    if (!settings || !liveCanvasRef.current) return;
+    const canvas = liveCanvasRef.current;
+    canvas.width = 1280;
+    canvas.height = 720;
+    drawCardToCanvas(canvas, settings, logoImgRef.current);
+  }, [cardSettingsMap, storyboard, selectedSceneIndex]);
+
+  const handleApplyCard = useCallback(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    const settings = cardSettingsMap[scene.id];
+    if (!settings) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280;
+    canvas.height = 720;
+    drawCardToCanvas(canvas, settings, logoImgRef.current);
+    const dataUrl = canvas.toDataURL("image/png");
+    onUpdateClipUrl?.(scene.id, dataUrl);
+    toast({ title: "Card updated", description: "Intro/outro card applied." });
+  }, [storyboard, selectedSceneIndex, cardSettingsMap, onUpdateClipUrl, toast]);
+
+  const openCardEditor = useCallback(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    if (!cardSettingsMap[scene.id]) {
+      setCardSettingsMap(prev => ({ ...prev, [scene.id]: DEFAULT_CARD_SETTINGS(brand) }));
+    }
+    handleSetActiveTab("card-editor" as EditorTab);
+  }, [storyboard, selectedSceneIndex, cardSettingsMap, brand, handleSetActiveTab]);
 
   // ─── Global timeline ───
   const sceneDurations = useMemo(() => {
