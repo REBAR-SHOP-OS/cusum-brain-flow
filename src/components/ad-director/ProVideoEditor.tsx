@@ -243,6 +243,15 @@ export function ProVideoEditor({
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       const a = new Audio(vo.audioUrl);
       a.currentTime = videoRef.current?.currentTime ?? 0;
+      // Adjust voiceover playback rate if it's longer than the video clip
+      const sceneClipDur = clipDurations[sceneId!];
+      const sceneVoDur = voiceoverDurations[sceneId!];
+      if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
+        const ratio = sceneVoDur / sceneClipDur;
+        a.playbackRate = Math.min(ratio, 1.3); // cap at 1.3x speedup
+      } else {
+        a.playbackRate = 1;
+      }
       a.play().catch(() => {});
       audioRef.current = a;
       currentVoUrlRef.current = vo.audioUrl;
