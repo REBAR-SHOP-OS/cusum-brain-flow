@@ -70,8 +70,9 @@ export function AdDirectorContent() {
       const { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
       const plannedBy = analyzeResult.modelUsed;
 
-      // Step 2: Write cinematic prompts for each scene (GPT-5)
-      setAnalysisStatus("GPT-5 writing cinematic prompts...");
+      // Step 2: Write cinematic prompts for each scene
+      setAnalysisStatus("Writing cinematic prompts...");
+      setAnalysisProgress(30);
       const promptResults = await Promise.all(
         rawStoryboard.map(async (scene, idx) => {
           try {
