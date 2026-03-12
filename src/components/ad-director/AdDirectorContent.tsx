@@ -112,7 +112,7 @@ export function AdDirectorContent() {
       const qualityResults = await Promise.all(
         promptResults.map(async (pr, idx) => {
           try {
-            const res = await invokeEdgeFunction<{
+            const res = await withTimeout(invokeEdgeFunction<{
               result: PromptQualityScore;
               modelUsed: string;
             }>("ad-director-ai", {
@@ -121,7 +121,7 @@ export function AdDirectorContent() {
               scene: rawStoryboard[idx],
               brand,
               modelOverrides,
-            });
+            }));
             return { quality: res.result, scoredBy: res.modelUsed };
           } catch {
             return { quality: undefined, scoredBy: "skipped" };
