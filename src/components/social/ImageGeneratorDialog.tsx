@@ -3,7 +3,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp } from "lucide-react";
+import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp, Bird, Building2, HardHat, Landmark, TreePine, Users, Bot, Package, type LucideIcon } from "lucide-react";
+
+const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: string }[] = [
+  { id: "bird", label: "پرنده", icon: Bird, promptTag: "birds in the sky" },
+  { id: "building", label: "ساختمان", icon: Building2, promptTag: "building structure" },
+  { id: "construction", label: "پروژه ساختمانی", icon: HardHat, promptTag: "construction project site" },
+  { id: "city", label: "شهر", icon: Landmark, promptTag: "urban cityscape" },
+  { id: "nature", label: "طبیعت", icon: TreePine, promptTag: "natural landscape" },
+  { id: "workers", label: "کارگران", icon: Users, promptTag: "construction workers at work" },
+  { id: "ai", label: "هوش مصنوعی", icon: Bot, promptTag: "AI technology in construction" },
+  { id: "products", label: "محصولات ما", icon: Package, promptTag: "rebar stirrups, ties, and accessories" },
+];
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
