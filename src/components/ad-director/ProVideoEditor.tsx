@@ -143,7 +143,7 @@ export function ProVideoEditor({
     try {
       const result = await invokeEdgeFunction<{ result: { prompt: string } }>(
         "edit-video-prompt",
-        { prompt: scene.prompt, editDetail: aiCommand }
+        { originalPrompt: scene.prompt, editAction: aiCommand }
       );
       const newPrompt = result.result?.prompt || result.result;
       if (typeof newPrompt === "string" && newPrompt.length > 0) {
