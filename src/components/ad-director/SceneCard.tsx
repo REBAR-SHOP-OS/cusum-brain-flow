@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Video, Image as ImageIcon, Link2, FileText, Layers,
-  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight
+  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight, Download
 } from "lucide-react";
+import { downloadFile } from "@/lib/downloadUtils";
 import { type StoryboardScene, type ClipOutput, type GenerationMode } from "@/types/adDirector";
 import { PromptQualityBadge } from "./PromptQualityBadge";
 import { SceneIntelligenceBar } from "./SceneIntelligenceBar";

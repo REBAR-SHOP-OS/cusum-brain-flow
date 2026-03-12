@@ -172,6 +172,54 @@ export type Database = {
         }
         Relationships: []
       }
+      ad_projects: {
+        Row: {
+          brand_name: string | null
+          clips: Json | null
+          continuity: Json | null
+          created_at: string
+          final_video_url: string | null
+          id: string
+          name: string
+          script: string | null
+          segments: Json | null
+          status: string
+          storyboard: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brand_name?: string | null
+          clips?: Json | null
+          continuity?: Json | null
+          created_at?: string
+          final_video_url?: string | null
+          id?: string
+          name?: string
+          script?: string | null
+          segments?: Json | null
+          status?: string
+          storyboard?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brand_name?: string | null
+          clips?: Json | null
+          continuity?: Json | null
+          created_at?: string
+          final_video_url?: string | null
+          id?: string
+          name?: string
+          script?: string | null
+          segments?: Json | null
+          status?: string
+          storyboard?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       agent_action_log: {
         Row: {
           action_type: string
