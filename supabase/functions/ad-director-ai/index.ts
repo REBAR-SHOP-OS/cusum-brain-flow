@@ -257,7 +257,7 @@ async function callAIAndExtract(
       console.warn(`callAIAndExtract: switching to fallback model ${route.fallback} (attempt ${attempt}, task=${taskType})`);
     }
     try {
-      const { data, modelUsed, fallbackUsed } = await callAI(apiKey, route, messages, tools, toolChoice, effectiveOverride);
+      const { data, modelUsed, fallbackUsed } = await callAI(apiKey, route, messages, tools, toolChoice, effectiveOverride, taskType);
       return { result: extractToolResult(data), modelUsed, fallbackUsed: fallbackUsed || usingFallback };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
