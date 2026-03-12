@@ -622,20 +622,25 @@ export async function stitchClips(
         drawFrame();
       };
 
-      video.addEventListener("playing", startDrawing, { once: true });
-      video.play().catch((err) => {
-        video.removeEventListener("playing", startDrawing);
-        console.error(`[stitchClips] Clip ${clipIndex + 1} play failed:`, err);
-        ctx.fillStyle = "#000000";
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = "#ff4444";
-        ctx.font = "24px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(`Scene ${clipIndex + 1} — playback failed`, W / 2, H / 2);
-        ctx.textAlign = "start";
-        hasDrawnFrame = true;
-        setTimeout(() => finishClip(), 1000);
-      });
+      if (wasPreStarted) {
+        // Already playing from crossfade — just attach draw loop directly
+        startDrawing();
+      } else {
+        video.addEventListener("playing", startDrawing, { once: true });
+        video.play().catch((err) => {
+          video.removeEventListener("playing", startDrawing);
+          console.error(`[stitchClips] Clip ${clipIndex + 1} play failed:`, err);
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#ff4444";
+          ctx.font = "24px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(`Scene ${clipIndex + 1} — playback failed`, W / 2, H / 2);
+          ctx.textAlign = "start";
+          hasDrawnFrame = true;
+          setTimeout(() => finishClip(), 1000);
+        });
+      }
     };
 
     const renderEndCard = () => {
