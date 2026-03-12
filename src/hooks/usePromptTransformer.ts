@@ -14,6 +14,8 @@ interface PromptElements {
 interface TransformResult {
   engineeredPrompt: string;
   elements: PromptElements;
+  intent: string;
+  platform_intent: string;
   isConstructionRelated: boolean;
   rawPrompt: string;
 }
