@@ -727,13 +727,79 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
               </div>
             )}
 
+            {/* Image result */}
+            {mediaType === "image" && generatedImageUrl && !imageGenerating && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[hsl(var(--success))]">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">Image ready!</span>
+                </div>
+                <div className="rounded-xl overflow-hidden border bg-black">
+                  <img src={generatedImageUrl} alt="Generated" className="w-full object-contain max-h-[500px]" />
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="outline" asChild>
+                    <a href={generatedImageUrl} download="generated-image.png" target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4 mr-1.5" /> Download</a>
+                  </Button>
+                  <Button variant="outline" onClick={() => { setGeneratedImageUrl(null); }}><RotateCcw className="w-4 h-4" /></Button>
+                </div>
+              </div>
+            )}
+
+            {/* Image generating */}
+            {mediaType === "image" && imageGenerating && (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+                <p className="font-semibold text-lg">Generating image…</p>
+                <p className="text-sm text-muted-foreground animate-pulse">This usually takes 10-30 seconds</p>
+              </div>
+            )}
+
+            {/* Standalone audio result */}
+            {mediaType === "audio" && standaloneAudioUrl && !standaloneAudioGenerating && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[hsl(var(--success))]">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">{audioType === "music" ? "Music" : "Sound effect"} ready!</span>
+                </div>
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <audio src={standaloneAudioUrl} controls className="w-full" />
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="outline" asChild>
+                    <a href={standaloneAudioUrl} download={`generated-${audioType}.mp3`}><Download className="w-4 h-4 mr-1.5" /> Download</a>
+                  </Button>
+                  <Button variant="outline" onClick={() => { setStandaloneAudioUrl(null); }}><RotateCcw className="w-4 h-4" /></Button>
+                </div>
+              </div>
+            )}
+
+            {/* Audio generating */}
+            {mediaType === "audio" && standaloneAudioGenerating && (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+                <p className="font-semibold text-lg">Generating {audioType === "music" ? "music" : "sound effect"}…</p>
+                <p className="text-sm text-muted-foreground animate-pulse">This usually takes 15-60 seconds</p>
+              </div>
+            )}
+
             {/* Empty state */}
-            {fullPage && status === "idle" && (
+            {fullPage && status === "idle" && !generatedImageUrl && !standaloneAudioUrl && !imageGenerating && !standaloneAudioGenerating && (
               <div className="flex flex-col items-center justify-center h-full min-h-[300px]">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center mb-4">
-                  <Clapperboard className="w-10 h-10 text-muted-foreground/30" />
+                  {mediaType === "image" ? <Image className="w-10 h-10 text-muted-foreground/30" /> :
+                   mediaType === "audio" ? <Music className="w-10 h-10 text-muted-foreground/30" /> :
+                   <Clapperboard className="w-10 h-10 text-muted-foreground/30" />}
                 </div>
-                <p className="text-muted-foreground text-sm font-medium">Your video will appear here</p>
+                <p className="text-muted-foreground text-sm font-medium">
+                  {mediaType === "image" ? "Your image will appear here" :
+                   mediaType === "audio" ? "Your audio will appear here" :
+                   "Your video will appear here"}
+                </p>
                 <p className="text-muted-foreground/50 text-xs mt-1">Describe your idea below and hit Generate</p>
               </div>
             )}
