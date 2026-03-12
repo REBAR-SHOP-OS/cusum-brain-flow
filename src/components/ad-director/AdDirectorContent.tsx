@@ -281,6 +281,7 @@ export function AdDirectorContent() {
               onBrandChange={setBrand}
               onAnalyze={handleAnalyze}
               analyzing={analyzing}
+              analysisStatus={analysisStatus}
               assets={assets}
               onAssetsChange={setAssets}
             />
