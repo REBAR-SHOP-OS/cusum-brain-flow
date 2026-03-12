@@ -20,7 +20,7 @@ export default function AdDirector() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 max-w-6xl mx-auto w-full px-4 pb-8 pt-4">
+      <div className="max-w-6xl mx-auto w-full px-4 pb-8 pt-4">
         <AdDirectorContent />
       </div>
     </div>

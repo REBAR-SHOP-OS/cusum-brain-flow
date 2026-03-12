@@ -165,7 +165,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
       >
         {analyzing ? (
           <>
-            <Sparkles className="w-5 h-5 mr-2 animate-pulse" />
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
             Analyzing Script...
           </>
         ) : (
