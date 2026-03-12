@@ -2,19 +2,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+function invoke(action: string, params: Record<string, unknown> = {}) {
+  return supabase.functions.invoke("semrush-api", { body: { action, ...params } });
+}
+
 export function useSemrushSync() {
   const qc = useQueryClient();
 
   const syncDomain = useMutation({
     mutationFn: async ({ domain_id, domain }: { domain_id: string; domain: string }) => {
-      // Run domain_overview + domain_organic in parallel
       const [overviewRes, organicRes] = await Promise.all([
-        supabase.functions.invoke("semrush-api", {
-          body: { action: "domain_overview", domain_id, domain },
-        }),
-        supabase.functions.invoke("semrush-api", {
-          body: { action: "domain_organic", domain_id, domain, limit: 500 },
-        }),
+        invoke("domain_overview", { domain_id, domain }),
+        invoke("domain_organic", { domain_id, domain, limit: 500 }),
       ]);
       if (overviewRes.error) throw overviewRes.error;
       if (organicRes.error) throw organicRes.error;
@@ -31,9 +30,7 @@ export function useSemrushSync() {
 
   const fetchBacklinks = useMutation({
     mutationFn: async ({ domain }: { domain: string }) => {
-      const { data, error } = await supabase.functions.invoke("semrush-api", {
-        body: { action: "backlinks_overview", domain },
-      });
+      const { data, error } = await invoke("backlinks_overview", { domain });
       if (error) throw error;
       return data;
     },
@@ -42,38 +39,59 @@ export function useSemrushSync() {
 
   const researchKeyword = useMutation({
     mutationFn: async ({ keyword }: { keyword: string }) => {
-      const { data, error } = await supabase.functions.invoke("semrush-api", {
-        body: { action: "keyword_overview", keyword },
-      });
+      const { data, error } = await invoke("keyword_overview", { keyword });
       if (error) throw error;
       return data?.data;
     },
     onError: (e: any) => toast.error(`Keyword research failed: ${e.message}`),
   });
 
-  /** Pull EVERYTHING from SEMrush: US+CA organic, backlinks, competitors, paid, history */
+  /**
+   * Pull EVERYTHING from SEMrush by firing individual lightweight edge function
+   * calls in parallel from the client. This avoids edge function timeout limits.
+   */
   const fullExport = useMutation({
     mutationFn: async ({ domain_id, domain }: { domain_id: string; domain: string }) => {
-      const { data, error } = await supabase.functions.invoke("semrush-api", {
-        body: { action: "full_export", domain_id, domain },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+      const databases = ["us", "ca"];
+
+      // Fire all calls in parallel — each is a separate lightweight edge function invocation
+      const calls = databases.flatMap((db) => [
+        invoke("domain_overview", { domain_id, domain, database: db }).then((r) => ({ db, type: "overview", ...r })),
+        invoke("domain_organic", { domain_id, domain, database: db, limit: 500 }).then((r) => ({ db, type: "organic", ...r })),
+        invoke("domain_competitors", { domain, database: db }).then((r) => ({ db, type: "competitors", ...r })),
+        invoke("domain_adwords", { domain, database: db }).then((r) => ({ db, type: "adwords", ...r })),
+        invoke("domain_rank_history", { domain, database: db }).then((r) => ({ db, type: "history", ...r })),
+      ]);
+      // Backlinks are domain-level (not db-specific), fire once
+      calls.push(
+        invoke("backlinks_overview", { domain }).then((r) => ({ db: "global", type: "backlinks", ...r })),
+        invoke("backlinks_refdomains", { domain }).then((r) => ({ db: "global", type: "refdomains", ...r })),
+      );
+
+      const results = await Promise.allSettled(calls);
+
+      // Tally successes
+      const summary: Record<string, number> = {};
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value.data?.success) {
+          const key = `${r.value.type}_${r.value.db}`;
+          summary[key] = r.value.data.count ?? r.value.data.keywords_synced ?? 1;
+        }
+      }
+
+      const totalKw = (summary["organic_us"] || 0) + (summary["organic_ca"] || 0);
+      const failed = results.filter((r) => r.status === "rejected").length;
+
+      return { summary, totalKw, failed };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["seo-domain"] });
       qc.invalidateQueries({ queryKey: ["seo-ai-kw-stats"] });
       qc.invalidateQueries({ queryKey: ["seo-ai-keywords"] });
-      const s = data?.summary || {};
       toast.success(
-        `Full SEMrush export complete!\n` +
-        `${s.total_organic_keywords || 0} keywords (US+CA)\n` +
-        `${s.us_competitors || 0} US competitors, ${s.ca_competitors || 0} CA competitors\n` +
-        `${s.referring_domains || 0} referring domains\n` +
-        `${s.paid_keywords_us || 0} paid keywords\n` +
-        `${s.rank_history_months || 0} months of rank history`,
-        { duration: 10000 }
+        `Full SEMrush export done! ${data.totalKw} keywords (US+CA) saved.` +
+          (data.failed > 0 ? ` ${data.failed} calls had errors.` : ""),
+        { duration: 10000 },
       );
     },
     onError: (e: any) => toast.error(`Full export failed: ${e.message}`),
