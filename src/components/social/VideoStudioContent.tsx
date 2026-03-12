@@ -392,6 +392,51 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     const isMultiScene = requestedDuration > effectiveMaxClip;
     isMultiRef.current = isMultiScene;
 
+    // Upload reference image to storage if present (for I2V)
+    let refImageStorageUrl: string | undefined;
+    if (referenceImage && isI2vModel) {
+      try {
+        setProgressLabel("Uploading reference image...");
+        const resp = await fetch(referenceImage);
+        const blob = await resp.blob();
+        const { data: { user } } = await supabase.auth.getUser();
+        const fileName = `ref-images/${user?.id}/${crypto.randomUUID()}.${blob.type.includes("png") ? "png" : "jpg"}`;
+        const { error: upErr } = await supabase.storage.from("social-media-assets").upload(fileName, blob, { contentType: blob.type, upsert: false });
+        if (upErr) throw upErr;
+        const { data: pubData } = supabase.storage.from("social-media-assets").getPublicUrl(fileName);
+        refImageStorageUrl = pubData.publicUrl;
+      } catch (err: any) {
+        console.error("Ref image upload failed:", err);
+        toast({ title: "Image upload failed", description: err.message, variant: "destructive" });
+        setStatus("idle"); return;
+      }
+    }
+
+    // Upload custom audio file to storage if present (for Wan audio sync)
+    let audioStorageUrl: string | undefined;
+    if (customAudioFile && effectiveVideoProvider === "wan") {
+      try {
+        setProgressLabel("Uploading audio file...");
+        const { data: { user } } = await supabase.auth.getUser();
+        const ext = customAudioFile.name.split(".").pop() || "mp3";
+        const fileName = `audio-sync/${user?.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("social-media-assets").upload(fileName, customAudioFile, { contentType: customAudioFile.type, upsert: false });
+        if (upErr) throw upErr;
+        const { data: pubData } = supabase.storage.from("social-media-assets").getPublicUrl(fileName);
+        audioStorageUrl = pubData.publicUrl;
+      } catch (err: any) {
+        console.error("Audio file upload failed:", err);
+        toast({ title: "Audio upload failed", description: err.message, variant: "destructive" });
+        setStatus("idle"); return;
+      }
+    }
+
+    // Build extra params for Wan models
+    const wanExtras: Record<string, unknown> = {};
+    if (refImageStorageUrl) wanExtras.imageUrl = refImageStorageUrl;
+    if (audioStorageUrl) wanExtras.audioUrl = audioStorageUrl;
+    if (negativePrompt.trim()) wanExtras.negativePrompt = negativePrompt.trim();
+
     try {
       if (isMultiScene) {
         const sceneCount = Math.ceil(requestedDuration / effectiveMaxClip);
@@ -400,6 +445,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           action: "generate-multi", provider: effectiveVideoProvider, prompt: finalPrompt,
           duration: requestedDuration,
           model: selectedModel,
+          ...wanExtras,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
@@ -421,6 +467,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt,
           duration: requestedDuration,
           model: selectedModel,
+          ...wanExtras,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
