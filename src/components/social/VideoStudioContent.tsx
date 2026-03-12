@@ -356,7 +356,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
       genRecord = await createGeneration.mutateAsync({
         raw_prompt: rawPrompt.trim(), engineered_prompt: finalPrompt,
         intent: result?.intent, mode, duration_seconds: durationSecs,
-        aspect_ratio: aspectRatio, provider: currentMode.provider,
+        aspect_ratio: aspectRatio, provider: effectiveVideoProvider,
         estimated_credits: creditCost,
         metadata: { elements: result?.elements, platform_intent: result?.platform_intent },
       });
