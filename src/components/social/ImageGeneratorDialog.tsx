@@ -86,12 +86,9 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("generate-image", {
-        body: {
+          body: {
           prompt: brandedPrompt,
           model: selectedModel,
-          size,
-          quality: "high",
-          style: selectedModel === "dall-e-3" ? "vivid" : undefined,
         },
       });
 
