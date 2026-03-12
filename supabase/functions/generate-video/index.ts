@@ -659,32 +659,34 @@ serve(async (req) => {
           } else {
             result = await wanGenerate(apiKey, prompt, duration || 8, aspectRatio, negativePrompt, inputAudioUrl);
           }
-        } else if (isVeo) {
+        } else if (!isVeo) {
+          // Sora selected — fallback: Sora → Wan → Veo
           try {
-            result = await veoGenerate(apiKey, prompt, duration || 8);
+            result = await soraGenerate(apiKey, prompt, duration || 8, (model && model.startsWith("sora")) ? model : "sora-2");
           } catch (e) {
             const message = getErrorMessage(e);
-            if (isProviderCapacityError(message) && gptKey) {
-              console.warn("Veo capacity reached on single generate, falling back to Sora");
-              result = await soraGenerate(gptKey, prompt, duration || 8, "sora-2");
-            } else if (isProviderCapacityError(message) && dashscopeKey) {
-              console.warn("Veo capacity reached, falling back to Wan");
-              result = await wanGenerate(dashscopeKey, prompt, duration || 8);
+            if (isProviderCapacityError(message) && dashscopeKey) {
+              console.warn("Sora capacity reached, falling back to Wan");
+              result = await wanGenerate(dashscopeKey, prompt, duration || 8, aspectRatio, negativePrompt, inputAudioUrl);
+            } else if (isProviderCapacityError(message) && geminiKey) {
+              console.warn("Sora capacity reached, falling back to Veo");
+              result = await veoGenerate(geminiKey, prompt, duration || 8);
             } else {
               throw e;
             }
           }
         } else {
+          // Veo selected — fallback: Veo → Wan → Sora
           try {
-            result = await soraGenerate(apiKey, prompt, duration || 8, (model && model.startsWith("sora")) ? model : "sora-2");
+            result = await veoGenerate(apiKey, prompt, duration || 8);
           } catch (e) {
             const message = getErrorMessage(e);
-            if (isProviderCapacityError(message) && geminiKey) {
-              console.warn("Sora capacity reached on single generate, falling back to Veo");
-              result = await veoGenerate(geminiKey, prompt, duration || 8);
-            } else if (isProviderCapacityError(message) && dashscopeKey) {
-              console.warn("Sora capacity reached, falling back to Wan");
-              result = await wanGenerate(dashscopeKey, prompt, duration || 8);
+            if (isProviderCapacityError(message) && dashscopeKey) {
+              console.warn("Veo capacity reached, falling back to Wan");
+              result = await wanGenerate(dashscopeKey, prompt, duration || 8, aspectRatio, negativePrompt, inputAudioUrl);
+            } else if (isProviderCapacityError(message) && gptKey) {
+              console.warn("Veo capacity reached, falling back to Sora");
+              result = await soraGenerate(gptKey, prompt, duration || 8, "sora-2");
             } else {
               throw e;
             }
@@ -803,27 +805,35 @@ serve(async (req) => {
           try {
             let result: { jobId: string; provider: string };
             if (isWan) {
-              result = await wanGenerate(apiKey, scenePrompt, clipDuration, undefined, negativePrompt, inputAudioUrl);
-            } else if (isVeo) {
+              result = await wanGenerate(apiKey, scenePrompt, clipDuration, aspectRatio, negativePrompt, inputAudioUrl);
+            } else if (!isVeo) {
+              // Sora — fallback: Sora → Wan → Veo
               try {
-                result = await veoGenerate(apiKey, scenePrompt, clipDuration);
+                result = await soraGenerate(apiKey, scenePrompt, clipDuration, (model && model.startsWith("sora")) ? model : "sora-2");
               } catch (e) {
                 const message = getErrorMessage(e);
-                if (isProviderCapacityError(message) && gptKey) {
-                  console.warn(`Veo capacity reached on scene ${i + 1}, falling back to Sora`);
-                  result = await soraGenerate(gptKey, scenePrompt, clipDuration, "sora-2");
+                if (isProviderCapacityError(message) && dashscopeKey) {
+                  console.warn(`Sora capacity reached on scene ${i + 1}, falling back to Wan`);
+                  result = await wanGenerate(dashscopeKey, scenePrompt, clipDuration, aspectRatio, negativePrompt, inputAudioUrl);
+                } else if (isProviderCapacityError(message) && geminiKey) {
+                  console.warn(`Sora capacity reached on scene ${i + 1}, falling back to Veo`);
+                  result = await veoGenerate(geminiKey, scenePrompt, clipDuration);
                 } else {
                   throw e;
                 }
               }
             } else {
+              // Veo — fallback: Veo → Wan → Sora
               try {
-                result = await soraGenerate(apiKey, scenePrompt, clipDuration, (model && model.startsWith("sora")) ? model : "sora-2");
+                result = await veoGenerate(apiKey, scenePrompt, clipDuration);
               } catch (e) {
                 const message = getErrorMessage(e);
-                if (isProviderCapacityError(message) && geminiKey) {
-                  console.warn(`Sora capacity reached on scene ${i + 1}, falling back to Veo`);
-                  result = await veoGenerate(geminiKey, scenePrompt, clipDuration);
+                if (isProviderCapacityError(message) && dashscopeKey) {
+                  console.warn(`Veo capacity reached on scene ${i + 1}, falling back to Wan`);
+                  result = await wanGenerate(dashscopeKey, scenePrompt, clipDuration, aspectRatio, negativePrompt, inputAudioUrl);
+                } else if (isProviderCapacityError(message) && gptKey) {
+                  console.warn(`Veo capacity reached on scene ${i + 1}, falling back to Sora`);
+                  result = await soraGenerate(gptKey, scenePrompt, clipDuration, "sora-2");
                 } else {
                   throw e;
                 }
