@@ -65,6 +65,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   // ── REFRESH-SAFE STATE RESTORATION ──
   // On mount, if machine has an active locked job, restore state from backend
+  // Validates the actual run status before blindly restoring to avoid stale "ABORT" state
   useEffect(() => {
     if (restoredFromBackend) return;
     // Don't finalize restoration until items have loaded
@@ -76,27 +77,55 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     ) {
       // Find the item matching the locked job
       const lockedIndex = items.findIndex(i => i.id === machine.active_job_id);
-      if (lockedIndex >= 0) {
-        setCurrentIndex(lockedIndex);
-        setTrackedItemId(machine.active_job_id!);
-        setIsRunning(true);
-        setActiveRunId(machine.current_run_id);
-        setCompletedAtRunStart(0); // Immediate sync fallback — async fetch refines below
-        // Fetch fresh completed count for snapshot
+      if (lockedIndex >= 0 && machine.current_run_id) {
+        // Verify the actual run is still running before restoring
         supabase
-          .from("cut_plan_items")
-          .select("completed_pieces")
-          .eq("id", machine.active_job_id)
+          .from("machine_runs")
+          .select("id, status")
+          .eq("id", machine.current_run_id)
           .single()
-          .then(({ data, error }) => {
-            if (error || !data) {
-              console.warn("[CutterStation] Failed to fetch completed_pieces for restore, falling back to 0");
-              setCompletedAtRunStart(0);
+          .then(async ({ data: runRow, error: runErr }) => {
+            if (runErr || !runRow || runRow.status !== "running") {
+              // Stale run — auto-clear instead of forcing abort
+              console.warn("[CutterStation] Stale run detected (status:", runRow?.status, "), auto-clearing");
+              try {
+                await manageMachine({
+                  action: "complete-run",
+                  machineId: machine.id,
+                  runId: machine.current_run_id!,
+                  outputQty: 0,
+                  scrapQty: 0,
+                  notes: "Auto-cleared stale run on restore",
+                });
+              } catch (e) {
+                console.warn("[CutterStation] Auto-clear failed (may already be cleared):", e);
+              }
+              setCompletedLocally(true);
+              queryClient.invalidateQueries({ queryKey: ["live-machines"] });
             } else {
-              setCompletedAtRunStart(data.completed_pieces ?? 0);
+              // Run is genuinely active — restore as before
+              setCurrentIndex(lockedIndex);
+              setTrackedItemId(machine.active_job_id!);
+              setIsRunning(true);
+              setActiveRunId(machine.current_run_id);
+              setCompletedAtRunStart(0);
+              // Fetch fresh completed count for snapshot
+              supabase
+                .from("cut_plan_items")
+                .select("completed_pieces")
+                .eq("id", machine.active_job_id!)
+                .single()
+                .then(({ data, error }) => {
+                  if (error || !data) {
+                    console.warn("[CutterStation] Failed to fetch completed_pieces for restore, falling back to 0");
+                    setCompletedAtRunStart(0);
+                  } else {
+                    setCompletedAtRunStart(data.completed_pieces ?? 0);
+                  }
+                });
+              console.log("[CutterStation] Restored active job from backend:", machine.active_job_id);
             }
           });
-        console.log("[CutterStation] Restored active job from backend:", machine.active_job_id);
       }
     }
     setRestoredFromBackend(true);
