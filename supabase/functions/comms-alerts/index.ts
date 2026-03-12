@@ -415,7 +415,7 @@ serve(async (req) => {
         const html = buildAlertHTML(alert.type, alert.owner, alert.comm, alert.agent);
         const subj = alert.type === "missed_call"
           ? `[Alert] Missed call from ${alert.comm.from_address || "Unknown"}`
-          : `[Alert] Unanswered email — ${alert.type.replace("response_time_", "")} — ${alert.comm.subject || ""}`;
+          : `[Alert] Unanswered email - ${alert.type.replace("response_time_", "")} - ${alert.comm.subject || ""}`;
 
         // Send to owner
         if (alert.owner) {
