@@ -638,7 +638,7 @@ Deno.serve(async (req) => {
               `⚠️ Image generation failed: ${imgResult.error || "Unknown error"}\n\n` +
               `**Caption:**\n${dynContent.caption}` +
               PIXEL_CONTACT_INFO +
-              `\n\n**Hashtags:**\n${dynContent.hashtags}` +
+              `\n\n${dynContent.hashtags}` +
               persianBlock
             );
           }
