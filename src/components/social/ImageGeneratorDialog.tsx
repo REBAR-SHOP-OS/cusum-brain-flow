@@ -22,12 +22,13 @@ import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { applyLogoToImage, ensureSquare } from "@/lib/imageWatermark";
+import { applyLogoToImage, ensureSquare, ensurePortrait } from "@/lib/imageWatermark";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImageReady?: (imageUrl: string) => void;
+  storyMode?: boolean;
 }
 
 type Status = "idle" | "searching" | "generating" | "branding" | "completed" | "failed";
