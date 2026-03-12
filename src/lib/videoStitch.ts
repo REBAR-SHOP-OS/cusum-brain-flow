@@ -344,7 +344,7 @@ export async function stitchClips(
 
       // Master compressor/limiter to prevent clipping
       const compressor = audioCtx.createDynamicsCompressor();
-      compressor.threshold.value = -6;
+      compressor.threshold.value = -3;
       compressor.knee.value = 6;
       compressor.ratio.value = 12;
       compressor.attack.value = 0.003;
