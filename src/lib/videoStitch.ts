@@ -379,8 +379,11 @@ export async function stitchClips(
 
     recorder.start(1000); // Request data every 1s for reliability
 
-    if (audioElement) {
-      audioElement.play().catch(() => console.warn("[stitchClips] Audio play failed"));
+    if (voiceElement) {
+      voiceElement.play().catch(() => console.warn("[stitchClips] Voice play failed"));
+    }
+    if (musicElement) {
+      musicElement.play().catch(() => console.warn("[stitchClips] Music play failed"));
     }
 
     // Phase 2: Render clips sequentially
