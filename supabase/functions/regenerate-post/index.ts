@@ -267,7 +267,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       const persianBlock = newCap.captionFa
         ? `\n\n---PERSIAN---\n📝 ترجمه کپشن: ${newCap.captionFa}`
         : "";
-      const fullContent = `${newCap.caption}\n\n${newCap.hashtags || ""}${PIXEL_CONTACT_INFO}${persianBlock}`;
+      const fullContent = `${newCap.caption}${PIXEL_CONTACT_INFO}\n\n${newCap.hashtags || ""}${persianBlock}`;
       const hashtags = (newCap.hashtags || "").split(/\s+/).filter((h: string) => h.startsWith("#"));
 
       const { error: updateErr } = await supabase
