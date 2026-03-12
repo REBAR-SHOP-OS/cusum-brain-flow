@@ -44,6 +44,9 @@ const editTools: EditToolConfig[] = [
   { id: "change-lighting", label: "Lighting", description: "Adjust lighting & mood", icon: <Sun className="w-4 h-4" />, needsDetail: true, placeholder: "golden hour, dramatic shadows, neon glow..." },
   { id: "remove-object", label: "Remove", description: "Remove an element", icon: <Eraser className="w-4 h-4" />, needsDetail: true, placeholder: "the background crane, the worker on the left..." },
   { id: "replace-background", label: "Background", description: "Swap environment", icon: <Image className="w-4 h-4" />, needsDetail: true, placeholder: "a futuristic factory, an outdoor construction site..." },
+  { id: "subtitle", label: "Subtitle", description: "Auto-generate captions", icon: <Subtitles className="w-4 h-4" />, needsDetail: true, placeholder: "Language: English, style: bold white text..." },
+  { id: "text-overlay", label: "Text", description: "Add text overlay", icon: <Type className="w-4 h-4" />, needsDetail: true, placeholder: "REBAR SHOP OS — bottom center, white bold..." },
+  { id: "resize-platform", label: "Resize", description: "Resize for platform", icon: <Maximize2 className="w-4 h-4" />, needsDetail: true, placeholder: "9:16 for TikTok, 1:1 for Instagram..." },
 ];
 
 const STYLE_PRESETS = [
