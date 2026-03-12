@@ -355,11 +355,21 @@ export function AdDirectorContent() {
           { action: "poll", jobId: generationId, provider }
         );
 
+        consecutiveErrors = 0;
+
         if (result.status === "completed" || result.videoUrl || result.url) {
           const videoUrl = result.videoUrl || result.url;
+          if (!videoUrl) {
+            setClips(prev => prev.map(c =>
+              c.sceneId === sceneId
+                ? { ...c, status: "failed", error: "Generation completed but no video URL was returned", progress: 0 }
+                : c
+            ));
+            return;
+          }
           setClips(prev => prev.map(c =>
             c.sceneId === sceneId
-              ? { ...c, status: "completed", videoUrl: videoUrl || null, progress: 100 }
+              ? { ...c, status: "completed", videoUrl, progress: 100 }
               : c
           ));
           return;
@@ -377,8 +387,16 @@ export function AdDirectorContent() {
             ? { ...c, progress: Math.min(90, 30 + (i / maxAttempts) * 60) }
             : c
         ));
-      } catch {
-        // Network error — keep polling
+      } catch (err: any) {
+        consecutiveErrors += 1;
+        if (consecutiveErrors >= 3) {
+          setClips(prev => prev.map(c =>
+            c.sceneId === sceneId
+              ? { ...c, status: "failed", error: err?.message || "Polling failed repeatedly", progress: 0 }
+              : c
+          ));
+          return;
+        }
       }
     }
     setClips(prev => prev.map(c =>
