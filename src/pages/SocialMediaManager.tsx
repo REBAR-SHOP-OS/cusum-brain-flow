@@ -323,7 +323,7 @@ export default function SocialMediaManager() {
             <div className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
               <div>
-                <p className="text-xl sm:text-2xl font-bold">{posts.length}</p>
+                <p className="text-xl sm:text-2xl font-bold">{posts.filter((p) => p.status === "scheduled" || p.status === "published").length}</p>
                 <p className="text-xs text-muted-foreground">Total posts</p>
               </div>
             </div>
