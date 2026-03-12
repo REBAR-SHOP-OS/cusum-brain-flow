@@ -356,7 +356,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         cutPlanItemId: currentItem.id,
         cutPlanId: currentItem.cut_plan_id || undefined,
         assignedBy: "manual",
-      });
+      }, { timeoutMs: 30000, retries: 1 });
 
       const runId = result.machineRunId;
       setActiveRunId(runId || null);
