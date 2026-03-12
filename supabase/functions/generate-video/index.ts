@@ -583,7 +583,7 @@ serve(async (req) => {
             const message = getErrorMessage(e);
             if (isProviderCapacityError(message) && gptKey) {
               console.warn("Veo capacity reached on single generate, falling back to Sora");
-              result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
+              result = await soraGenerate(gptKey, prompt, duration || 8, "sora-2");
             } else if (isProviderCapacityError(message) && dashscopeKey) {
               console.warn("Veo capacity reached, falling back to Wan");
               result = await wanGenerate(dashscopeKey, prompt, duration || 8);
