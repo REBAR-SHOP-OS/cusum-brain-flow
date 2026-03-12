@@ -15,6 +15,7 @@ import {
 import { VideoEditor } from "./VideoEditor";
 import { VideoToSocialPanel } from "./VideoToSocialPanel";
 import { useVideoCredits } from "@/hooks/useVideoCredits";
+import { useGenerations } from "@/hooks/useGenerations";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { slideshowToVideo } from "@/lib/slideshowToVideo";
