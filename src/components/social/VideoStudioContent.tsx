@@ -378,7 +378,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
     try {
       if (isMultiScene) {
-        const sceneCount = Math.ceil(requestedDuration / currentMode.maxClipDuration);
+        const sceneCount = Math.ceil(requestedDuration / effectiveMaxClip);
         setProgressLabel(`Generating ${sceneCount} scenes...`);
         const data = await invokeEdgeFunction("generate-video", {
           action: "generate-multi", provider: currentMode.provider, prompt: finalPrompt,
