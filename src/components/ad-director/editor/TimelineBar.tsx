@@ -5,6 +5,9 @@ import { Slider } from "@/components/ui/slider";
 import {
   ZoomIn, ZoomOut, Maximize, Music, Type, Plus, Mic,
   Volume2, VolumeX, Trash2, RefreshCw, Edit3, Move,
+  Scissors, Expand, SplitSquareHorizontal, Copy,
+  ArrowLeft, ArrowRight, VolumeOff, FileText,
+  RotateCcw, Sparkles, MoveVertical,
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
