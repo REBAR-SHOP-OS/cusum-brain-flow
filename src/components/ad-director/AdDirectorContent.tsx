@@ -83,6 +83,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
   const [storyboard, setStoryboard] = useState<StoryboardScene[]>([]);
+  const storyboardRef = useRef<StoryboardScene[]>(storyboard);
+  useEffect(() => { storyboardRef.current = storyboard; }, [storyboard]);
   const [continuity, setContinuity] = useState<ContinuityProfile | null>(null);
   const [clips, setClips] = useState<ClipOutput[]>([]);
   // Derive generatingAny reactively from clips state
