@@ -1,55 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix "Use in Post" — Upload Failed for Remote Video URLs
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-When clicking "Use in Post", the video URL is passed to `handleMediaReady` → `uploadSocialMediaAsset`, which tries to `fetch()` the URL client-side. If the video URL is a remote URL (e.g., from Google Veo API) without CORS headers, the browser blocks the fetch with "Failed to fetch". This only fails for remote URLs — blob: URLs from watermarking or slideshow work fine.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Solution
-Modify `handleUseVideo` in `VideoStudioContent.tsx` to convert remote URLs to blob URLs before passing them to `onVideoReady`. The component already has a `proxyDownload` function and a `blobUrlRef` — but when watermarking fails or there's no brand kit, the raw remote URL is kept.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### `src/components/social/VideoStudioContent.tsx`
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-**Change `handleUseVideo` (line 560)** from a simple pass-through to:
-1. If `videoUrl` is already a `blob:` or `data:` URL → pass directly (works fine)
-2. If it's a remote `https:` URL → fetch it via the existing `proxyDownload`-style edge function call to get a blob, then pass the blob URL to `onVideoReady`
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-```ts
-const handleUseVideo = async () => {
-  if (!videoUrl || !onVideoReady) return;
-  
-  // blob: and data: URLs can be fetched client-side fine
-  if (videoUrl.startsWith("blob:") || videoUrl.startsWith("data:")) {
-    onVideoReady(videoUrl);
-    return;
-  }
-  
-  // Remote URL — proxy download to avoid CORS
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error("Not authenticated");
-    
-    const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ action: "download", provider: "veo", videoUrl }),
-    });
-    
-    if (!resp.ok) throw new Error("Proxy download failed");
-    const blob = await resp.blob();
-    onVideoReady(URL.createObjectURL(blob));
-  } catch (err) {
-    console.error("Use in post proxy failed, trying direct:", err);
-    // Fallback: try passing directly (may work for some URLs)
-    onVideoReady(videoUrl);
-  }
-};
-```
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### Files Changed
-- `src/components/social/VideoStudioContent.tsx` (line 560 — replace `handleUseVideo`)
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
