@@ -91,7 +91,9 @@ export function AdDirectorContent() {
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
     } finally {
+      clearInterval(statusInterval);
       setAnalyzing(false);
+      setAnalysisStatus("");
     }
   }, [script, brand, assets, toast]);
 
