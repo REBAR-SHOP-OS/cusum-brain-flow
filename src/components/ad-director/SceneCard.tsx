@@ -59,6 +59,7 @@ interface SceneCardProps {
   canRegenerate: boolean;
   onImprovePrompt?: (id: string) => void;
   improvingSceneId?: string | null;
+  logoUrl?: string | null;
 }
 
 export function SceneCard({
