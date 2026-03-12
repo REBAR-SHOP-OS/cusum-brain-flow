@@ -1,6 +1,3 @@
-
-
-
 ## Completed: Upgrade Wan 2.1 → Wan 2.6
 
 ### Changes
@@ -31,3 +28,19 @@
 4. **Multi-Scene Fix**
    - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
    - Negative prompt and audio sync passed through to multi-scene generation
+
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
