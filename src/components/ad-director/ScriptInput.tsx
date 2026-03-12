@@ -40,35 +40,9 @@ function estimateDuration(text: string): number {
   return Math.round(words / 2.5); // ~150 wpm = 2.5 words/sec
 }
 
-export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange, modelOverrides, onModelOverridesChange, onSaveBrandKit, savingBrandKit, onLoadProject }: ScriptInputProps) {
+export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange, modelOverrides, onModelOverridesChange, onSaveBrandKit, savingBrandKit, onLoadProject, videoParams, onVideoParamsChange }: ScriptInputProps) {
   const { projects, deleteProject } = useAdProjectHistory();
   const { toast } = useToast();
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-
-  const handleLogoUpload = async (file: File) => {
-    setUploadingLogo(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({ title: "Please sign in", description: "Authentication required to upload logo", variant: "destructive" });
-        return;
-      }
-      const ext = file.name.split(".").pop() || "png";
-      const fileName = `${user.id}/logo-${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage
-        .from("brand-assets")
-        .upload(fileName, file, { contentType: file.type, upsert: false });
-      if (error) throw error;
-      const { data: publicData } = supabase.storage.from("brand-assets").getPublicUrl(fileName);
-      onBrandChange({ ...brand, logoUrl: publicData.publicUrl });
-      toast({ title: "Logo uploaded", description: "Watermark will be applied to all clips" });
-    } catch (err: any) {
-      console.error("Logo upload failed:", err);
-      toast({ title: "Logo upload failed", description: err.message, variant: "destructive" });
-    } finally {
-      setUploadingLogo(false);
-    }
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
