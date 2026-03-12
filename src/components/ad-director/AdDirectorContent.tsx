@@ -94,8 +94,9 @@ export function AdDirectorContent() {
         })
       );
 
-      // Step 3: Score prompt quality (Gemini Flash)
-      setAnalysisStatus("Gemini Flash scoring prompt quality...");
+      // Step 3: Score prompt quality
+      setAnalysisStatus("Scoring prompt quality...");
+      setAnalysisProgress(55);
       const qualityResults = await Promise.all(
         promptResults.map(async (pr, idx) => {
           try {
