@@ -129,6 +129,7 @@ const iconComponents = {
   website: Globe,
   code: Code,
   search: Search,
+  video: Video,
 };
 
 interface AutomationCardProps {
