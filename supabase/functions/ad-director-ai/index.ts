@@ -387,17 +387,7 @@ Return: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, moti
 
 const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word cinematic video generation prompts. Be specific: lens mm, f-stop, lighting angles, material textures, movement speed. NO camera brand names, NO text/titles in prompts. For continuation scenes, reference previous scene visuals.`;
 
-const SCORE_QUALITY_PROMPT = `You are a quality evaluator for AI video generation prompts. Score each prompt on 7 dimensions (0-10 each):
-
-1. realism: How photorealistic and physically accurate are the described visuals?
-2. specificity: How precise and detailed are visual descriptions (vs generic)?
-3. visualRichness: How much visual depth, texture, and layered detail?
-4. continuityStrength: How well does it maintain visual consistency with adjacent scenes?
-5. brandRelevance: How well does it serve the brand message and target audience?
-6. emotionalPersuasion: How effectively does it create the intended emotional response?
-7. cinematicClarity: How clear and executable are the camera, lighting, and composition instructions?
-
-Return scores and a brief improvement suggestion if overall < 7.0.`;
+const SCORE_QUALITY_PROMPT = `Score this video generation prompt on 7 dimensions (0-10): realism, specificity, visualRichness, continuityStrength, brandRelevance, emotionalPersuasion, cinematicClarity. Include overall score and suggestion if < 7.`;
 
 const IMPROVE_PROMPT_SYSTEM = `You are a cinematic prompt improvement specialist. You receive a video generation prompt that scored below quality threshold.
 
