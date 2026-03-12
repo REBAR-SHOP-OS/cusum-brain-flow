@@ -10,6 +10,7 @@ import {
 import { type StoryboardScene, type ClipOutput, type GenerationMode } from "@/types/adDirector";
 import { PromptQualityBadge } from "./PromptQualityBadge";
 import { SceneIntelligenceBar } from "./SceneIntelligenceBar";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 const modeIcons: Record<GenerationMode, React.ReactNode> = {
