@@ -22,7 +22,7 @@ import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { applyLogoToImage } from "@/lib/imageWatermark";
+import { applyLogoToImage, ensureSquare } from "@/lib/imageWatermark";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
@@ -113,7 +113,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
         body: {
           prompt: finalPrompt,
           model: selectedModel,
-          logoUrl: brandKit?.logo_url || undefined,
+          logoUrl: selectedThemes.has("logo") ? (brandKit?.logo_url || undefined) : undefined,
           brandContext: {
             business_name: brandKit?.business_name || undefined,
             description: brandKit?.description || undefined,
@@ -133,9 +133,15 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
       let finalImageUrl = data.imageUrl;
 
-      // Apply brand logo overlay if logo theme selected OR brandKit logo available
-      const forceLogoOverlay = selectedThemes.has("logo");
-      if ((forceLogoOverlay || brandKit?.logo_url) && brandKit?.logo_url && finalImageUrl) {
+      // Ensure 1:1 square for Instagram
+      try {
+        finalImageUrl = await ensureSquare(finalImageUrl);
+      } catch (e) {
+        console.warn("Square crop failed, using original:", e);
+      }
+
+      // Apply brand logo overlay ONLY when Logo theme chip is explicitly selected
+      if (selectedThemes.has("logo") && brandKit?.logo_url && finalImageUrl) {
         try {
           setStatus("branding");
           finalImageUrl = await applyLogoToImage(finalImageUrl, brandKit.logo_url);

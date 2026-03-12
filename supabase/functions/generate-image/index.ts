@@ -86,6 +86,7 @@ function buildAdPrompt(
   parts.push("- ALL images MUST be PHOTOREALISTIC — real-world professional photography style ONLY.");
   parts.push("- Natural lighting, real textures, real materials, real environments.");
   parts.push("- ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, clip-art.");
+  parts.push("- The image MUST be perfectly SQUARE (1:1 aspect ratio), suitable for Instagram feed posts.");
   parts.push(`- Feature ${brandName} products (rebar stirrups, ties, cut & bent rebar, accessories) prominently in the scene.`);
   parts.push("- Clean, professional, visually striking — like high-end commercial/industrial photography.");
   parts.push("");
