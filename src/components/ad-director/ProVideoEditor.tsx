@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,8 +18,9 @@ import { MusicTab } from "./editor/MusicTab";
 import { ScriptTab } from "./editor/ScriptTab";
 import { SettingsTab } from "./editor/SettingsTab";
 import { LogoTab } from "./editor/LogoTab";
-import { TimelineBar } from "./editor/TimelineBar";
+import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { EffectsPanel } from "./editor/EffectsPanel";
+import { TextOverlayDialog } from "./editor/TextOverlayDialog";
 import { supabase } from "@/integrations/supabase/client";
 
 type EditorTab = "media" | "music" | "script" | "settings" | "logo";
@@ -57,6 +58,7 @@ export function ProVideoEditor({
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -73,6 +75,30 @@ export function ProVideoEditor({
   const [fadeIn, setFadeIn] = useState(0);
   const [fadeOut, setFadeOut] = useState(0);
   const [speed, setSpeed] = useState(1);
+  const [textDialogOpen, setTextDialogOpen] = useState(false);
+  const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
+  const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
+  const [musicUrl, setMusicUrl] = useState<string | null>(null);
+
+  // ─── Global timeline ───
+  const sceneDurations = useMemo(() => {
+    return storyboard.map((scene, i) => {
+      const seg = segments.find(s => s.id === scene.segmentId);
+      return seg ? seg.endTime - seg.startTime : 4;
+    });
+  }, [storyboard, segments]);
+
+  const cumulativeStarts = useMemo(() => {
+    const starts: number[] = [0];
+    for (let i = 0; i < sceneDurations.length - 1; i++) {
+      starts.push(starts[i] + sceneDurations[i]);
+    }
+    return starts;
+  }, [sceneDurations]);
+
+  const totalDuration = useMemo(() => sceneDurations.reduce((a, b) => a + b, 0), [sceneDurations]);
+
+  const globalTime = (cumulativeStarts[selectedSceneIndex] || 0) + currentTime;
 
   // Auto-seed mandatory logo overlays for intro/outro scenes
   useEffect(() => {
@@ -109,6 +135,33 @@ export function ProVideoEditor({
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = speed;
   }, [speed]);
+
+  // Auto-play after scene change
+  const autoPlayPending = useRef(false);
+  useEffect(() => {
+    if (autoPlayPending.current && videoRef.current) {
+      videoRef.current.play().catch(() => {});
+      autoPlayPending.current = false;
+    }
+  }, [selectedSceneIndex]);
+
+  // Sync voiceover audio with playback
+  useEffect(() => {
+    const sceneId = storyboard[selectedSceneIndex]?.id;
+    const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
+    if (vo && isPlaying && !isMuted) {
+      const a = new Audio(vo.audioUrl);
+      a.play().catch(() => {});
+      audioRef.current = a;
+    }
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSceneIndex, isPlaying, isMuted]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
@@ -171,6 +224,41 @@ export function ProVideoEditor({
     if (videoRef.current) setDuration(videoRef.current.duration);
   };
 
+  // ─── Auto-advance on video end ───
+  const handleVideoEnded = () => {
+    // Find the next completed clip
+    const completedIndices = storyboard
+      .map((s, i) => ({ i, clip: clips.find(c => c.sceneId === s.id) }))
+      .filter(x => x.clip?.status === "completed" && x.clip?.videoUrl)
+      .map(x => x.i);
+
+    const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
+    if (nextIdx !== undefined) {
+      autoPlayPending.current = true;
+      setSelectedSceneIndex(nextIdx);
+    } else {
+      setIsPlaying(false);
+    }
+  };
+
+  // ─── Global seek from timeline ───
+  const handleGlobalSeek = (globalTimeSec: number) => {
+    // Find which scene this falls into
+    let targetScene = 0;
+    for (let i = 0; i < cumulativeStarts.length; i++) {
+      if (globalTimeSec >= cumulativeStarts[i]) targetScene = i;
+      else break;
+    }
+    const offset = globalTimeSec - cumulativeStarts[targetScene];
+    setSelectedSceneIndex(targetScene);
+    // Defer seek until video loads the new source
+    setTimeout(() => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = Math.min(offset, videoRef.current.duration || offset);
+      }
+    }, 100);
+  };
+
   const seekTo = (pct: number) => {
     if (videoRef.current && duration > 0) {
       videoRef.current.currentTime = (pct / 100) * duration;
@@ -180,6 +268,56 @@ export function ProVideoEditor({
   const skipScene = (dir: -1 | 1) => {
     const next = selectedSceneIndex + dir;
     if (next >= 0 && next < storyboard.length) setSelectedSceneIndex(next);
+  };
+
+  // ─── Generate all voiceovers ───
+  const generateAllVoiceovers = async () => {
+    setGeneratingVoiceovers(true);
+    const newTracks: AudioTrackItem[] = [];
+    try {
+      for (const seg of segments) {
+        if (!seg.text.trim()) continue;
+        const scene = storyboard.find(s => s.segmentId === seg.id);
+        if (!scene) continue;
+
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ text: seg.text }),
+          }
+        );
+        if (!response.ok) throw new Error(`TTS failed for ${seg.label}`);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover" });
+      }
+      // Replace voiceover tracks, keep music
+      setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
+      toast({ title: "Voiceovers generated", description: `${newTracks.length} audio tracks created` });
+    } catch (err: any) {
+      toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingVoiceovers(false);
+    }
+  };
+
+  // Handle music selection — also add to audio tracks
+  const handleMusicSelect = (url: string | null) => {
+    setMusicUrl(url);
+    onMusicSelect?.(url);
+    setAudioTracks(prev => {
+      const withoutMusic = prev.filter(a => a.kind !== "music");
+      if (url) {
+        return [...withoutMusic, { sceneId: "", label: "Music", audioUrl: url, kind: "music" as const }];
+      }
+      return withoutMusic;
+    });
   };
 
   // AI Command Bar
@@ -241,6 +379,7 @@ export function ProVideoEditor({
   // Overlays for current scene
   const currentSceneId = storyboard[selectedSceneIndex]?.id;
   const sceneOverlays = overlays.filter(o => o.sceneId === currentSceneId);
+  const textOverlays = overlays.filter(o => o.kind === "text");
 
   // Logo handlers
   const handleDeleteLogo = () => onUpdateBrand?.({ ...brand, logoUrl: null });
@@ -278,6 +417,18 @@ export function ProVideoEditor({
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
         </div>
+
+        {/* Generate Voiceovers button */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-[10px] gap-1 ml-2"
+          onClick={generateAllVoiceovers}
+          disabled={generatingVoiceovers || segments.length === 0}
+        >
+          {generatingVoiceovers ? <Loader2 className="w-3 h-3 animate-spin" /> : <Music className="w-3 h-3" />}
+          {generatingVoiceovers ? "Generating…" : "Auto Voiceover"}
+        </Button>
 
         <div className="flex-1" />
 
@@ -338,7 +489,7 @@ export function ProVideoEditor({
                 />
               )}
               {activeTab === "music" && (
-                <MusicTab onTrackSelect={(track) => onMusicSelect?.(track?.url ?? null)} />
+                <MusicTab onTrackSelect={(track) => handleMusicSelect(track?.url ?? null)} />
               )}
               {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
               {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
@@ -396,7 +547,7 @@ export function ProVideoEditor({
                   onLoadedMetadata={handleLoaded}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
-                  onEnded={() => setIsPlaying(false)}
+                  onEnded={handleVideoEnded}
                 />
                 {brand.logoUrl && (
                   <img
@@ -450,7 +601,7 @@ export function ProVideoEditor({
               </button>
 
               <span className="text-white/50 text-[10px] font-mono min-w-[60px]">
-                {formatTime(currentTime)} / {formatTime(duration)}
+                {formatTime(globalTime)} / {formatTime(totalDuration)}
               </span>
 
               {/* Scrub bar */}
@@ -502,11 +653,26 @@ export function ProVideoEditor({
         clips={clips}
         storyboard={storyboard}
         segments={segments}
-        currentTime={currentTime}
-        duration={duration}
+        globalTime={globalTime}
+        totalDuration={totalDuration}
+        cumulativeStarts={cumulativeStarts}
         selectedSceneIndex={selectedSceneIndex}
-        onSeek={seekTo}
+        onSeek={handleGlobalSeek}
         onSelectScene={setSelectedSceneIndex}
+        onAddText={() => setTextDialogOpen(true)}
+        onAddAudio={generateAllVoiceovers}
+        textOverlays={textOverlays}
+        audioTracks={audioTracks}
+      />
+
+      {/* Text Overlay Dialog */}
+      <TextOverlayDialog
+        open={textDialogOpen}
+        onClose={() => setTextDialogOpen(false)}
+        storyboard={storyboard}
+        segments={segments}
+        selectedSceneIndex={selectedSceneIndex}
+        onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
       />
     </div>
   );

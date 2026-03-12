@@ -1,34 +1,54 @@
 import { useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, Maximize, Music, Type, Plus } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize, Music, Type, Plus, Mic } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
+import type { VideoOverlay } from "@/types/videoOverlay";
+
+export interface AudioTrackItem {
+  sceneId: string;
+  label: string;
+  audioUrl: string;
+  kind: "voiceover" | "music";
+}
 
 interface TimelineBarProps {
   clips: ClipOutput[];
   storyboard: StoryboardScene[];
   segments: ScriptSegment[];
-  currentTime: number;
-  duration: number;
+  globalTime: number;
+  totalDuration: number;
+  cumulativeStarts: number[];
   selectedSceneIndex: number;
-  onSeek: (pct: number) => void;
+  onSeek: (globalTimeSec: number) => void;
   onSelectScene: (index: number) => void;
+  onAddText?: () => void;
+  onAddAudio?: () => void;
+  textOverlays?: VideoOverlay[];
+  audioTracks?: AudioTrackItem[];
 }
 
 export function TimelineBar({
-  clips, storyboard, segments, currentTime, duration,
-  selectedSceneIndex, onSeek, onSelectScene,
+  clips, storyboard, segments, globalTime, totalDuration,
+  cumulativeStarts, selectedSceneIndex, onSeek, onSelectScene,
+  onAddText, onAddAudio, textOverlays = [], audioTracks = [],
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
 
-  const totalDuration = segments.reduce((sum, s) => sum + (s.endTime - s.startTime), 0) || 30;
-  const playheadPct = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const playheadPct = totalDuration > 0 ? (globalTime / totalDuration) * 100 : 0;
 
   const handleTrackClick = (e: React.MouseEvent) => {
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
-    const pct = ((e.clientX - rect.left) / rect.width) * 100;
-    onSeek(Math.max(0, Math.min(100, pct)));
+    const pct = (e.clientX - rect.left) / rect.width;
+    const clickedTime = pct * totalDuration;
+    onSeek(Math.max(0, Math.min(totalDuration, clickedTime)));
+  };
+
+  // Get scene duration
+  const getSceneDur = (i: number) => {
+    const seg = segments.find(s => s.id === storyboard[i]?.segmentId);
+    return seg ? seg.endTime - seg.startTime : 4;
   };
 
   return (
@@ -36,21 +56,18 @@ export function TimelineBar({
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/20">
         <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Timeline</span>
+        <span className="text-[10px] text-muted-foreground font-mono ml-2">
+          {formatTime(globalTime)} / {formatTime(totalDuration)}
+        </span>
         <div className="flex-1" />
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-          <ZoomOut className="w-3 h-3" />
-        </Button>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-          <ZoomIn className="w-3 h-3" />
-        </Button>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-          <Maximize className="w-3 h-3" />
-        </Button>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><ZoomOut className="w-3 h-3" /></Button>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><ZoomIn className="w-3 h-3" /></Button>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><Maximize className="w-3 h-3" /></Button>
       </div>
 
-      {/* Video track */}
+      {/* Tracks */}
       <div className="px-3 py-2 space-y-1.5 relative">
-        {/* Scene filmstrip */}
+        {/* Video track */}
         <div className="flex items-center gap-0.5">
           <span className="text-[9px] text-muted-foreground w-12 shrink-0 truncate">Video</span>
           <div
@@ -59,9 +76,9 @@ export function TimelineBar({
             onClick={handleTrackClick}
           >
             {storyboard.map((scene, i) => {
-              const seg = segments.find(s => s.id === scene.segmentId);
-              const dur = seg ? seg.endTime - seg.startTime : 4;
+              const dur = getSceneDur(i);
               const clip = clips.find(c => c.sceneId === scene.id);
+              const seg = segments.find(s => s.id === scene.segmentId);
               const isSelected = i === selectedSceneIndex;
               const isCompleted = clip?.status === "completed";
               const isGenerating = clip?.status === "generating";
@@ -100,30 +117,114 @@ export function TimelineBar({
           </div>
         </div>
 
-        {/* Text track (placeholder) */}
+        {/* Text track */}
         <div className="flex items-center gap-0.5">
           <span className="text-[9px] text-muted-foreground w-12 shrink-0 truncate">Text</span>
-          <div className="flex-1 h-7 rounded bg-muted/10 border border-dashed border-border/30 flex items-center justify-center">
-            <button className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors">
-              <Plus className="w-2.5 h-2.5" />
-              <Type className="w-2.5 h-2.5" />
-              Add text
-            </button>
+          <div className="flex-1 h-7 rounded bg-muted/10 border border-dashed border-border/30 flex items-center relative overflow-hidden">
+            {textOverlays.length > 0 ? (
+              <>
+                {textOverlays.map(ov => {
+                  const sceneIdx = storyboard.findIndex(s => s.id === ov.sceneId);
+                  if (sceneIdx < 0) return null;
+                  const start = cumulativeStarts[sceneIdx] || 0;
+                  const dur = getSceneDur(sceneIdx);
+                  const leftPct = totalDuration > 0 ? (start / totalDuration) * 100 : 0;
+                  const widthPct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
+                  return (
+                    <div
+                      key={ov.id}
+                      className="absolute h-5 top-1 rounded bg-amber-600/50 border border-amber-500/40 flex items-center px-1"
+                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                      title={ov.content}
+                    >
+                      <span className="text-[7px] text-white truncate">{ov.content}</span>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={onAddText}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground z-10"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={onAddText}
+                className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors mx-auto"
+              >
+                <Plus className="w-2.5 h-2.5" />
+                <Type className="w-2.5 h-2.5" />
+                Add text
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Audio track (placeholder) */}
+        {/* Audio track */}
         <div className="flex items-center gap-0.5">
           <span className="text-[9px] text-muted-foreground w-12 shrink-0 truncate">Audio</span>
-          <div className="flex-1 h-7 rounded bg-muted/10 border border-dashed border-border/30 flex items-center justify-center">
-            <button className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors">
-              <Plus className="w-2.5 h-2.5" />
-              <Music className="w-2.5 h-2.5" />
-              Add audio
-            </button>
+          <div className="flex-1 h-7 rounded bg-muted/10 border border-dashed border-border/30 flex items-center relative overflow-hidden">
+            {audioTracks.length > 0 ? (
+              <>
+                {audioTracks.map((at, idx) => {
+                  if (at.kind === "music") {
+                    return (
+                      <div
+                        key={`music-${idx}`}
+                        className="absolute h-5 top-1 rounded bg-purple-600/40 border border-purple-500/40 flex items-center px-1"
+                        style={{ left: 0, width: "100%" }}
+                        title="Background Music"
+                      >
+                        <Music className="w-2.5 h-2.5 text-purple-300 mr-0.5" />
+                        <span className="text-[7px] text-purple-200 truncate">Music</span>
+                      </div>
+                    );
+                  }
+                  const sceneIdx = storyboard.findIndex(s => s.id === at.sceneId);
+                  if (sceneIdx < 0) return null;
+                  const start = cumulativeStarts[sceneIdx] || 0;
+                  const dur = getSceneDur(sceneIdx);
+                  const leftPct = totalDuration > 0 ? (start / totalDuration) * 100 : 0;
+                  const widthPct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
+                  return (
+                    <div
+                      key={`vo-${idx}`}
+                      className="absolute h-5 top-1 rounded bg-sky-600/50 border border-sky-500/40 flex items-center px-1"
+                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                      title={at.label}
+                    >
+                      <Mic className="w-2 h-2 text-sky-300 mr-0.5" />
+                      <span className="text-[7px] text-sky-200 truncate">{at.label}</span>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={onAddAudio}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground z-10"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={onAddAudio}
+                className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors mx-auto"
+              >
+                <Plus className="w-2.5 h-2.5" />
+                <Music className="w-2.5 h-2.5" />
+                Add audio
+              </button>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function formatTime(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
