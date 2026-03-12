@@ -22,6 +22,14 @@ import { LogoTab } from "./editor/LogoTab";
 import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { EffectsPanel } from "./editor/EffectsPanel";
 import { TextOverlayDialog } from "./editor/TextOverlayDialog";
+import { RecordTab } from "./editor/RecordTab";
+import { TextTab } from "./editor/TextTab";
+import { StockVideoTab } from "./editor/StockVideoTab";
+import { StockImagesTab } from "./editor/StockImagesTab";
+import { TemplatesTab } from "./editor/TemplatesTab";
+import { GraphicsTab } from "./editor/GraphicsTab";
+import { TransitionsTab } from "./editor/TransitionsTab";
+import { BrandKitTab } from "./editor/BrandKitTab";
 import { supabase } from "@/integrations/supabase/client";
 
 type EditorTab = "media" | "music" | "script" | "settings" | "logo";
