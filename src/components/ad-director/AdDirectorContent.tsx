@@ -46,7 +46,7 @@ const steps: { id: WorkflowStep; label: string; desc: string; icon: React.ReactN
 const QUALITY_THRESHOLD = 7.0;
 const MAX_IMPROVE_ATTEMPTS = 2;
 
-const EDGE_TIMEOUT_MS = 90_000;
+const EDGE_TIMEOUT_MS = 180_000;
 
 function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
   return Promise.race([
