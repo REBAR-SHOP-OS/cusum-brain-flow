@@ -8,12 +8,10 @@ export async function mergeVideoAudio(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
-    video.crossOrigin = "anonymous";
     video.playsInline = true;
     video.preload = "auto";
 
     const audio = document.createElement("audio");
-    audio.crossOrigin = "anonymous";
     audio.preload = "auto";
 
     let videoReady = false;

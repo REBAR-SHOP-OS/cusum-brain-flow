@@ -3,25 +3,43 @@
  * Each clip is trimmed to its target duration.
  * Returns a blob URL of the combined video.
  */
+
+async function fetchAsBlob(url: string): Promise<string> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+    const blob = await resp.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    // If fetch fails (CORS), return original URL and hope crossOrigin works
+    return url;
+  }
+}
+
 export async function stitchClips(
   clips: { videoUrl: string; targetDuration: number }[],
 ): Promise<string> {
   if (clips.length === 0) throw new Error("No clips to stitch");
-  if (clips.length === 1) return clips[0].videoUrl;
+  if (clips.length === 1) {
+    const blobUrl = await fetchAsBlob(clips[0].videoUrl);
+    return blobUrl;
+  }
+
+  // Pre-fetch all clips as blobs to bypass CORS
+  const blobUrls = await Promise.all(clips.map(c => fetchAsBlob(c.videoUrl)));
 
   // Load all videos first
   const videos = await Promise.all(
     clips.map(
-      (clip) =>
+      (clip, i) =>
         new Promise<{ video: HTMLVideoElement; target: number }>((resolve, reject) => {
           const video = document.createElement("video");
-          video.crossOrigin = "anonymous";
           video.playsInline = true;
           video.preload = "auto";
           video.muted = true;
           video.onloadedmetadata = () => resolve({ video, target: clip.targetDuration });
           video.onerror = () => reject(new Error(`Failed to load clip: ${clip.videoUrl}`));
-          video.src = clip.videoUrl;
+          video.src = blobUrls[i];
         })
     )
   );
