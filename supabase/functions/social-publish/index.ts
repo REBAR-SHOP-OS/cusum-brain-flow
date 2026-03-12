@@ -10,6 +10,34 @@ const corsHeaders = {
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+/**
+ * Refresh a Facebook Page token using the user's long-lived token.
+ * Returns a fresh page access token with current permissions, or null on failure.
+ */
+async function refreshPageToken(
+  userLongLivedToken: string,
+  pageId: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API}/${pageId}?fields=access_token&access_token=${userLongLivedToken}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.access_token) {
+        console.log(`[social-publish] Refreshed page token for page ${pageId}`);
+        return data.access_token;
+      }
+    } else {
+      const errBody = await res.text();
+      console.warn(`[social-publish] Page token refresh failed (${res.status}): ${errBody}`);
+    }
+  } catch (e) {
+    console.warn(`[social-publish] Page token refresh exception:`, e);
+  }
+  return null;
+}
+
 async function verifyAuth(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
@@ -142,12 +170,30 @@ serve(async (req) => {
       .eq("platform", `${tokenPlatform}_page_${pageId}`)
       .maybeSingle();
 
-    const pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
+    let pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
 
     let result: { id?: string; error?: string };
 
     if (platform === "facebook") {
-      // Pre-flight: verify page token has publish permissions
+      // Refresh page token using the user's long-lived token to ensure current permissions
+      const userLongLivedToken = tokenData.access_token;
+      const refreshedToken = await refreshPageToken(userLongLivedToken, pageId);
+      if (refreshedToken) {
+        pageAccessToken = refreshedToken;
+        // Persist refreshed token to avoid repeated refreshes
+        await supabaseAdmin
+          .from("user_meta_tokens")
+          .upsert({
+            user_id: userId,
+            platform: `facebook_page_${pageId}`,
+            access_token: refreshedToken,
+          }, { onConflict: "user_id,platform" });
+        console.log(`[social-publish] Stored refreshed page token for page ${pageId}`);
+      } else {
+        console.warn(`[social-publish] Token refresh failed, using stored token for page ${pageId}`);
+      }
+
+      // Pre-flight: verify the (possibly refreshed) token can access the page
       const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
       const preflightData = await preflightRes.json();
       if (preflightData.error) {

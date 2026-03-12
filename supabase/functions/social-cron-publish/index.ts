@@ -9,6 +9,34 @@ const corsHeaders = {
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+/**
+ * Refresh a Facebook Page token using the user's long-lived token.
+ * Returns a fresh page access token with current permissions, or null on failure.
+ */
+async function refreshPageToken(
+  userLongLivedToken: string,
+  pageId: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API}/${pageId}?fields=access_token&access_token=${userLongLivedToken}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.access_token) {
+        console.log(`[social-cron-publish] Refreshed page token for page ${pageId}`);
+        return data.access_token;
+      }
+    } else {
+      const errBody = await res.text();
+      console.warn(`[social-cron-publish] Page token refresh failed (${res.status}): ${errBody}`);
+    }
+  } catch (e) {
+    console.warn(`[social-cron-publish] Page token refresh exception:`, e);
+  }
+  return null;
+}
+
 /** Strip Persian translation block — never publish Persian text */
 function stripPersianBlock(text: string): string {
   let t = text;
@@ -181,10 +209,27 @@ serve(async (req) => {
                   .limit(1)
                   .maybeSingle()).data;
               }
-              const pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
+              let pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
 
               if (post.platform === "facebook") {
-                // Pre-flight: verify page token has publish permissions
+                // Refresh page token using user's long-lived token for current permissions
+                const userLLT = tokenData.access_token;
+                const refreshedToken = await refreshPageToken(userLLT, pageId);
+                if (refreshedToken) {
+                  pageAccessToken = refreshedToken;
+                  // Persist refreshed token
+                  await supabase
+                    .from("user_meta_tokens")
+                    .upsert({
+                      user_id: post.user_id,
+                      platform: `facebook_page_${pageId}`,
+                      access_token: refreshedToken,
+                    }, { onConflict: "user_id,platform" });
+                } else {
+                  console.warn(`[social-cron-publish] Token refresh failed for post ${post.id}, using stored token`);
+                }
+
+                // Pre-flight: verify page token validity
                 const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
                 const preflightData = await preflightRes.json();
                 if (preflightData.error) {
