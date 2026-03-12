@@ -556,7 +556,7 @@ serve(async (req) => {
     }
 
     if (!apiKey) {
-      const keyName = isVeo ? "GEMINI_API_KEY" : "GPT_API_KEY";
+      const keyName = isWan ? "DASHSCOPE_API_KEY" : isVeo ? "GEMINI_API_KEY" : "GPT_API_KEY";
       return new Response(
         JSON.stringify({ error: `${keyName} is not configured` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
