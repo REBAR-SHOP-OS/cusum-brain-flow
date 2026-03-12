@@ -501,7 +501,7 @@ export function VideoStudioPromptBar({
               )}
             </div>
           ) : currentModelOption.free ? (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600 border border-green-500/20">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
               ✓ Free
             </div>
           ) : (
