@@ -16,12 +16,14 @@ import { cn } from "@/lib/utils";
 import { stitchClips } from "@/lib/videoStitch";
 
 
+import { Check } from "lucide-react";
+
 type WorkflowStep = "script" | "storyboard" | "preview";
 
-const steps: { id: WorkflowStep; label: string; icon: React.ReactNode }[] = [
-  { id: "script", label: "Script & Assets", icon: <FileText className="w-4 h-4" /> },
-  { id: "storyboard", label: "Storyboard", icon: <Layers className="w-4 h-4" /> },
-  { id: "preview", label: "Preview & Export", icon: <Film className="w-4 h-4" /> },
+const steps: { id: WorkflowStep; label: string; desc: string; icon: React.ReactNode }[] = [
+  { id: "script", label: "Script & Assets", desc: "Write or paste your ad script", icon: <FileText className="w-4 h-4" /> },
+  { id: "storyboard", label: "Storyboard", desc: "Review scenes & prompts", icon: <Layers className="w-4 h-4" /> },
+  { id: "preview", label: "Preview & Export", desc: "Assemble & download", icon: <Film className="w-4 h-4" /> },
 ];
 
 const QUALITY_THRESHOLD = 7.0;
@@ -561,25 +563,50 @@ export function AdDirectorContent() {
         );
       })()}
 
-      {/* Workflow Steps */}
-      <div className="flex items-center gap-1 bg-card/30 rounded-xl p-1 border border-border/30">
-        {steps.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setStep(s.id)}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-medium transition-all",
-              step === s.id
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-card/50",
-              s.id === "storyboard" && segments.length === 0 && "opacity-40 pointer-events-none",
-              s.id === "preview" && storyboard.length === 0 && "opacity-40 pointer-events-none",
-            )}
-          >
-            {s.icon}
-            <span className="hidden sm:inline">{s.label}</span>
-          </button>
-        ))}
+      {/* Step Indicator */}
+      <div className="flex items-center justify-center gap-0">
+        {steps.map((s, idx) => {
+          const stepOrder = ["script", "storyboard", "preview"];
+          const currentIdx = stepOrder.indexOf(step);
+          const thisIdx = stepOrder.indexOf(s.id);
+          const isCompleted = thisIdx < currentIdx;
+          const isActive = s.id === step;
+          const isDisabled = (s.id === "storyboard" && segments.length === 0) || (s.id === "preview" && storyboard.length === 0);
+
+          return (
+            <div key={s.id} className="flex items-center">
+              <button
+                onClick={() => !isDisabled && setStep(s.id)}
+                disabled={isDisabled}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-xl transition-all group",
+                  isActive && "bg-primary/10 ring-1 ring-primary/30",
+                  !isActive && !isDisabled && "hover:bg-card/50",
+                  isDisabled && "opacity-30 cursor-not-allowed"
+                )}
+              >
+                <div className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all shrink-0",
+                  isCompleted && "bg-accent/20 text-accent-foreground ring-1 ring-accent/30",
+                  isActive && "bg-primary text-primary-foreground shadow-md shadow-primary/30",
+                  !isActive && !isCompleted && "bg-card/50 text-muted-foreground ring-1 ring-border/30"
+                )}>
+                  {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <div className={cn("text-xs font-semibold", isActive ? "text-foreground" : "text-muted-foreground")}>{s.label}</div>
+                  <div className="text-[10px] text-muted-foreground/70">{s.desc}</div>
+                </div>
+              </button>
+              {idx < steps.length - 1 && (
+                <div className={cn(
+                  "w-8 h-px mx-1 hidden sm:block",
+                  isCompleted ? "bg-primary/40" : "bg-border/30"
+                )} />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Content */}

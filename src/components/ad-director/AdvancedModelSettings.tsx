@@ -49,7 +49,7 @@ export function AdvancedModelSettings({ modelOverrides, onModelOverridesChange }
       >
         <div className="flex items-center gap-2">
           <Settings2 className="w-3.5 h-3.5" />
-          <span>Advanced: AI Model Routing</span>
+          <span>AI Engine</span>
         </div>
         {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
       </button>
