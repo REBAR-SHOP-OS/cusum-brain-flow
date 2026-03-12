@@ -415,6 +415,8 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     setAudioPrompt(""); setAudioGenerating(false); setAudioPlaying(false); setMerging(false);
     jobRef.current = null; multiJobsRef.current = null; isMultiRef.current = false;
     uploadedSceneUrlsRef.current = {}; pollCountRef.current = 0; setElapsedSecs(0);
+    setGeneratedImageUrl(null); setImageGenerating(false);
+    setStandaloneAudioUrl(null); setStandaloneAudioGenerating(false);
   };
 
   const handleSaveToLibrary = async () => {
