@@ -139,6 +139,9 @@ export function ExportDialog({
                 <Film className="w-5 h-5 text-primary" />
                 Export Video
               </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Choose quality and export destination.
+              </DialogDescription>
             </DialogHeader>
 
             {/* File name */}
