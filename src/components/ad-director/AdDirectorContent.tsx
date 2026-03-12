@@ -45,6 +45,20 @@ export function AdDirectorContent() {
   // ─── Analyze Script ──────────────────────────────────────
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true);
+    const statusMessages = [
+      "Reading your script...",
+      "Identifying hook, problem, and solution...",
+      "Breaking script into timed scenes...",
+      "Generating storyboard with visual styles...",
+      "Building continuity profile...",
+      "Optimizing scene prompts...",
+    ];
+    let msgIndex = 0;
+    setAnalysisStatus(statusMessages[0]);
+    const statusInterval = setInterval(() => {
+      msgIndex = Math.min(msgIndex + 1, statusMessages.length - 1);
+      setAnalysisStatus(statusMessages[msgIndex]);
+    }, 3000);
     try {
       const assetDescriptions = assets.length > 0
         ? assets.map(f => f.name).join(", ")
