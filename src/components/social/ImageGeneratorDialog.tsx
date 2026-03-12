@@ -114,6 +114,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
         body: {
           prompt: finalPrompt,
           model: selectedModel,
+          aspectRatio: storyMode ? "9:16" : "1:1",
           logoUrl: selectedThemes.has("logo") ? (brandKit?.logo_url || undefined) : undefined,
           brandContext: {
             business_name: brandKit?.business_name || undefined,
