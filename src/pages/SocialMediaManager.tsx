@@ -4,7 +4,10 @@ import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
   Sparkles, Loader2, BookOpen, ShieldCheck, CheckSquare, Trash2,
+  CalendarDays,
 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
@@ -68,6 +71,7 @@ export default function SocialMediaManager() {
 
   // Strategy panel
   const [showStrategy, setShowStrategy] = useState(false);
+  const [autoGenDate, setAutoGenDate] = useState<Date | undefined>(undefined);
 
   // Selection mode
   const [selectionMode, setSelectionMode] = useState(false);
@@ -216,21 +220,40 @@ export default function SocialMediaManager() {
           <h1 className="text-base sm:text-xl font-semibold">Social Media</h1>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-          <Button
-            onClick={() => generatePosts()}
-            disabled={generating}
-            variant="outline"
-            size="sm"
-            className="gap-1.5 flex-1 sm:flex-initial"
-          >
-            {generating ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5" />
-            )}
-            <span className="hidden sm:inline">{generating ? "Generating..." : "Auto-generate today"}</span>
-            <span className="sm:hidden">{generating ? "..." : "Auto"}</span>
-          </Button>
+          <div className="flex items-center gap-0">
+            <Button
+              onClick={() => generatePosts({ scheduledDate: autoGenDate?.toISOString() })}
+              disabled={generating}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 flex-1 sm:flex-initial rounded-r-none"
+            >
+              {generating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {generating ? "Generating..." : autoGenDate ? `Auto-generate ${format(autoGenDate, "MMM d")}` : "Auto-generate today"}
+              </span>
+              <span className="sm:hidden">{generating ? "..." : "Auto"}</span>
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="px-2 rounded-l-none border-l-0">
+                  <CalendarDays className="w-3.5 h-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={autoGenDate}
+                  onSelect={(d) => setAutoGenDate(d)}
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
           <Button
             variant={showApprovals ? "default" : "outline"}
             size="sm"
@@ -457,18 +480,35 @@ export default function SocialMediaManager() {
               Click "Auto-generate today" and Pixel will create posts for all your connected platforms. You just approve!
             </p>
             <div className="flex gap-3 mt-4">
-              <Button
-                className="gap-2"
-                onClick={() => generatePosts()}
-                disabled={generating}
-              >
-                {generating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4" />
-                )}
-                {generating ? "Generating..." : "Auto-generate today"}
-              </Button>
+              <div className="flex items-center gap-0">
+                <Button
+                  className="gap-2 rounded-r-none"
+                  onClick={() => generatePosts({ scheduledDate: autoGenDate?.toISOString() })}
+                  disabled={generating}
+                >
+                  {generating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {generating ? "Generating..." : autoGenDate ? `Auto-generate ${format(autoGenDate, "MMM d")}` : "Auto-generate today"}
+                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" className="px-2 rounded-l-none border-l border-primary-foreground/20">
+                      <CalendarDays className="w-4 h-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={autoGenDate}
+                      onSelect={(d) => setAutoGenDate(d)}
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
               <Button variant="outline" className="gap-2" onClick={() => setShowCreateContent(true)}>
                 <Plus className="w-4 h-4" />
                 Create manually
