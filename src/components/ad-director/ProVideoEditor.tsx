@@ -772,20 +772,32 @@ export function ProVideoEditor({
                   onUpdateClipUrl={onUpdateClipUrl}
                 />
               )}
+              {activeTab === "record" && <RecordTab />}
+              {activeTab === "text" && <TextTab onAddText={() => setTextDialogOpen(true)} />}
               {activeTab === "music" && (
                 <MusicTab onTrackSelect={(track) => handleMusicSelect(track?.url ?? null)} />
               )}
-              {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
-              {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
-              {activeTab === "logo" && (
-                <LogoTab
-                  logo={logoSettings}
+              {activeTab === "stock-video" && <StockVideoTab />}
+              {activeTab === "stock-images" && <StockImagesTab />}
+              {activeTab === "templates" && <TemplatesTab />}
+              {activeTab === "graphics" && <GraphicsTab />}
+              {activeTab === "transitions" && (
+                <TransitionsTab
+                  activeTransition={editorSettings.transitionPreset}
+                  onSelect={(t) => setEditorSettings(prev => ({ ...prev, transitionPreset: t }))}
+                />
+              )}
+              {activeTab === "brand-kit" && (
+                <BrandKitTab
                   brand={brand}
-                  onChange={setLogoSettings}
+                  logo={logoSettings}
+                  onLogoChange={setLogoSettings}
                   onDeleteLogo={handleDeleteLogo}
                   onReplaceLogo={handleReplaceLogo}
                 />
               )}
+              {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
+              {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
             </div>
           )}
         </div>
