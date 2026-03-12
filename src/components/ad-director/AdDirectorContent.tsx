@@ -45,7 +45,12 @@ function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
   ]);
 }
 
-export function AdDirectorContent() {
+interface AdDirectorContentProps {
+  externalLoadProject?: import("@/hooks/useAdProjectHistory").AdProjectRow | null;
+  onProjectLoaded?: () => void;
+}
+
+export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDirectorContentProps = {}) {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const { saveProject } = useAdProjectHistory();
@@ -60,6 +65,14 @@ export function AdDirectorContent() {
       setBrand(savedBrand);
     }
   }, [savedBrand, brandLoading]);
+
+  // Load project from sidebar
+  useEffect(() => {
+    if (externalLoadProject) {
+      handleLoadProject(externalLoadProject);
+      onProjectLoaded?.();
+    }
+  }, [externalLoadProject]);
 
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -803,6 +816,11 @@ export function AdDirectorContent() {
               onBack={() => setStep("storyboard")}
               onExport={handleExport}
               exporting={exporting}
+              onRegenerateScene={generateScene}
+              onUpdateClipUrl={(sceneId, url) => setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: url, progress: 100 } : c))}
+              onUpdateSegment={(id, text) => setSegments(prev => prev.map(s => s.id === id ? { ...s, text } : s))}
+              onUpdateStoryboard={setStoryboard}
+              onUpdateBrand={setBrand}
             />
           </div>
         )}

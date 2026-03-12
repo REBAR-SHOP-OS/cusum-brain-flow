@@ -1,11 +1,13 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import {
-  Play, Pause, Volume2, VolumeX, Maximize2, SkipBack, SkipForward,
-  Sparkles, Settings2, Send, Download, Edit3, ArrowLeft,
-  Image, Music, FileText, Sliders, ImageIcon,
+  Play, Pause, Volume2, VolumeX, Maximize2,
+  Sparkles, Send, Download, Edit3, ArrowLeft,
+  Image, Music, FileText, Sliders, ImageIcon, Loader2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -17,6 +19,7 @@ import { MusicTab } from "./editor/MusicTab";
 import { ScriptTab } from "./editor/ScriptTab";
 import { SettingsTab } from "./editor/SettingsTab";
 import { LogoTab } from "./editor/LogoTab";
+import { supabase } from "@/integrations/supabase/client";
 
 type EditorTab = "media" | "music" | "script" | "settings" | "logo";
 
@@ -37,12 +40,20 @@ interface ProVideoEditorProps {
   onBack: () => void;
   onExport: () => void;
   exporting: boolean;
+  onRegenerateScene?: (sceneId: string) => void;
+  onUpdateClipUrl?: (sceneId: string, url: string) => void;
+  onUpdateSegment?: (id: string, text: string) => void;
+  onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
+  onUpdateBrand?: (brand: BrandProfile) => void;
 }
 
 export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
+  onRegenerateScene, onUpdateClipUrl, onUpdateSegment,
+  onUpdateStoryboard, onUpdateBrand,
 }: ProVideoEditorProps) {
+  const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -50,11 +61,43 @@ export function ProVideoEditor({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [aiCommand, setAiCommand] = useState("");
+  const [aiProcessing, setAiProcessing] = useState(false);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
 
-  // Pick the video to show: final video or the selected scene clip
+  // Undo/Redo history
+  const [history, setHistory] = useState<StoryboardScene[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  const pushHistory = useCallback((newStoryboard: StoryboardScene[]) => {
+    setHistory(prev => [...prev.slice(0, historyIndex + 1), newStoryboard]);
+    setHistoryIndex(prev => prev + 1);
+  }, [historyIndex]);
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      setHistoryIndex(historyIndex - 1);
+      onUpdateStoryboard?.(history[historyIndex - 1]);
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      setHistoryIndex(historyIndex + 1);
+      onUpdateStoryboard?.(history[historyIndex + 1]);
+    }
+  };
+
+  const resetAll = () => {
+    if (history.length > 0) {
+      onUpdateStoryboard?.(history[0]);
+      setHistoryIndex(0);
+      toast({ title: "All edits reset" });
+    }
+  };
+
+  // Pick the video to show
   const selectedClip = clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id);
   const videoSrc = finalVideoUrl || selectedClip?.videoUrl || null;
 
@@ -90,10 +133,52 @@ export function ProVideoEditor({
     }
   };
 
-  const handleAiSubmit = () => {
-    if (!aiCommand.trim()) return;
-    // TODO: integrate with AI edit edge function
-    setAiCommand("");
+  // AI Command Bar — wired to edit-video-prompt edge function
+  const handleAiSubmit = async () => {
+    if (!aiCommand.trim() || aiProcessing) return;
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+
+    setAiProcessing(true);
+    try {
+      const result = await invokeEdgeFunction<{ result: { prompt: string } }>(
+        "edit-video-prompt",
+        { prompt: scene.prompt, editDetail: aiCommand }
+      );
+      const newPrompt = result.result?.prompt || result.result;
+      if (typeof newPrompt === "string" && newPrompt.length > 0) {
+        pushHistory(storyboard);
+        const updated = storyboard.map((s, i) =>
+          i === selectedSceneIndex ? { ...s, prompt: newPrompt, promptQuality: undefined } : s
+        );
+        onUpdateStoryboard?.(updated);
+        toast({ title: "Prompt updated", description: `Scene ${selectedSceneIndex + 1} modified by AI` });
+      }
+      setAiCommand("");
+    } catch (err: any) {
+      toast({ title: "AI edit failed", description: err.message, variant: "destructive" });
+    } finally {
+      setAiProcessing(false);
+    }
+  };
+
+  // Logo handlers
+  const handleDeleteLogo = () => {
+    onUpdateBrand?.({ ...brand, logoUrl: null });
+  };
+
+  const handleReplaceLogo = async (file: File) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const path = `${user.id}/logo-${Date.now()}.${file.name.split('.').pop()}`;
+      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+      onUpdateBrand?.({ ...brand, logoUrl: data.publicUrl });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    }
   };
 
   return (
@@ -128,10 +213,8 @@ export function ProVideoEditor({
           </div>
         )}
 
-        {/* Custom controls overlay */}
         {videoSrc && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 space-y-2">
-            {/* Progress bar */}
             <div
               className="w-full h-1 bg-muted/40 rounded-full cursor-pointer group"
               onClick={e => {
@@ -147,7 +230,6 @@ export function ProVideoEditor({
               </div>
             </div>
 
-            {/* Controls row */}
             <div className="flex items-center gap-2">
               <button onClick={togglePlay} className="text-white/90 hover:text-white">
                 {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
@@ -172,20 +254,25 @@ export function ProVideoEditor({
 
       {/* AI Command Bar */}
       <div className="flex gap-2 items-center p-2 rounded-xl border border-border/30 bg-muted/10">
-        <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+        {aiProcessing ? (
+          <Loader2 className="w-4 h-4 text-primary flex-shrink-0 animate-spin" />
+        ) : (
+          <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+        )}
         <Input
           value={aiCommand}
           onChange={e => setAiCommand(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleAiSubmit()}
           placeholder="Give me a command to edit this video..."
           className="border-0 bg-transparent h-8 text-sm focus-visible:ring-0 shadow-none"
+          disabled={aiProcessing}
         />
         <Button
           size="sm"
           variant="ghost"
           className="h-8 w-8 p-0"
           onClick={handleAiSubmit}
-          disabled={!aiCommand.trim()}
+          disabled={!aiCommand.trim() || aiProcessing}
         >
           <Send className="w-4 h-4" />
         </Button>
@@ -218,12 +305,22 @@ export function ProVideoEditor({
             segments={segments}
             selectedSceneIndex={selectedSceneIndex}
             onSelectScene={setSelectedSceneIndex}
+            onRegenerateScene={onRegenerateScene}
+            onUpdateClipUrl={onUpdateClipUrl}
           />
         )}
         {activeTab === "music" && <MusicTab />}
-        {activeTab === "script" && <ScriptTab segments={segments} />}
+        {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
         {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
-        {activeTab === "logo" && <LogoTab logo={logoSettings} brand={brand} onChange={setLogoSettings} />}
+        {activeTab === "logo" && (
+          <LogoTab
+            logo={logoSettings}
+            brand={brand}
+            onChange={setLogoSettings}
+            onDeleteLogo={handleDeleteLogo}
+            onReplaceLogo={handleReplaceLogo}
+          />
+        )}
       </div>
 
       {/* Bottom action bar */}
@@ -235,9 +332,9 @@ export function ProVideoEditor({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem className="text-xs">Undo</DropdownMenuItem>
-            <DropdownMenuItem className="text-xs">Redo</DropdownMenuItem>
-            <DropdownMenuItem className="text-xs">Reset all edits</DropdownMenuItem>
+            <DropdownMenuItem className="text-xs" onClick={undo} disabled={historyIndex <= 0}>Undo</DropdownMenuItem>
+            <DropdownMenuItem className="text-xs" onClick={redo} disabled={historyIndex >= history.length - 1}>Redo</DropdownMenuItem>
+            <DropdownMenuItem className="text-xs" onClick={resetAll}>Reset all edits</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

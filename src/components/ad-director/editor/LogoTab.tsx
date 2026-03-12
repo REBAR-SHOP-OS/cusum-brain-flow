@@ -1,8 +1,10 @@
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Image, Trash2, Upload } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { LogoSettings } from "@/types/editorSettings";
 import type { BrandProfile } from "@/types/adDirector";
 
@@ -11,15 +13,28 @@ interface LogoTabProps {
   brand: BrandProfile;
   onChange: (s: LogoSettings) => void;
   onDeleteLogo?: () => void;
-  onReplaceLogo?: () => void;
+  onReplaceLogo?: (file: File) => void;
 }
 
 export function LogoTab({ logo, brand, onChange, onDeleteLogo, onReplaceLogo }: LogoTabProps) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const update = (patch: Partial<LogoSettings>) => onChange({ ...logo, ...patch });
+
+  const handleReplace = () => fileInputRef.current?.click();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    onReplaceLogo?.(file);
+    toast({ title: "Logo replaced", description: file.name });
+    e.target.value = "";
+  };
 
   return (
     <div className="space-y-4">
       <h4 className="text-sm font-semibold">Logo</h4>
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
 
       {/* Preview */}
       <div className="rounded-lg border border-border/30 p-4 flex items-center justify-center bg-muted/20 min-h-[80px]">
@@ -59,15 +74,22 @@ export function LogoTab({ logo, brand, onChange, onDeleteLogo, onReplaceLogo }: 
 
       {/* Actions */}
       <div className="flex gap-2 pt-3 border-t border-border/30">
-        <Button variant="destructive" size="sm" className="h-8 text-xs gap-1 flex-1" onClick={onDeleteLogo}>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="h-8 text-xs gap-1 flex-1"
+          onClick={() => { onDeleteLogo?.(); toast({ title: "Logo removed" }); }}
+        >
           <Trash2 className="w-3 h-3" /> Delete
         </Button>
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1 flex-1" onClick={onReplaceLogo}>
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1 flex-1" onClick={handleReplace}>
           <Upload className="w-3 h-3" /> Replace
         </Button>
       </div>
 
-      <Button size="sm" className="w-full h-8 text-xs">Save changes</Button>
+      <Button size="sm" className="w-full h-8 text-xs" onClick={() => toast({ title: "Logo settings saved" })}>
+        Save changes
+      </Button>
     </div>
   );
 }

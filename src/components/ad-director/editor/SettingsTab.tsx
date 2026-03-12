@@ -2,7 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { EditorSettings } from "@/types/editorSettings";
+import { useToast } from "@/hooks/use-toast";
+import { type EditorSettings, DEFAULT_EDITOR_SETTINGS } from "@/types/editorSettings";
 
 interface SettingsTabProps {
   settings: EditorSettings;
@@ -32,6 +33,7 @@ function PresetSelect({ label, value, options, onChange }: { label: string; valu
 }
 
 export function SettingsTab({ settings, onChange }: SettingsTabProps) {
+  const { toast } = useToast();
   const update = (patch: Partial<EditorSettings>) => onChange({ ...settings, ...patch });
 
   return (
@@ -63,8 +65,17 @@ export function SettingsTab({ settings, onChange }: SettingsTabProps) {
       </div>
 
       <div className="flex gap-2 pt-2">
-        <Button size="sm" className="flex-1 h-8 text-xs">Save changes</Button>
-        <Button variant="outline" size="sm" className="flex-1 h-8 text-xs">Reset</Button>
+        <Button size="sm" className="flex-1 h-8 text-xs" onClick={() => toast({ title: "Settings saved" })}>
+          Save changes
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 h-8 text-xs"
+          onClick={() => { onChange(DEFAULT_EDITOR_SETTINGS); toast({ title: "Settings reset to defaults" }); }}
+        >
+          Reset
+        </Button>
       </div>
     </div>
   );

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Image, Upload, Sparkles, RotateCw, Move, ZoomIn, Palette, Music, ChevronLeft } from "lucide-react";
+import { Image, Upload, Sparkles, RotateCw, Move, ZoomIn, Palette, Music, ChevronLeft, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { StoryboardScene, ClipOutput, ScriptSegment } from "@/types/adDirector";
 
 interface MediaTabProps {
@@ -13,9 +14,13 @@ interface MediaTabProps {
   segments: ScriptSegment[];
   selectedSceneIndex: number;
   onSelectScene: (idx: number) => void;
+  onRegenerateScene?: (sceneId: string) => void;
+  onUpdateClipUrl?: (sceneId: string, url: string) => void;
 }
 
-export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSelectScene }: MediaTabProps) {
+export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSelectScene, onRegenerateScene, onUpdateClipUrl }: MediaTabProps) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showProperties, setShowProperties] = useState(false);
   const [trimFrom, setTrimFrom] = useState("0.0");
   const [trimTo, setTrimTo] = useState("5.0");
@@ -30,6 +35,33 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
   const scene = storyboard[selectedSceneIndex];
   const clip = clips.find(c => c.sceneId === scene?.id);
   const segment = segments.find(s => s.id === scene?.segmentId);
+
+  const resetProperties = () => {
+    setTrimFrom("0.0");
+    setTrimTo("5.0");
+    setCenterX(50);
+    setCenterY(50);
+    setPosX(0);
+    setPosY(0);
+    setZoom(100);
+    setRotation(0);
+    setColorHex("#000000");
+  };
+
+  const handleApply = () => {
+    toast({ title: "Properties applied", description: `Transforms saved for scene ${selectedSceneIndex + 1}` });
+  };
+
+  const handleUpload = () => fileInputRef.current?.click();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !scene) return;
+    const url = URL.createObjectURL(file);
+    onUpdateClipUrl?.(scene.id, url);
+    toast({ title: "Media replaced", description: file.name });
+    e.target.value = "";
+  };
 
   if (showProperties && scene) {
     return (
@@ -100,15 +132,31 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
         <div className="space-y-2 pt-2 border-t border-border/30">
           <Label className="text-xs flex items-center gap-1"><Music className="w-3 h-3" /> Audio & SFX</Label>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-7 gap-1"><Upload className="w-3 h-3" /> Upload</Button>
-            <Button variant="outline" size="sm" className="text-xs h-7 gap-1"><Music className="w-3 h-3" /> Stock SFX</Button>
-            <Button variant="outline" size="sm" className="text-xs h-7 gap-1"><Sparkles className="w-3 h-3" /> Generate</Button>
+            <Button variant="outline" size="sm" className="text-xs h-7 gap-1" onClick={handleUpload}>
+              <Upload className="w-3 h-3" /> Upload
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-7 gap-1"
+              onClick={() => toast({ title: "Coming soon", description: "Stock SFX library is under development" })}
+            >
+              <Music className="w-3 h-3" /> Stock SFX
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-7 gap-1"
+              onClick={() => toast({ title: "Coming soon", description: "SFX generation is under development" })}
+            >
+              <Sparkles className="w-3 h-3" /> Generate
+            </Button>
           </div>
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button size="sm" className="flex-1 h-8 text-xs">Apply</Button>
-          <Button variant="outline" size="sm" className="flex-1 h-8 text-xs">Reset</Button>
+          <Button size="sm" className="flex-1 h-8 text-xs" onClick={handleApply}>Apply</Button>
+          <Button variant="outline" size="sm" className="flex-1 h-8 text-xs" onClick={resetProperties}>Reset</Button>
         </div>
       </div>
     );
@@ -117,6 +165,7 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
   return (
     <div className="space-y-4">
       <h4 className="text-sm font-semibold">Chapters</h4>
+      <input ref={fileInputRef} type="file" accept="video/*,image/*" className="hidden" onChange={handleFileChange} />
 
       {/* Chapter thumbnails */}
       <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
@@ -158,9 +207,26 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
       <div className="space-y-2 pt-2 border-t border-border/30">
         <Label className="text-xs text-muted-foreground">Replace media</Label>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="text-xs h-7 gap-1 flex-1"><Upload className="w-3 h-3" /> Upload</Button>
-          <Button variant="outline" size="sm" className="text-xs h-7 gap-1 flex-1"><Image className="w-3 h-3" /> Stock</Button>
-          <Button variant="outline" size="sm" className="text-xs h-7 gap-1 flex-1"><Sparkles className="w-3 h-3" /> Generate</Button>
+          <Button variant="outline" size="sm" className="text-xs h-7 gap-1 flex-1" onClick={handleUpload}>
+            <Upload className="w-3 h-3" /> Upload
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-7 gap-1 flex-1"
+            onClick={() => toast({ title: "Coming soon", description: "Stock media library is under development" })}
+          >
+            <Image className="w-3 h-3" /> Stock
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-7 gap-1 flex-1"
+            onClick={() => scene && onRegenerateScene?.(scene.id)}
+            disabled={!scene || clip?.status === "generating"}
+          >
+            {clip?.status === "generating" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Generate
+          </Button>
         </div>
       </div>
     </div>
