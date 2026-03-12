@@ -49,7 +49,7 @@ export function AdDirectorContent() {
         ? assets.map(f => f.name).join(", ")
         : undefined;
 
-      const result = await invokeEdgeFunction<{\
+      const result = await invokeEdgeFunction<{
         segments: ScriptSegment[];
         storyboard: StoryboardScene[];
         continuityProfile: ContinuityProfile;
