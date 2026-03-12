@@ -831,7 +831,18 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 referenceImage={referenceImage}
                 onReferenceImageChange={setReferenceImage}
                 mediaType={mediaType}
-                onMediaTypeChange={(t) => { setMediaType(t); setGeneratedImageUrl(null); setStandaloneAudioUrl(null); setError(null); }}
+                onMediaTypeChange={(t) => {
+                  setMediaType(t);
+                  setGeneratedImageUrl(null);
+                  setStandaloneAudioUrl(null);
+                  setError(null);
+                  setStatus("idle");
+                  setVideoUrl(null);
+                  setSceneUrls([]);
+                  // Auto-correct duration for the target mode
+                  if (t === "audio") setDuration("15");
+                  else if (t === "video") setDuration("8");
+                }}
                 audioType={audioType}
                 onAudioTypeChange={setAudioType}
               />
