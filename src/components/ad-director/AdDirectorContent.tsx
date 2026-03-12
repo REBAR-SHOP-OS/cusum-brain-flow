@@ -44,10 +44,17 @@ function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
 
 export function AdDirectorContent() {
   const { toast } = useToast();
+  const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const [step, setStep] = useState<WorkflowStep>("script");
   const [script, setScript] = useState("");
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
-  const [assets, setAssets] = useState<File[]>([]);
+
+  // Load saved brand kit on mount
+  useEffect(() => {
+    if (savedBrand && !brandLoading) {
+      setBrand(savedBrand);
+    }
+  }, [savedBrand, brandLoading]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
   const [analysisProgress, setAnalysisProgress] = useState(0);
