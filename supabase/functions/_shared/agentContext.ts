@@ -224,6 +224,12 @@ ENFORCEMENT RULES:
 
       // Pixel-specific: fetch knowledge items tagged with metadata.agent = "social"
       if (agent === "social") {
+        // Inject upcoming event calendar
+        const eventBlock = buildEventPromptBlock(new Date(), 5);
+        if (eventBlock) {
+          brainBlock += `\n${eventBlock}`;
+        }
+
         try {
           const { data: pixelItems } = await svc
             .from("knowledge")
