@@ -704,7 +704,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 creditCost={getCost(parseInt(duration), mode)}
                 remaining={remaining}
                 canGenerate={canGenerate(parseInt(duration), mode)}
-                isGenerating={status === "submitting" || status === "processing"}
+                isGenerating={false}
                 isTransforming={isTransforming}
                 onGenerate={handleGenerate}
                 referenceImage={referenceImage}
