@@ -483,9 +483,31 @@ export function PostReviewPanel({
 
                     {/* Regenerate caption / AI Edit */}
                     <div className="flex gap-2 px-4 pt-3">
-                      <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Regenerate caption
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={regeneratingCaption}
+                        onClick={async () => {
+                          setRegeneratingCaption(true);
+                          try {
+                            const { data, error } = await supabase.functions.invoke("regenerate-post", {
+                              body: { post_id: post.id, caption_only: true },
+                            });
+                            if (error) throw error;
+                            if (data?.error) throw new Error(data.error);
+                            queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                            toast({ title: "Caption regenerated", description: "New caption generated based on the image." });
+                          } catch (err: any) {
+                            console.error("Caption regen error:", err);
+                            toast({ title: "Caption regeneration failed", description: err?.message || "Could not regenerate caption", variant: "destructive" });
+                          } finally {
+                            setRegeneratingCaption(false);
+                          }
+                        }}
+                      >
+                        {regeneratingCaption ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        {regeneratingCaption ? "Regenerating..." : "Regenerate caption"}
                       </Button>
                       <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
                         <Sparkles className="w-3.5 h-3.5" />

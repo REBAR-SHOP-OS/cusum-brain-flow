@@ -206,7 +206,77 @@ serve(async (req) => {
       ? `\n\n## MANDATORY BRAIN CONTEXT (YOU MUST USE THIS):\n${brainKnowledge}\n\nCRITICAL: You MUST incorporate the above brain context into your generated content.\n`
       : "";
 
-    // 2. Generate new caption + image text via LLM
+    // ─── CAPTION-ONLY mode: just regenerate caption based on the image ───
+    if (caption_only) {
+      const captionOnlyPrompt = `You are an elite creative advertising copywriter for REBAR.SHOP, a premium rebar and steel reinforcement company in Ontario, Canada.
+
+You are looking at an image from a social media post. Based on what you see in the image, write a NEW short promotional caption.
+
+Platform: ${post.platform}
+${brainBlock}
+
+RULES:
+- Write a short, punchy, promotional English caption. Maximum 2 sentences.
+- Write 8-12 relevant hashtags as a single string separated by spaces.
+- Write a short catchy title (max 10 words).
+- Translate the caption to Farsi (Persian).
+- ABSOLUTELY FORBIDDEN WORDS: guarantee, guaranteed, ensures, promise, best, greatest, number one, unmatched, unparalleled, revolutionary, superior, finest, ensure, assured, unbeatable, top-notch
+- Do NOT mention ANY time of day, hour, clock time, AM/PM
+- Be bold, specific, and direct. Use relevant emojis.
+- SESSION SEED: ${sessionSeed}
+
+Respond with ONLY a valid JSON object (no markdown, no code fences):
+{"title": "...", "caption": "...", "hashtags": "...", "captionFa": "..."}`;
+
+      const contentParts: any[] = [{ type: "text", text: captionOnlyPrompt }];
+      if (post.image_url) {
+        contentParts.push({ type: "image_url", image_url: { url: post.image_url } });
+      }
+
+      const capRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: contentParts }],
+          temperature: 1.0,
+        }),
+      });
+
+      if (!capRes.ok) throw new Error(`Caption generation failed (${capRes.status})`);
+
+      const capData = await capRes.json();
+      const rawCap = capData.choices?.[0]?.message?.content || "";
+      const jsonCap = rawCap.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+      const newCap = JSON.parse(jsonCap);
+
+      if (!newCap.caption) throw new Error("Missing caption in response");
+
+      const persianBlock = newCap.captionFa
+        ? `\n\n---PERSIAN---\n📝 ترجمه کپشن: ${newCap.captionFa}`
+        : "";
+      const fullContent = `${newCap.caption}\n\n${newCap.hashtags || ""}${PIXEL_CONTACT_INFO}${persianBlock}`;
+      const hashtags = (newCap.hashtags || "").split(/\s+/).filter((h: string) => h.startsWith("#"));
+
+      const { error: updateErr } = await supabase
+        .from("social_posts")
+        .update({
+          title: newCap.title || post.title,
+          content: fullContent,
+          hashtags,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", post_id);
+
+      if (updateErr) throw new Error(`DB update failed: ${updateErr.message}`);
+
+      return new Response(
+        JSON.stringify({ success: true, title: newCap.title || post.title, content: fullContent, hashtags }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 2. Generate new caption + image text via LLM (full regeneration)
     const captionPrompt = `You are an elite creative advertising copywriter for RebarShop, a premium rebar and steel reinforcement company based in Ontario, Canada.
 
 Current post title: ${post.title}
@@ -226,7 +296,7 @@ CRITICAL RULES:
 - Content MUST be COMPLETELY DIFFERENT from the current post
 - NEVER use generic phrases like "Building strong" or "Engineering excellence"
 - ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM
-- FORBIDDEN WORDS: best, greatest, number one, unmatched, unparalleled, revolutionary
+- FORBIDDEN WORDS: guarantee, guaranteed, ensures, promise, best, greatest, number one, unmatched, unparalleled, revolutionary, superior, finest
 - Be creative, bold, and specific
 - The image slogan must be short enough to be readable on an image
 - SESSION CREATIVE SEED: ${sessionSeed} — use this to drive a UNIQUE creative direction
