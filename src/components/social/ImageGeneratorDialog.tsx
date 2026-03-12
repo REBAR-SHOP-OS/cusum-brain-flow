@@ -15,6 +15,7 @@ const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: s
   { id: "workers", label: "Workers", icon: Users, promptTag: "construction workers at work" },
   { id: "ai", label: "AI & Build", icon: Bot, promptTag: "AI technology in construction" },
   { id: "products", label: "Our Products", icon: Package, promptTag: "rebar stirrups, ties, and accessories" },
+  { id: "logo", label: "Logo", icon: Stamp, promptTag: "with company branding" },
 ];
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
