@@ -1,46 +1,37 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix Ad Director Sidebar — Make All Links Functional
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+The sidebar links (Stock Images, Stock Video, Templates, Graphics, Transitions, Brand Kit, etc.) only render their content panels inside `ProVideoEditor`, which only appears at the "Preview" step. When the user is on the "Script & Assets" or "Storyboard" step, clicking sidebar items highlights them but shows nothing — the content panels are not wired to these steps.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+The Pexels edge function works correctly (tested and confirmed), so the stock search itself is not broken — the issue is purely that the tab content panels are not rendered outside the editor.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Plan
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. Add a floating side panel to `AdDirectorContent.tsx`
+When `externalActiveTab` is set and the current step is NOT "preview" (where the editor handles it), render a slide-out panel on the left side that shows the appropriate tab content:
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+- `stock-images` → `<StockImagesTab />`
+- `stock-video` → `<StockVideoTab />`
+- `templates` → `<TemplatesTab />`
+- `graphics` → `<GraphicsTab />`
+- `transitions` → `<TransitionsTab />` (with default props)
+- `brand-kit` → `<BrandKitTab />` (with brand/logo state)
+- `text` → `<TextTab />` (with no-op handler)
+- `record` → `<RecordTab />`
+- `media` → placeholder "Select a project first"
+- `music` → `<MusicTab />`
+- `settings` → `<SettingsTab />`
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+The panel will appear as a floating card overlaying or beside the main content, with a close button (X) that resets `activeTab` to null.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. Update `AdDirectorContent.tsx` — Add imports and panel rendering
+- Import all tab components (StockImagesTab, StockVideoTab, etc.)
+- Add a conditional render block before or alongside the main grid content
+- When `step !== "preview" && externalActiveTab` is truthy, render a side panel with the matching tab component
+- Add a close/dismiss button that calls `onActiveTabChanged?.(null)`
+
+### 3. No backend changes needed
+The `pexels-search` edge function and `PEXELS_API_KEY` are both working correctly.
+
