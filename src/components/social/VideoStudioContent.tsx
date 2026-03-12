@@ -893,7 +893,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 isConstructionRelated={transformResult?.isConstructionRelated}
                 creditCost={mediaType === "video" ? getCost(parseInt(duration), mode) : mediaType === "image" ? 1 : parseInt(duration)}
                 remaining={remaining}
-                canGenerate={mediaType === "video" ? canGenerate(parseInt(duration), mode) : true}
+                canGenerate={mediaType === "video" ? (effectiveVideoProvider === "wan" || canGenerate(parseInt(duration), mode)) : true}
                 isGenerating={imageGenerating || standaloneAudioGenerating}
                 isTransforming={isTransforming}
                 onGenerate={handleGenerate}
