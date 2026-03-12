@@ -883,6 +883,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
                 onExport={handleExport}
                 exporting={exporting}
                 finalVideoUrl={finalVideoUrl}
+                onOpenExportDialog={() => setExportDialogOpen(true)}
               />
             </div>
           </>
