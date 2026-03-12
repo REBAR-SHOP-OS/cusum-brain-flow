@@ -602,7 +602,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                     </Button>
                   )}
                   {savedToLibrary && (
-                    <Button variant="outline" disabled className="gap-1.5 text-emerald-600">
+                    <Button variant="outline" disabled className="gap-1.5 text-[hsl(var(--success))]">
                       <CheckCircle2 className="w-4 h-4" /> Saved
                     </Button>
                   )}
