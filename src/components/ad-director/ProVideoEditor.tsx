@@ -529,7 +529,14 @@ export function ProVideoEditor({
   };
 
   const handleLoaded = () => {
-    if (videoRef.current) setDuration(videoRef.current.duration);
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+      // Track actual clip duration keyed by scene ID
+      const sceneId = storyboard[selectedSceneIndex]?.id;
+      if (sceneId && videoRef.current.duration > 0) {
+        setClipDurations(prev => ({ ...prev, [sceneId]: videoRef.current!.duration }));
+      }
+    }
   };
 
   // ─── Auto-advance on video end with fade transition ───
