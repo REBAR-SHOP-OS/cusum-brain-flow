@@ -64,7 +64,14 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
   const { brandKit } = useBrandKit();
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
-  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
+  // Auto-select "logo" theme when brand logo exists
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(() => {
+    return new Set();
+  });
+
+  // Auto-enable logo theme when brandKit loads with a logo_url
+  const logoAutoApplied = brandKit?.logo_url ? true : false;
+
 
   const toggleTheme = (id: string) => {
     setSelectedThemes((prev) => {
