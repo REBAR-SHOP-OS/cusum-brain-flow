@@ -1,34 +1,33 @@
 
 
-# Fix: Blank Exported Video + End Card UI Not Updating
 
-## Problems Identified
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-1. **Exported video is blank/gray**: The canvas capture loop has a race condition. After `video.play()` resolves, `drawFrame()` starts immediately, but the first check `if (video.paused || video.ended || ...)` can evaluate `video.paused` as true momentarily or `video.currentTime` as 0 while the browser is still buffering. The loop exits before any frames are drawn.
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-2. **UI shows "7/7 clips ready" without "+end card"**: The `endCardEnabled` toggle state is `false` — the FinalPreview code is correct but the toggle needs to be on. This is a user action issue, but the fact that a previous export already ran with 7 scenes at 35s suggests the export also didn't respect end card, confirming `endCardEnabled` was off during that export.
+## Completed: Add All Wan 2.6 Capabilities
 
-## Root Cause: Canvas Capture Race Condition
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-In `videoStitch.ts` line 299:
-```typescript
-if (video.paused || video.ended || video.currentTime >= effectiveDuration) {
-```
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-After `video.play()`, the browser may not have decoded the first frame yet. The `video.paused` can flicker, or `video.currentTime` stays at 0 while `effectiveDuration` is also being checked. Additionally, if a clip's blob URL doesn't decode properly, `video.play()` resolves but the video never actually advances.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Solution
-
-### 1. Fix canvas capture timing (`src/lib/videoStitch.ts`)
-- Wait for the `playing` event before starting the `drawFrame` loop (ensures first frame is decoded)
-- Add a `setTimeout`-based frame loop as backup alongside `requestAnimationFrame` (RAF pauses when tab is hidden)
-- Guard the exit condition: only exit when `video.currentTime > 0` AND `>= effectiveDuration`, preventing premature exit on frame 0
-- Add console logs for debugging each clip transition
-
-### 2. Ensure end card default is `true` (`AdDirectorContent.tsx`)
-- Check if `endCardEnabled` initializes to `true` — if not, set the default so the UI and export behavior match expectations out of the box
-
-## Files Modified
-- `src/lib/videoStitch.ts` — fix race condition in playback loop, add `playing` event gate, guard exit on frame 0
-- `src/components/ad-director/AdDirectorContent.tsx` — verify/fix `endCardEnabled` default state
-
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
