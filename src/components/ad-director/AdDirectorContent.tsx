@@ -45,7 +45,12 @@ function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
   ]);
 }
 
-export function AdDirectorContent() {
+interface AdDirectorContentProps {
+  externalLoadProject?: import("@/hooks/useAdProjectHistory").AdProjectRow | null;
+  onProjectLoaded?: () => void;
+}
+
+export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDirectorContentProps = {}) {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const { saveProject } = useAdProjectHistory();
