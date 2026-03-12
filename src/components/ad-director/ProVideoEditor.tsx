@@ -78,6 +78,7 @@ export function ProVideoEditor({
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
+  const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
 
   // ─── Global timeline ───
