@@ -126,7 +126,7 @@ export function VideoParameters({ params, onChange }: VideoParametersProps) {
 
       {/* Build Quantity */}
       <div className="space-y-2">
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Build Quantity</span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Number of Ad Versions</span>
         <div className="flex items-center gap-3">
           <Slider
             min={1}

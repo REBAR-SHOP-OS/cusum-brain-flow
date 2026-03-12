@@ -102,8 +102,11 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   useEffect(() => { storyboardRef.current = storyboard; }, [storyboard]);
   const [continuity, setContinuity] = useState<ContinuityProfile | null>(null);
   const [clips, setClips] = useState<ClipOutput[]>([]);
-  // Derive generatingAny reactively from clips state
-  const generatingAny = clips.some(c => c.status === "generating");
+  // Multi-build state: each build is an independent set of clips for all scenes
+  const [builds, setBuilds] = useState<{ buildIndex: number; clips: ClipOutput[] }[]>([]);
+  const [activeBuildIndex, setActiveBuildIndex] = useState(0);
+  // Derive generatingAny reactively from clips state + all builds
+  const generatingAny = clips.some(c => c.status === "generating") || builds.some(b => b.clips.some(c => c.status === "generating"));
   const [exporting, setExporting] = useState(false);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [musicTrackUrl, setMusicTrackUrl] = useState<string | null>(null);
@@ -547,54 +550,67 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   // ─── Generate All (with buildQty support) ──────────────
   const handleGenerateAll = useCallback(async () => {
     const buildQty = videoParams.buildQty || 1;
-    const scenesToGenerate = storyboard.filter(s => {
-      const c = clips.find(c => c.sceneId === s.id);
-      return c?.status !== "completed";
-    });
+    const baseScenes = storyboard;
 
-    // If buildQty > 1, create extra clip entries for each variant
-    if (buildQty > 1) {
-      setClips(prev => {
-        const newClips = [...prev];
-        for (const scene of scenesToGenerate) {
-          for (let v = 2; v <= buildQty; v++) {
-            const variantId = `${scene.id}-v${v}`;
-            if (!newClips.find(c => c.sceneId === variantId)) {
-              newClips.push({ sceneId: variantId, status: "idle", progress: 0 });
-            }
-          }
-        }
-        return newClips;
+    if (buildQty <= 1) {
+      // Single build — original behaviour
+      const scenesToGen = baseScenes.filter(s => {
+        const c = clips.find(c => c.sceneId === s.id);
+        return c?.status !== "completed";
       });
-      // Also duplicate storyboard entries for variant scenes
-      setStoryboard(prev => {
-        const newSb = [...prev];
-        for (const scene of scenesToGenerate) {
-          for (let v = 2; v <= buildQty; v++) {
-            const variantId = `${scene.id}-v${v}`;
-            if (!newSb.find(s => s.id === variantId)) {
-              newSb.push({ ...scene, id: variantId });
-            }
-          }
-        }
-        return newSb;
-      });
-    }
-
-    const totalJobs = scenesToGenerate.length * buildQty;
-    let launched = 0;
-    for (const scene of scenesToGenerate) {
-      for (let v = 1; v <= buildQty; v++) {
-        const sceneId = v === 1 ? scene.id : `${scene.id}-v${v}`;
+      let launched = 0;
+      for (const scene of scenesToGen) {
         launched++;
-        setGenerationStatus(`Launching build ${launched} of ${totalJobs}...`);
-        await generateScene(sceneId);
+        setGenerationStatus(`Generating scene ${launched} of ${scenesToGen.length}...`);
+        await generateScene(scene.id);
         await new Promise(r => setTimeout(r, 2000));
       }
+      setGenerationStatus("");
+      setStep("preview");
+      toast({ title: "Generation complete", description: `${scenesToGen.length} scenes generated.` });
+      return;
     }
+
+    // Multi-build: run the full pipeline buildQty times, each producing a complete set of clips
+    const newBuilds: { buildIndex: number; clips: ClipOutput[] }[] = [];
+    for (let b = 0; b < buildQty; b++) {
+      newBuilds.push({
+        buildIndex: b,
+        clips: baseScenes.map(s => ({ sceneId: s.id, status: "idle" as const, progress: 0 })),
+      });
+    }
+    setBuilds(newBuilds);
+    setActiveBuildIndex(0);
+
+    const totalJobs = baseScenes.length * buildQty;
+    let launched = 0;
+
+    for (let b = 0; b < buildQty; b++) {
+      setActiveBuildIndex(b);
+      // Set the main clips state to this build's clips so generateScene updates the right entries
+      setClips(newBuilds[b].clips);
+
+      for (const scene of baseScenes) {
+        launched++;
+        setGenerationStatus(`Build ${b + 1}/${buildQty} — scene ${launched} of ${totalJobs}...`);
+        await generateScene(scene.id);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      // Snapshot current clips state into the build
+      setClips(prev => {
+        newBuilds[b] = { ...newBuilds[b], clips: [...prev] };
+        setBuilds([...newBuilds]);
+        return prev;
+      });
+    }
+
+    // Set active build to first and load its clips
+    setActiveBuildIndex(0);
+    setClips(newBuilds[0].clips);
     setGenerationStatus("");
     setStep("preview");
-    toast({ title: "All builds launched", description: `${totalJobs} clips generating. Check progress below.` });
+    toast({ title: "All versions generated", description: `${buildQty} ad versions × ${baseScenes.length} scenes completed.` });
   }, [storyboard, clips, generateScene, toast, videoParams.buildQty]);
 
   // ─── Export ──────────────────────────────────────
@@ -945,7 +961,32 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
 
         {step === "storyboard" && (
           <>
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 space-y-3">
+              {/* Build version tabs */}
+              {builds.length > 1 && (
+                <div className="flex items-center gap-1 rounded-lg border border-border/30 bg-card/30 p-1 w-fit">
+                  {builds.map((b) => (
+                    <button
+                      key={b.buildIndex}
+                      onClick={() => {
+                        setActiveBuildIndex(b.buildIndex);
+                        setClips(b.clips);
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                        activeBuildIndex === b.buildIndex
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                      )}
+                    >
+                      Version {b.buildIndex + 1}
+                      {b.clips.every(c => c.status === "completed") && (
+                        <Check className="w-3 h-3 ml-1 inline" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
               <StoryboardTimeline
                 segments={segments}
                 storyboard={storyboard}
