@@ -1,33 +1,33 @@
 
 
+# Add Detailed Analysis Progress Indicators
 
-## Completed: Upgrade Wan 2.1 → Wan 2.6
+## Problem
+When analyzing a script, users only see "Analyzing Script..." with a spinner. No feedback on what the system is doing — feels broken on longer waits.
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
-
-## Completed: Add All Wan 2.6 Capabilities
+## Solution
+Add a multi-step progress indicator that cycles through descriptive status messages during analysis, showing users each phase of the AI pipeline.
 
 ### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+#### 1. `src/components/ad-director/AdDirectorContent.tsx`
+- Add `analysisStatus` state string that updates as analysis progresses
+- Before calling the edge function, cycle through status messages on a timer:
+  - "Reading your script..."
+  - "Identifying hook, problem, and solution..."
+  - "Breaking script into timed scenes..."
+  - "Generating storyboard with visual styles..."
+  - "Building continuity profile..."
+  - "Optimizing scene prompts..."
+- Pass `analysisStatus` down to `ScriptInput`
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+#### 2. `src/components/ad-director/ScriptInput.tsx`
+- Accept new `analysisStatus?: string` prop
+- When `analyzing` is true, replace the button area with a styled progress card showing:
+  - Animated spinner
+  - Current status message (e.g., "Identifying hook, problem, and solution...")
+  - A subtle progress bar or animated dots
+  - The card sits below the button to give a "live feed" feel
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+This gives users clear, descriptive feedback about what the AI is doing at each moment.
+
