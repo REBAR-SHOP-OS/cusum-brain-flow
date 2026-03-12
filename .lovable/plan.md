@@ -1,64 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Redesign Preview & Export as Canva-Style Editor
+## Completed: Add All Wan 2.6 Capabilities
 
-## Current State
-The `ProVideoEditor` uses a vertical stacked layout: video → AI command bar → horizontal tabs → tab content → action bar. Everything flows top-to-bottom.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Target Layout (from Canva screenshot)
-A 3-panel layout with bottom timeline:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-```text
-┌──────────────┬────────────────────────────┬──────────────┐
-│  Left Sidebar │      Video Canvas          │ Right Panel  │
-│  (icon nav +  │      (playback controls)   │ (Fade, FX,   │
-│   tab content)│                            │  Speed, etc) │
-│               │                            │              │
-├──────────────┴────────────────────────────┴──────────────┤
-│  Timeline: scene thumbnails strip + audio track          │
-│  + playhead + zoom controls                              │
-└──────────────────────────────────────────────────────────┘
-```
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Changes
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### `src/components/ad-director/ProVideoEditor.tsx` — Full layout restructure
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-1. **Left sidebar** (w-56, dark bg):
-   - Vertical icon strip (same tabs: Media, Music, Script, Settings, Logo) as icon buttons
-   - Active tab's content renders below the icons in the sidebar
-   - Top: undo/redo buttons
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-2. **Center canvas** (flex-1):
-   - Video player with overlay support (unchanged logic)
-   - Top-right: Export button (gradient, like Canva)
-   - Bottom: playback controls (play/pause, skip, time display)
-
-3. **Right panel** (w-64, collapsible):
-   - New contextual properties panel:
-     - **Fade**: fade-in / fade-out sliders (0-5s)
-     - **Speed**: playback speed selector (0.5x–2x)
-   - These map to existing `EditorSettings` fields
-
-4. **Bottom timeline bar** (h-36, fixed at bottom of editor):
-   - Scene thumbnail strip (horizontal filmstrip from clip thumbnails)
-   - Audio track visualization (waveform placeholder bar)
-   - Playhead indicator (white vertical line)
-   - Zoom in/out + fit-to-view buttons
-   - "+ Add text" and "+ Add audio" placeholder rows
-
-5. **AI Command Bar** — moves to top of center canvas (overlaid, minimal)
-
-### New file: `src/components/ad-director/editor/TimelineBar.tsx`
-- Renders the bottom timeline with scene thumbnails, audio track row, playhead
-- Props: clips, storyboard, segments, currentTime, duration, onSeek, onSelectScene
-
-### New file: `src/components/ad-director/editor/EffectsPanel.tsx`
-- Right-side panel with Fade in/out sliders and Speed selector
-- Props: editorSettings, onChange
-
-### Files Modified
-- `src/components/ad-director/ProVideoEditor.tsx` — restructure from vertical to 3-panel + timeline layout
-- `src/components/ad-director/editor/TimelineBar.tsx` — new component
-- `src/components/ad-director/editor/EffectsPanel.tsx` — new component
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
