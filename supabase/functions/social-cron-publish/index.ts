@@ -209,10 +209,27 @@ serve(async (req) => {
                   .limit(1)
                   .maybeSingle()).data;
               }
-              const pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
+              let pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
 
               if (post.platform === "facebook") {
-                // Pre-flight: verify page token has publish permissions
+                // Refresh page token using user's long-lived token for current permissions
+                const userLLT = tokenData.access_token;
+                const refreshedToken = await refreshPageToken(userLLT, pageId);
+                if (refreshedToken) {
+                  pageAccessToken = refreshedToken;
+                  // Persist refreshed token
+                  await supabase
+                    .from("user_meta_tokens")
+                    .upsert({
+                      user_id: post.user_id,
+                      platform: `facebook_page_${pageId}`,
+                      access_token: refreshedToken,
+                    }, { onConflict: "user_id,platform" });
+                } else {
+                  console.warn(`[social-cron-publish] Token refresh failed for post ${post.id}, using stored token`);
+                }
+
+                // Pre-flight: verify page token validity
                 const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
                 const preflightData = await preflightRes.json();
                 if (preflightData.error) {
