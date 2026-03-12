@@ -21,6 +21,7 @@ interface FinalPreviewProps {
   onExport: () => void;
   exporting: boolean;
   finalVideoUrl: string | null;
+  onOpenExportDialog?: () => void;
   // Render pipeline state (optional — backward compatible)
   renderStatus?: RenderStatus;
   renderError?: { message: string; stage: string } | null;
