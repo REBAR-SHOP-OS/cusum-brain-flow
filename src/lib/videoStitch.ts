@@ -286,7 +286,7 @@ async function preloadAndValidate(
 
 // ─── Post-stitch validation ────────────────────────────────
 
-async function validateBlob(blob: Blob): Promise<{ valid: boolean; error?: string; duration?: number }> {
+async function validateBlob(blob: Blob, expectedDuration?: number): Promise<{ valid: boolean; error?: string; duration?: number }> {
   if (blob.size === 0) return { valid: false, error: "Output blob is empty (0 bytes)" };
   if (blob.size < 1000) return { valid: false, error: `Output blob suspiciously small (${blob.size} bytes)` };
 
@@ -302,8 +302,11 @@ async function validateBlob(blob: Blob): Promise<{ valid: boolean; error?: strin
       clearTimeout(timeout);
       const dur = testVideo.duration;
       URL.revokeObjectURL(url);
-      if (!dur || dur <= 0 || !isFinite(dur)) {
+      if (!dur || dur <= 0) {
         resolve({ valid: false, error: `Output video has invalid duration: ${dur}` });
+      } else if (!isFinite(dur) && expectedDuration && expectedDuration > 0) {
+        console.warn(`[validateBlob] Browser reported Infinity duration, using expected: ${expectedDuration.toFixed(1)}s`);
+        resolve({ valid: true, duration: expectedDuration });
       } else {
         resolve({ valid: true, duration: dur });
       }
@@ -457,7 +460,7 @@ export async function stitchClips(
       // Phase 3: Post-stitch validation
       onProgress?.({ stage: "validating", message: "Validating output..." });
       const blob = new Blob(chunks, { type: mimeType });
-      const validation = await validateBlob(blob);
+      const validation = await validateBlob(blob, cumulativeTime);
 
       if (!validation.valid) {
         reject(new Error(`Stitch validation failed: ${validation.error}`));
