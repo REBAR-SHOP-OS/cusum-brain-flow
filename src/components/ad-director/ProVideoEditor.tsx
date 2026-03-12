@@ -913,6 +913,25 @@ export function ProVideoEditor({
         onDeleteOverlay={handleDeleteOverlay}
         onRemoveAudioTrack={handleRemoveAudioTrack}
         onRegenerateScene={onRegenerateScene}
+        onDeleteScene={handleDeleteScene}
+        onTrimScene={handleTrimScene}
+        onStretchScene={handleStretchScene}
+        onSplitScene={handleSplitScene}
+        onDuplicateScene={handleDuplicateScene}
+        onMoveScene={handleMoveScene}
+        onEditPrompt={handleEditPrompt}
+        onEditVoiceover={handleEditVoiceover}
+        onMuteScene={handleMuteScene}
+        mutedScenes={mutedScenes}
+        onEditOverlayPosition={handleEditOverlayPosition}
+        onResizeOverlay={handleResizeOverlay}
+        onToggleOverlayAnimation={handleToggleOverlayAnimation}
+        onReRecordVoiceover={handleReRecordVoiceover}
+        onEditVoiceoverText={handleEditVoiceoverText}
+        onEditOverlay={(ov) => {
+          const newText = prompt("Edit overlay text:", ov.content);
+          if (newText !== null) setOverlays(prev => prev.map(o => o.id === ov.id ? { ...o, content: newText } : o));
+        }}
       />
 
       {/* Text Overlay Dialog */}
