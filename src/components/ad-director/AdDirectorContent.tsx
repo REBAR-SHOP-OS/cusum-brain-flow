@@ -16,12 +16,14 @@ import { cn } from "@/lib/utils";
 import { stitchClips } from "@/lib/videoStitch";
 
 
+import { Check } from "lucide-react";
+
 type WorkflowStep = "script" | "storyboard" | "preview";
 
-const steps: { id: WorkflowStep; label: string; icon: React.ReactNode }[] = [
-  { id: "script", label: "Script & Assets", icon: <FileText className="w-4 h-4" /> },
-  { id: "storyboard", label: "Storyboard", icon: <Layers className="w-4 h-4" /> },
-  { id: "preview", label: "Preview & Export", icon: <Film className="w-4 h-4" /> },
+const steps: { id: WorkflowStep; label: string; desc: string; icon: React.ReactNode }[] = [
+  { id: "script", label: "Script & Assets", desc: "Write or paste your ad script", icon: <FileText className="w-4 h-4" /> },
+  { id: "storyboard", label: "Storyboard", desc: "Review scenes & prompts", icon: <Layers className="w-4 h-4" /> },
+  { id: "preview", label: "Preview & Export", desc: "Assemble & download", icon: <Film className="w-4 h-4" /> },
 ];
 
 const QUALITY_THRESHOLD = 7.0;
