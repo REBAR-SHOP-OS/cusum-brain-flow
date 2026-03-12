@@ -399,6 +399,18 @@ export function AdDirectorContent() {
 
   return (
     <div className="space-y-6">
+      {/* Global Analysis Progress — visible on all tabs */}
+      {analyzing && analysisStatus && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
+            <span className="text-sm font-medium text-foreground">{analysisStatus}</span>
+            <span className="ml-auto text-xs text-muted-foreground">{analysisProgress}%</span>
+          </div>
+          <Progress value={analysisProgress} className="h-2" />
+        </div>
+      )}
+
       {/* Workflow Steps */}
       <div className="flex items-center gap-1 bg-card/30 rounded-xl p-1 border border-border/30">
         {steps.map((s) => (
