@@ -260,6 +260,8 @@ export async function stitchClips(
     recorder.onerror = () => reject(new Error("Stitch recording failed"));
 
     recorder.onstop = () => {
+      if (audioElement) audioElement.pause();
+      if (audioCtx) audioCtx.close();
       const blob = new Blob(chunks, { type: mimeType });
       resolve(URL.createObjectURL(blob));
     };
