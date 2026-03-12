@@ -49,9 +49,11 @@ function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
 interface AdDirectorContentProps {
   externalLoadProject?: import("@/hooks/useAdProjectHistory").AdProjectRow | null;
   onProjectLoaded?: () => void;
+  externalActiveTab?: string | null;
+  onActiveTabChanged?: (tab: string | null) => void;
 }
 
-export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDirectorContentProps = {}) {
+export function AdDirectorContent({ externalLoadProject, onProjectLoaded, externalActiveTab, onActiveTabChanged }: AdDirectorContentProps = {}) {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const { saveProject } = useAdProjectHistory();
