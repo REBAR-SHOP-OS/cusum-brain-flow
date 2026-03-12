@@ -141,7 +141,37 @@ async function callAI(
     throw new Error(response.status === 429 ? "Rate limited — please try again." : response.status === 402 ? "AI credits exhausted." : "AI generation failed");
   }
 
-  const data = await response.json();
+  const rawText = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    // Try to salvage truncated JSON from the response
+    let cleaned = rawText.replace(/```json\s*/gi, "").replace(/```\s*/g, "").replace(/[\x00-\x1F\x7F]/g, "").trim();
+    const start = cleaned.search(/[\{\[]/);
+    if (start === -1) {
+      console.error("AI returned non-JSON response:", rawText.slice(0, 500));
+      throw new Error("AI returned empty or non-JSON response");
+    }
+    cleaned = cleaned.substring(start);
+    // Balance braces/brackets
+    let braces = 0, brackets = 0;
+    for (const ch of cleaned) { if (ch === '{') braces++; if (ch === '}') braces--; if (ch === '[') brackets++; if (ch === ']') brackets--; }
+    if (braces > 0) cleaned += '}'.repeat(braces);
+    if (brackets > 0) cleaned += ']'.repeat(brackets);
+    cleaned = cleaned.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+    try {
+      data = JSON.parse(cleaned);
+      console.warn("Repaired truncated AI JSON response");
+    } catch (e2) {
+      console.error("Failed to repair AI JSON:", rawText.slice(0, 500));
+      throw new Error("AI returned malformed response");
+    }
+    // Wrap repaired content to match expected structure
+    if (!data.choices) {
+      data = { choices: [{ message: { content: JSON.stringify(data) } }] };
+    }
+  }
   return { data, modelUsed: model, fallbackUsed: false };
 }
 
