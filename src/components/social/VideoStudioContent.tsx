@@ -992,8 +992,22 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                     <Button variant="outline" asChild>
                       <a href={videoUrl} download target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4" /></a>
                     </Button>
+                    <Button variant="outline" className="gap-1.5" onClick={() => setShowSocialPanel(!showSocialPanel)}>
+                      <Share2 className="w-4 h-4" /> Post
+                    </Button>
                     <Button variant="outline" onClick={handleReset}><RotateCcw className="w-4 h-4" /></Button>
                   </div>
+
+                  {/* Social Post Panel */}
+                  {showSocialPanel && (
+                    <div className="border rounded-lg p-3 bg-muted/30">
+                      <VideoToSocialPanel
+                        videoUrl={videoUrl}
+                        aspectRatio={aspectRatio}
+                        onClose={() => setShowSocialPanel(false)}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
