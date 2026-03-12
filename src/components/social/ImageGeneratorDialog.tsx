@@ -104,7 +104,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
           prompt: brandedPrompt,
           model: selectedModel,
           size,
-          quality: selectedModel === "gpt-image-1" ? "high" : "hd",
+          quality: "high",
           style: selectedModel === "dall-e-3" ? "vivid" : undefined,
         },
       });
