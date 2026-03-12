@@ -184,6 +184,13 @@ export function TimelineBar({
                       style={{ flex: dur }}
                       title={seg?.label || `Scene ${i + 1}`}
                     >
+                      {/* Left drag handle */}
+                      {onResizeScene && (
+                        <div
+                          onMouseDown={(e) => handleDragStart(e, i, "left")}
+                          className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 z-20"
+                        />
+                      )}
                       {clip?.videoUrl && (
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
                       )}
@@ -192,6 +199,13 @@ export function TimelineBar({
                       </span>
                       {isSelected && (
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                      )}
+                      {/* Right drag handle */}
+                      {onResizeScene && (
+                        <div
+                          onMouseDown={(e) => handleDragStart(e, i, "right")}
+                          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 z-20"
+                        />
                       )}
                     </div>
                   </PopoverTrigger>
