@@ -38,11 +38,31 @@ RULES:
    - STYLE: Visual style (cinematic, documentary, commercial, editorial, moody)
    - REALISM: Level of photorealism desired
 
-2. REMOVE all marketing buzzwords, sales language, and non-visual fluff
-3. ADD cinematic specificity: lens type feelings, depth of field, color grading notes
-4. Keep the prompt under 200 words
-5. Write as a single flowing paragraph — NO bullet points, NO labels
-6. The output should read like a film director's shot description
+2. CLASSIFY the user's intent into exactly one of these categories:
+   - product_promo
+   - cinematic_broll
+   - industrial_machinery
+   - construction_documentary
+   - social_media_ad
+   - educational_explainer
+   - product_showcase
+   - before_after
+   - image_to_video
+
+3. DETECT the target platform intent (if apparent):
+   - instagram_reels
+   - tiktok
+   - youtube
+   - linkedin
+   - facebook
+   - website_hero
+   - general
+
+4. REMOVE all marketing buzzwords, sales language, and non-visual fluff
+5. ADD cinematic specificity: lens type feelings, depth of field, color grading notes
+6. Keep the prompt under 200 words
+7. Write as a single flowing paragraph — NO bullet points, NO labels
+8. The output should read like a film director's shot description
 
 RESPOND WITH ONLY A JSON OBJECT in this exact format:
 {
@@ -56,6 +76,8 @@ RESPOND WITH ONLY A JSON OBJECT in this exact format:
     "style": "suggested style",
     "realism": "photorealistic|stylized|hyperreal"
   },
+  "intent": "one of the intent categories above",
+  "platform_intent": "one of the platform intent categories above",
   "isConstructionRelated": true|false
 }`;
 
@@ -65,7 +87,6 @@ serve(async (req) => {
   }
 
   try {
-    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
@@ -106,19 +127,12 @@ serve(async (req) => {
       );
     }
 
-    // Detect construction context
     const lowerPrompt = rawPrompt.toLowerCase();
     const isConstructionRelated = CONSTRUCTION_KEYWORDS.some(kw => lowerPrompt.includes(kw));
 
-    // Build context-aware user message
     let userMessage = `Transform this casual video description into a cinematic prompt:\n\n"${rawPrompt}"`;
-    
-    if (aspectRatio) {
-      userMessage += `\n\nTarget aspect ratio: ${aspectRatio}`;
-    }
-    if (duration) {
-      userMessage += `\nTarget duration: ${duration} seconds`;
-    }
+    if (aspectRatio) userMessage += `\n\nTarget aspect ratio: ${aspectRatio}`;
+    if (duration) userMessage += `\nTarget duration: ${duration} seconds`;
     if (isConstructionRelated) {
       const enhancements = CONSTRUCTION_ENHANCEMENTS.slice(0, 4).join(", ");
       userMessage += `\n\nThis is construction/industrial content. Enhance with: ${enhancements}`;
@@ -163,13 +177,11 @@ serve(async (req) => {
     const aiData = await aiResp.json();
     const content = aiData.choices?.[0]?.message?.content || "";
 
-    // Parse JSON from response (handle markdown code blocks)
     let parsed: any;
     try {
       const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(jsonStr);
     } catch {
-      // Fallback: use the raw content as the engineered prompt
       parsed = {
         engineeredPrompt: content.trim(),
         elements: {
@@ -181,6 +193,8 @@ serve(async (req) => {
           style: "cinematic",
           realism: "photorealistic",
         },
+        intent: "cinematic_broll",
+        platform_intent: "general",
         isConstructionRelated,
       };
     }
@@ -189,6 +203,8 @@ serve(async (req) => {
       JSON.stringify({
         engineeredPrompt: parsed.engineeredPrompt,
         elements: parsed.elements,
+        intent: parsed.intent || "cinematic_broll",
+        platform_intent: parsed.platform_intent || "general",
         isConstructionRelated: parsed.isConstructionRelated ?? isConstructionRelated,
         rawPrompt: rawPrompt.trim(),
       }),
