@@ -68,7 +68,7 @@ export function AdDirectorContent() {
       // Step 1: Analyze script + generate storyboard
       setAnalysisStatus("Analyzing script structure...");
       setAnalysisProgress(10);
-      const analyzeResult = await invokeEdgeFunction<{
+      const analyzeResult = await withTimeout(invokeEdgeFunction<{
         result: { segments: ScriptSegment[]; storyboard: StoryboardScene[]; continuityProfile: ContinuityProfile };
         modelUsed: string;
         fallbackUsed: boolean;
@@ -77,7 +77,7 @@ export function AdDirectorContent() {
         script, brand,
         assetDescriptions: assets.length > 0 ? assets.map(f => f.name).join(", ") : undefined,
         modelOverrides,
-      });
+      }));
 
       const { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
       const plannedBy = analyzeResult.modelUsed;
