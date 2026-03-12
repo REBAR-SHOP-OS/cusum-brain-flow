@@ -142,11 +142,11 @@ export function VideoStudioPromptBar({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
-  const isWanModel = currentModelOption?.provider === "wan";
-  const isI2vModel = selectedModel === "wan-2.6-i2v" || selectedModel === "wan-2.6-i2v-flash";
-
   const modelOptions = mediaType === "image" ? IMAGE_MODELS : mediaType === "audio" ? AUDIO_MODELS : VIDEO_MODELS;
   const currentModelOption = modelOptions.find(m => m.id === selectedModel) || modelOptions[0];
+
+  const isWanModel = currentModelOption?.provider === "wan";
+  const isI2vModel = selectedModel === "wan-2.6-i2v" || selectedModel === "wan-2.6-i2v-flash";
 
   const currentMode = modes.find(m => m.id === mode) || modes[1];
   const currentAspect = aspectOptions.find(a => a.value === aspectRatio) || aspectOptions[0];
