@@ -898,6 +898,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               onSaveBrandKit={() => saveBrandKit.mutate(brand)}
               savingBrandKit={saveBrandKit.isPending}
               onLoadProject={handleLoadProject}
+              videoParams={videoParams}
+              onVideoParamsChange={setVideoParams}
             />
           </div>
         )}
