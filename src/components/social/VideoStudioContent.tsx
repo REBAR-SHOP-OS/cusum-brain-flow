@@ -123,6 +123,13 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
 
+  // Video analysis state
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState<VideoAnalysisResults | null>(null);
+  const [moderationStatus, setModerationStatus] = useState<"safe" | "flagged">("safe");
+  const [suggestedHashtags, setSuggestedHashtags] = useState<string[]>([]);
+  const [showInsights, setShowInsights] = useState(false);
+
   // Refs
   const jobRef = useRef<{ id: string; provider: string } | null>(null);
   const multiJobsRef = useRef<{ id: string; provider: string; sceneIndex: number }[] | null>(null);
