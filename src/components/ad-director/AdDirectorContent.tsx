@@ -327,13 +327,66 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
     setStoryboard(prev => prev.map(s => s.id === id ? { ...s, continuityLock: !s.continuityLock } : s));
   };
 
+  // ─── Generate Canvas End Card ────────────────────────────
+  const generateEndCardPreview = useCallback((sceneId: string) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext("2d")!;
+
+    // Gradient background using brand colors
+    const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    grad.addColorStop(0, brand.primaryColor || "#ef4444");
+    grad.addColorStop(1, brand.secondaryColor || "#1e293b");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Brand name
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 64px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(brand.name || "", canvas.width / 2, canvas.height / 2 - 40);
+
+    // Tagline
+    ctx.font = "32px sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillText(brand.tagline || "", canvas.width / 2, canvas.height / 2 + 20);
+
+    // CTA
+    ctx.font = "24px sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.fillText(brand.cta || "", canvas.width / 2, canvas.height / 2 + 70);
+
+    // Website
+    ctx.font = "bold 28px sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(brand.website || "", canvas.width / 2, canvas.height / 2 + 120);
+
+    const dataUrl = canvas.toDataURL("image/png");
+    setClips(prev => prev.map(c =>
+      c.sceneId === sceneId
+        ? { ...c, status: "completed", videoUrl: dataUrl, progress: 100 }
+        : c
+    ));
+    setStoryboard(prev => prev.map(s => s.id === sceneId ? {
+      ...s,
+      sceneIntelligence: { ...s.sceneIntelligence!, videoEngine: "Canvas End Card" },
+    } : s));
+  }, [brand]);
+
   // ─── Generate Single Scene ──────────────────────────────
   const generateScene = useCallback(async (sceneId: string) => {
     const scene = storyboardRef.current.find(s => s.id === sceneId);
     if (!scene) return;
 
-    // Calculate duration from script segment timing
+    // Skip video generation for static-card / closing scenes — render canvas end card instead
     const segment = segments.find(seg => seg.id === scene.segmentId);
+    if (scene.generationMode === "static-card" || segment?.type === "closing") {
+      generateEndCardPreview(sceneId);
+      return;
+    }
+
+    // Calculate duration from script segment timing
     const rawDur = segment ? segment.endTime - segment.startTime : 5;
     const sceneDuration = Math.min(Math.max(rawDur, 2), 15);
 
@@ -807,6 +860,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
                 generatingAny={generatingAny}
                 onImprovePrompt={handleImprovePrompt}
                 improvingSceneId={improvingSceneId}
+                logoUrl={brand.logoUrl}
               />
             </div>
             <div className="space-y-4">
