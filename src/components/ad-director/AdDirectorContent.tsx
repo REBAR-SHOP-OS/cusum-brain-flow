@@ -329,7 +329,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
 
   // ─── Generate Single Scene ──────────────────────────────
   const generateScene = useCallback(async (sceneId: string) => {
-    const scene = storyboard.find(s => s.id === sceneId);
+    const scene = storyboardRef.current.find(s => s.id === sceneId);
     if (!scene) return;
 
     // Calculate duration from script segment timing
