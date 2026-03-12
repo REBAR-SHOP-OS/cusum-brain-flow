@@ -159,12 +159,28 @@ async function getInternalSenderToken(svc: ReturnType<typeof createClient>): Pro
   return data.access_token;
 }
 
+// Safe base64 encode for potentially large strings
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    for (let j = 0; j < chunk.length; j++) {
+      binary += String.fromCharCode(chunk[j]);
+    }
+  }
+  return btoa(binary);
+}
+
 function createRawEmail(to: string, subject: string, body: string, fromEmail: string): string {
-  // Use MIME encoded-word (RFC 2047) for subject to handle Unicode properly
   const encoder = new TextEncoder();
-  const subjectBytes = encoder.encode(subject);
-  const subjectB64 = btoa(String.fromCharCode(...subjectBytes));
+
+  // MIME encoded-word (RFC 2047) for subject to handle Unicode
+  const subjectB64 = uint8ToBase64(encoder.encode(subject));
   const encodedSubject = `=?UTF-8?B?${subjectB64}?=`;
+
+  // Base64-encode the HTML body separately
+  const bodyB64 = uint8ToBase64(encoder.encode(body));
 
   const lines = [
     `From: ${fromEmail}`,
@@ -174,13 +190,12 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
     "Content-Type: text/html; charset=utf-8",
     "Content-Transfer-Encoding: base64",
     "",
-    btoa(String.fromCharCode(...encoder.encode(body))),
+    bodyB64,
   ];
   const raw = lines.join("\r\n");
-  // Use URL-safe base64 for Gmail API
-  const rawBytes = encoder.encode(raw);
-  const b64 = btoa(String.fromCharCode(...rawBytes));
-  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  // Gmail API expects URL-safe base64 of the entire raw message
+  const rawB64 = uint8ToBase64(encoder.encode(raw));
+  return rawB64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 async function sendAlertEmail(accessToken: string, to: string, subject: string, htmlBody: string) {
