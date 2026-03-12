@@ -586,6 +586,56 @@ export function AdDirectorContent() {
     a.click();
   };
 
+  // ─── Load Project from History ──────────────────────────
+  const handleLoadProject = useCallback((project: AdProjectRow) => {
+    setScript(project.script ?? "");
+    setSegments(project.segments ?? []);
+    setStoryboard(project.storyboard ?? []);
+    setContinuity(project.continuity ?? null);
+    setClips(project.clips ?? []);
+    setFinalVideoUrl(project.final_video_url);
+    projectIdRef.current = project.id;
+
+    if (project.storyboard?.length > 0) {
+      setStep("storyboard");
+    }
+    toast({ title: "Project loaded", description: project.name });
+  }, [toast]);
+
+  // ─── Auto-save clips to storage on completion ────────────
+  useEffect(() => {
+    const uploadCompletedClips = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      for (const clip of clips) {
+        if (clip.status === "completed" && clip.videoUrl && !clip.videoUrl.includes("generated-videos")) {
+          try {
+            const resp = await fetch(clip.videoUrl);
+            if (!resp.ok) continue;
+            const blob = await resp.blob();
+            const fileName = `${user.id}/${crypto.randomUUID()}.mp4`;
+            const { error } = await supabase.storage
+              .from("generated-videos")
+              .upload(fileName, blob, { contentType: "video/mp4", upsert: false });
+            if (!error) {
+              const { data: publicData } = supabase.storage.from("generated-videos").getPublicUrl(fileName);
+              setClips(prev => prev.map(c =>
+                c.sceneId === clip.sceneId ? { ...c, videoUrl: publicData.publicUrl } : c
+              ));
+            }
+          } catch (e) {
+            console.warn("Clip upload failed:", e);
+          }
+        }
+      }
+    };
+    const hasNewCompleted = clips.some(c => c.status === "completed" && c.videoUrl && !c.videoUrl.includes("generated-videos"));
+    if (hasNewCompleted) {
+      uploadCompletedClips();
+    }
+  }, [clips]);
+
   return (
     <div className="space-y-6">
       {/* Global Progress — visible on all tabs */}
