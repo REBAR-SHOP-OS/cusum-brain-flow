@@ -281,7 +281,10 @@ export function AdDirectorContent() {
     setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "generating", progress: 10 } : c));
 
     try {
-      const result = await invokeEdgeFunction<{ url?: string; videoUrl?: string; generationId?: string }>(
+      const result = await invokeEdgeFunction<{
+        url?: string; videoUrl?: string; generationId?: string; jobId?: string;
+        provider?: string; mode?: string; imageUrls?: string[];
+      }>(
         "generate-video",
         {
           action: "generate",
@@ -294,25 +297,36 @@ export function AdDirectorContent() {
       );
 
       const videoUrl = result.url || result.videoUrl;
+      const genId = result.jobId || result.generationId;
 
-      if (videoUrl) {
+      // Slideshow fallback — treat first image as completed thumbnail
+      if (result.mode === "slideshow" && result.imageUrls?.length) {
         setClips(prev => prev.map(c =>
           c.sceneId === sceneId
-            ? { ...c, status: "completed", videoUrl, progress: 100, generationId: result.generationId }
+            ? { ...c, status: "completed", videoUrl: result.imageUrls![0], progress: 100 }
             : c
         ));
-        // Track video engine in scene intelligence
+        setStoryboard(prev => prev.map(s => s.id === sceneId ? {
+          ...s,
+          sceneIntelligence: { ...s.sceneIntelligence!, videoEngine: "Slideshow Fallback" },
+        } : s));
+      } else if (videoUrl) {
+        setClips(prev => prev.map(c =>
+          c.sceneId === sceneId
+            ? { ...c, status: "completed", videoUrl, progress: 100, generationId: genId }
+            : c
+        ));
         setStoryboard(prev => prev.map(s => s.id === sceneId ? {
           ...s,
           sceneIntelligence: { ...s.sceneIntelligence!, videoEngine: "Alibaba Wan 2.6" },
         } : s));
-      } else if (result.generationId) {
+      } else if (genId) {
         setClips(prev => prev.map(c =>
           c.sceneId === sceneId
-            ? { ...c, status: "generating", generationId: result.generationId, progress: 30 }
+            ? { ...c, status: "generating", generationId: genId, progress: 30 }
             : c
         ));
-        pollGeneration(sceneId, result.generationId);
+        pollGeneration(sceneId, genId);
       }
     } catch (err: any) {
       setClips(prev => prev.map(c =>
@@ -330,7 +344,7 @@ export function AdDirectorContent() {
       try {
         const result = await invokeEdgeFunction<{ status?: string; videoUrl?: string; url?: string }>(
           "generate-video",
-          { action: "status", generationId }
+          { action: "poll", jobId: generationId, provider: "wan" }
         );
 
         if (result.status === "completed" || result.videoUrl || result.url) {
