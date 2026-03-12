@@ -48,6 +48,7 @@ const TABS: { id: EditorTab; label: string; icon: React.ReactNode }[] = [
   { id: "transitions", label: "Transitions", icon: <ArrowRightLeft className="w-4 h-4" /> },
   { id: "brand-kit", label: "Brand Kit", icon: <Palette className="w-4 h-4" /> },
   { id: "script", label: "Script", icon: <FileText className="w-4 h-4" /> },
+  { id: "card-editor", label: "Card Editor", icon: <SquarePen className="w-4 h-4" /> },
   { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
 ];
 
