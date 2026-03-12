@@ -1,38 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Add Visual Theme Tags to Image Generator
+## Completed: Add All Wan 2.6 Capabilities
 
-## What
-Add a row of selectable theme chips (with check icons) between the prompt description and the suggestions area. When selected, these themes are appended to the prompt sent to the edge function, guiding the AI to include those elements in the generated image.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Themes
-| Icon | Label (EN) | Prompt keyword |
-|------|-----------|----------------|
-| Bird | Bird | "birds in the sky" |
-| Building2 | Building | "building structure" |
-| HardHat | Construction Projects | "construction project site" |
-| Landmark | City | "urban cityscape" |
-| TreePine | Nature | "natural landscape" |
-| Users | Workers | "construction workers at work" |
-| Bot | AI & Construction | "AI technology in construction" |
-| Package | Our Products | "rebar stirrups, ties, and accessories" |
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Changes
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### `src/components/social/ImageGeneratorDialog.tsx`
-1. Add a `selectedThemes` state (`Set<string>`)
-2. Define a `VISUAL_THEMES` array with `{ id, label, icon, promptTag }` objects
-3. Insert a new section between the prompt textarea hint text (line 206) and the suggestions section (line 209):
-   - Label: "Visual themes"
-   - Render chips as toggle buttons with the icon + label + a `CheckCircle2` when selected
-   - Clicking toggles the theme in/out of the set
-4. In `handleGenerate`, build the final prompt by appending selected theme keywords:
-   ```
-   const themeString = selectedThemes joined as comma-separated promptTags
-   finalPrompt = `${prompt.trim()}. Include: ${themeString}`
-   ```
-5. Reset `selectedThemes` in `handleClose` and `handleReset`
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### No backend changes needed
-The themes are injected into the user prompt string before it reaches the edge function, which already has the Pixel Agent photorealistic rules and brand context logic.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

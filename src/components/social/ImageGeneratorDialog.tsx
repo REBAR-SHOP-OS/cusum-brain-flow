@@ -3,7 +3,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp } from "lucide-react";
+import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp, Bird, Building2, HardHat, Landmark, TreePine, Users, Bot, Package, type LucideIcon } from "lucide-react";
+
+const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: string }[] = [
+  { id: "bird", label: "پرنده", icon: Bird, promptTag: "birds in the sky" },
+  { id: "building", label: "ساختمان", icon: Building2, promptTag: "building structure" },
+  { id: "construction", label: "پروژه ساختمانی", icon: HardHat, promptTag: "construction project site" },
+  { id: "city", label: "شهر", icon: Landmark, promptTag: "urban cityscape" },
+  { id: "nature", label: "طبیعت", icon: TreePine, promptTag: "natural landscape" },
+  { id: "workers", label: "کارگران", icon: Users, promptTag: "construction workers at work" },
+  { id: "ai", label: "هوش مصنوعی", icon: Bot, promptTag: "AI technology in construction" },
+  { id: "products", label: "محصولات ما", icon: Package, promptTag: "rebar stirrups, ties, and accessories" },
+];
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
@@ -50,12 +61,24 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
   const { brandKit } = useBrandKit();
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
+
+  const toggleTheme = (id: string) => {
+    setSelectedThemes((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const handleClose = () => {
     if (status === "searching" || status === "generating" || status === "branding") return;
     onOpenChange(false);
     setTimeout(() => {
       setPrompt("");
       setSelectedModel("google/gemini-3-pro-image-preview");
+      setSelectedThemes(new Set());
       setStatus("idle");
       setImageUrl(null);
       setRevisedPrompt(null);
@@ -78,9 +101,15 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     setStatus("generating");
 
     try {
+      // Build final prompt with selected themes
+      const themePromptTags = VISUAL_THEMES.filter((t) => selectedThemes.has(t.id)).map((t) => t.promptTag);
+      const finalPrompt = themePromptTags.length > 0
+        ? `${prompt.trim()}. Include: ${themePromptTags.join(", ")}`
+        : prompt.trim();
+
       const { data, error: fnError } = await supabase.functions.invoke("generate-image", {
         body: {
-          prompt: prompt.trim(),
+          prompt: finalPrompt,
           model: selectedModel,
           logoUrl: brandKit?.logo_url || undefined,
           brandContext: {
@@ -128,6 +157,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     setImageUrl(null);
     setRevisedPrompt(null);
     setPexelsInspired(false);
+    setSelectedThemes(new Set());
     setError(null);
   };
 
@@ -204,6 +234,32 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
                 <p className="text-[10px] text-muted-foreground">
                   The AI will search Pexels for visual inspiration, then generate a unique ad image using your brand context.
                 </p>
+              </div>
+
+              {/* Visual Themes */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">تم‌های تصویری</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {VISUAL_THEMES.map((theme) => {
+                    const Icon = theme.icon;
+                    const isActive = selectedThemes.has(theme.id);
+                    return (
+                      <button
+                        key={theme.id}
+                        onClick={() => toggleTheme(theme.id)}
+                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
+                          isActive
+                            ? "border-primary bg-primary/10 text-primary font-medium"
+                            : "bg-card hover:bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {theme.label}
+                        {isActive && <CheckCircle2 className="w-3 h-3" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Suggestions */}
