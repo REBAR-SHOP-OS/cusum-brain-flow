@@ -546,7 +546,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
             })()}
 
             {/* Completed */}
-            {status === "completed" && videoUrl && !showEditor && (
+            {mediaType === "video" && status === "completed" && videoUrl && !showEditor && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-[hsl(var(--success))]">
                   <CheckCircle2 className="w-5 h-5" />
@@ -679,7 +679,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
             )}
 
             {/* Video Editor */}
-            {status === "completed" && videoUrl && showEditor && (
+            {mediaType === "video" && status === "completed" && videoUrl && showEditor && (
               <VideoEditor
                 videoUrl={videoUrl}
                 engineeredPrompt={transformResult?.engineeredPrompt || rawPrompt}
@@ -715,7 +715,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
             )}
 
             {/* Error */}
-            {status === "failed" && (
+            {mediaType === "video" && status === "failed" && (
               <div className="space-y-4 py-4">
                 <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-center">
                   <p className="text-sm font-medium text-destructive">{error}</p>
@@ -806,7 +806,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           </div>
 
           {/* Prompt Bar — pinned at bottom in full page, inline otherwise */}
-          {(status === "idle" || status === "transforming" || (mediaType !== "video" && !isGenerating)) && (
+          {(status === "idle" || status === "transforming" || status === "completed" || status === "failed" || (mediaType !== "video" && !isGenerating)) && (
             <div className={fullPage ? "shrink-0 pt-2" : "mt-4"}>
               <VideoStudioPromptBar
                 rawPrompt={rawPrompt}
@@ -831,7 +831,18 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 referenceImage={referenceImage}
                 onReferenceImageChange={setReferenceImage}
                 mediaType={mediaType}
-                onMediaTypeChange={(t) => { setMediaType(t); setGeneratedImageUrl(null); setStandaloneAudioUrl(null); setError(null); }}
+                onMediaTypeChange={(t) => {
+                  setMediaType(t);
+                  setGeneratedImageUrl(null);
+                  setStandaloneAudioUrl(null);
+                  setError(null);
+                  setStatus("idle");
+                  setVideoUrl(null);
+                  setSceneUrls([]);
+                  // Auto-correct duration for the target mode
+                  if (t === "audio") setDuration("15");
+                  else if (t === "video") setDuration("8");
+                }}
                 audioType={audioType}
                 onAudioTypeChange={setAudioType}
               />
