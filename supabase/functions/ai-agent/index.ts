@@ -97,6 +97,7 @@ CRITICAL RULES:
 - Be creative, bold, and specific to the product
 - The image slogan must be short enough to be readable when printed on an image
 - ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM, morning, afternoon, evening, dawn, sunrise, sunset, or any time-related phrases in the caption, slogan, or translations. This is a STRICT RULE with ZERO exceptions.
+- NEVER use words like "guarantee", "guaranteed", "warranty", "certified", "certify", or any legally binding claims in captions, slogans, or translations. This is a STRICT RULE.
 - Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
 - SESSION CREATIVE SEED: ${sessionSeed || crypto.randomUUID()} — You MUST use this seed to drive a COMPLETELY UNIQUE creative direction. No two sessions should ever produce similar styles, angles, metaphors, or visual concepts. Treat this seed as your creative DNA for this specific session.
 ${brainContext ? "- You MUST follow any brand guidelines, tone, or language preferences from the Brain Context above" : ""}
@@ -626,18 +627,18 @@ Deno.serve(async (req) => {
             results.push(
               `### Slot ${slot.slot} — ${slot.product}\n\n` +
               `![${slot.product}](${imgResult.imageUrl})\n\n` +
-              `**Caption:**\n${dynContent.caption}\n\n` +
-              `**Hashtags:**\n${dynContent.hashtags}` +
+              `**Caption:**\n${dynContent.caption}` +
               PIXEL_CONTACT_INFO +
+              `\n\n**Hashtags:**\n${dynContent.hashtags}` +
               persianBlock
             );
           } else {
             results.push(
               `### Slot ${slot.slot} — ${slot.product}\n\n` +
               `⚠️ Image generation failed: ${imgResult.error || "Unknown error"}\n\n` +
-              `**Caption:**\n${dynContent.caption}\n\n` +
-              `**Hashtags:**\n${dynContent.hashtags}` +
+              `**Caption:**\n${dynContent.caption}` +
               PIXEL_CONTACT_INFO +
+              `\n\n**Hashtags:**\n${dynContent.hashtags}` +
               persianBlock
             );
           }

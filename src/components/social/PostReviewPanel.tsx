@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -472,21 +473,51 @@ export function PostReviewPanel({
                   </div>
                 ) : (
                   <>
-                    {/* Content card */}
-                    <div className="mx-4 rounded-lg border bg-card p-4 space-y-3">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Content</p>
-                      <div className="space-y-2 text-sm">
-                        {post.title && (
-                          <p className="font-semibold text-foreground">{post.title}</p>
-                        )}
-                        <p className="text-foreground/90 whitespace-pre-line leading-relaxed">{post.content}</p>
-                        {post.hashtags.length > 0 && (
-                          <p className="text-primary text-xs leading-relaxed">
-                            Hashtags: {post.hashtags.join(" ")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                    {/* Content card — strip Persian block */}
+                    {(() => {
+                      const persianSep = "---PERSIAN---";
+                      const rawContent = post.content || "";
+                      const persianIdx = rawContent.indexOf(persianSep);
+                      const englishContent = persianIdx !== -1 ? rawContent.slice(0, persianIdx).trim() : rawContent;
+                      const persianBlock = persianIdx !== -1 ? rawContent.slice(persianIdx + persianSep.length).trim() : "";
+                      return (
+                        <>
+                          <div className="mx-4 rounded-lg border bg-card p-4 space-y-3">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Content</p>
+                            <div className="space-y-2 text-sm">
+                              {post.title && (
+                                <p className="font-semibold text-foreground">{post.title}</p>
+                              )}
+                              <p className="text-foreground/90 whitespace-pre-line leading-relaxed">{englishContent}</p>
+                              {post.hashtags.length > 0 && (
+                                <p className="text-primary text-xs leading-relaxed">
+                                  Hashtags: {post.hashtags.join(" ")}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Persian translation — internal reference only */}
+                          {persianBlock && (
+                            <div className="mx-4">
+                              <Collapsible>
+                                <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group w-full">
+                                  <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
+                                  <span>🔒 Persian Translation (internal only — never published)</span>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  <div className="mt-2 p-3 rounded-lg border border-border/50 bg-muted/30">
+                                    <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed" dir="rtl">
+                                      {persianBlock}
+                                    </p>
+                                  </div>
+                                </CollapsibleContent>
+                              </Collapsible>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {/* Regenerate caption / AI Edit */}
                     <div className="flex gap-2 px-4 pt-3">

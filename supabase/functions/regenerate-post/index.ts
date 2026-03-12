@@ -267,7 +267,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       const persianBlock = newCap.captionFa
         ? `\n\n---PERSIAN---\n📝 ترجمه کپشن: ${newCap.captionFa}`
         : "";
-      const fullContent = `${newCap.caption}\n\n${newCap.hashtags || ""}${PIXEL_CONTACT_INFO}${persianBlock}`;
+      const fullContent = `${newCap.caption}${PIXEL_CONTACT_INFO}\n\n${newCap.hashtags || ""}${persianBlock}`;
       const hashtags = (newCap.hashtags || "").split(/\s+/).filter((h: string) => h.startsWith("#"));
 
       const { error: updateErr } = await supabase
@@ -409,7 +409,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       (hasImageText ? `🖼️ متن روی عکس: ${newContent.imageTextFa}\n` : "") +
       `📝 ترجمه کپشن: ${newContent.captionFa || ""}`;
 
-    const fullContent = `${newContent.caption}\n\n${newContent.hashtags || ""}${PIXEL_CONTACT_INFO}${persianBlock}`;
+    const fullContent = `${newContent.caption}${PIXEL_CONTACT_INFO}\n\n${newContent.hashtags || ""}${persianBlock}`;
 
     // 5. Update post in DB
     const hashtags = (newContent.hashtags || "")
