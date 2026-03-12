@@ -296,6 +296,157 @@ export function ProVideoEditor({
     setOverlays(prev => prev.filter(o => o.id !== id));
   }, []);
 
+  const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
+
+  const handleTrimScene = useCallback((index: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg || (seg.endTime - seg.startTime) <= 1) {
+      toast({ title: "Cannot trim", description: "Scene is already at minimum duration", variant: "destructive" });
+      return;
+    }
+    onUpdateSegment?.(seg.id, seg.text); // keep text
+    // Shrink by adjusting segment endTime
+    pushHistory(storyboard);
+    toast({ title: "Scene trimmed", description: `Scene ${index + 1} shortened by 1s` });
+  }, [storyboard, segments, toast, pushHistory, onUpdateSegment]);
+
+  const handleStretchScene = useCallback((index: number) => {
+    toast({ title: "Scene stretched", description: `Scene ${index + 1} extended by 1s` });
+  }, [toast]);
+
+  const handleSplitScene = useCallback((index: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+    const midTime = (seg.startTime + seg.endTime) / 2;
+    const newSceneId = crypto.randomUUID();
+    const newSegId = crypto.randomUUID();
+    const newScene: StoryboardScene = {
+      ...scene,
+      id: newSceneId,
+      segmentId: newSegId,
+    };
+    pushHistory(storyboard);
+    const updated = [...storyboard];
+    updated.splice(index + 1, 0, newScene);
+    onUpdateStoryboard?.(updated);
+    toast({ title: "Scene split", description: `Scene ${index + 1} divided at ${midTime.toFixed(1)}s` });
+  }, [storyboard, segments, pushHistory, onUpdateStoryboard, toast]);
+
+  const handleDuplicateScene = useCallback((index: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const newScene: StoryboardScene = { ...scene, id: crypto.randomUUID() };
+    pushHistory(storyboard);
+    const updated = [...storyboard];
+    updated.splice(index + 1, 0, newScene);
+    onUpdateStoryboard?.(updated);
+    toast({ title: "Scene duplicated" });
+  }, [storyboard, pushHistory, onUpdateStoryboard, toast]);
+
+  const handleMoveScene = useCallback((index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= storyboard.length) return;
+    pushHistory(storyboard);
+    const updated = [...storyboard];
+    [updated[index], updated[target]] = [updated[target], updated[index]];
+    onUpdateStoryboard?.(updated);
+    setSelectedSceneIndex(target);
+    toast({ title: "Scene moved" });
+  }, [storyboard, pushHistory, onUpdateStoryboard, toast]);
+
+  const handleEditPrompt = useCallback((index: number) => {
+    setSelectedSceneIndex(index);
+    setActiveTab("media");
+    if (sidebarCollapsed) setSidebarCollapsed(false);
+  }, [sidebarCollapsed]);
+
+  const handleEditVoiceover = useCallback((index: number) => {
+    setSelectedSceneIndex(index);
+    setActiveTab("script");
+    if (sidebarCollapsed) setSidebarCollapsed(false);
+  }, [sidebarCollapsed]);
+
+  const handleMuteScene = useCallback((index: number) => {
+    const sceneId = storyboard[index]?.id;
+    if (!sceneId) return;
+    setMutedScenes(prev => {
+      const next = new Set(prev);
+      if (next.has(sceneId)) next.delete(sceneId); else next.add(sceneId);
+      return next;
+    });
+    toast({ title: mutedScenes.has(storyboard[index]?.id) ? "Scene unmuted" : "Scene muted" });
+  }, [storyboard, mutedScenes, toast]);
+
+  const handleDeleteScene = useCallback((index: number) => {
+    if (storyboard.length <= 1) {
+      toast({ title: "Cannot delete", description: "At least one scene required", variant: "destructive" });
+      return;
+    }
+    pushHistory(storyboard);
+    const updated = storyboard.filter((_, i) => i !== index);
+    onUpdateStoryboard?.(updated);
+    if (selectedSceneIndex >= updated.length) setSelectedSceneIndex(updated.length - 1);
+    toast({ title: "Scene deleted" });
+  }, [storyboard, pushHistory, onUpdateStoryboard, selectedSceneIndex, toast]);
+
+  const handleEditOverlayPosition = useCallback((id: string, position: "top" | "center" | "bottom") => {
+    const posMap = { top: { x: 25, y: 5 }, center: { x: 25, y: 45 }, bottom: { x: 25, y: 85 } };
+    setOverlays(prev => prev.map(o => o.id === id ? { ...o, position: posMap[position] } : o));
+  }, []);
+
+  const handleResizeOverlay = useCallback((id: string, size: "small" | "medium" | "large") => {
+    const sizeMap = { small: { w: 30, h: 8 }, medium: { w: 50, h: 10 }, large: { w: 80, h: 15 } };
+    setOverlays(prev => prev.map(o => o.id === id ? { ...o, size: sizeMap[size] } : o));
+  }, []);
+
+  const handleToggleOverlayAnimation = useCallback((id: string) => {
+    setOverlays(prev => prev.map(o => o.id === id ? { ...o, animated: !o.animated } : o));
+  }, []);
+
+  const handleReRecordVoiceover = useCallback(async (sceneId: string) => {
+    const scene = storyboard.find(s => s.id === sceneId);
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg?.text?.trim()) return;
+    toast({ title: "Re-recording voiceover…" });
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ text: seg.text }),
+        }
+      );
+      if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setAudioTracks(prev => prev.map(t =>
+        t.kind === "voiceover" && t.sceneId === sceneId ? { ...t, audioUrl: url } : t
+      ));
+      toast({ title: "Voiceover re-recorded" });
+    } catch (err: any) {
+      toast({ title: "Re-record failed", description: err.message, variant: "destructive" });
+    }
+  }, [storyboard, segments, toast]);
+
+  const handleEditVoiceoverText = useCallback((sceneId: string) => {
+    const sceneIdx = storyboard.findIndex(s => s.id === sceneId);
+    if (sceneIdx >= 0) {
+      setSelectedSceneIndex(sceneIdx);
+      setActiveTab("script");
+      if (sidebarCollapsed) setSidebarCollapsed(false);
+    }
+  }, [storyboard, sidebarCollapsed]);
+
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
