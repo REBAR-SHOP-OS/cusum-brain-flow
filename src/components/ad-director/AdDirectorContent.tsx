@@ -51,7 +51,7 @@ export function AdDirectorContent() {
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true);
     try {
-      // Step 1: Analyze script + generate storyboard (Gemini Pro)
+      // Step 1: Analyze script + generate storyboard (GPT-5)
       setAnalysisStatus("GPT-5 analyzing script structure...");
       const analyzeResult = await invokeEdgeFunction<{
         result: { segments: ScriptSegment[]; storyboard: StoryboardScene[]; continuityProfile: ContinuityProfile };
