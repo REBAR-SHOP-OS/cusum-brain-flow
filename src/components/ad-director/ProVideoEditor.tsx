@@ -749,6 +749,19 @@ export function ProVideoEditor({
   };
 
   // ─── Generate all voiceovers ───
+  // Helper to measure video clip duration from URL
+  const measureVideoDuration = (videoUrl: string): Promise<number | null> => {
+    return new Promise((resolve) => {
+      const tempVid = document.createElement("video");
+      tempVid.preload = "metadata";
+      tempVid.addEventListener("loadedmetadata", () => {
+        resolve(tempVid.duration && isFinite(tempVid.duration) ? tempVid.duration : null);
+      });
+      tempVid.addEventListener("error", () => resolve(null));
+      tempVid.src = videoUrl;
+    });
+  };
+
   const generateAllVoiceovers = async () => {
     setGeneratingVoiceovers(true);
     const newTracks: AudioTrackItem[] = [];
@@ -758,7 +771,18 @@ export function ProVideoEditor({
         const scene = storyboard.find(s => s.segmentId === seg.id);
         if (!scene) continue;
 
-        const clipDur = clipDurations[scene.id];
+        // Ensure we have clip duration — measure from URL if not cached
+        let clipDur = clipDurations[scene.id];
+        if (!clipDur) {
+          const clip = clips.find(c => c.sceneId === scene.id);
+          if (clip?.videoUrl && !clip.videoUrl.startsWith("data:image/")) {
+            const measured = await measureVideoDuration(clip.videoUrl);
+            if (measured && measured > 0) {
+              clipDur = measured;
+              setClipDurations(prev => ({ ...prev, [scene.id]: measured }));
+            }
+          }
+        }
 
         // First pass: generate VO at normal speed
         let response = await fetch(
