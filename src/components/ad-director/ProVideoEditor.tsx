@@ -217,18 +217,28 @@ export function ProVideoEditor({
   }, [selectedSceneIndex]);
 
   // Sync voiceover audio with video playback (time-locked)
+  const currentVoUrlRef = useRef<string | null>(null);
   useEffect(() => {
     const sceneId = storyboard[selectedSceneIndex]?.id;
     // Skip voiceover if scene is muted
     if (sceneId && mutedScenes.has(sceneId)) {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      currentVoUrlRef.current = null;
       return;
     }
     const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
     if (vo && isPlaying && !isMuted) {
+      // Skip re-creation if same URL is already playing
+      if (audioRef.current && currentVoUrlRef.current === vo.audioUrl && !audioRef.current.paused) {
+        return;
+      }
+      // Always clean up before creating new instance
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       const a = new Audio(vo.audioUrl);
       a.currentTime = videoRef.current?.currentTime ?? 0;
       a.play().catch(() => {});
       audioRef.current = a;
+      currentVoUrlRef.current = vo.audioUrl;
 
       // Keep voiceover in sync with video time
       const syncHandler = () => {
@@ -247,16 +257,13 @@ export function ProVideoEditor({
           audioRef.current.pause();
           audioRef.current = null;
         }
+        currentVoUrlRef.current = null;
       };
     }
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSceneIndex, isPlaying, isMuted, mutedScenes]);
+    // Not playing or no voiceover — clean up
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    currentVoUrlRef.current = null;
+  }, [selectedSceneIndex, isPlaying, isMuted, mutedScenes, audioTracks, storyboard]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
