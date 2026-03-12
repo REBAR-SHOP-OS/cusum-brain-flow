@@ -28,6 +28,7 @@ export function AdDirectorContent() {
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState("");
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
   const [storyboard, setStoryboard] = useState<StoryboardScene[]>([]);
