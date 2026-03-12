@@ -124,22 +124,26 @@ export function VideoParameters({ params, onChange }: VideoParametersProps) {
         </div>
       </div>
 
-      {/* Build Quantity (coming soon) */}
-      <div className="space-y-2 opacity-50">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Build Quantity</span>
-          <span className="text-[8px] text-muted-foreground italic">Coming soon</span>
-        </div>
+      {/* Build Quantity */}
+      <div className="space-y-2">
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Build Quantity</span>
         <div className="flex items-center gap-3">
           <Slider
             min={1}
-            max={4}
+            max={10}
             step={1}
             value={[params.buildQty]}
-            disabled
+            onValueChange={([v]) => set("buildQty", v)}
             className="flex-1"
           />
-          <span className="text-xs font-medium w-6 text-center">{params.buildQty}</span>
+          <Input
+            type="number"
+            min={1}
+            max={10}
+            value={params.buildQty}
+            onChange={(e) => set("buildQty", Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
+            className="w-14 h-7 text-xs text-center bg-background/50"
+          />
         </div>
       </div>
     </div>

@@ -544,24 +544,58 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     ));
   };
 
-  // ─── Generate All ──────────────────────────────────────
+  // ─── Generate All (with buildQty support) ──────────────
   const handleGenerateAll = useCallback(async () => {
+    const buildQty = videoParams.buildQty || 1;
     const scenesToGenerate = storyboard.filter(s => {
       const c = clips.find(c => c.sceneId === s.id);
       return c?.status !== "completed";
     });
-    const total = scenesToGenerate.length;
+
+    // If buildQty > 1, create extra clip entries for each variant
+    if (buildQty > 1) {
+      setClips(prev => {
+        const newClips = [...prev];
+        for (const scene of scenesToGenerate) {
+          for (let v = 2; v <= buildQty; v++) {
+            const variantId = `${scene.id}-v${v}`;
+            if (!newClips.find(c => c.sceneId === variantId)) {
+              newClips.push({ sceneId: variantId, status: "idle", progress: 0 });
+            }
+          }
+        }
+        return newClips;
+      });
+      // Also duplicate storyboard entries for variant scenes
+      setStoryboard(prev => {
+        const newSb = [...prev];
+        for (const scene of scenesToGenerate) {
+          for (let v = 2; v <= buildQty; v++) {
+            const variantId = `${scene.id}-v${v}`;
+            if (!newSb.find(s => s.id === variantId)) {
+              newSb.push({ ...scene, id: variantId });
+            }
+          }
+        }
+        return newSb;
+      });
+    }
+
+    const totalJobs = scenesToGenerate.length * buildQty;
     let launched = 0;
     for (const scene of scenesToGenerate) {
-      launched++;
-      setGenerationStatus(`Launching scene ${launched} of ${total}...`);
-      await generateScene(scene.id);
-      await new Promise(r => setTimeout(r, 2000));
+      for (let v = 1; v <= buildQty; v++) {
+        const sceneId = v === 1 ? scene.id : `${scene.id}-v${v}`;
+        launched++;
+        setGenerationStatus(`Launching build ${launched} of ${totalJobs}...`);
+        await generateScene(sceneId);
+        await new Promise(r => setTimeout(r, 2000));
+      }
     }
     setGenerationStatus("");
     setStep("preview");
-    toast({ title: "All scenes launched", description: "Scenes are generating. Check progress below." });
-  }, [storyboard, clips, generateScene, toast]);
+    toast({ title: "All builds launched", description: `${totalJobs} clips generating. Check progress below.` });
+  }, [storyboard, clips, generateScene, toast, videoParams.buildQty]);
 
   // ─── Export ──────────────────────────────────────
   const handleExport = useCallback(async () => {
