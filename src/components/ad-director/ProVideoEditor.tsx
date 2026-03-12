@@ -58,6 +58,7 @@ interface ProVideoEditorProps {
   onBack: () => void;
   onExport: () => void;
   exporting: boolean;
+  onOpenExportDialog?: () => void;
   onRegenerateScene?: (sceneId: string) => void;
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
   onUpdateSegment?: (id: string, text: string) => void;
@@ -69,7 +70,7 @@ interface ProVideoEditorProps {
 
 export function ProVideoEditor({
   clips, storyboard, segments, brand,
-  finalVideoUrl, onBack, onExport, exporting,
+  finalVideoUrl, onBack, onExport, exporting, onOpenExportDialog,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming,
   onUpdateStoryboard, onUpdateBrand, onMusicSelect,
 }: ProVideoEditorProps) {
