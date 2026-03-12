@@ -557,7 +557,38 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     } catch (err: any) { toast({ title: "Save failed", description: err.message, variant: "destructive" }); }
   };
 
-  const handleUseVideo = () => { if (videoUrl) onVideoReady?.(videoUrl); };
+  const handleUseVideo = async () => {
+    if (!videoUrl || !onVideoReady) return;
+
+    // blob: and data: URLs can be fetched client-side fine
+    if (videoUrl.startsWith("blob:") || videoUrl.startsWith("data:")) {
+      onVideoReady(videoUrl);
+      return;
+    }
+
+    // Remote URL — proxy download to avoid CORS
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ action: "download", provider: "veo", videoUrl }),
+      });
+
+      if (!resp.ok) throw new Error("Proxy download failed");
+      const blob = await resp.blob();
+      onVideoReady(URL.createObjectURL(blob));
+    } catch (err) {
+      console.error("Use in post proxy failed, trying direct:", err);
+      onVideoReady(videoUrl);
+    }
+  };
 
   // Audio handlers
   const handleGenerateAudio = async () => {
