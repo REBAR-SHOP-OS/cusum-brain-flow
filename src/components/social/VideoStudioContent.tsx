@@ -715,7 +715,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
             )}
 
             {/* Error */}
-            {status === "failed" && (
+            {mediaType === "video" && status === "failed" && (
               <div className="space-y-4 py-4">
                 <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-center">
                   <p className="text-sm font-medium text-destructive">{error}</p>
