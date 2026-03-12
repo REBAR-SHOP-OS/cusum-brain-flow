@@ -663,11 +663,15 @@ export function ProVideoEditor({
       return;
     }
 
-    // If voiceover is still playing, wait for it to finish before advancing
+    // If voiceover is still playing, orphan it from audioRef so cleanup won't kill it
     const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
     if (voStillPlaying) {
       if (videoRef.current) videoRef.current.pause();
-      audioRef.current!.onended = () => {
+      const orphanedAudio = audioRef.current!;
+      audioRef.current = null; // Detach — cleanup effect won't touch it
+      currentVoUrlRef.current = null;
+      orphanedAudio.onended = () => {
+        orphanedAudio.onended = null;
         doAdvance(nextIdx);
       };
       return;
@@ -684,6 +688,15 @@ export function ProVideoEditor({
         const nextScene = storyboard[idx];
         const nextClip = clips.find(c => c.sceneId === nextScene?.id);
         const nextIsStatic = nextScene?.generationMode === "static-card" || nextClip?.videoUrl?.startsWith("data:image/");
+
+        // Preload next scene's voiceover
+        const nextVo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === nextScene?.id);
+        if (nextVo) {
+          const preload = new Audio(nextVo.audioUrl);
+          preload.preload = "auto";
+          preload.load();
+        }
+
         if (nextIsStatic) {
           sceneTransitioning.current = false;
           setSceneTransition(false);
@@ -706,7 +719,7 @@ export function ProVideoEditor({
         }
       }, 500);
     }
-  }, [storyboard, clips, selectedSceneIndex]);
+  }, [storyboard, clips, selectedSceneIndex, audioTracks]);
 
   const handleVideoEnded = useCallback(() => {
     advanceToNextScene();
