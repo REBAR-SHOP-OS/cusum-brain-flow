@@ -759,10 +759,27 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                   <p className="text-xs text-amber-600">⚠️ Prompt transform unavailable, using your text directly.</p>
                 )}
 
+                {/* Credits Display */}
+                <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                  <Gauge className="w-4 h-4 text-primary flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-medium">{remaining}s / {total}s remaining</span>
+                      <Badge variant="secondary" className="text-[10px]">{plan}</Badge>
+                    </div>
+                    <Progress value={usedPercent} className="h-1.5" />
+                  </div>
+                  {rawPrompt.trim() && (
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      Cost: {getCost(parseInt(duration), mode)}s
+                    </span>
+                  )}
+                </div>
+
                 {/* Generate Button */}
                 <Button
                   className="w-full gap-2 h-11"
-                  disabled={!rawPrompt.trim() || isTransforming}
+                  disabled={!rawPrompt.trim() || isTransforming || !canGenerate(parseInt(duration), mode)}
                   onClick={handleGenerate}
                   size="lg"
                 >
@@ -770,6 +787,11 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Engineering prompt...
+                    </>
+                  ) : !canGenerate(parseInt(duration), mode) ? (
+                    <>
+                      <Gauge className="w-4 h-4" />
+                      Not enough credits
                     </>
                   ) : (
                     <>
