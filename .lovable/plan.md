@@ -1,64 +1,33 @@
 
 
-# AI Video Director — Audit & Polish Pass
 
-## Critical Bug Found
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-The Quick Start card **never appears**. `AdDirectorContent` initializes `script` with `DEMO_SCRIPT`, so `!script.trim()` in `ScriptInput` is always false. The prominent onboarding card from the redesign is dead code.
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Issues by Priority
+## Completed: Add All Wan 2.6 Capabilities
 
-### 1. Dead Quick Start (Bug)
-- Script state initializes to `DEMO_SCRIPT` → Quick Start card never renders
-- Fix: Initialize `script` to `""`. Show Quick Start card. Let user explicitly load demo.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-### 2. Step 1 — ScriptInput Polish
-- **Brand color preview missing**: Two tiny color pickers with no visual preview of how they work together. Add a small brand preview strip (name on primaryColor background).
-- **Logo upload stores blob URL only**: `URL.createObjectURL(file)` works for preview but won't survive page refresh or be usable in the edge function pipeline. This is a latent bug but not blocking for now — note it.
-- **Script textarea placeholder is generic when demo is loaded**: After loading demo, the textarea has content but no guidance on what to do next. Add a subtle "tip" below textarea: "Edit the script above or proceed to analyze →".
-- **Word/duration counters invisible when script is empty**: They hide when `!script.trim()`. Acceptable.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 3. Step 2 — Storyboard Density
-- **SceneCard is information-dense**: Shot type, camera, tone, objective, prompt, quality score, intelligence bar — 7+ elements per card. Target user is a busy founder.
-- Fix: Collapse visual details (shot/camera/tone) into a "Details" expandable. Show only: scene number, time range, prompt (truncated), quality badge, status, and thumbnail.
-- **SceneIntelligenceBar too technical**: "Planned: Gemini Pro → Written: GPT-5 → Render: Wan 2.6" means nothing to a marketer.
-- Fix: Hide intelligence bar by default. Show only on hover or in an "Advanced" section.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 4. Step 3 — FinalPreview
-- **Download link is a plain text link**: `<button className="text-sm text-primary hover:underline">Download Final MP4</button>` — weak for the final action of the entire workflow.
-- Fix: Replace with a proper styled button with Download icon.
-- **Overlay toggles too small**: `scale-75` switches are hard to tap on mobile.
-- Fix: Remove `scale-75`, use normal size with better spacing.
-
-### 5. Page Header
-- Current header is clean. No changes needed.
-
-### 6. Global Progress Bar
-- Looks good. Minor: add `rounded-2xl` to match card radius consistency.
-
-## Implementation Plan
-
-### File: `src/components/ad-director/AdDirectorContent.tsx`
-- Line 46: Change `useState(DEMO_SCRIPT)` → `useState("")`
-- Line 553: Add `rounded-2xl` to progress bar container
-- Lines 684-690: Replace plain download link with styled Button
-
-### File: `src/components/ad-director/ScriptInput.tsx`
-- Add brand color preview strip below color pickers (small bar showing name on primary bg)
-- Show Quick Start card conditionally (now actually visible since script starts empty)
-
-### File: `src/components/ad-director/SceneCard.tsx`
-- Wrap shot/camera/tone grid in a collapsible section (default collapsed)
-- Move SceneIntelligenceBar inside the collapsible
-- Keep prompt, quality badge, status, and thumbnail always visible
-
-### File: `src/components/ad-director/FinalPreview.tsx`
-- Remove `scale-75` from overlay toggle switches (lines 110, 114, 118)
-- Improve spacing between toggles
-
-## Files Modified
-1. `src/components/ad-director/AdDirectorContent.tsx` — Fix script init, download button, progress radius
-2. `src/components/ad-director/ScriptInput.tsx` — Brand color preview strip
-3. `src/components/ad-director/SceneCard.tsx` — Collapse visual details, hide intelligence bar
-4. `src/components/ad-director/FinalPreview.tsx` — Fix toggle scale, improve download UX
-
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation

@@ -105,18 +105,18 @@ export function FinalPreview({
       })()}
 
       {/* Overlay Toggles */}
-      <div className="flex gap-4">
-        <div className="flex items-center gap-1.5">
-          <Switch checked={subtitlesEnabled} onCheckedChange={onToggleSubtitles} className="scale-75" />
-          <Label className="text-[10px] flex items-center gap-1"><Type className="w-3 h-3" /> Subtitles</Label>
+      <div className="flex gap-6">
+        <div className="flex items-center gap-2">
+          <Switch checked={subtitlesEnabled} onCheckedChange={onToggleSubtitles} />
+          <Label className="text-xs flex items-center gap-1"><Type className="w-3.5 h-3.5" /> Subtitles</Label>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Switch checked={logoEnabled} onCheckedChange={onToggleLogo} className="scale-75" />
-          <Label className="text-[10px] flex items-center gap-1"><ImageIcon className="w-3 h-3" /> Logo</Label>
+        <div className="flex items-center gap-2">
+          <Switch checked={logoEnabled} onCheckedChange={onToggleLogo} />
+          <Label className="text-xs flex items-center gap-1"><ImageIcon className="w-3.5 h-3.5" /> Logo</Label>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Switch checked={endCardEnabled} onCheckedChange={onToggleEndCard} className="scale-75" />
-          <Label className="text-[10px] flex items-center gap-1"><LayoutTemplate className="w-3 h-3" /> End Card</Label>
+        <div className="flex items-center gap-2">
+          <Switch checked={endCardEnabled} onCheckedChange={onToggleEndCard} />
+          <Label className="text-xs flex items-center gap-1"><LayoutTemplate className="w-3.5 h-3.5" /> End Card</Label>
         </div>
       </div>
 

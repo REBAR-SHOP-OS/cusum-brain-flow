@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ScriptInput } from "./ScriptInput";
 import { StoryboardTimeline } from "./StoryboardTimeline";
@@ -43,7 +44,7 @@ function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
 export function AdDirectorContent() {
   const { toast } = useToast();
   const [step, setStep] = useState<WorkflowStep>("script");
-  const [script, setScript] = useState(DEMO_SCRIPT);
+  const [script, setScript] = useState("");
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -550,7 +551,7 @@ export function AdDirectorContent() {
             : "Exporting...";
         const progressValue = analyzing ? analysisProgress : generatingAny ? genProgress : undefined;
         return (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="flex items-center gap-3">
               <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
               <span className="text-sm font-medium text-foreground">{statusText}</span>
@@ -683,9 +684,10 @@ export function AdDirectorContent() {
             />
             {finalVideoUrl && (
               <div className="mt-4 flex justify-center">
-                <button onClick={handleDownload} className="text-sm text-primary hover:underline">
+                <Button onClick={handleDownload} variant="outline" className="gap-2 rounded-2xl px-6">
+                  <Film className="w-4 h-4" />
                   Download Final MP4
-                </button>
+                </Button>
               </div>
             )}
           </div>
