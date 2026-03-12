@@ -1061,7 +1061,7 @@ export function ProVideoEditor({
                     {ov.kind === "logo" ? (
                       <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain" />
                     ) : (
-                      <span className="text-white font-bold text-sm drop-shadow-lg bg-black/40 px-2 py-1 rounded">
+                      <span className="text-white font-semibold text-sm drop-shadow-lg bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/[0.08]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                         {ov.content}
                       </span>
                     )}
