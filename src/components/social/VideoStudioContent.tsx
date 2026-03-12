@@ -500,6 +500,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     setStandaloneAudioUrl(null); setStandaloneAudioGenerating(false);
     setAnalysisResults(null); setShowInsights(false); setAnalyzing(false);
     setSuggestedHashtags([]); setModerationStatus("safe");
+    setNegativePrompt(""); setCustomAudioFile(null); setCustomAudioStorageUrl(null);
   };
 
   const handleAnalyzeVideo = async () => {
