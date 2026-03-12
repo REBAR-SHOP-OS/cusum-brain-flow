@@ -78,6 +78,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     setTimeout(() => {
       setPrompt("");
       setSelectedModel("google/gemini-3-pro-image-preview");
+      setSelectedThemes(new Set());
       setStatus("idle");
       setImageUrl(null);
       setRevisedPrompt(null);
