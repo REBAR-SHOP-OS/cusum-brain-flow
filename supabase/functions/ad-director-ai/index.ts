@@ -389,16 +389,7 @@ const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word ci
 
 const SCORE_QUALITY_PROMPT = `Score this video generation prompt on 7 dimensions (0-10): realism, specificity, visualRichness, continuityStrength, brandRelevance, emotionalPersuasion, cinematicClarity. Include overall score and suggestion if < 7.`;
 
-const IMPROVE_PROMPT_SYSTEM = `You are a cinematic prompt improvement specialist. You receive a video generation prompt that scored below quality threshold.
-
-Your job: Rewrite it to be significantly more specific, visually rich, and cinematically precise while preserving the scene's objective and emotional tone.
-
-Focus on:
-- Replace vague descriptions with precise visual details
-- Add specific camera, lens, and lighting information
-- Include material textures, environmental details, atmospheric conditions
-- Ensure strong continuity references if it's not the first scene
-- Maintain the original scene objective and emotional impact`;
+const IMPROVE_PROMPT_SYSTEM = `Rewrite this below-threshold video prompt to be more specific and cinematic. Add precise camera/lens/lighting details, material textures, atmospheric conditions. Preserve scene objective and emotional tone. Ensure continuity with adjacent scenes.`;
 
 // ─── Tool Schemas ───────────────────────────────────────────────
 const ANALYZE_SCRIPT_TOOLS = [{
