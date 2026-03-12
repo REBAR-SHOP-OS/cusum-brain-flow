@@ -368,13 +368,21 @@ export function AdDirectorContent() {
   // ─── Generate All ──────────────────────────────────────
   const handleGenerateAll = useCallback(async () => {
     setGeneratingAny(true);
+    const total = storyboard.filter(s => {
+      const c = clips.find(c => c.sceneId === s.id);
+      return c?.status !== "completed";
+    }).length;
+    let done = 0;
     for (const scene of storyboard) {
       const clip = clips.find(c => c.sceneId === scene.id);
       if (clip?.status === "completed") continue;
+      done++;
+      setGenerationStatus(`Generating scene ${done} of ${total}...`);
       await generateScene(scene.id);
       await new Promise(r => setTimeout(r, 2000));
     }
     setGeneratingAny(false);
+    setGenerationStatus("");
     setStep("preview");
     toast({ title: "Generation complete", description: "All scenes generated. Ready to export." });
   }, [storyboard, clips, generateScene, toast]);
