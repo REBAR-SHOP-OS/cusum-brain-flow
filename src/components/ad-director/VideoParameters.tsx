@@ -61,19 +61,22 @@ export function VideoParameters({ params, onChange }: VideoParametersProps) {
         </div>
       </div>
 
-      {/* Resolution */}
-      <div className="space-y-2">
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Resolution</span>
+      {/* Resolution (coming soon) */}
+      <div className="space-y-2 opacity-50">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Resolution</span>
+          <span className="text-[8px] text-muted-foreground italic">Coming soon</span>
+        </div>
         <div className="flex gap-1">
           {RESOLUTIONS.map((r) => (
             <button
               key={r}
-              onClick={() => set("resolution", r)}
+              disabled
               className={cn(
-                "flex-1 py-1.5 rounded-md text-[10px] font-medium border transition-all text-center",
+                "flex-1 py-1.5 rounded-md text-[10px] font-medium border transition-all text-center cursor-not-allowed",
                 params.resolution === r
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background/50 text-muted-foreground border-border/30 hover:border-primary/40"
+                  ? "bg-primary/50 text-primary-foreground border-primary/50"
+                  : "bg-background/50 text-muted-foreground border-border/30"
               )}
             >
               {r}
