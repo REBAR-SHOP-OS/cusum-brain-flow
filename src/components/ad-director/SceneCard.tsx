@@ -211,8 +211,6 @@ export function SceneCard({
           </Button>
         </div>
 
-        {/* Scene Intelligence Bar */}
-        <SceneIntelligenceBar intelligence={scene.sceneIntelligence} />
       </div>
     </div>
   );

@@ -683,9 +683,10 @@ export function AdDirectorContent() {
             />
             {finalVideoUrl && (
               <div className="mt-4 flex justify-center">
-                <button onClick={handleDownload} className="text-sm text-primary hover:underline">
+                <Button onClick={handleDownload} variant="outline" className="gap-2 rounded-2xl px-6">
+                  <Film className="w-4 h-4" />
                   Download Final MP4
-                </button>
+                </Button>
               </div>
             )}
           </div>
