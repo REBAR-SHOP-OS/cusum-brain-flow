@@ -13,6 +13,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile } from "@/types/adDirector";
+import type { VideoOverlay } from "@/types/videoOverlay";
 import { type EditorSettings, type LogoSettings, DEFAULT_EDITOR_SETTINGS, DEFAULT_LOGO_SETTINGS } from "@/types/editorSettings";
 import { MediaTab } from "./editor/MediaTab";
 import { MusicTab } from "./editor/MusicTab";
@@ -65,6 +66,7 @@ export function ProVideoEditor({
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
+  const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
@@ -141,19 +143,46 @@ export function ProVideoEditor({
 
     setAiProcessing(true);
     try {
-      const result = await invokeEdgeFunction<{ editedPrompt: string }>(
+      const result = await invokeEdgeFunction<any>(
         "edit-video-prompt",
         { originalPrompt: scene.prompt, editAction: "custom", editDetail: aiCommand }
       );
-      const newPrompt = result.editedPrompt;
-      if (typeof newPrompt === "string" && newPrompt.length > 0) {
-        pushHistory(storyboard);
-        const updated = storyboard.map((s, i) =>
-          i === selectedSceneIndex ? { ...s, prompt: newPrompt, promptQuality: undefined } : s
-        );
-        onUpdateStoryboard?.(updated);
-        onRegenerateScene?.(scene.id);
-        toast({ title: "Regenerating scene", description: "AI is applying your edit…" });
+
+      if (result.type === "overlay") {
+        // Apply overlay without regeneration
+        const overlay = result.overlay as { kind: string; position: string; size: string; content: string };
+        const posMap: Record<string, { x: number; y: number }> = {
+          "top-left": { x: 5, y: 5 }, "top-right": { x: 80, y: 5 },
+          "bottom-left": { x: 5, y: 80 }, "bottom-right": { x: 80, y: 80 },
+          "center": { x: 40, y: 40 },
+        };
+        const sizeMap: Record<string, { w: number; h: number }> = {
+          small: { w: 10, h: 10 }, medium: { w: 15, h: 15 }, large: { w: 25, h: 25 },
+        };
+        const content = overlay.content === "brand_logo" && brand.logoUrl ? brand.logoUrl : overlay.content;
+        const newOverlay: VideoOverlay = {
+          id: crypto.randomUUID(),
+          kind: (overlay.kind as VideoOverlay["kind"]) || "logo",
+          position: posMap[overlay.position] || posMap["bottom-right"],
+          size: sizeMap[overlay.size] || sizeMap["medium"],
+          content,
+          opacity: 0.85,
+          sceneId: scene.id,
+        };
+        setOverlays(prev => [...prev, newOverlay]);
+        toast({ title: "Overlay added", description: `${overlay.kind} overlay applied — no regeneration needed.` });
+      } else {
+        // Generative edit — rewrite prompt and regenerate
+        const newPrompt = result.editedPrompt;
+        if (typeof newPrompt === "string" && newPrompt.length > 0) {
+          pushHistory(storyboard);
+          const updated = storyboard.map((s, i) =>
+            i === selectedSceneIndex ? { ...s, prompt: newPrompt, promptQuality: undefined } : s
+          );
+          onUpdateStoryboard?.(updated);
+          onRegenerateScene?.(scene.id);
+          toast({ title: "Regenerating scene", description: "AI is applying your edit…" });
+        }
       }
       setAiCommand("");
     } catch (err: any) {
@@ -162,6 +191,10 @@ export function ProVideoEditor({
       setAiProcessing(false);
     }
   };
+
+  // Overlays for current scene
+  const currentSceneId = storyboard[selectedSceneIndex]?.id;
+  const sceneOverlays = overlays.filter(o => o.sceneId === currentSceneId);
 
   // Logo handlers
   const handleDeleteLogo = () => {
@@ -216,6 +249,27 @@ export function ProVideoEditor({
                 className="absolute bottom-14 right-4 h-10 w-auto object-contain opacity-70 pointer-events-none z-10"
               />
             )}
+            {/* AI-added overlays */}
+            {sceneOverlays.map(ov => (
+              <div
+                key={ov.id}
+                className="absolute pointer-events-none z-20"
+                style={{
+                  left: `${ov.position.x}%`,
+                  top: `${ov.position.y}%`,
+                  width: `${ov.size.w}%`,
+                  opacity: ov.opacity,
+                }}
+              >
+                {ov.kind === "logo" ? (
+                  <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain" />
+                ) : (
+                  <span className="text-white font-bold text-sm drop-shadow-lg bg-black/40 px-2 py-1 rounded">
+                    {ov.content}
+                  </span>
+                )}
+              </div>
+            ))}
           </>
         ) : (
           <div className="w-full aspect-video flex flex-col items-center justify-center bg-muted/10 gap-3">
