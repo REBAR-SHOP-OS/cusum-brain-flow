@@ -3,7 +3,7 @@ import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search } from "lucide-react";
+import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search, Video } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
