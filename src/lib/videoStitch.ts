@@ -302,8 +302,11 @@ async function validateBlob(blob: Blob, expectedDuration?: number): Promise<{ va
       clearTimeout(timeout);
       const dur = testVideo.duration;
       URL.revokeObjectURL(url);
-      if (!dur || dur <= 0 || !isFinite(dur)) {
+      if (!dur || dur <= 0) {
         resolve({ valid: false, error: `Output video has invalid duration: ${dur}` });
+      } else if (!isFinite(dur) && expectedDuration && expectedDuration > 0) {
+        console.warn(`[validateBlob] Browser reported Infinity duration, using expected: ${expectedDuration.toFixed(1)}s`);
+        resolve({ valid: true, duration: expectedDuration });
       } else {
         resolve({ valid: true, duration: dur });
       }
