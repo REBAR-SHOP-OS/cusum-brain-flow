@@ -154,7 +154,8 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     return (vm?.provider as "sora" | "veo" | "wan") || currentMode.provider;
   }, [selectedModel, mediaType, currentMode.provider]);
 
-  const effectiveMaxClip = effectiveVideoProvider === "wan" ? 8 : currentMode.maxClipDuration;
+  const effectiveMaxClip = effectiveVideoProvider === "wan" ? 15 : currentMode.maxClipDuration;
+  const isI2vModel = selectedModel === "wan-2.6-i2v" || selectedModel === "wan-2.6-i2v-flash";
 
   const cleanup = useCallback(() => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
