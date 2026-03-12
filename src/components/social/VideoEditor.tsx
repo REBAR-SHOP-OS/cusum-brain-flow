@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Scissors, Expand, RefreshCw, Palette, Sun, Eraser, Image,
-  Loader2, ArrowLeft, Sparkles, Play, Pause, ChevronRight
+  Loader2, ArrowLeft, Sparkles, Play, Pause, ChevronRight,
+  Type, Subtitles, Maximize2
 } from "lucide-react";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { trimVideo } from "@/lib/videoTrim";
