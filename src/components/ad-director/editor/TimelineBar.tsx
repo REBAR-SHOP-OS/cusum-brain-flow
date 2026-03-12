@@ -70,6 +70,10 @@ export function TimelineBar({
   videoVolume = 1, onVideoVolumeChange, onAudioTrackVolumeChange,
   onDeleteOverlay, onEditOverlay, onRemoveAudioTrack,
   onRegenerateScene, onDeleteScene,
+  onTrimScene, onStretchScene, onSplitScene, onDuplicateScene,
+  onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, mutedScenes,
+  onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
+  onReRecordVoiceover, onEditVoiceoverText,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
