@@ -806,7 +806,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           </div>
 
           {/* Prompt Bar — pinned at bottom in full page, inline otherwise */}
-          {(status === "idle" || status === "transforming") && (
+          {(status === "idle" || status === "transforming" || (mediaType !== "video" && !isGenerating)) && (
             <div className={fullPage ? "shrink-0 pt-2" : "mt-4"}>
               <VideoStudioPromptBar
                 rawPrompt={rawPrompt}
@@ -822,14 +822,18 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 engineeredPrompt={transformResult?.engineeredPrompt}
                 intent={transformResult?.intent}
                 isConstructionRelated={transformResult?.isConstructionRelated}
-                creditCost={getCost(parseInt(duration), mode)}
+                creditCost={mediaType === "video" ? getCost(parseInt(duration), mode) : mediaType === "image" ? 1 : parseInt(duration)}
                 remaining={remaining}
-                canGenerate={canGenerate(parseInt(duration), mode)}
-                isGenerating={false}
+                canGenerate={mediaType === "video" ? canGenerate(parseInt(duration), mode) : true}
+                isGenerating={imageGenerating || standaloneAudioGenerating}
                 isTransforming={isTransforming}
                 onGenerate={handleGenerate}
                 referenceImage={referenceImage}
                 onReferenceImageChange={setReferenceImage}
+                mediaType={mediaType}
+                onMediaTypeChange={(t) => { setMediaType(t); setGeneratedImageUrl(null); setStandaloneAudioUrl(null); setError(null); }}
+                audioType={audioType}
+                onAudioTypeChange={setAudioType}
               />
             </div>
           )}
