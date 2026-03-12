@@ -840,6 +840,38 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
         })}
       </div>
 
+      {/* Floating sidebar panel for non-preview steps */}
+      {step !== "preview" && externalActiveTab && (
+        <div className="fixed left-60 top-20 z-40 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-border/40 bg-card/95 backdrop-blur-md shadow-xl p-4 animate-in slide-in-from-left-4 duration-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold capitalize">{externalActiveTab.replace("-", " ")}</h3>
+            <button
+              onClick={() => onActiveTabChanged?.(null)}
+              className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {externalActiveTab === "stock-images" && <StockImagesTab />}
+          {externalActiveTab === "stock-video" && <StockVideoTab />}
+          {externalActiveTab === "templates" && <TemplatesTab />}
+          {externalActiveTab === "graphics" && <GraphicsTab />}
+          {externalActiveTab === "transitions" && <TransitionsTab activeTransition="None" onSelect={() => {}} />}
+          {externalActiveTab === "text" && <TextTab onAddText={() => toast({ title: "Coming soon", description: "Text overlays are available in the Preview editor" })} />}
+          {externalActiveTab === "record" && <RecordTab />}
+          {externalActiveTab === "music" && <MusicTab />}
+          {externalActiveTab === "media" && (
+            <div className="text-xs text-muted-foreground py-4 text-center">Media library is available in the Preview editor step.</div>
+          )}
+          {externalActiveTab === "settings" && (
+            <div className="text-xs text-muted-foreground py-4 text-center">Filters & effects are available in the Preview editor step.</div>
+          )}
+          {externalActiveTab === "brand-kit" && (
+            <div className="text-xs text-muted-foreground py-4 text-center">Brand kit settings are in the Script & Assets step above.</div>
+          )}
+        </div>
+      )}
+
       {/* Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {step === "script" && (
