@@ -71,14 +71,24 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               <Label className="text-base font-semibold">Creative Brief</Label>
             </div>
             {script.trim() && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onScriptChange(DEMO_SCRIPT)}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Load Demo
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onScriptChange("")}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onScriptChange(DEMO_SCRIPT)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Load Demo
+                </Button>
+              </div>
             )}
           </div>
 
