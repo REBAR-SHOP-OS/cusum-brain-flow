@@ -14,7 +14,11 @@ interface MusicTrack {
   url?: string;
 }
 
-export function MusicTab() {
+interface MusicTabProps {
+  onTrackSelect?: (track: { url: string; name: string } | null) => void;
+}
+
+export function MusicTab({ onTrackSelect }: MusicTabProps) {
   const { toast } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

@@ -27,6 +27,8 @@ export interface StitchOverlayOptions {
     segments: { text: string; startTime: number; endTime: number }[];
   };
   audioUrl?: string;
+  musicUrl?: string;
+  musicVolume?: number; // 0-1, default 0.3
 }
 
 export interface StitchProgress {
