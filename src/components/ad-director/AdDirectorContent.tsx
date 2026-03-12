@@ -52,7 +52,8 @@ export function AdDirectorContent() {
   const [storyboard, setStoryboard] = useState<StoryboardScene[]>([]);
   const [continuity, setContinuity] = useState<ContinuityProfile | null>(null);
   const [clips, setClips] = useState<ClipOutput[]>([]);
-  const [generatingAny, setGeneratingAny] = useState(false);
+  // Derive generatingAny reactively from clips state
+  const generatingAny = clips.some(c => c.status === "generating");
   const [exporting, setExporting] = useState(false);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
