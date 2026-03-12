@@ -494,29 +494,28 @@ export default function TimeClock() {
                 {(() => {
                   const todayStart = new Date();
                   todayStart.setHours(0, 0, 0, 0);
-                  const kioskEntries = allEntries.filter((e: any) => e.source === "kiosk" && new Date(e.clock_in) >= todayStart);
-                  const kioskProfileIds = new Set(kioskEntries.map(e => e.profile_id));
-                  const kioskProfiles = activeProfiles.filter(p => kioskProfileIds.has(p.id));
+                  const todayEntries = allEntries.filter((e: any) => new Date(e.clock_in) >= todayStart);
+                  const kioskProfiles = activeProfiles;
                   const presentCount = kioskProfiles.filter(p => statusMap.get(p.id)?.clocked_in).length;
 
                   return (
                     <>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Monitor className="w-4 h-4" />
-                        <span>{presentCount} people present (kiosk)</span>
+                        <span>{presentCount} people present</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {loading ? (
                           <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
                         ) : kioskProfiles.length === 0 ? (
-                          <p className="text-muted-foreground text-sm col-span-2 text-center py-8">No kiosk check-ins today</p>
+                          <p className="text-muted-foreground text-sm col-span-2 text-center py-8">No team members found</p>
                         ) : (
                           kioskProfiles.map((profile) => {
                             const status = statusMap.get(profile.id);
                             const isClockedIn = status?.clocked_in ?? false;
                             const clockInTime = status?.clock_in;
                             const elapsed = isClockedIn && clockInTime ? differenceInMinutes(now, new Date(clockInTime)) : null;
-                            const profileKioskEntries = kioskEntries.filter((e) => e.profile_id === profile.id);
+                            const profileKioskEntries = todayEntries.filter((e) => e.profile_id === profile.id);
                             const totalMins = profileKioskEntries.reduce((sum, e) => {
                               const end = e.clock_out ? new Date(e.clock_out) : (isClockedIn ? now : new Date(e.clock_in));
                               return sum + differenceInMinutes(end, new Date(e.clock_in));
