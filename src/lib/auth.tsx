@@ -19,6 +19,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Detect if we're returning from an OAuth redirect (hash contains access_token)
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const isOAuthCallback = hashParams.has('access_token') || hashParams.has('refresh_token');
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -36,7 +40,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    // Then check for existing session
+    // If this is an OAuth callback, let onAuthStateChange handle it —
+    // don't call getSession() which may resolve with null before
+    // Supabase processes the hash tokens, causing a premature redirect.
+    if (isOAuthCallback) {
+      // Safety timeout: if onAuthStateChange doesn't fire within 5s, stop loading
+      const timeout = setTimeout(() => {
+        console.warn('OAuth callback timeout — no auth event received');
+        setLoading(false);
+      }, 5000);
+      return () => {
+        clearTimeout(timeout);
+        subscription.unsubscribe();
+      };
+    }
+
+    // Normal flow: check for existing session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
         // Stale/corrupt token in storage — clear it to stop bad_jwt polling
