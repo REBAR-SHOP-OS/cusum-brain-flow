@@ -283,7 +283,7 @@ export function AdDirectorContent() {
     try {
       const result = await invokeEdgeFunction<{
         url?: string; videoUrl?: string; generationId?: string; jobId?: string;
-        provider?: string; mode?: string; imageUrls?: string[];
+        provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
       }>(
         "generate-video",
         {
