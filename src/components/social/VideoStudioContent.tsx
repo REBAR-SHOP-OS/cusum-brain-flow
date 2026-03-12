@@ -91,6 +91,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [activeTab, setActiveTab] = useState("generate");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<MediaType>("video");
+  const [selectedModel, setSelectedModel] = useState("gpt-image-1");
 
   // Image generation state
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
@@ -289,7 +290,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     try {
       const sizeMap: Record<string, string> = { "16:9": "1792x1024", "9:16": "1024x1792", "1:1": "1024x1024" };
       const size = sizeMap[aspectRatio] || "1024x1024";
-      const data = await invokeEdgeFunction("generate-image", { prompt: rawPrompt.trim(), size, quality: "hd", model: "gpt-image-1" });
+      const data = await invokeEdgeFunction("generate-image", { prompt: rawPrompt.trim(), size, quality: "high", model: selectedModel });
       if (data?.imageUrl) {
         setGeneratedImageUrl(data.imageUrl);
         toast({ title: "Image ready!", description: data.revisedPrompt ? "Prompt was refined by AI" : "Image generated successfully" });
@@ -898,12 +899,17 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                   setStatus("idle");
                   setVideoUrl(null);
                   setSceneUrls([]);
-                  // Auto-correct duration for the target mode
                   if (t === "audio") setDuration("15");
                   else if (t === "video") setDuration("8");
+                  // Set default model for media type
+                  if (t === "image") setSelectedModel("gpt-image-1");
+                  else if (t === "video") setSelectedModel("veo-3.1");
+                  else setSelectedModel("elevenlabs");
                 }}
                 audioType={audioType}
                 onAudioTypeChange={setAudioType}
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
               />
             </div>
           )}

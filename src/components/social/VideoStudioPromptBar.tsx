@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import {
   Video, Image, Music, Zap, Film, Crown, Sparkles, Loader2,
-  ChevronDown, Eye, EyeOff, Gauge, Upload, X
+  ChevronDown, Eye, EyeOff, Gauge, Upload, X, Cpu
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,6 +39,31 @@ const audioDurationOptions = [
   { value: "5", label: "5s" },
   { value: "15", label: "15s" },
   { value: "30", label: "30s" },
+];
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  provider: string;
+  costLabel: string;
+  free: boolean;
+}
+
+export const IMAGE_MODELS: ModelOption[] = [
+  { id: "gpt-image-1", label: "GPT Image 1", provider: "openai", costLabel: "~$0.02/image", free: false },
+  { id: "google/gemini-2.5-flash-image", label: "Nano Banana", provider: "lovable", costLabel: "Free", free: true },
+  { id: "google/gemini-3-pro-image-preview", label: "Nano Banana Pro", provider: "lovable", costLabel: "Free", free: true },
+  { id: "google/gemini-3.1-flash-image-preview", label: "Nano Banana 2", provider: "lovable", costLabel: "Free", free: true },
+];
+
+export const VIDEO_MODELS: ModelOption[] = [
+  { id: "veo-3.1", label: "Google Veo 3.1", provider: "veo", costLabel: "Credits", free: false },
+  { id: "sora-2", label: "OpenAI Sora", provider: "sora", costLabel: "Credits", free: false },
+  { id: "sora-2-pro", label: "Sora Pro", provider: "sora", costLabel: "Credits", free: false },
+];
+
+export const AUDIO_MODELS: ModelOption[] = [
+  { id: "elevenlabs", label: "ElevenLabs", provider: "elevenlabs", costLabel: "Free", free: true },
 ];
 
 const videoSuggestions = [
@@ -88,6 +113,8 @@ interface VideoStudioPromptBarProps {
   onMediaTypeChange: (t: MediaType) => void;
   audioType?: "music" | "sfx";
   onAudioTypeChange?: (t: "music" | "sfx") => void;
+  selectedModel: string;
+  onModelChange: (m: string) => void;
 }
 
 export function VideoStudioPromptBar({
@@ -97,11 +124,16 @@ export function VideoStudioPromptBar({
   isConstructionRelated, creditCost, remaining, canGenerate,
   isGenerating, isTransforming, onGenerate, referenceImage, onReferenceImageChange,
   mediaType, onMediaTypeChange, audioType = "music", onAudioTypeChange,
+  selectedModel, onModelChange,
 }: VideoStudioPromptBarProps) {
   const [modeOpen, setModeOpen] = useState(false);
   const [durationOpen, setDurationOpen] = useState(false);
   const [aspectOpen, setAspectOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const modelOptions = mediaType === "image" ? IMAGE_MODELS : mediaType === "audio" ? AUDIO_MODELS : VIDEO_MODELS;
+  const currentModelOption = modelOptions.find(m => m.id === selectedModel) || modelOptions[0];
 
   const currentMode = modes.find(m => m.id === mode) || modes[1];
   const currentAspect = aspectOptions.find(a => a.value === aspectRatio) || aspectOptions[0];
@@ -117,10 +149,10 @@ export function VideoStudioPromptBar({
 
   const generateLabel = mediaType === "image" ? "Generate" : mediaType === "audio" ? "Generate" : "Generate";
   const footerText = mediaType === "image"
-    ? "⌘+Enter to generate • Powered by GPT Image & DALL-E"
+    ? `⌘+Enter to generate • ${currentModelOption.label}`
     : mediaType === "audio"
     ? "⌘+Enter to generate • Powered by ElevenLabs"
-    : "⌘+Enter to generate • Powered by Google Veo 3.1 & OpenAI Sora";
+    : `⌘+Enter to generate • ${currentModelOption.label}`;
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -270,6 +302,39 @@ export function VideoStudioPromptBar({
                     {m.icon}
                     <span className="flex-1 text-left">{m.label}</span>
                     <span className="text-[10px] text-muted-foreground">{m.badge}</span>
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* Model pill — all media types */}
+          {modelOptions.length > 1 && (
+            <Popover open={modelOpen} onOpenChange={setModelOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
+                  <Cpu className="w-3 h-3" />
+                  {currentModelOption.label}
+                  <ChevronDown className="w-3 h-3 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-1" align="start">
+                {modelOptions.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => { onModelChange(m.id); setModelOpen(false); }}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+                      selectedModel === m.id ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    <span className="flex-1 text-left">{m.label}</span>
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full",
+                      m.free ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                    )}>
+                      {m.costLabel}
+                    </span>
                   </button>
                 ))}
               </PopoverContent>
@@ -426,14 +491,24 @@ export function VideoStudioPromptBar({
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Credits indicator */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/40 text-muted-foreground border border-border/20">
-            <Gauge className="w-3 h-3" />
-            <span>{remaining}s</span>
-            {rawPrompt.trim() && (
-              <span className="text-[10px] opacity-70">• Cost: {creditCost}s</span>
-            )}
-          </div>
+          {/* Cost / credits indicator */}
+          {mediaType === "video" ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/40 text-muted-foreground border border-border/20">
+              <Gauge className="w-3 h-3" />
+              <span>{remaining}s</span>
+              {rawPrompt.trim() && (
+                <span className="text-[10px] opacity-70">• Cost: {creditCost}s</span>
+              )}
+            </div>
+          ) : currentModelOption.free ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+              ✓ Free
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/40 text-muted-foreground border border-border/20">
+              {currentModelOption.costLabel}
+            </div>
+          )}
         </div>
 
         {/* Engineered prompt preview */}
