@@ -252,7 +252,12 @@ export function SceneCard({
               size="sm"
               variant="outline"
               className="h-7 text-[10px]"
-              onClick={() => downloadFile(clip.videoUrl!, `scene-${index + 1}-${segmentLabel}.mp4`)}
+              onClick={() => {
+                const isImage = clip.videoUrl!.startsWith("data:image/");
+                const ext = isImage ? ".png" : ".mp4";
+                const fname = `scene-${index + 1}-${segmentLabel}${ext}`;
+                downloadFile(clip.videoUrl!, fname, isImage ? undefined : { provider: "wan" });
+              }}
             >
               <Download className="w-3 h-3 mr-1" />
               Download
