@@ -337,7 +337,58 @@ export function ProVideoEditor({
   const selectedClip = clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id);
   const videoSrc = finalVideoUrl || selectedClip?.videoUrl || null;
 
+  // Detect static-card scenes (end cards rendered as PNG data URLs)
+  const currentScene = storyboard[selectedSceneIndex];
+  const isStaticCard = !finalVideoUrl && (
+    currentScene?.generationMode === "static-card" ||
+    (videoSrc?.startsWith("data:image/") ?? false)
+  );
+
+  // Static card duration: use segment timing or default 4s
+  const staticCardDuration = useMemo(() => {
+    if (!isStaticCard || !currentScene) return 4;
+    const seg = segments.find(s => s.id === currentScene.segmentId);
+    return seg ? seg.endTime - seg.startTime : 4;
+  }, [isStaticCard, currentScene, segments]);
+
+  // Timer-based playback for static cards
+  const staticTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const handleVideoEndedRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!isStaticCard || !isPlaying) {
+      if (staticTimerRef.current) { clearInterval(staticTimerRef.current); staticTimerRef.current = null; }
+      if (isStaticCard && !isPlaying) setCurrentTime(0);
+      return;
+    }
+    setCurrentTime(0);
+    setDuration(staticCardDuration);
+    const start = Date.now();
+    staticTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - start) / 1000;
+      if (elapsed >= staticCardDuration) {
+        clearInterval(staticTimerRef.current!);
+        staticTimerRef.current = null;
+        setCurrentTime(staticCardDuration);
+        handleVideoEndedRef.current();
+      } else {
+        setCurrentTime(elapsed);
+      }
+    }, 100);
+    return () => { if (staticTimerRef.current) { clearInterval(staticTimerRef.current); staticTimerRef.current = null; } };
+  }, [isStaticCard, isPlaying, staticCardDuration, selectedSceneIndex]);
+
+  // Track static card durations in clipDurations
+  useEffect(() => {
+    if (isStaticCard && currentScene?.id) {
+      setClipDurations(prev => ({ ...prev, [currentScene.id]: staticCardDuration }));
+    }
+  }, [isStaticCard, currentScene?.id, staticCardDuration]);
+
   const togglePlay = () => {
+    if (isStaticCard) {
+      setIsPlaying(prev => !prev);
+      return;
+    }
     if (!videoRef.current) return;
     if (isPlaying) videoRef.current.pause(); else videoRef.current.play();
     setIsPlaying(!isPlaying);
@@ -585,27 +636,38 @@ export function ProVideoEditor({
       setTimeout(() => {
         autoPlayPending.current = true;
         setSelectedSceneIndex(nextIdx);
-        // Wait for new video to be ready before completing transition
-        const checkReady = () => {
-          if (videoRef.current && videoRef.current.readyState >= 3) {
-            sceneTransitioning.current = false;
-            setSceneTransition(false);
-            if (autoPlayPending.current) {
-              videoRef.current.play().catch(() => {});
-              autoPlayPending.current = false;
+        // Check if next scene is a static card — no video readyState to wait for
+        const nextScene = storyboard[nextIdx];
+        const nextClip = clips.find(c => c.sceneId === nextScene?.id);
+        const nextIsStatic = nextScene?.generationMode === "static-card" || nextClip?.videoUrl?.startsWith("data:image/");
+        if (nextIsStatic) {
+          sceneTransitioning.current = false;
+          setSceneTransition(false);
+          setIsPlaying(true);
+          autoPlayPending.current = false;
+        } else {
+          // Wait for new video to be ready before completing transition
+          const checkReady = () => {
+            if (videoRef.current && videoRef.current.readyState >= 3) {
+              sceneTransitioning.current = false;
+              setSceneTransition(false);
+              if (autoPlayPending.current) {
+                videoRef.current.play().catch(() => {});
+                autoPlayPending.current = false;
+              }
+            } else {
+              setTimeout(checkReady, 50);
             }
-          } else {
-            setTimeout(checkReady, 50);
-          }
-        };
-        setTimeout(checkReady, 50);
+          };
+          setTimeout(checkReady, 50);
+        }
       }, 500);
     } else {
       setIsPlaying(false);
     }
   }, [storyboard, clips, selectedSceneIndex]);
 
-  const handleVideoEnded = () => {
+  const handleVideoEnded = useCallback(() => {
     // Check if voiceover is still playing — wait for it before advancing
     const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
     if (voStillPlaying) {
@@ -613,7 +675,9 @@ export function ProVideoEditor({
       return;
     }
     advanceToNextScene();
-  };
+  }, [advanceToNextScene]);
+  // Keep ref in sync for static card timer
+  handleVideoEndedRef.current = handleVideoEnded;
 
   // ─── Global seek from timeline ───
   const handleGlobalSeek = (globalTimeSec: number) => {
@@ -933,21 +997,29 @@ export function ProVideoEditor({
             </Button>
           </div>
 
-          {/* Video */}
+          {/* Video / Static Card */}
           <div className="flex-1 flex items-center justify-center relative overflow-hidden">
             {videoSrc ? (
               <>
-                <video
-                  ref={videoRef}
-                  src={videoSrc}
-                  className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                  muted={isMuted}
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoaded}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onEnded={handleVideoEnded}
-                />
+                {isStaticCard ? (
+                  <img
+                    src={videoSrc}
+                    alt="End Card"
+                    className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
+                  />
+                ) : (
+                  <video
+                    ref={videoRef}
+                    src={videoSrc}
+                    className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
+                    muted={isMuted}
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoaded}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={handleVideoEnded}
+                  />
+                )}
                 {brand.logoUrl && (
                   <img
                     src={brand.logoUrl}
