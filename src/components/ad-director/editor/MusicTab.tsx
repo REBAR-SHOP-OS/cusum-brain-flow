@@ -150,7 +150,10 @@ export function MusicTab({ onTrackSelect }: MusicTabProps) {
         {tracks.map(track => (
           <div
             key={track.id}
-            onClick={() => setSelectedTrack(track.id)}
+            onClick={() => {
+              setSelectedTrack(track.id);
+              onTrackSelect?.(track.url ? { url: track.url, name: track.name } : null);
+            }}
             className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left cursor-pointer ${
               selectedTrack === track.id ? "border-primary bg-primary/5" : "border-border/30 hover:border-border/60"
             }`}
