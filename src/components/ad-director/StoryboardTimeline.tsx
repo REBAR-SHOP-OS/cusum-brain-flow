@@ -75,6 +75,8 @@ export function StoryboardTimeline({
               onContinuityToggle={onContinuityToggle}
               onRegenerate={onRegenerate}
               canRegenerate={!generatingAny}
+              onImprovePrompt={onImprovePrompt}
+              improvingSceneId={improvingSceneId}
             />
           );
         })}
