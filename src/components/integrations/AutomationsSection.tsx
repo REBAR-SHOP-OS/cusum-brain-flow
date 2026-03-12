@@ -101,6 +101,15 @@ const defaultAutomations: Automation[] = [
     icon: "code",
     route: "/automations",
   },
+  {
+    id: "video-generator",
+    name: "AI Video Studio",
+    description: "Generate videos, images & audio with AI",
+    enabled: true,
+    color: "purple",
+    icon: "video",
+    route: "/video-studio",
+  },
 ];
 
 const colorGradients = {
