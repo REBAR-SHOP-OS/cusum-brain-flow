@@ -45,6 +45,7 @@ interface ProVideoEditorProps {
   onRegenerateScene?: (sceneId: string) => void;
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
   onUpdateSegment?: (id: string, text: string) => void;
+  onUpdateSegmentTiming?: (id: string, startTime: number, endTime: number) => void;
   onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
   onUpdateBrand?: (brand: BrandProfile) => void;
   onMusicSelect?: (url: string | null) => void;
@@ -53,7 +54,7 @@ interface ProVideoEditorProps {
 export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
-  onRegenerateScene, onUpdateClipUrl, onUpdateSegment,
+  onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming,
   onUpdateStoryboard, onUpdateBrand, onMusicSelect,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
@@ -80,6 +81,7 @@ export function ProVideoEditor({
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
   const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
+  const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
 
   // ─── Global timeline ───
   const sceneDurations = useMemo(() => {
@@ -184,6 +186,10 @@ export function ProVideoEditor({
   // Sync voiceover audio with video playback (time-locked)
   useEffect(() => {
     const sceneId = storyboard[selectedSceneIndex]?.id;
+    // Skip voiceover if scene is muted
+    if (sceneId && mutedScenes.has(sceneId)) {
+      return;
+    }
     const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
     if (vo && isPlaying && !isMuted) {
       const a = new Audio(vo.audioUrl);
@@ -217,7 +223,7 @@ export function ProVideoEditor({
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSceneIndex, isPlaying, isMuted]);
+  }, [selectedSceneIndex, isPlaying, isMuted, mutedScenes]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
@@ -266,10 +272,14 @@ export function ProVideoEditor({
     setIsMuted(!isMuted);
   };
 
-  // Apply videoVolume to the video element
+  // Apply videoVolume and mute state to the video element
   useEffect(() => {
-    if (videoRef.current) videoRef.current.volume = videoVolume;
-  }, [videoVolume]);
+    if (videoRef.current) {
+      const sceneId = storyboard[selectedSceneIndex]?.id;
+      const isMutedScene = sceneId ? mutedScenes.has(sceneId) : false;
+      videoRef.current.volume = isMutedScene ? 0 : videoVolume;
+    }
+  }, [videoVolume, selectedSceneIndex, mutedScenes, storyboard]);
 
   // Apply per-track volume to voiceover audio
   useEffect(() => {
@@ -296,7 +306,6 @@ export function ProVideoEditor({
     setOverlays(prev => prev.filter(o => o.id !== id));
   }, []);
 
-  const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
 
   const handleTrimScene = useCallback((index: number) => {
     const scene = storyboard[index];
@@ -306,15 +315,30 @@ export function ProVideoEditor({
       toast({ title: "Cannot trim", description: "Scene is already at minimum duration", variant: "destructive" });
       return;
     }
-    onUpdateSegment?.(seg.id, seg.text); // keep text
-    // Shrink by adjusting segment endTime
     pushHistory(storyboard);
+    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.endTime - 1);
     toast({ title: "Scene trimmed", description: `Scene ${index + 1} shortened by 1s` });
-  }, [storyboard, segments, toast, pushHistory, onUpdateSegment]);
+  }, [storyboard, segments, toast, pushHistory, onUpdateSegmentTiming]);
 
   const handleStretchScene = useCallback((index: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+    pushHistory(storyboard);
+    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.endTime + 1);
     toast({ title: "Scene stretched", description: `Scene ${index + 1} extended by 1s` });
-  }, [toast]);
+  }, [storyboard, segments, toast, pushHistory, onUpdateSegmentTiming]);
+
+  const handleResizeScene = useCallback((index: number, newDuration: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+    const clamped = Math.max(1, Math.round(newDuration * 10) / 10);
+    pushHistory(storyboard);
+    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.startTime + clamped);
+  }, [storyboard, segments, pushHistory, onUpdateSegmentTiming]);
 
   const handleSplitScene = useCallback((index: number) => {
     const scene = storyboard[index];
@@ -922,6 +946,7 @@ export function ProVideoEditor({
         onEditPrompt={handleEditPrompt}
         onEditVoiceover={handleEditVoiceover}
         onMuteScene={handleMuteScene}
+        onResizeScene={handleResizeScene}
         mutedScenes={mutedScenes}
         onEditOverlayPosition={handleEditOverlayPosition}
         onResizeOverlay={handleResizeOverlay}

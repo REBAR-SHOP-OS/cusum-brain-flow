@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
@@ -53,6 +53,7 @@ interface TimelineBarProps {
   onEditPrompt?: (index: number) => void;
   onEditVoiceover?: (index: number) => void;
   onMuteScene?: (index: number) => void;
+  onResizeScene?: (index: number, newDuration: number) => void;
   mutedScenes?: Set<string>;
   // Text overlay extras
   onEditOverlayPosition?: (id: string, position: "top" | "center" | "bottom") => void;
@@ -71,12 +72,54 @@ export function TimelineBar({
   onDeleteOverlay, onEditOverlay, onRemoveAudioTrack,
   onRegenerateScene, onDeleteScene,
   onTrimScene, onStretchScene, onSplitScene, onDuplicateScene,
-  onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, mutedScenes,
+  onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onEditVoiceoverText,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
+  const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Drag-to-resize handlers
+  const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
+    e.stopPropagation();
+    e.preventDefault();
+    const dur = getSceneDurForDrag(index);
+    dragState.current = { index, startX: e.clientX, startDur: dur, side };
+    setIsDragging(true);
+  }, []);
+
+  const getSceneDurForDrag = (i: number) => {
+    const seg = segments.find(s => s.id === storyboard[i]?.segmentId);
+    return seg ? seg.endTime - seg.startTime : 4;
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragState.current || !trackRef.current) return;
+      const trackWidth = trackRef.current.getBoundingClientRect().width;
+      const pxPerSec = trackWidth / totalDuration;
+      const dx = e.clientX - dragState.current.startX;
+      const deltaSec = dx / pxPerSec;
+      const newDur = dragState.current.side === "right"
+        ? dragState.current.startDur + deltaSec
+        : dragState.current.startDur - deltaSec;
+      const clamped = Math.max(1, newDur);
+      onResizeScene?.(dragState.current.index, clamped);
+    };
+    const handleMouseUp = () => {
+      dragState.current = null;
+      setIsDragging(false);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging, totalDuration, onResizeScene]);
 
   const playheadPct = totalDuration > 0 ? (globalTime / totalDuration) * 100 : 0;
 
@@ -141,6 +184,13 @@ export function TimelineBar({
                       style={{ flex: dur }}
                       title={seg?.label || `Scene ${i + 1}`}
                     >
+                      {/* Left drag handle */}
+                      {onResizeScene && (
+                        <div
+                          onMouseDown={(e) => handleDragStart(e, i, "left")}
+                          className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 z-20"
+                        />
+                      )}
                       {clip?.videoUrl && (
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
                       )}
@@ -149,6 +199,13 @@ export function TimelineBar({
                       </span>
                       {isSelected && (
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                      )}
+                      {/* Right drag handle */}
+                      {onResizeScene && (
+                        <div
+                          onMouseDown={(e) => handleDragStart(e, i, "right")}
+                          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 z-20"
+                        />
                       )}
                     </div>
                   </PopoverTrigger>
