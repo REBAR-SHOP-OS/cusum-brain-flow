@@ -481,9 +481,11 @@ serve(async (req) => {
     const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls } = parsed.data;
 
     const isVeo = provider === "veo";
+    const isWan = provider === "wan";
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     const gptKey = Deno.env.get("GPT_API_KEY");
-    const apiKey = isVeo ? geminiKey : gptKey;
+    const dashscopeKey = Deno.env.get("DASHSCOPE_API_KEY");
+    const apiKey = isWan ? dashscopeKey : isVeo ? geminiKey : gptKey;
 
     // ── Library: list saved videos ──
     if (action === "list-library") {
