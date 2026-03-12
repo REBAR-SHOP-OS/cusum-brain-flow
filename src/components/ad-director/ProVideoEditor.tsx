@@ -279,7 +279,7 @@ export function ProVideoEditor({
       const sceneClipDur = clipDurations[sceneId!];
       const sceneVoDur = voiceoverDurations[sceneId!];
       if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
-        a.playbackRate = Math.min(sceneVoDur / sceneClipDur, 1.3);
+        a.playbackRate = Math.min(sceneVoDur / sceneClipDur, 1.6);
       } else {
         a.playbackRate = 1;
       }
