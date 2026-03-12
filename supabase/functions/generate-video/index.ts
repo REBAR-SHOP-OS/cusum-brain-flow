@@ -555,7 +555,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt } = parsed.data;
+    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt, aspectRatio } = parsed.data;
 
     const isVeo = provider === "veo";
     const isWan = provider === "wan";
