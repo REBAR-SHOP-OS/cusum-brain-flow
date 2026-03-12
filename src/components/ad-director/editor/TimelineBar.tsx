@@ -413,25 +413,39 @@ export function TimelineBar({
                         </div>
                       </PopoverTrigger>
                       <PopoverContent className="w-44 p-2" side="top" align="center">
-                        <div className="space-y-2">
-                          <p className="text-[10px] font-medium text-foreground">{at.label} Volume</p>
-                          <Slider
-                            value={[Math.round((at.volume ?? 1) * 100)]}
-                            min={0} max={100} step={1}
-                            onValueChange={([v]) => onAudioTrackVolumeChange?.(idx, v / 100)}
-                            className="w-full"
-                          />
-                          <div className="flex justify-between">
-                            <span className="text-[9px] text-muted-foreground">{Math.round((at.volume ?? 1) * 100)}%</span>
-                            {onRemoveAudioTrack && (
-                              <button
-                                onClick={() => onRemoveAudioTrack(idx)}
-                                className="text-[9px] text-destructive hover:underline flex items-center gap-0.5"
-                              ><Trash2 className="w-2.5 h-2.5" />Remove</button>
-                            )}
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-medium text-foreground">{at.label} Volume</p>
+                            <Slider
+                              value={[Math.round((at.volume ?? 1) * 100)]}
+                              min={0} max={100} step={1}
+                              onValueChange={([v]) => onAudioTrackVolumeChange?.(idx, v / 100)}
+                              className="w-full"
+                            />
+                            <div className="flex justify-between">
+                              <span className="text-[9px] text-muted-foreground">{Math.round((at.volume ?? 1) * 100)}%</span>
+                              {onRemoveAudioTrack && (
+                                <button
+                                  onClick={() => onRemoveAudioTrack(idx)}
+                                  className="text-[9px] text-destructive hover:underline flex items-center gap-0.5"
+                                ><Trash2 className="w-2.5 h-2.5" />Remove</button>
+                              )}
+                            </div>
+                            <div className="border-t border-border/30 pt-1.5 space-y-0.5">
+                              {onEditVoiceoverText && (
+                                <button
+                                  onClick={() => onEditVoiceoverText(at.sceneId)}
+                                  className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                                ><Edit3 className="w-2.5 h-2.5" />Edit Text</button>
+                              )}
+                              {onReRecordVoiceover && (
+                                <button
+                                  onClick={() => onReRecordVoiceover(at.sceneId)}
+                                  className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                                ><RotateCcw className="w-2.5 h-2.5" />Re-record</button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </PopoverContent>
+                        </PopoverContent>
                     </Popover>
                   );
                 })}
