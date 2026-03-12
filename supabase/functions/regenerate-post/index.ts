@@ -87,6 +87,18 @@ async function generatePixelImage(
   for (const attempt of attempts) {
     try {
       const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+
+      // Pass previous image as negative reference to prevent duplicates
+      if (options?.previousImageUrl) {
+        contentParts.push({ type: "image_url", image_url: { url: options.previousImageUrl } });
+        contentParts.push({
+          type: "text",
+          text: "⚠️ CRITICAL DEDUP RULE: The image above is the PREVIOUS version. You MUST generate something COMPLETELY DIFFERENT. " +
+            "Use a DIFFERENT composition, camera angle, color palette, subject arrangement, lighting, and mood. " +
+            "The new image must NOT resemble the previous one in any way. Treat it as a forbidden reference.",
+        });
+      }
+
       if (attempt.useLogo && logoUrl) {
         contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
         contentParts.push({
