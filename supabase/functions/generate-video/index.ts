@@ -457,7 +457,7 @@ serve(async (req) => {
 
     const videoSchema = z.object({
       action: z.enum(["generate", "poll", "download", "generate-multi", "poll-multi", "list-library", "delete-library"]),
-      provider: z.enum(["veo", "sora"]).optional(),
+      provider: z.enum(["veo", "sora", "wan"]).optional(),
       prompt: z.string().max(5000).optional(),
       jobId: z.string().max(500).optional(),
       jobIds: z.array(z.object({
