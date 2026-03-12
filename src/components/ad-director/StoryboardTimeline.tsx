@@ -164,6 +164,7 @@ export function StoryboardTimeline({
               canRegenerate={!generatingAny}
               onImprovePrompt={onImprovePrompt}
               improvingSceneId={improvingSceneId}
+              logoUrl={logoUrl}
             />
           );
         })}
