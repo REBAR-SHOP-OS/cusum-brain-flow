@@ -665,7 +665,7 @@ ${qualityScore?.suggestion ? `Suggestion: ${qualityScore.suggestion}` : ""}
 Scene: ${scene?.objective || "N/A"} — ${scene?.emotionalTone || "N/A"}
 Brand: ${brand?.name || "N/A"}`;
 
-  const { data, modelUsed, fallbackUsed } = await callAI(
+  return await callAIAndExtract(
     apiKey,
     MODEL_ROUTES["improve-prompt"],
     [{ role: "system", content: IMPROVE_PROMPT_SYSTEM }, { role: "user", content: userPrompt }],
@@ -673,8 +673,6 @@ Brand: ${brand?.name || "N/A"}`;
     { type: "function", function: { name: "write_prompt" } },
     modelOverride,
   );
-
-  return { result: extractToolResult(data), modelUsed, fallbackUsed };
 }
 
 async function handleSimpleTextTask(apiKey: string, taskType: TaskType, body: any, systemPrompt: string, modelOverride?: string) {
