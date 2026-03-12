@@ -92,7 +92,7 @@ serve(async (req) => {
       );
 
     } else {
-      // Evening mode: close ONLY office worker shifts at 5 PM ET
+      // Evening mode: close ONLY office worker shifts at 6 PM ET
       // Shop workers (non-@rebar.shop emails OR Kourosh Zand) are exempt
       const clockOutTime = new Date().toISOString();
 
@@ -145,7 +145,7 @@ serve(async (req) => {
         .from("time_clock_entries")
         .update({
           clock_out: clockOutTime,
-          notes: "[auto-closed: 5 PM auto clock-out]",
+          notes: "[auto-closed: 6 PM auto clock-out]",
         })
         .in("id", idsToClose);
 
@@ -157,7 +157,7 @@ serve(async (req) => {
         .update({ is_active: false })
         .in("id", profileIds);
 
-      console.log(`Evening auto clock-out: closed ${idsToClose.length} office shifts, exempted ${shopExempted.length} shop workers`);
+      console.log(`Evening 6 PM auto clock-out: closed ${idsToClose.length} office shifts, exempted ${shopExempted.length} shop workers`);
 
       return new Response(
         JSON.stringify({ ok: true, mode: "evening", closed: idsToClose.length, exempted: shopExempted.length, clock_out_time: clockOutTime }),
