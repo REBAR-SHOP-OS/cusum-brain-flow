@@ -303,7 +303,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
         scene,
         brand,
         modelOverrides,
-      });
+      }, { timeoutMs: EDGE_TIMEOUT_MS });
 
       const rescoreRes = await invokeEdgeFunction<{
         result: PromptQualityScore;
