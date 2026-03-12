@@ -820,7 +820,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
               })()}
 
               {/* Completed */}
-              {status === "completed" && videoUrl && (
+              {status === "completed" && videoUrl && !showEditor && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-emerald-600">
                     <CheckCircle2 className="w-5 h-5" />
@@ -934,6 +934,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                         <Video className="w-4 h-4" /> Use in Post
                       </Button>
                     )}
+                    <Button variant="outline" className="gap-1.5" onClick={() => setShowEditor(true)}>
+                      <Pencil className="w-4 h-4" /> Edit Video
+                    </Button>
                     {!savedToLibrary && (
                       <Button variant="outline" onClick={handleSaveToLibrary} className="gap-1.5">
                         <Save className="w-4 h-4" /> Save
@@ -950,6 +953,75 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                     <Button variant="outline" onClick={handleReset}><RotateCcw className="w-4 h-4" /></Button>
                   </div>
                 </div>
+              )}
+
+              {/* Video Editor */}
+              {status === "completed" && videoUrl && showEditor && (
+                <VideoEditor
+                  videoUrl={videoUrl}
+                  engineeredPrompt={transformResult?.engineeredPrompt || rawPrompt}
+                  mode={currentMode.label}
+                  duration={duration}
+                  onBack={() => setShowEditor(false)}
+                  onEditComplete={(newUrl, newPrompt) => {
+                    setVideoUrl(newUrl);
+                    setSavedToLibrary(false);
+                    setShowEditor(false);
+                  }}
+                  onRegenerate={(editedPrompt) => {
+                    setShowEditor(false);
+                    setStatus("submitting");
+                    setProgress(0);
+                    setProgressLabel("Regenerating with edits...");
+                    setError(null);
+                    setSavedToLibrary(false);
+                    setVideoUrl(null);
+                    pollCountRef.current = 0;
+                    // Fire regeneration with edited prompt
+                    (async () => {
+                      try {
+                        const data = await invokeEdgeFunction("generate-video", {
+                          action: "generate",
+                          provider: currentMode.provider,
+                          prompt: editedPrompt,
+                          duration: parseInt(duration),
+                          model: currentMode.model === "sora-2-pro" ? "sora-2-pro" : currentMode.model === "sora-2" ? "sora-2" : undefined,
+                        });
+                        if (data?.status === "failed") {
+                          setError(data.error || "Regeneration failed.");
+                          setStatus("failed");
+                          return;
+                        }
+                        if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
+                          setProgressLabel("Compiling motion slideshow...");
+                          setProgress(50);
+                          const blobUrl = await slideshowToVideo({
+                            imageUrls: data.imageUrls,
+                            durationPerImage: data.clipDuration || 5,
+                            onProgress: (pct) => setProgress(50 + Math.round(pct * 0.5)),
+                          });
+                          setVideoUrl(blobUrl);
+                          setSceneUrls([blobUrl]);
+                          setStatus("completed");
+                          return;
+                        }
+                        if (!data?.jobId || !data?.provider) {
+                          setError("No generation job was returned.");
+                          setStatus("failed");
+                          return;
+                        }
+                        jobRef.current = { id: data.jobId, provider: data.provider };
+                        setStatus("processing");
+                        setProgress(5);
+                        setProgressLabel("Regenerating video with edits...");
+                        pollTimerRef.current = setTimeout(pollForResult, 5000);
+                      } catch (err: any) {
+                        setError(err?.message || "Regeneration failed.");
+                        setStatus("failed");
+                      }
+                    })();
+                  }}
+                />
               )}
 
               {/* Error */}
