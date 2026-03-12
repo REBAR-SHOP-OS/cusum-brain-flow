@@ -112,7 +112,19 @@ function buildAdPrompt(
   if (brandContext?.description) parts.push(`About: ${brandContext.description}`);
 
   parts.push("");
-  parts.push("Do NOT include any text, watermarks, or logos in the image — the brand logo will be added separately as an overlay.");
+  parts.push("TEXT & BRANDING INSTRUCTIONS:");
+  if (brandContext?.business_name) {
+    parts.push(`- Include the brand name "${brandContext.business_name}" as professional typography text on the image.`);
+  }
+  if (brandContext?.tagline) {
+    parts.push(`- Include the advertising slogan: "${brandContext.tagline}" — render it as stylish, readable text overlay.`);
+  }
+  if (brandContext?.value_prop) {
+    parts.push(`- Optionally include a short call-to-action or value phrase: "${brandContext.value_prop}".`);
+  }
+  parts.push("- Place text with clean, bold, professional typography — suitable for social media ads.");
+  parts.push("- Text should be legible, well-contrasted against the background, and positioned in the lower third or a clean area.");
+  parts.push("- Do NOT include watermarks from stock sites. The company logo will be added as a separate overlay.");
 
   return parts.join("\n");
 }

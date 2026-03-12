@@ -149,8 +149,8 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
         console.warn("Aspect ratio crop failed, using original:", e);
       }
 
-      // Apply brand logo overlay ONLY when Logo theme chip is explicitly selected
-      if (selectedThemes.has("logo") && brandKit?.logo_url && finalImageUrl) {
+      // Always apply brand logo overlay when logo exists
+      if (brandKit?.logo_url && finalImageUrl) {
         try {
           setStatus("branding");
           finalImageUrl = await applyLogoToImage(finalImageUrl, brandKit.logo_url);
