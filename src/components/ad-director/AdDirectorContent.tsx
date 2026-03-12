@@ -533,7 +533,7 @@ export function AdDirectorContent() {
     if (!finalVideoUrl) return;
     const a = document.createElement("a");
     a.href = finalVideoUrl;
-    a.download = `${brand.name.replace(/\s+/g, "-")}-30s-ad.mp4`;
+    a.download = `${brand.name.replace(/\s+/g, "-")}-30s-ad.webm`;
     a.click();
   };
 
