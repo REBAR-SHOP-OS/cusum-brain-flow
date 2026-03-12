@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.ad-director-ai]
 verify_jwt = false
+
+[functions.pexels-search]
+verify_jwt = false
