@@ -546,6 +546,7 @@ serve(async (req) => {
       imageUrl: z.string().max(2000).optional(),
       audioUrl: z.string().max(2000).optional(),
       negativePrompt: z.string().max(2000).optional(),
+      aspectRatio: z.string().max(10).optional(),
     });
     const parsed = videoSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -554,7 +555,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt } = parsed.data;
+    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt, aspectRatio } = parsed.data;
 
     const isVeo = provider === "veo";
     const isWan = provider === "wan";

@@ -436,6 +436,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     if (refImageStorageUrl) wanExtras.imageUrl = refImageStorageUrl;
     if (audioStorageUrl) wanExtras.audioUrl = audioStorageUrl;
     if (negativePrompt.trim()) wanExtras.negativePrompt = negativePrompt.trim();
+    wanExtras.aspectRatio = "16:9";
 
     try {
       if (isMultiScene) {
@@ -830,6 +831,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                         action: "generate", provider: currentMode.provider, prompt: editedPrompt,
                         duration: parseInt(duration),
                         model: currentMode.model === "sora-2-pro" ? "sora-2-pro" : currentMode.model === "sora-2" ? "sora-2" : undefined,
+                        aspectRatio: "16:9",
                       });
                       if (data?.status === "failed") { setError(data.error || "Regeneration failed."); setStatus("failed"); return; }
                       if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
