@@ -1080,7 +1080,7 @@ export function ProVideoEditor({
 
           {/* Playback Controls */}
           {videoSrc && (
-            <div className="shrink-0 flex items-center gap-3 px-4 py-2 bg-black/70 backdrop-blur-sm border-t border-white/5">
+            <div className="shrink-0 flex items-center gap-3 px-4 py-2 bg-black/40 backdrop-blur-xl border-t border-white/[0.06] shadow-[0_-4px_24px_rgba(0,0,0,0.3)]">
               <button onClick={() => skipScene(-1)} className="text-white/60 hover:text-white" disabled={selectedSceneIndex === 0}>
                 <SkipBack className="w-4 h-4" />
               </button>
