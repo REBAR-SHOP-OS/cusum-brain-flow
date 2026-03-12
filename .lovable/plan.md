@@ -1,27 +1,25 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Plan: Register generate-video in config.toml and verify full logic
 
 ### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+The `generate-video` edge function exists with complete 3-tier fallback logic (Veo → Sora → Slideshow), but it is **not registered** in `supabase/config.toml`. This means the function may not deploy or may require JWT verification (which would block unauthenticated preflight requests).
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### What's already working (no changes needed)
+- **Edge function** (`supabase/functions/generate-video/index.ts`): Full 936-line implementation with Veo, Sora, slideshow fallback, multi-scene, progressive polling, library management
+- **Client slideshow compiler** (`src/lib/slideshowToVideo.ts`): Ken Burns canvas-to-video rendering
+- **UI** (`src/components/social/VideoGeneratorDialog.tsx`): Handles all modes including slideshow fallback
+- **Secrets**: `GEMINI_API_KEY`, `GPT_API_KEY`, and `LOVABLE_API_KEY` are all configured
+- **invokeEdgeFunction utility**: Properly fetches with auth headers
 
-### Plan
-Run a single database migration:
+### Fix required
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+**File: `supabase/config.toml`** — Add the `generate-video` function registration with `verify_jwt = false` (the function handles auth manually via `verifyAuth()`):
+
+```toml
+[functions.generate-video]
+verify_jwt = false
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
-
-No code changes needed — just the migration.
+This single change ensures the function is properly deployed and accessible. The full 3-tier logic is already implemented end-to-end.
 
