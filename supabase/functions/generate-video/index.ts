@@ -901,14 +901,16 @@ serve(async (req) => {
 
       if (newlyCompleted) {
         try {
-          const sceneApiKey = newlyCompleted.provider === "veo" ? geminiKey : gptKey;
-          if (!sceneApiKey) throw new Error("API key missing for download");
+          const sceneApiKey = newlyCompleted.provider === "wan" ? dashscopeKey : newlyCompleted.provider === "veo" ? geminiKey : gptKey;
+          if (!sceneApiKey && newlyCompleted.provider !== "wan") throw new Error("API key missing for download");
 
           let clipBytes: Uint8Array;
-          if (newlyCompleted.provider === "veo" && (newlyCompleted as any).videoUrl) {
-            clipBytes = await veoDownloadBytes(sceneApiKey, (newlyCompleted as any).videoUrl);
+          if (newlyCompleted.provider === "wan" && (newlyCompleted as any).videoUrl) {
+            clipBytes = await wanDownloadBytes((newlyCompleted as any).videoUrl);
+          } else if (newlyCompleted.provider === "veo" && (newlyCompleted as any).videoUrl) {
+            clipBytes = await veoDownloadBytes(sceneApiKey!, (newlyCompleted as any).videoUrl);
           } else if (newlyCompleted.provider === "sora") {
-            clipBytes = await soraDownloadBytes(sceneApiKey, newlyCompleted.id);
+            clipBytes = await soraDownloadBytes(sceneApiKey!, newlyCompleted.id);
           } else {
             throw new Error("Cannot download scene");
           }
