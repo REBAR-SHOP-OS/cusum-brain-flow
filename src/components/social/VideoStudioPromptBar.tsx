@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import {
   Video, Image, Music, Zap, Film, Crown, Sparkles, Loader2,
-  ChevronDown, Eye, EyeOff, Gauge, Upload, X
+  ChevronDown, Eye, EyeOff, Gauge, Upload, X, Cpu
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,6 +39,31 @@ const audioDurationOptions = [
   { value: "5", label: "5s" },
   { value: "15", label: "15s" },
   { value: "30", label: "30s" },
+];
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  provider: string;
+  costLabel: string;
+  free: boolean;
+}
+
+export const IMAGE_MODELS: ModelOption[] = [
+  { id: "gpt-image-1", label: "GPT Image 1", provider: "openai", costLabel: "~$0.02/image", free: false },
+  { id: "google/gemini-2.5-flash-image", label: "Nano Banana", provider: "lovable", costLabel: "Free", free: true },
+  { id: "google/gemini-3-pro-image-preview", label: "Nano Banana Pro", provider: "lovable", costLabel: "Free", free: true },
+  { id: "google/gemini-3.1-flash-image-preview", label: "Nano Banana 2", provider: "lovable", costLabel: "Free", free: true },
+];
+
+export const VIDEO_MODELS: ModelOption[] = [
+  { id: "veo-3.1", label: "Google Veo 3.1", provider: "veo", costLabel: "Credits", free: false },
+  { id: "sora-2", label: "OpenAI Sora", provider: "sora", costLabel: "Credits", free: false },
+  { id: "sora-2-pro", label: "Sora Pro", provider: "sora", costLabel: "Credits", free: false },
+];
+
+export const AUDIO_MODELS: ModelOption[] = [
+  { id: "elevenlabs", label: "ElevenLabs", provider: "elevenlabs", costLabel: "Free", free: true },
 ];
 
 const videoSuggestions = [
@@ -88,6 +113,8 @@ interface VideoStudioPromptBarProps {
   onMediaTypeChange: (t: MediaType) => void;
   audioType?: "music" | "sfx";
   onAudioTypeChange?: (t: "music" | "sfx") => void;
+  selectedModel: string;
+  onModelChange: (m: string) => void;
 }
 
 export function VideoStudioPromptBar({
@@ -97,6 +124,7 @@ export function VideoStudioPromptBar({
   isConstructionRelated, creditCost, remaining, canGenerate,
   isGenerating, isTransforming, onGenerate, referenceImage, onReferenceImageChange,
   mediaType, onMediaTypeChange, audioType = "music", onAudioTypeChange,
+  selectedModel, onModelChange,
 }: VideoStudioPromptBarProps) {
   const [modeOpen, setModeOpen] = useState(false);
   const [durationOpen, setDurationOpen] = useState(false);
