@@ -546,6 +546,10 @@ export function AIExtractView() {
         selectedMode: selectedOptMode || "combination",
       });
       await refreshSessions();
+      queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
+      queryClient.invalidateQueries({ queryKey: ["barlists"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["production-queues"] });
       toast({
         title: "Approved!",
         description: `Created WO ${result.work_order_number} with ${result.items_approved} items`,
