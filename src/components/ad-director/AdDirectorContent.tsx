@@ -25,6 +25,17 @@ const steps: { id: WorkflowStep; label: string; icon: React.ReactNode }[] = [
 const QUALITY_THRESHOLD = 7.0;
 const MAX_IMPROVE_ATTEMPTS = 2;
 
+const EDGE_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out — the AI model took too long. Please try again.")), ms)
+    ),
+  ]);
+}
+
 export function AdDirectorContent() {
   const { toast } = useToast();
   const [step, setStep] = useState<WorkflowStep>("script");
@@ -34,6 +45,7 @@ export function AdDirectorContent() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [generationStatus, setGenerationStatus] = useState("");
   const [modelOverrides, setModelOverrides] = useState<ModelOverrides>({});
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
@@ -56,7 +68,7 @@ export function AdDirectorContent() {
       // Step 1: Analyze script + generate storyboard
       setAnalysisStatus("Analyzing script structure...");
       setAnalysisProgress(10);
-      const analyzeResult = await invokeEdgeFunction<{
+      const analyzeResult = await withTimeout(invokeEdgeFunction<{
         result: { segments: ScriptSegment[]; storyboard: StoryboardScene[]; continuityProfile: ContinuityProfile };
         modelUsed: string;
         fallbackUsed: boolean;
@@ -65,7 +77,7 @@ export function AdDirectorContent() {
         script, brand,
         assetDescriptions: assets.length > 0 ? assets.map(f => f.name).join(", ") : undefined,
         modelOverrides,
-      });
+      }));
 
       const { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
       const plannedBy = analyzeResult.modelUsed;
@@ -76,7 +88,7 @@ export function AdDirectorContent() {
       const promptResults = await Promise.all(
         rawStoryboard.map(async (scene, idx) => {
           try {
-            const res = await invokeEdgeFunction<{
+            const res = await withTimeout(invokeEdgeFunction<{
               result: { prompt: string; reasoning?: string };
               modelUsed: string;
             }>("ad-director-ai", {
@@ -86,7 +98,7 @@ export function AdDirectorContent() {
               continuityProfile,
               previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
               modelOverrides,
-            });
+            }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
           } catch {
             return { prompt: scene.prompt, modelUsed: "original" };
@@ -100,7 +112,7 @@ export function AdDirectorContent() {
       const qualityResults = await Promise.all(
         promptResults.map(async (pr, idx) => {
           try {
-            const res = await invokeEdgeFunction<{
+            const res = await withTimeout(invokeEdgeFunction<{
               result: PromptQualityScore;
               modelUsed: string;
             }>("ad-director-ai", {
@@ -109,7 +121,7 @@ export function AdDirectorContent() {
               scene: rawStoryboard[idx],
               brand,
               modelOverrides,
-            });
+            }));
             return { quality: res.result, scoredBy: res.modelUsed };
           } catch {
             return { quality: undefined, scoredBy: "skipped" };
@@ -129,7 +141,7 @@ export function AdDirectorContent() {
           // Try improvement
           for (let attempt = 0; attempt < MAX_IMPROVE_ATTEMPTS; attempt++) {
             try {
-              const improveRes = await invokeEdgeFunction<{
+              const improveRes = await withTimeout(invokeEdgeFunction<{
                 result: { prompt: string };
                 modelUsed: string;
               }>("ad-director-ai", {
@@ -139,10 +151,10 @@ export function AdDirectorContent() {
                 scene: rawStoryboard[idx],
                 brand,
                 modelOverrides,
-              });
+              }));
 
               // Re-score
-              const rescoreRes = await invokeEdgeFunction<{
+              const rescoreRes = await withTimeout(invokeEdgeFunction<{
                 result: PromptQualityScore;
               }>("ad-director-ai", {
                 action: "score-prompt-quality",
@@ -150,7 +162,7 @@ export function AdDirectorContent() {
                 scene: rawStoryboard[idx],
                 brand,
                 modelOverrides,
-              });
+              }));
 
               qualityResults[idx] = { quality: rescoreRes.result, scoredBy: qualityResults[idx].scoredBy };
 
@@ -356,13 +368,21 @@ export function AdDirectorContent() {
   // ─── Generate All ──────────────────────────────────────
   const handleGenerateAll = useCallback(async () => {
     setGeneratingAny(true);
+    const total = storyboard.filter(s => {
+      const c = clips.find(c => c.sceneId === s.id);
+      return c?.status !== "completed";
+    }).length;
+    let done = 0;
     for (const scene of storyboard) {
       const clip = clips.find(c => c.sceneId === scene.id);
       if (clip?.status === "completed") continue;
+      done++;
+      setGenerationStatus(`Generating scene ${done} of ${total}...`);
       await generateScene(scene.id);
       await new Promise(r => setTimeout(r, 2000));
     }
     setGeneratingAny(false);
+    setGenerationStatus("");
     setStep("preview");
     toast({ title: "Generation complete", description: "All scenes generated. Ready to export." });
   }, [storyboard, clips, generateScene, toast]);
@@ -399,15 +419,17 @@ export function AdDirectorContent() {
 
   return (
     <div className="space-y-6">
-      {/* Global Analysis Progress — visible on all tabs */}
-      {analyzing && analysisStatus && (
+      {/* Global Progress — visible on all tabs */}
+      {(analyzing || generatingAny || exporting) && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="flex items-center gap-3">
             <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
-            <span className="text-sm font-medium text-foreground">{analysisStatus}</span>
-            <span className="ml-auto text-xs text-muted-foreground">{analysisProgress}%</span>
+            <span className="text-sm font-medium text-foreground">
+              {analyzing ? analysisStatus : generatingAny ? generationStatus : "Exporting..."}
+            </span>
+            {analyzing && <span className="ml-auto text-xs text-muted-foreground">{analysisProgress}%</span>}
           </div>
-          <Progress value={analysisProgress} className="h-2" />
+          {analyzing && <Progress value={analysisProgress} className="h-2" />}
         </div>
       )}
 
