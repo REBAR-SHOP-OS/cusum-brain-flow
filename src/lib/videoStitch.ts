@@ -282,18 +282,30 @@ export async function stitchClips(
   const canvasStream = canvas.captureStream(30);
   const combinedStream = new MediaStream([...canvasStream.getVideoTracks()]);
 
-  // Audio setup — mix voice + music via AudioContext
+  // Audio setup — mix voice + music via AudioContext with ducking & limiter
   let voiceElement: HTMLAudioElement | null = null;
   let musicElement: HTMLAudioElement | null = null;
   let audioCtx: AudioContext | null = null;
+  let musicGainNode: GainNode | null = null;
 
   const hasVoice = !!overlays?.audioUrl;
   const hasMusic = !!overlays?.musicUrl;
+  const baseMusicVol = overlays?.musicVolume ?? 0.3;
+  const duckedMusicVol = Math.min(baseMusicVol * 0.5, 0.15); // duck to 50% or max 0.15
 
   if (hasVoice || hasMusic) {
     try {
       audioCtx = new AudioContext();
       const audioDest = audioCtx.createMediaStreamDestination();
+
+      // Master compressor/limiter to prevent clipping
+      const compressor = audioCtx.createDynamicsCompressor();
+      compressor.threshold.value = -6;
+      compressor.knee.value = 6;
+      compressor.ratio.value = 12;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.15;
+      compressor.connect(audioDest);
 
       // Voice track
       if (hasVoice) {
@@ -310,16 +322,15 @@ export async function stitchClips(
         const voiceGain = audioCtx.createGain();
         voiceGain.gain.value = 1.0;
         voiceSource.connect(voiceGain);
-        voiceGain.connect(audioDest);
-        voiceSource.connect(audioCtx.destination);
+        voiceGain.connect(compressor);
       }
 
-      // Music track
+      // Music track with ducking support
       if (hasMusic) {
         const musicBlobUrl = await fetchAsBlob(overlays!.musicUrl!);
         musicElement = document.createElement("audio");
         musicElement.preload = "auto";
-        musicElement.loop = true; // Loop music under entire video
+        musicElement.loop = true;
         musicElement.src = musicBlobUrl;
         await new Promise<void>((res, rej) => {
           musicElement!.oncanplaythrough = () => res();
@@ -327,11 +338,11 @@ export async function stitchClips(
           setTimeout(() => res(), 5000);
         });
         const musicSource = audioCtx.createMediaElementSource(musicElement);
-        const musicGain = audioCtx.createGain();
-        musicGain.gain.value = overlays?.musicVolume ?? 0.3;
-        musicSource.connect(musicGain);
-        musicGain.connect(audioDest);
-        musicSource.connect(audioCtx.destination);
+        musicGainNode = audioCtx.createGain();
+        // Start at ducked volume if voice is present, else full
+        musicGainNode.gain.value = hasVoice ? duckedMusicVol : baseMusicVol;
+        musicSource.connect(musicGainNode);
+        musicGainNode.connect(compressor);
       }
 
       audioDest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
@@ -339,8 +350,17 @@ export async function stitchClips(
       console.warn("[stitchClips] Audio mix failed, continuing without audio:", e);
       voiceElement = null;
       musicElement = null;
+      musicGainNode = null;
     }
   }
+
+  // Dynamic ducking: lower music when voice is playing, restore when silent
+  const updateMusicDucking = () => {
+    if (!musicGainNode || !audioCtx || !voiceElement) return;
+    const voicePlaying = !voiceElement.paused && !voiceElement.ended && voiceElement.currentTime > 0;
+    const targetVol = voicePlaying ? duckedMusicVol : baseMusicVol;
+    musicGainNode.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.1);
+  };
 
   const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
     ? "video/webm;codecs=vp9,opus"
