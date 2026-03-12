@@ -283,7 +283,7 @@ export function AdDirectorContent() {
     try {
       const result = await invokeEdgeFunction<{
         url?: string; videoUrl?: string; generationId?: string; jobId?: string;
-        provider?: string; mode?: string; imageUrls?: string[];
+        provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
       }>(
         "generate-video",
         {
@@ -298,6 +298,7 @@ export function AdDirectorContent() {
 
       const videoUrl = result.url || result.videoUrl;
       const genId = result.jobId || result.generationId;
+      const provider = result.provider || "wan";
 
       // Slideshow fallback — treat first image as completed thumbnail
       if (result.mode === "slideshow" && result.imageUrls?.length) {
@@ -326,7 +327,13 @@ export function AdDirectorContent() {
             ? { ...c, status: "generating", generationId: genId, progress: 30 }
             : c
         ));
-        pollGeneration(sceneId, genId);
+        pollGeneration(sceneId, genId, provider);
+      } else {
+        setClips(prev => prev.map(c =>
+          c.sceneId === sceneId
+            ? { ...c, status: "failed", error: "No job id or video URL returned", progress: 0 }
+            : c
+        ));
       }
     } catch (err: any) {
       setClips(prev => prev.map(c =>
@@ -337,21 +344,32 @@ export function AdDirectorContent() {
     }
   }, [storyboard]);
 
-  const pollGeneration = async (sceneId: string, generationId: string) => {
+  const pollGeneration = async (sceneId: string, generationId: string, provider: "wan" | "veo" | "sora" = "wan") => {
     const maxAttempts = 120;
+    let consecutiveErrors = 0;
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, 5000));
       try {
         const result = await invokeEdgeFunction<{ status?: string; videoUrl?: string; url?: string }>(
           "generate-video",
-          { action: "poll", jobId: generationId, provider: "wan" }
+          { action: "poll", jobId: generationId, provider }
         );
+
+        consecutiveErrors = 0;
 
         if (result.status === "completed" || result.videoUrl || result.url) {
           const videoUrl = result.videoUrl || result.url;
+          if (!videoUrl) {
+            setClips(prev => prev.map(c =>
+              c.sceneId === sceneId
+                ? { ...c, status: "failed", error: "Generation completed but no video URL was returned", progress: 0 }
+                : c
+            ));
+            return;
+          }
           setClips(prev => prev.map(c =>
             c.sceneId === sceneId
-              ? { ...c, status: "completed", videoUrl: videoUrl || null, progress: 100 }
+              ? { ...c, status: "completed", videoUrl, progress: 100 }
               : c
           ));
           return;
@@ -369,8 +387,16 @@ export function AdDirectorContent() {
             ? { ...c, progress: Math.min(90, 30 + (i / maxAttempts) * 60) }
             : c
         ));
-      } catch {
-        // Network error — keep polling
+      } catch (err: any) {
+        consecutiveErrors += 1;
+        if (consecutiveErrors >= 3) {
+          setClips(prev => prev.map(c =>
+            c.sceneId === sceneId
+              ? { ...c, status: "failed", error: err?.message || "Polling failed repeatedly", progress: 0 }
+              : c
+          ));
+          return;
+        }
       }
     }
     setClips(prev => prev.map(c =>
