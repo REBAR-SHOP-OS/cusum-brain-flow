@@ -337,7 +337,58 @@ export function ProVideoEditor({
   const selectedClip = clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id);
   const videoSrc = finalVideoUrl || selectedClip?.videoUrl || null;
 
+  // Detect static-card scenes (end cards rendered as PNG data URLs)
+  const currentScene = storyboard[selectedSceneIndex];
+  const isStaticCard = !finalVideoUrl && (
+    currentScene?.generationMode === "static-card" ||
+    (videoSrc?.startsWith("data:image/") ?? false)
+  );
+
+  // Static card duration: use segment timing or default 4s
+  const staticCardDuration = useMemo(() => {
+    if (!isStaticCard || !currentScene) return 4;
+    const seg = segments.find(s => s.id === currentScene.segmentId);
+    return seg ? seg.endTime - seg.startTime : 4;
+  }, [isStaticCard, currentScene, segments]);
+
+  // Timer-based playback for static cards
+  const staticTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!isStaticCard || !isPlaying) {
+      if (staticTimerRef.current) { clearInterval(staticTimerRef.current); staticTimerRef.current = null; }
+      if (isStaticCard && !isPlaying) setCurrentTime(0);
+      return;
+    }
+    setCurrentTime(0);
+    setDuration(staticCardDuration);
+    const start = Date.now();
+    staticTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - start) / 1000;
+      if (elapsed >= staticCardDuration) {
+        clearInterval(staticTimerRef.current!);
+        staticTimerRef.current = null;
+        setCurrentTime(staticCardDuration);
+        // Trigger auto-advance same as video ending
+        handleVideoEnded();
+      } else {
+        setCurrentTime(elapsed);
+      }
+    }, 100);
+    return () => { if (staticTimerRef.current) { clearInterval(staticTimerRef.current); staticTimerRef.current = null; } };
+  }, [isStaticCard, isPlaying, staticCardDuration, selectedSceneIndex]);
+
+  // Track static card durations in clipDurations
+  useEffect(() => {
+    if (isStaticCard && currentScene?.id) {
+      setClipDurations(prev => ({ ...prev, [currentScene.id]: staticCardDuration }));
+    }
+  }, [isStaticCard, currentScene?.id, staticCardDuration]);
+
   const togglePlay = () => {
+    if (isStaticCard) {
+      setIsPlaying(prev => !prev);
+      return;
+    }
     if (!videoRef.current) return;
     if (isPlaying) videoRef.current.pause(); else videoRef.current.play();
     setIsPlaying(!isPlaying);
