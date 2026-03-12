@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 
 interface AdDirectorSidebarProps {
   onLoadProject?: (project: AdProjectRow) => void;
-  onNavigateTab?: (tab: string) => void;
+  onNavigateTab?: (tab: string | null) => void;
+  activeTab?: string | null;
 }
 
 const PLUGINS = [
