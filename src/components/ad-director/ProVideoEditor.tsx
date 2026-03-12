@@ -667,7 +667,7 @@ export function ProVideoEditor({
     }
   }, [storyboard, clips, selectedSceneIndex]);
 
-  const handleVideoEnded = () => {
+  const handleVideoEnded = useCallback(() => {
     // Check if voiceover is still playing — wait for it before advancing
     const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
     if (voStillPlaying) {
@@ -675,7 +675,7 @@ export function ProVideoEditor({
       return;
     }
     advanceToNextScene();
-  };
+  }, [advanceToNextScene]);
 
   // ─── Global seek from timeline ───
   const handleGlobalSeek = (globalTimeSec: number) => {
