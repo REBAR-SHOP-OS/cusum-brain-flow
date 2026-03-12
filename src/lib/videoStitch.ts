@@ -578,6 +578,7 @@ export async function stitchClips(
             // Start next clip video if not already
             if (!nextClipStarted) {
               nextClipStarted = true;
+              clipPreStartedByCrossfade = true;
               const nv = validatedClips[clipIndex + 1].video;
               nv.currentTime = 0;
               nv.play().catch(() => {});
