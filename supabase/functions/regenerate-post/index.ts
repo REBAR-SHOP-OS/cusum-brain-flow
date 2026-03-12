@@ -409,7 +409,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       (hasImageText ? `🖼️ متن روی عکس: ${newContent.imageTextFa}\n` : "") +
       `📝 ترجمه کپشن: ${newContent.captionFa || ""}`;
 
-    const fullContent = `${newContent.caption}\n\n${newContent.hashtags || ""}${PIXEL_CONTACT_INFO}${persianBlock}`;
+    const fullContent = `${newContent.caption}${PIXEL_CONTACT_INFO}\n\n${newContent.hashtags || ""}${persianBlock}`;
 
     // 5. Update post in DB
     const hashtags = (newContent.hashtags || "")
