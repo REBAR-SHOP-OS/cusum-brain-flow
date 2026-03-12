@@ -493,6 +493,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     setError(null);
     setAudioUrl(null);
     setShowEditor(false);
+    setShowSocialPanel(false);
     setAudioPrompt("");
     setAudioGenerating(false);
     setAudioPlaying(false);
