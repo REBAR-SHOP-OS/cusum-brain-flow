@@ -291,31 +291,29 @@ export function ProVideoEditor({
       // For video scenes, sync VO start to video's actual playing event
       const currentClip = clips.find(c => c.sceneId === sceneId);
       const isStaticCard = storyboard[selectedSceneIndex]?.generationMode === "static-card" || currentClip?.videoUrl?.startsWith("data:image/");
+      let voStarted = false;
 
       if (!isStaticCard && videoRef.current) {
         const onPlaying = () => {
-          if (cancelled || !audioRef.current) return;
+          if (cancelled || !audioRef.current || voStarted) return;
+          voStarted = true;
           audioRef.current.currentTime = videoRef.current?.currentTime ?? 0;
           audioRef.current.play().catch(() => {});
           videoRef.current?.removeEventListener("playing", onPlaying);
         };
         // If video is already playing, start immediately
         if (!videoRef.current.paused && videoRef.current.readyState >= 3) {
-          a.currentTime = videoRef.current.currentTime ?? 0;
-          a.play().catch(() => {});
+          if (!voStarted) {
+            voStarted = true;
+            a.currentTime = videoRef.current.currentTime ?? 0;
+            a.play().catch(() => {});
+          }
         } else {
           videoRef.current.addEventListener("playing", onPlaying);
         }
 
-        // Sync drift correction
-        syncHandler = () => {
-          if (audioRef.current && videoRef.current) {
-            const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
-            if (drift > 0.5) audioRef.current.currentTime = videoRef.current.currentTime;
-          }
-        };
+        // No drift correction — VO is speed-matched to clip, drift is minimal
         vid = videoRef.current;
-        vid.addEventListener("timeupdate", syncHandler);
       } else {
         // Static card — play immediately
         a.currentTime = 0;
