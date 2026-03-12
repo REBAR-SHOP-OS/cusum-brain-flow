@@ -92,6 +92,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<MediaType>("video");
   const [selectedModel, setSelectedModel] = useState("gpt-image-1");
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
+  const [customAudioStorageUrl, setCustomAudioStorageUrl] = useState<string | null>(null);
 
   // Image generation state
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
