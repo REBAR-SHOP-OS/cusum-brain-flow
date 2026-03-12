@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Home, Image, Sparkles, Type, Camera, LayoutGrid, History,
   ChevronLeft, ChevronRight, Film, FileImage, Wand2,
-  Music, SlidersHorizontal, Layers, Palette,
+  Music, SlidersHorizontal, Layers, Palette, Shapes,
 } from "lucide-react";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { cn } from "@/lib/utils";
@@ -11,14 +11,16 @@ import { Badge } from "@/components/ui/badge";
 
 interface AdDirectorSidebarProps {
   onLoadProject?: (project: AdProjectRow) => void;
-  onNavigateTab?: (tab: string) => void;
+  onNavigateTab?: (tab: string | null) => void;
+  activeTab?: string | null;
 }
 
 const PLUGINS = [
-  { icon: Type, label: "Text to clip", href: "/video-studio" },
-  { icon: FileImage, label: "Text to image", href: "/video-studio" },
-  { icon: Camera, label: "Photo to clip", href: "/video-studio" },
-  { icon: LayoutGrid, label: "Preset library", href: null },
+  { icon: Type, label: "Text to clip", tab: "text" },
+  { icon: FileImage, label: "Stock Images", tab: "stock-images" },
+  { icon: Film, label: "Stock Video", tab: "stock-video" },
+  { icon: LayoutGrid, label: "Templates", tab: "templates" },
+  { icon: Shapes, label: "Graphics", tab: "graphics" },
 ];
 
 const TOOLS = [
@@ -28,7 +30,7 @@ const TOOLS = [
   { icon: Palette, label: "Brand kit", tab: "brand-kit" },
 ];
 
-export function AdDirectorSidebar({ onLoadProject, onNavigateTab }: AdDirectorSidebarProps) {
+export function AdDirectorSidebar({ onLoadProject, onNavigateTab, activeTab }: AdDirectorSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const { projects } = useAdProjectHistory();
@@ -56,10 +58,13 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab }: AdDirectorSi
         <SidebarItem icon={Home} label="Home" collapsed={collapsed} onClick={() => navigate("/ad-director")} />
 
         {/* Media Library */}
-        <SidebarItem icon={Image} label="Media Library" collapsed={collapsed} onClick={() => onNavigateTab?.("media")} />
+        <SidebarItem icon={Image} label="My Media" collapsed={collapsed} active={activeTab === "media"} onClick={() => onNavigateTab?.("media")} />
+
+        {/* Record */}
+        <SidebarItem icon={Camera} label="Record" collapsed={collapsed} active={activeTab === "record"} onClick={() => onNavigateTab?.("record")} />
 
         {/* Generative Picks */}
-        <SidebarItem icon={Sparkles} label="Generative Picks" collapsed={collapsed} onClick={() => navigate("/video-studio")} />
+        <SidebarItem icon={Sparkles} label="AI Generate" collapsed={collapsed} onClick={() => navigate("/video-studio")} />
 
         {/* Plugins */}
         {!collapsed && (
@@ -74,8 +79,8 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab }: AdDirectorSi
             icon={p.icon}
             label={p.label}
             collapsed={collapsed}
-            onClick={() => p.href ? navigate(p.href) : null}
-            disabled={!p.href}
+            active={activeTab === p.tab}
+            onClick={() => onNavigateTab?.(p.tab)}
           />
         ))}
 
@@ -92,6 +97,7 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab }: AdDirectorSi
             icon={t.icon}
             label={t.label}
             collapsed={collapsed}
+            active={activeTab === t.tab}
             onClick={() => onNavigateTab?.(t.tab)}
           />
         ))}

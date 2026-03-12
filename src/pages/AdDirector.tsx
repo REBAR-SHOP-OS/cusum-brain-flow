@@ -6,6 +6,7 @@ import type { AdProjectRow } from "@/hooks/useAdProjectHistory";
 
 export default function AdDirector() {
   const [loadTrigger, setLoadTrigger] = useState<AdProjectRow | null>(null);
+  const [activeEditorTab, setActiveEditorTab] = useState<string | null>(null);
 
   const handleLoadProject = useCallback((project: AdProjectRow) => {
     setLoadTrigger(project);
@@ -14,7 +15,7 @@ export default function AdDirector() {
   return (
     <div className="h-full flex overflow-hidden">
       {/* Sidebar */}
-      <AdDirectorSidebar onLoadProject={handleLoadProject} />
+      <AdDirectorSidebar onLoadProject={handleLoadProject} onNavigateTab={setActiveEditorTab} activeTab={activeEditorTab} />
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto flex flex-col">
@@ -40,7 +41,12 @@ export default function AdDirector() {
 
         {/* Content */}
         <div className="max-w-6xl mx-auto w-full px-4 pb-8 pt-4">
-          <AdDirectorContent externalLoadProject={loadTrigger} onProjectLoaded={() => setLoadTrigger(null)} />
+          <AdDirectorContent
+            externalLoadProject={loadTrigger}
+            onProjectLoaded={() => setLoadTrigger(null)}
+            externalActiveTab={activeEditorTab}
+            onActiveTabChanged={setActiveEditorTab}
+          />
         </div>
       </div>
     </div>

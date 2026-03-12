@@ -66,6 +66,8 @@ interface ProVideoEditorProps {
   onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
   onUpdateBrand?: (brand: BrandProfile) => void;
   onMusicSelect?: (url: string | null) => void;
+  externalActiveTab?: string | null;
+  onActiveTabChanged?: (tab: string | null) => void;
 }
 
 export function ProVideoEditor({
@@ -73,11 +75,25 @@ export function ProVideoEditor({
   finalVideoUrl, onBack, onExport, exporting, onOpenExportDialog,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming,
   onUpdateStoryboard, onUpdateBrand, onMusicSelect,
+  externalActiveTab, onActiveTabChanged,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
+
+  // Sync from external sidebar navigation
+  useEffect(() => {
+    if (externalActiveTab && TABS.some(t => t.id === externalActiveTab)) {
+      setActiveTab(externalActiveTab as EditorTab);
+    }
+  }, [externalActiveTab]);
+
+  // Notify parent of tab changes
+  const handleSetActiveTab = useCallback((tab: EditorTab) => {
+    setActiveTab(tab);
+    onActiveTabChanged?.(tab);
+  }, [onActiveTabChanged]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -739,7 +755,7 @@ export function ProVideoEditor({
             {TABS.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); if (sidebarCollapsed) setSidebarCollapsed(false); }}
+                onClick={() => { handleSetActiveTab(tab.id); if (sidebarCollapsed) setSidebarCollapsed(false); }}
                 className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors
                   ${activeTab === tab.id ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"}`}
                 title={tab.label}
