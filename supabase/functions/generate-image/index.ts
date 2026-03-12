@@ -53,35 +53,58 @@ async function searchPexelsReference(query: string): Promise<string | null> {
   }
 }
 
-/** Build an advertising-optimized prompt incorporating brand context */
+/** 12 diverse visual styles the Pixel Agent rotates through */
+const VISUAL_STYLES = [
+  "Construction site with workers using rebar products, golden hour lighting",
+  "Warehouse product display — neat stacks of rebar stirrups and ties on metal shelving",
+  "Macro close-up of rebar stirrups showing texture, sharp focus, bokeh background",
+  "Drone aerial view of a construction project with rebar grids being placed",
+  "Urban infrastructure — bridges, overpasses, or high-rises with visible rebar framework",
+  "Before-and-after showing raw rebar vs finished reinforced concrete",
+  "Industrial workshop — bending machine shaping rebar with sparks, dramatic lighting",
+  "Clean studio product shot — rebar accessories arranged on concrete surface",
+  "Delivery truck loaded with bundled rebar arriving at a construction site",
+  "Engineer inspecting rebar installation on-site with blueprints in hand",
+  "Split composition — steel rebar on left, finished structure on right",
+  "Rain-soaked construction site with glistening rebar grids, moody atmosphere",
+];
+
+/** Build a Pixel-Agent-style photorealistic prompt */
 function buildAdPrompt(
   userPrompt: string,
   brandContext?: { business_name?: string; description?: string; value_prop?: string; tagline?: string },
   hasReferenceImage?: boolean
 ): string {
+  const style = VISUAL_STYLES[Math.floor(Math.random() * VISUAL_STYLES.length)];
+  const brandName = brandContext?.business_name || "REBAR.SHOP";
+
   const parts: string[] = [];
 
+  parts.push(`PHOTOREALISTIC ADVERTISING IMAGE — ${brandName}`);
+  parts.push("");
+  parts.push("ABSOLUTE RULES:");
+  parts.push("- ALL images MUST be PHOTOREALISTIC — real-world professional photography style ONLY.");
+  parts.push("- Natural lighting, real textures, real materials, real environments.");
+  parts.push("- ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, clip-art.");
+  parts.push(`- Feature ${brandName} products (rebar stirrups, ties, cut & bent rebar, accessories) prominently in the scene.`);
+  parts.push("- Clean, professional, visually striking — like high-end commercial/industrial photography.");
+  parts.push("");
+
   if (hasReferenceImage) {
-    parts.push("Using the reference image as visual inspiration and style guide, create a new professional advertising image.");
-  } else {
-    parts.push("Create a professional, high-quality advertising image.");
+    parts.push("Use the provided reference image as visual inspiration for composition and style.");
   }
 
-  if (brandContext?.business_name) {
-    parts.push(`This is for the brand "${brandContext.business_name}".`);
-  }
-  if (brandContext?.tagline) {
-    parts.push(`Brand tagline: "${brandContext.tagline}".`);
-  }
-  if (brandContext?.value_prop) {
-    parts.push(`Key value proposition: ${brandContext.value_prop}.`);
-  }
-  if (brandContext?.description) {
-    parts.push(`About the business: ${brandContext.description}.`);
-  }
-
+  parts.push(`Suggested visual style: ${style}`);
+  parts.push("");
   parts.push(`User request: ${userPrompt}`);
-  parts.push("The image must be visually striking, suitable for social media advertising, with strong composition and professional lighting. Do NOT include any text, watermarks, or logos in the image — the brand logo will be added separately as an overlay.");
+  parts.push("");
+
+  if (brandContext?.tagline) parts.push(`Brand tagline: "${brandContext.tagline}"`);
+  if (brandContext?.value_prop) parts.push(`Value proposition: ${brandContext.value_prop}`);
+  if (brandContext?.description) parts.push(`About: ${brandContext.description}`);
+
+  parts.push("");
+  parts.push("Do NOT include any text, watermarks, or logos in the image — the brand logo will be added separately as an overlay.");
 
   return parts.join("\n");
 }
