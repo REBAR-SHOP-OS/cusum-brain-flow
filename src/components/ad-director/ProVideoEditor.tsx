@@ -353,6 +353,7 @@ export function ProVideoEditor({
 
   // Timer-based playback for static cards
   const staticTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const handleVideoEndedRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (!isStaticCard || !isPlaying) {
       if (staticTimerRef.current) { clearInterval(staticTimerRef.current); staticTimerRef.current = null; }
@@ -368,8 +369,7 @@ export function ProVideoEditor({
         clearInterval(staticTimerRef.current!);
         staticTimerRef.current = null;
         setCurrentTime(staticCardDuration);
-        // Trigger auto-advance same as video ending
-        handleVideoEnded();
+        handleVideoEndedRef.current();
       } else {
         setCurrentTime(elapsed);
       }
