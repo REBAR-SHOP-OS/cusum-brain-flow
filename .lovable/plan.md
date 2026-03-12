@@ -1,46 +1,40 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix Mute & Replace Fixed Stretch with Drag-to-Resize
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Issues Found
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+1. **Mute not working**: `handleMuteScene` correctly tracks `mutedScenes` state (Set of scene IDs), but the voiceover playback effect (line 185-220) never checks `mutedScenes` — it always plays audio for the active scene. The video element volume is also unaffected.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+2. **Trim not working either**: `handleTrimScene` calls `onUpdateSegment(seg.id, seg.text)` which only updates the text, never changes the timing. The segment `endTime` is never modified.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+3. **Stretch is just a toast**: `handleStretchScene` shows a toast message but performs zero logic — no timing change at all.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+4. **User wants mouse-based stretch**: Instead of fixed +1s buttons, clips should be draggable from their edges on the timeline to resize.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+## Plan
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 1. Add `onUpdateSegmentTiming` callback
+- In `AdDirectorContent.tsx`: add a new prop handler that updates a segment's `startTime`/`endTime`
+- Pass it to `ProVideoEditor` as a new prop
+
+### 2. Fix `handleTrimScene` and `handleStretchScene` in `ProVideoEditor.tsx`
+- Both should call the new timing update callback to actually change `seg.endTime`
+- Trim: `endTime -= 1` (min 1s duration)
+- Stretch: `endTime += 1`
+
+### 3. Fix Mute in voiceover playback effect
+- In the `useEffect` at line 185: add `mutedScenes` to the check — if `mutedScenes.has(sceneId)`, skip voiceover playback
+- Also mute the `<video>` element volume when the current scene is muted
+
+### 4. Add drag-to-resize on timeline clip edges
+- In `TimelineBar.tsx`: add invisible drag handles (4px wide) on the left and right edges of each video scene block
+- On `mousedown` on a handle, track `mousemove` to compute new duration based on pixel delta relative to total timeline width
+- On `mouseup`, call a new `onResizeScene(index, newDuration)` callback
+- Keep "Trim (−1s)" and "Stretch (+1s)" in the popover as quick shortcuts, but the primary interaction is drag
+
+### Files
+- **Edit**: `src/components/ad-director/AdDirectorContent.tsx` — add `onUpdateSegmentTiming` handler
+- **Edit**: `src/components/ad-director/ProVideoEditor.tsx` — fix mute effect, fix trim/stretch handlers, add resize handler, wire new prop
+- **Edit**: `src/components/ad-director/editor/TimelineBar.tsx` — add drag handles on clip edges, add `onResizeScene` prop
+
