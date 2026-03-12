@@ -163,6 +163,92 @@ async function veoDownload(apiKey: string, videoUrl: string) {
   });
 }
 
+// ─── Wan (Alibaba DashScope) helpers ────────────────────────
+
+const WAN_CLIP_DURATIONS = [4, 5, 8];
+const WAN_MAX_CLIP = 8;
+
+async function wanGenerate(apiKey: string, prompt: string, duration: number) {
+  const wanDuration = snapDuration(duration, WAN_CLIP_DURATIONS);
+  const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "X-DashScope-Async": "enable",
+    },
+    body: JSON.stringify({
+      model: "wan2.1-t2v-plus",
+      input: { prompt },
+      parameters: { resolution: "720P", duration: wanDuration },
+    }),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Wan submit error:", resp.status, errText);
+    let detail = `Wan generation failed (${resp.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      const apiMsg = errJson?.message || errJson?.code;
+      if (apiMsg) detail = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
+    } catch { /* use default */ }
+    throw new Error(detail);
+  }
+
+  const data = await resp.json();
+  const taskId = data?.output?.task_id;
+  if (!taskId) throw new Error("Wan did not return a task_id");
+  return { jobId: taskId, provider: "wan" };
+}
+
+async function wanPoll(apiKey: string, taskId: string) {
+  const resp = await fetch(`${DASHSCOPE_BASE}/tasks/${taskId}`, {
+    headers: { "Authorization": `Bearer ${apiKey}` },
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Wan poll error:", resp.status, errText);
+    throw new Error(`Wan polling failed (${resp.status})`);
+  }
+
+  const data = await resp.json();
+  const output = data?.output || {};
+  const taskStatus = output.task_status;
+
+  if (taskStatus === "SUCCEEDED") {
+    const videoUrl = output.video_url || output.results?.[0]?.url;
+    return { status: "completed", videoUrl, needsAuth: false };
+  }
+
+  if (taskStatus === "FAILED") {
+    return { status: "failed", error: output.message || "Wan generation failed" };
+  }
+
+  return { status: "processing", progress: null };
+}
+
+async function wanDownloadBytes(videoUrl: string): Promise<Uint8Array> {
+  const resp = await fetch(videoUrl);
+  if (!resp.ok) throw new Error(`Wan download failed (${resp.status})`);
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
+async function wanDownload(videoUrl: string) {
+  const resp = await fetch(videoUrl);
+  if (!resp.ok) throw new Error(`Wan download failed (${resp.status})`);
+  return new Response(resp.body, {
+    headers: {
+      "Content-Type": resp.headers.get("Content-Type") || "video/mp4",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    },
+  });
+}
+
 // ─── Sora helpers ───────────────────────────────────────────
 
 async function soraGenerate(apiKey: string, prompt: string, duration: number, model: string) {
