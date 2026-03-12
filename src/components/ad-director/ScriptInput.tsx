@@ -28,6 +28,7 @@ interface ScriptInputProps {
   onModelOverridesChange: (overrides: ModelOverrides) => void;
   onSaveBrandKit?: () => void;
   savingBrandKit?: boolean;
+  onLoadProject?: (project: AdProjectRow) => void;
 }
 
 function estimateDuration(text: string): number {
