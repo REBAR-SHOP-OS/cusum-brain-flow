@@ -902,6 +902,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
               onUpdateSegment={(id, text) => setSegments(prev => prev.map(s => s.id === id ? { ...s, text } : s))}
               onUpdateStoryboard={setStoryboard}
               onUpdateBrand={setBrand}
+              onMusicSelect={setMusicTrackUrl}
             />
           </div>
         )}
