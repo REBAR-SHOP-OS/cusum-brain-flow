@@ -27,24 +27,16 @@ interface ModelOption {
 
 const modelOptions: ModelOption[] = [
   {
-    id: "gpt-image-1",
-    label: "GPT Image 1",
-    description: "OpenAI's latest — highest quality, best prompt following",
-    sizes: [
-      { value: "1024x1024", label: "Square (1024×1024)" },
-      { value: "1536x1024", label: "Landscape (1536×1024)" },
-      { value: "1024x1536", label: "Portrait (1024×1536)" },
-    ],
+    id: "google/gemini-3-pro-image-preview",
+    label: "Gemini Pro Image",
+    description: "Highest quality — best for detailed, professional images",
+    sizes: [],
   },
   {
-    id: "dall-e-3",
-    label: "DALL·E 3",
-    description: "Creative and artistic, great for stylized content",
-    sizes: [
-      { value: "1024x1024", label: "Square (1024×1024)" },
-      { value: "1792x1024", label: "Landscape (1792×1024)" },
-      { value: "1024x1792", label: "Portrait (1024×1792)" },
-    ],
+    id: "google/gemini-3.1-flash-image-preview",
+    label: "Gemini Flash Image",
+    description: "Fast generation with pro-level quality",
+    sizes: [],
   },
 ];
 
