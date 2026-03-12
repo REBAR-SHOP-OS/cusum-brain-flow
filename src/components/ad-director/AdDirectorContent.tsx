@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
@@ -16,6 +16,8 @@ import {
 import { cn } from "@/lib/utils";
 import { stitchClips } from "@/lib/videoStitch";
 import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
+import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
+import { supabase } from "@/integrations/supabase/client";
 
 
 import { Check } from "lucide-react";
@@ -45,6 +47,8 @@ function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
 export function AdDirectorContent() {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
+  const { saveProject } = useAdProjectHistory();
+  const projectIdRef = useRef<string | null>(null);
   const [step, setStep] = useState<WorkflowStep>("script");
   const [script, setScript] = useState("");
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
@@ -221,6 +225,24 @@ export function AdDirectorContent() {
       })));
       setStep("storyboard");
       toast({ title: "Storyboard created", description: `${storyboardWithDefaults.length} scenes analyzed with multi-model pipeline` });
+
+      // Auto-save project
+      try {
+        const savedId = await saveProject.mutateAsync({
+          id: projectIdRef.current ?? undefined,
+          name: brand.name ? `${brand.name} Ad` : "Untitled Ad",
+          brandName: brand.name,
+          script,
+          segments: newSegments,
+          storyboard: storyboardWithDefaults,
+          clips: storyboardWithDefaults.map(s => ({ sceneId: s.id, status: "idle" as const, progress: 0 })),
+          continuity: continuityProfile,
+          status: "analyzed",
+        });
+        projectIdRef.current = savedId;
+      } catch (e) {
+        console.warn("Auto-save failed:", e);
+      }
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
     } finally {
@@ -532,6 +554,23 @@ export function AdDirectorContent() {
 
       setFinalVideoUrl(finalUrl.blobUrl);
       toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched — ${finalUrl.duration.toFixed(1)}s, ${(finalUrl.blob.size / 1024 / 1024).toFixed(1)}MB` });
+
+      // Auto-save project as completed
+      try {
+        await saveProject.mutateAsync({
+          id: projectIdRef.current ?? undefined,
+          name: brand.name ? `${brand.name} Ad` : "Untitled Ad",
+          brandName: brand.name,
+          script,
+          segments,
+          storyboard,
+          clips,
+          continuity,
+          status: "completed",
+        });
+      } catch (e) {
+        console.warn("Auto-save failed:", e);
+      }
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
@@ -546,6 +585,56 @@ export function AdDirectorContent() {
     a.download = `${brand.name.replace(/\s+/g, "-")}-30s-ad.webm`;
     a.click();
   };
+
+  // ─── Load Project from History ──────────────────────────
+  const handleLoadProject = useCallback((project: AdProjectRow) => {
+    setScript(project.script ?? "");
+    setSegments(project.segments ?? []);
+    setStoryboard(project.storyboard ?? []);
+    setContinuity(project.continuity ?? null);
+    setClips(project.clips ?? []);
+    setFinalVideoUrl(project.final_video_url);
+    projectIdRef.current = project.id;
+
+    if (project.storyboard?.length > 0) {
+      setStep("storyboard");
+    }
+    toast({ title: "Project loaded", description: project.name });
+  }, [toast]);
+
+  // ─── Auto-save clips to storage on completion ────────────
+  useEffect(() => {
+    const uploadCompletedClips = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      for (const clip of clips) {
+        if (clip.status === "completed" && clip.videoUrl && !clip.videoUrl.includes("generated-videos")) {
+          try {
+            const resp = await fetch(clip.videoUrl);
+            if (!resp.ok) continue;
+            const blob = await resp.blob();
+            const fileName = `${user.id}/${crypto.randomUUID()}.mp4`;
+            const { error } = await supabase.storage
+              .from("generated-videos")
+              .upload(fileName, blob, { contentType: "video/mp4", upsert: false });
+            if (!error) {
+              const { data: publicData } = supabase.storage.from("generated-videos").getPublicUrl(fileName);
+              setClips(prev => prev.map(c =>
+                c.sceneId === clip.sceneId ? { ...c, videoUrl: publicData.publicUrl } : c
+              ));
+            }
+          } catch (e) {
+            console.warn("Clip upload failed:", e);
+          }
+        }
+      }
+    };
+    const hasNewCompleted = clips.some(c => c.status === "completed" && c.videoUrl && !c.videoUrl.includes("generated-videos"));
+    if (hasNewCompleted) {
+      uploadCompletedClips();
+    }
+  }, [clips]);
 
   return (
     <div className="space-y-6">
@@ -638,6 +727,7 @@ export function AdDirectorContent() {
               onModelOverridesChange={setModelOverrides}
               onSaveBrandKit={() => saveBrandKit.mutate(brand)}
               savingBrandKit={saveBrandKit.isPending}
+              onLoadProject={handleLoadProject}
             />
           </div>
         )}

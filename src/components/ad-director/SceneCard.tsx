@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Video, Image as ImageIcon, Link2, FileText, Layers,
-  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight
+  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight, Download
 } from "lucide-react";
+import { downloadFile } from "@/lib/downloadUtils";
 import { type StoryboardScene, type ClipOutput, type GenerationMode } from "@/types/adDirector";
 import { PromptQualityBadge } from "./PromptQualityBadge";
 import { SceneIntelligenceBar } from "./SceneIntelligenceBar";
@@ -221,6 +222,17 @@ export function SceneCard({
             <RotateCcw className="w-3 h-3 mr-1" />
             {clip.status === "completed" ? "Regenerate" : "Generate"}
           </Button>
+          {clip.status === "completed" && clip.videoUrl && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px]"
+              onClick={() => downloadFile(clip.videoUrl!, `scene-${index + 1}-${segmentLabel}.mp4`)}
+            >
+              <Download className="w-3 h-3 mr-1" />
+              Download
+            </Button>
+          )}
         </div>
 
       </div>
