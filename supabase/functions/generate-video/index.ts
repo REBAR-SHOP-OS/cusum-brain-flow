@@ -583,7 +583,7 @@ serve(async (req) => {
             const message = getErrorMessage(e);
             if (isProviderCapacityError(message) && gptKey) {
               console.warn("Veo capacity reached on single generate, falling back to Sora");
-              result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
+              result = await soraGenerate(gptKey, prompt, duration || 8, "sora-2");
             } else if (isProviderCapacityError(message) && dashscopeKey) {
               console.warn("Veo capacity reached, falling back to Wan");
               result = await wanGenerate(dashscopeKey, prompt, duration || 8);
@@ -593,7 +593,7 @@ serve(async (req) => {
           }
         } else {
           try {
-            result = await soraGenerate(apiKey, prompt, duration || 8, model || "sora-2");
+            result = await soraGenerate(apiKey, prompt, duration || 8, (model && model.startsWith("sora")) ? model : "sora-2");
           } catch (e) {
             const message = getErrorMessage(e);
             if (isProviderCapacityError(message) && geminiKey) {
@@ -728,14 +728,14 @@ serve(async (req) => {
                 const message = getErrorMessage(e);
                 if (isProviderCapacityError(message) && gptKey) {
                   console.warn(`Veo capacity reached on scene ${i + 1}, falling back to Sora`);
-                  result = await soraGenerate(gptKey, scenePrompt, clipDuration, model || "sora-2");
+                  result = await soraGenerate(gptKey, scenePrompt, clipDuration, "sora-2");
                 } else {
                   throw e;
                 }
               }
             } else {
               try {
-                result = await soraGenerate(apiKey, scenePrompt, clipDuration, model || "sora-2");
+                result = await soraGenerate(apiKey, scenePrompt, clipDuration, (model && model.startsWith("sora")) ? model : "sora-2");
               } catch (e) {
                 const message = getErrorMessage(e);
                 if (isProviderCapacityError(message) && geminiKey) {

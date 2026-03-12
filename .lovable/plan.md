@@ -1,16 +1,27 @@
 
 
-## Update DashScope API Key
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
-The current `DASHSCOPE_API_KEY` is invalid — edge function logs confirm repeated `401 InvalidApiKey` errors from DashScope.
+### Problem
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### What needs to happen
-Use the `add_secret` tool to prompt you for the new correct API key value. The key should be from the **DashScope International** console (https://dashscope-intl.console.aliyun.com/) and typically starts with `sk-`.
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-### Steps
-1. Call `add_secret` to request the updated `DASHSCOPE_API_KEY` value from you
-2. You paste in the correct key
-3. Redeploy the `generate-video` edge function so it picks up the new secret
+### Plan
+Run a single database migration:
 
-No code changes needed — just the secret value update and redeployment.
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
+```
+
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
+
+No code changes needed — just the migration.
 
