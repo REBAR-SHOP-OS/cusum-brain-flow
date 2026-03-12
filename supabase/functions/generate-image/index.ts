@@ -124,7 +124,11 @@ function buildAdPrompt(
   }
   parts.push("- Place text with clean, bold, professional typography — suitable for social media ads.");
   parts.push("- Text should be legible, well-contrasted against the background, and positioned in the lower third or a clean area.");
-  parts.push("- Do NOT include watermarks from stock sites. The company logo will be added as a separate overlay.");
+  parts.push("- Do NOT include watermarks from stock sites.");
+  parts.push("");
+  parts.push("MANDATORY BRANDING RULE:");
+  parts.push("- The final image MUST contain: 1) The company logo rendered clearly and prominently, 2) At least one line of advertising text (brand name, tagline, or CTA).");
+  parts.push("- If a logo image is provided, render it as a visible, professional part of the design — NOT a tiny watermark.");
 
   return parts.join("\n");
 }
@@ -180,7 +184,7 @@ serve(async (req) => {
       }
       if (logoUrl) {
         contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
-        contentParts.push({ type: "text", text: "Incorporate this company logo naturally as a branded watermark in the corner of the image — preserve its exact colors, shape, and design." });
+        contentParts.push({ type: "text", text: "Render this company logo prominently and clearly in the image — make it a visible, professional part of the design. Preserve its exact colors, shape, and design. Do NOT shrink it to a tiny corner watermark." });
       }
       const messageContent = contentParts.length === 1 ? adPrompt : contentParts;
 

@@ -303,7 +303,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     try {
       const sizeMap: Record<string, string> = { "16:9": "1792x1024", "9:16": "1024x1792", "1:1": "1024x1024" };
       const size = sizeMap[aspectRatio] || "1024x1024";
-      const data = await invokeEdgeFunction("generate-image", { prompt: rawPrompt.trim(), size, quality: "high", model: selectedModel });
+      const brandContext = brandKit ? { business_name: brandKit.business_name, description: brandKit.description, value_prop: brandKit.value_prop, tagline: (brandKit as any).tagline || "" } : undefined;
+      const logoUrl = brandKit?.logo_url || undefined;
+      const data = await invokeEdgeFunction("generate-image", { prompt: rawPrompt.trim(), size, quality: "high", model: selectedModel, brandContext, logoUrl, aspectRatio });
       if (data?.imageUrl) {
         setGeneratedImageUrl(data.imageUrl);
         toast({ title: "Image ready!", description: data.revisedPrompt ? "Prompt was refined by AI" : "Image generated successfully" });
