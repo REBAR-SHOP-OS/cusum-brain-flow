@@ -339,6 +339,22 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const handleGenerate = async () => {
     if (!rawPrompt.trim()) return;
 
+    // Credit check
+    const durationSecs = parseInt(duration);
+    if (!canGenerate(durationSecs, mode)) {
+      const cost = getCost(durationSecs, mode);
+      toast({ title: "Not enough credits", description: `Need ${cost}s credits, have ${remaining}s remaining.`, variant: "destructive" });
+      return;
+    }
+
+    // Consume credits upfront
+    try {
+      await consumeCredits.mutateAsync({ durationSeconds: durationSecs, mode });
+    } catch (err: any) {
+      toast({ title: "Credit error", description: err.message, variant: "destructive" });
+      return;
+    }
+
     // Step 1: Transform the prompt
     setStatus("transforming");
     setProgress(0);
