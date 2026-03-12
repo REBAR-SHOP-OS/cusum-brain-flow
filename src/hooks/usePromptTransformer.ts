@@ -50,6 +50,8 @@ export function usePromptTransformer() {
       const result: TransformResult = {
         engineeredPrompt: data.engineeredPrompt,
         elements: data.elements,
+        intent: data.intent || "cinematic_broll",
+        platform_intent: data.platform_intent || "general",
         isConstructionRelated: data.isConstructionRelated,
         rawPrompt: data.rawPrompt,
       };
