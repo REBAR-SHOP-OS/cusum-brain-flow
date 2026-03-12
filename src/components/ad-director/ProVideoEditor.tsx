@@ -216,8 +216,9 @@ export function ProVideoEditor({
 
   // Auto-play after scene change
   const autoPlayPending = useRef(false);
+  const sceneTransitioning = useRef(false);
   useEffect(() => {
-    if (autoPlayPending.current && videoRef.current) {
+    if (autoPlayPending.current && videoRef.current && !sceneTransitioning.current) {
       videoRef.current.play().catch(() => {});
       autoPlayPending.current = false;
     }
