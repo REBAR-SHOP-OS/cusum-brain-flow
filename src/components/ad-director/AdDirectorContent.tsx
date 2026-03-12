@@ -280,6 +280,14 @@ export function AdDirectorContent() {
     const scene = storyboard.find(s => s.id === sceneId);
     if (!scene) return;
 
+    // Calculate duration from script segment timing
+    const segment = segments.find(seg => seg.id === scene.segmentId);
+    const rawDur = segment ? segment.endTime - segment.startTime : 5;
+    const sceneDuration = Math.min(Math.max(rawDur, 2), 15);
+
+    // Enforce motion in prompt to avoid static zoom-only results
+    const motionPrompt = scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+
     setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "generating", progress: 10 } : c));
 
     try {
@@ -290,11 +298,12 @@ export function AdDirectorContent() {
         "generate-video",
         {
           action: "generate",
-          prompt: scene.prompt,
-          duration: 15,
+          prompt: motionPrompt,
+          duration: sceneDuration,
           aspectRatio: "16:9",
           provider: "wan",
           model: "wan2.6-t2v",
+          negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
         }
       );
 
