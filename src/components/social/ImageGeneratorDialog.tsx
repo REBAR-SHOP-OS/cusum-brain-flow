@@ -51,7 +51,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
   const handleClose = () => {
-    if (status === "searching" || status === "generating") return;
+    if (status === "searching" || status === "generating" || status === "branding") return;
     onOpenChange(false);
     setTimeout(() => {
       setPrompt("");
