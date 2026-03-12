@@ -225,6 +225,24 @@ export function AdDirectorContent() {
       })));
       setStep("storyboard");
       toast({ title: "Storyboard created", description: `${storyboardWithDefaults.length} scenes analyzed with multi-model pipeline` });
+
+      // Auto-save project
+      try {
+        const savedId = await saveProject.mutateAsync({
+          id: projectIdRef.current ?? undefined,
+          name: brand.name ? `${brand.name} Ad` : "Untitled Ad",
+          brandName: brand.name,
+          script,
+          segments: newSegments,
+          storyboard: storyboardWithDefaults,
+          clips: storyboardWithDefaults.map(s => ({ sceneId: s.id, status: "idle" as const, progress: 0 })),
+          continuity: continuityProfile,
+          status: "analyzed",
+        });
+        projectIdRef.current = savedId;
+      } catch (e) {
+        console.warn("Auto-save failed:", e);
+      }
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
     } finally {
