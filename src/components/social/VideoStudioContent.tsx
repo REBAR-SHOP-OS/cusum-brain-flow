@@ -725,6 +725,15 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                     <VideoToSocialPanel videoUrl={videoUrl} aspectRatio={aspectRatio} onClose={() => setShowSocialPanel(false)} />
                   </div>
                 )}
+
+                {showInsights && analysisResults && (
+                  <VideoInsightsPanel
+                    results={analysisResults}
+                    moderationStatus={moderationStatus}
+                    suggestedHashtags={suggestedHashtags}
+                    onClose={() => setShowInsights(false)}
+                  />
+                )}
               </div>
             )}
 
