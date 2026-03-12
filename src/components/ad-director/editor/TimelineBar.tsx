@@ -152,12 +152,66 @@ export function TimelineBar({
                       )}
                     </div>
                   </PopoverTrigger>
-                  <PopoverContent className="w-36 p-1.5" side="top" align="center">
+                  <PopoverContent className="w-44 p-1.5" side="top" align="center">
                     <div className="space-y-0.5">
                       <button
                         onClick={() => onSelectScene(i)}
                         className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground"
                       >Select</button>
+                      {onEditPrompt && (
+                        <button
+                          onClick={() => onEditPrompt(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><Edit3 className="w-2.5 h-2.5" />Edit Prompt</button>
+                      )}
+                      {onEditVoiceover && (
+                        <button
+                          onClick={() => onEditVoiceover(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><FileText className="w-2.5 h-2.5" />Edit Voiceover Text</button>
+                      )}
+                      {onTrimScene && (
+                        <button
+                          onClick={() => onTrimScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><Scissors className="w-2.5 h-2.5" />Trim (−1s)</button>
+                      )}
+                      {onStretchScene && (
+                        <button
+                          onClick={() => onStretchScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><Expand className="w-2.5 h-2.5" />Stretch (+1s)</button>
+                      )}
+                      {onSplitScene && (
+                        <button
+                          onClick={() => onSplitScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><SplitSquareHorizontal className="w-2.5 h-2.5" />Split</button>
+                      )}
+                      {onDuplicateScene && (
+                        <button
+                          onClick={() => onDuplicateScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><Copy className="w-2.5 h-2.5" />Duplicate</button>
+                      )}
+                      {onMoveScene && i > 0 && (
+                        <button
+                          onClick={() => onMoveScene(i, -1)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><ArrowLeft className="w-2.5 h-2.5" />Move Left</button>
+                      )}
+                      {onMoveScene && i < storyboard.length - 1 && (
+                        <button
+                          onClick={() => onMoveScene(i, 1)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><ArrowRight className="w-2.5 h-2.5" />Move Right</button>
+                      )}
+                      {onMuteScene && (
+                        <button
+                          onClick={() => onMuteScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><VolumeOff className="w-2.5 h-2.5" />{mutedScenes?.has(scene.id) ? "Unmute" : "Mute Scene"}</button>
+                      )}
                       {onRegenerateScene && isCompleted && (
                         <button
                           onClick={() => onRegenerateScene(scene.id)}
