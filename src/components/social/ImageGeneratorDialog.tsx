@@ -242,25 +242,48 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Visual Themes</Label>
                 <div className="flex flex-wrap gap-1.5">
+                  <TooltipProvider delayDuration={300}>
                   {VISUAL_THEMES.map((theme) => {
                     const Icon = theme.icon;
                     const isActive = selectedThemes.has(theme.id);
-                    return (
+                    const isLogo = theme.id === "logo";
+                    const logoDisabled = isLogo && !brandKit?.logo_url;
+
+                    const chip = (
                       <button
                         key={theme.id}
-                        onClick={() => toggleTheme(theme.id)}
+                        onClick={() => !logoDisabled && toggleTheme(theme.id)}
+                        disabled={logoDisabled}
                         className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
-                          isActive
-                            ? "border-primary bg-primary/10 text-primary font-medium"
-                            : "bg-card hover:bg-muted text-muted-foreground"
+                          logoDisabled
+                            ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground"
+                            : isActive
+                              ? "border-primary bg-primary/10 text-primary font-medium"
+                              : "bg-card hover:bg-muted text-muted-foreground"
                         }`}
                       >
-                        <Icon className="w-3.5 h-3.5" />
+                        {isLogo && brandKit?.logo_url ? (
+                          <img src={brandKit.logo_url} alt="Logo" className="w-4 h-4 object-contain rounded-sm" />
+                        ) : (
+                          <Icon className="w-3.5 h-3.5" />
+                        )}
                         {theme.label}
                         {isActive && <CheckCircle2 className="w-3 h-3" />}
                       </button>
                     );
+
+                    if (logoDisabled) {
+                      return (
+                        <Tooltip key={theme.id}>
+                          <TooltipTrigger asChild>{chip}</TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">Upload a logo in Brand Kit first</TooltipContent>
+                        </Tooltip>
+                      );
+                    }
+
+                    return chip;
                   })}
+                  </TooltipProvider>
                 </div>
               </div>
 
