@@ -515,7 +515,7 @@ export default function TimeClock() {
                             const isClockedIn = status?.clocked_in ?? false;
                             const clockInTime = status?.clock_in;
                             const elapsed = isClockedIn && clockInTime ? differenceInMinutes(now, new Date(clockInTime)) : null;
-                            const profileKioskEntries = kioskEntries.filter((e) => e.profile_id === profile.id);
+                            const profileKioskEntries = todayEntries.filter((e) => e.profile_id === profile.id);
                             const totalMins = profileKioskEntries.reduce((sum, e) => {
                               const end = e.clock_out ? new Date(e.clock_out) : (isClockedIn ? now : new Date(e.clock_in));
                               return sum + differenceInMinutes(end, new Date(e.clock_in));
