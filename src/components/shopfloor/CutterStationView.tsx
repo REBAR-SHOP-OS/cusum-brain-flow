@@ -310,6 +310,24 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       return;
     }
     startingRef.current = true;
+
+    // Force-clear stale run before starting if we just aborted
+    if (completedLocally && machine.current_run_id) {
+      try {
+        await manageMachine({
+          action: "complete-run",
+          machineId: machine.id,
+          runId: machine.current_run_id,
+          outputQty: 0,
+          scrapQty: 0,
+          notes: "Pre-start cleanup after abort",
+        });
+        console.log("[CutterStation] Pre-start cleanup completed for stale run:", machine.current_run_id);
+      } catch (e) {
+        console.warn("[CutterStation] Pre-start cleanup failed (may already be cleared):", e);
+      }
+    }
+
     // Hard clamp: never exceed machine max capacity regardless of role
     const finalBars = Math.max(1, Math.min(bars, maxBars));
     try {
