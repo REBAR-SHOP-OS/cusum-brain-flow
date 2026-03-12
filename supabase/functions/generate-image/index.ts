@@ -73,7 +73,8 @@ const VISUAL_STYLES = [
 function buildAdPrompt(
   userPrompt: string,
   brandContext?: { business_name?: string; description?: string; value_prop?: string; tagline?: string },
-  hasReferenceImage?: boolean
+  hasReferenceImage?: boolean,
+  aspectRatio?: string
 ): string {
   const style = VISUAL_STYLES[Math.floor(Math.random() * VISUAL_STYLES.length)];
   const brandName = brandContext?.business_name || "REBAR.SHOP";
@@ -86,7 +87,13 @@ function buildAdPrompt(
   parts.push("- ALL images MUST be PHOTOREALISTIC — real-world professional photography style ONLY.");
   parts.push("- Natural lighting, real textures, real materials, real environments.");
   parts.push("- ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, clip-art.");
-  parts.push("- The image MUST be perfectly SQUARE (1:1 aspect ratio), suitable for Instagram feed posts.");
+
+  if (aspectRatio === "9:16") {
+    parts.push("- The image MUST be VERTICAL (9:16 portrait aspect ratio), suitable for Instagram/Facebook Stories.");
+  } else {
+    parts.push("- The image MUST be perfectly SQUARE (1:1 aspect ratio), suitable for Instagram feed posts.");
+  }
+
   parts.push(`- Feature ${brandName} products (rebar stirrups, ties, cut & bent rebar, accessories) prominently in the scene.`);
   parts.push("- Clean, professional, visually striking — like high-end commercial/industrial photography.");
   parts.push("");
