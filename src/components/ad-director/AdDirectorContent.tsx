@@ -344,7 +344,7 @@ export function AdDirectorContent() {
       try {
         const result = await invokeEdgeFunction<{ status?: string; videoUrl?: string; url?: string }>(
           "generate-video",
-          { action: "status", generationId }
+          { action: "poll", jobId: generationId, provider: "wan" }
         );
 
         if (result.status === "completed" || result.videoUrl || result.url) {
