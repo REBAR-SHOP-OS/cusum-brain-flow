@@ -755,7 +755,7 @@ export function ProVideoEditor({
             {TABS.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); if (sidebarCollapsed) setSidebarCollapsed(false); }}
+                onClick={() => { handleSetActiveTab(tab.id); if (sidebarCollapsed) setSidebarCollapsed(false); }}
                 className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors
                   ${activeTab === tab.id ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"}`}
                 title={tab.label}
