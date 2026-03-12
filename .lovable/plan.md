@@ -1,30 +1,33 @@
 
 
-# Fix: Logo Missing + Voiceover Merge Failing + End Card Issues
 
-## Root Causes Found
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-1. **No logo**: `DEFAULT_BRAND.logoUrl` is `null`. The condition `logoEnabled && !!brand.logoUrl` evaluates to `false`, so logo overlay is skipped. The user needs to upload a logo in the brand settings, OR we should let users upload one in the ScriptInput panel.
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-2. **Voiceover merge fails**: Console shows `"Failed to load video for merge"`. The `mergeVideoAudio` function tries to load the blob URL from `stitchClips` into a new `<video>` element, but MediaRecorder-produced WebM blobs often fail to reload in another video element because they lack proper seeking metadata. The fix: set `video.muted = true` before setting `.src` (some browsers block unmuted media element loads), and add a fallback so the stitched video is still used even without audio.
+## Completed: Add All Wan 2.6 Capabilities
 
-3. **End card "lol" scene**: The end card IS being rendered by the stitcher, but it looks like the AI-generated last scene is what appears instead. This is because the last storyboard scene is an AI-generated "CTA" scene that looks bad. The end card renders AFTER all clips -- so it should appear at the very end. The user may be seeing the last generated clip, not the end card itself.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Changes
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. Fix `mergeVideoAudio` to handle blob URLs (`src/lib/videoAudioMerge.ts`)
-- Set `video.muted = true` before setting src (required for autoplay/load in some browsers)
-- Add timeout fallback: if video fails to load within 5 seconds, resolve with the original videoSrc (silent but functional)
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 2. Fix logo availability (`src/components/ad-director/ScriptInput.tsx`)
-- The logo upload UI likely exists but `logoUrl` stays null after upload. Need to verify the upload actually sets `brand.logoUrl` to a usable URL (blob or data URL).
-
-### 3. Improve end card visibility (`src/lib/videoStitch.ts`)
-- Extend end card duration from 3s to 4s for better visibility
-- Add a fade-in transition effect (gradual opacity increase over first 0.5s)
-
-## Files to Modify
-- `src/lib/videoAudioMerge.ts` -- fix blob URL loading
-- `src/components/ad-director/ScriptInput.tsx` -- verify logo upload sets brand.logoUrl
-- `src/lib/videoStitch.ts` -- minor end card duration tweak
-
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation

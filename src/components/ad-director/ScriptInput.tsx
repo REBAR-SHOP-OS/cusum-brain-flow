@@ -127,6 +127,40 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
         onModelOverridesChange={onModelOverridesChange}
       />
 
+      {/* Brand Logo Upload */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <ImageIcon className="w-4 h-4 text-primary" />
+          <Label className="text-sm font-medium">Brand Logo</Label>
+          <Badge variant="outline" className="text-[10px]">Optional</Badge>
+        </div>
+        {brand.logoUrl ? (
+          <div className="flex items-center gap-3">
+            <img src={brand.logoUrl} alt="Brand logo" className="h-10 rounded border border-border/50" />
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => onBrandChange({ ...brand, logoUrl: null })}>Remove</Button>
+          </div>
+        ) : (
+          <div className="border border-dashed border-border/50 rounded-xl p-3 text-center hover:border-primary/40 transition-colors">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const url = URL.createObjectURL(file);
+                  onBrandChange({ ...brand, logoUrl: url });
+                }
+              }}
+              className="hidden"
+              id="logo-upload"
+            />
+            <label htmlFor="logo-upload" className="cursor-pointer">
+              <p className="text-xs text-muted-foreground">Upload logo for watermark & end card</p>
+            </label>
+          </div>
+        )}
+      </div>
+
       {/* Asset Upload */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -150,7 +184,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               <Mic className="w-5 h-5" />
             </div>
             <p className="text-xs text-muted-foreground">
-              Upload logos, product images, site photos, shop drawings, voiceover, or music
+              Upload product images, site photos, shop drawings, voiceover, or music
             </p>
           </label>
         </div>
