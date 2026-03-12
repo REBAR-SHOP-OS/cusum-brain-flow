@@ -1,19 +1,16 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Upload, Sparkles, FileText, Image as ImageIcon, Music, Mic, Loader2,
-  Play, Palette, X, History, Trash2, FolderOpen
+  Play, X, History, Trash2, FolderOpen
 } from "lucide-react";
-import { DEMO_SCRIPT, type BrandProfile, type ModelOverrides, DEFAULT_BRAND } from "@/types/adDirector";
-import { AdvancedModelSettings } from "./AdvancedModelSettings";
+import { DEMO_SCRIPT, type BrandProfile, type ModelOverrides } from "@/types/adDirector";
+import { VideoParameters, type VideoParams } from "./VideoParameters";
 import { cn } from "@/lib/utils";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { format } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface ScriptInputProps {
@@ -31,6 +28,8 @@ interface ScriptInputProps {
   onSaveBrandKit?: () => void;
   savingBrandKit?: boolean;
   onLoadProject?: (project: AdProjectRow) => void;
+  videoParams: VideoParams;
+  onVideoParamsChange: (p: VideoParams) => void;
 }
 
 function estimateDuration(text: string): number {
@@ -38,35 +37,9 @@ function estimateDuration(text: string): number {
   return Math.round(words / 2.5); // ~150 wpm = 2.5 words/sec
 }
 
-export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange, modelOverrides, onModelOverridesChange, onSaveBrandKit, savingBrandKit, onLoadProject }: ScriptInputProps) {
+export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange, modelOverrides, onModelOverridesChange, onSaveBrandKit, savingBrandKit, onLoadProject, videoParams, onVideoParamsChange }: ScriptInputProps) {
   const { projects, deleteProject } = useAdProjectHistory();
   const { toast } = useToast();
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-
-  const handleLogoUpload = async (file: File) => {
-    setUploadingLogo(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({ title: "Please sign in", description: "Authentication required to upload logo", variant: "destructive" });
-        return;
-      }
-      const ext = file.name.split(".").pop() || "png";
-      const fileName = `${user.id}/logo-${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage
-        .from("brand-assets")
-        .upload(fileName, file, { contentType: file.type, upsert: false });
-      if (error) throw error;
-      const { data: publicData } = supabase.storage.from("brand-assets").getPublicUrl(fileName);
-      onBrandChange({ ...brand, logoUrl: publicData.publicUrl });
-      toast({ title: "Logo uploaded", description: "Watermark will be applied to all clips" });
-    } catch (err: any) {
-      console.error("Logo upload failed:", err);
-      toast({ title: "Logo upload failed", description: err.message, variant: "destructive" });
-    } finally {
-      setUploadingLogo(false);
-    }
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -80,10 +53,10 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
   return (
     <div className="space-y-6">
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* ── Left Column: Creative Brief ── */}
-        <div className="lg:col-span-3 space-y-4">
+        <div className="lg:col-span-2 space-y-4">
           {/* Quick Start Card */}
           {!script.trim() && (
             <button
@@ -149,153 +122,8 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
           </div>
         </div>
 
-        {/* ── Right Column: Brand Kit ── */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Brand Identity Card */}
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl p-4 space-y-3 ring-1 ring-white/5">
-            <div className="flex items-center gap-2 mb-1">
-              <Palette className="w-4 h-4 text-primary" />
-              <Label className="text-sm font-semibold">Brand Kit</Label>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Brand Name</Label>
-                <Input
-                  value={brand.name}
-                  onChange={(e) => onBrandChange({ ...brand, name: e.target.value })}
-                  className="h-8 text-xs bg-background/50"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Website</Label>
-                <Input
-                  value={brand.website}
-                  onChange={(e) => onBrandChange({ ...brand, website: e.target.value })}
-                  className="h-8 text-xs bg-background/50"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Tagline</Label>
-                <Input
-                  value={brand.tagline}
-                  onChange={(e) => onBrandChange({ ...brand, tagline: e.target.value })}
-                  className="h-8 text-xs bg-background/50"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Audience</Label>
-                <Input
-                  value={brand.targetAudience}
-                  onChange={(e) => onBrandChange({ ...brand, targetAudience: e.target.value })}
-                  className="h-8 text-xs bg-background/50"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Call to Action</Label>
-              <Input
-                value={brand.cta}
-                onChange={(e) => onBrandChange({ ...brand, cta: e.target.value })}
-                className="h-8 text-xs bg-background/50"
-              />
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-border/20" />
-
-            {/* Colors inline */}
-            <div className="flex items-center gap-4 pt-1">
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={brand.primaryColor}
-                  onChange={(e) => onBrandChange({ ...brand, primaryColor: e.target.value })}
-                  className="w-7 h-7 rounded-lg cursor-pointer border border-border/30"
-                />
-                <span className="text-[10px] text-muted-foreground">Primary</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={brand.secondaryColor}
-                  onChange={(e) => onBrandChange({ ...brand, secondaryColor: e.target.value })}
-                  className="w-7 h-7 rounded-lg cursor-pointer border border-border/30"
-                />
-                <span className="text-[10px] text-muted-foreground">Secondary</span>
-              </div>
-            </div>
-
-            {/* Brand Color Preview Strip */}
-            {brand.name && (
-              <div
-                className="rounded-xl px-3 py-1.5 text-xs font-semibold text-center truncate"
-                style={{ backgroundColor: brand.primaryColor, color: brand.secondaryColor }}
-              >
-                {brand.name} {brand.tagline ? `· ${brand.tagline}` : ""}
-              </div>
-            )}
-
-            {/* Save Brand Kit Button */}
-            {onSaveBrandKit && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onSaveBrandKit}
-                disabled={savingBrandKit || !brand.name.trim()}
-                className="w-full text-xs gap-1.5"
-              >
-                {savingBrandKit ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
-                ) : (
-                  <><Sparkles className="w-3.5 h-3.5" /> Save Brand Kit</>
-                )}
-              </Button>
-            )}
-          </div>
-
-          {/* Logo Upload Card */}
-          <div className="rounded-2xl border border-border/30 bg-card/30 backdrop-blur-sm p-4 ring-1 ring-white/5">
-            <div className="flex items-center gap-2 mb-3">
-              <ImageIcon className="w-4 h-4 text-primary" />
-              <Label className="text-sm font-medium">Brand Logo</Label>
-              <Badge variant="secondary" className="text-[9px] ml-auto">Mandatory Watermark</Badge>
-            </div>
-            {brand.logoUrl ? (
-              <div className="flex items-center gap-3">
-                <img src={brand.logoUrl} alt="Brand logo" className="h-10 rounded-lg border border-border/30" />
-                <span className="text-xs text-muted-foreground flex-1 truncate">{brand.name} logo</span>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onBrandChange({ ...brand, logoUrl: null })}>
-                  <X className="w-3.5 h-3.5 text-muted-foreground" />
-                </Button>
-              </div>
-            ) : (
-              <>
-                <input type="file" accept="image/*" onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleLogoUpload(file);
-                }} className="hidden" id="logo-upload" />
-                <label htmlFor="logo-upload" className={cn(
-                  "flex items-center gap-3 p-3 rounded-xl border border-border/20 bg-background/30 hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer group",
-                  uploadingLogo && "opacity-50 pointer-events-none"
-                )}>
-                  <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                    {uploadingLogo ? (
-                      <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                    ) : (
-                      <ImageIcon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-foreground">{uploadingLogo ? "Uploading…" : "Upload logo"}</p>
-                    <p className="text-[10px] text-muted-foreground">Watermarked on every clip & final export</p>
-                  </div>
-                </label>
-              </>
-            )}
-          </div>
-
+        {/* ── Right Column: Assets & Video Params ── */}
+        <div className="space-y-4">
           {/* Reference Assets Card */}
           <div className="rounded-2xl border border-border/30 bg-card/30 backdrop-blur-sm p-4 ring-1 ring-white/5">
             <div className="flex items-center gap-2 mb-3">
@@ -331,11 +159,8 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
             )}
           </div>
 
-          {/* AI Engine (collapsed) */}
-          <AdvancedModelSettings
-            modelOverrides={modelOverrides}
-            onModelOverridesChange={onModelOverridesChange}
-          />
+          {/* Video Parameters */}
+          <VideoParameters params={videoParams} onChange={onVideoParamsChange} />
         </div>
       </div>
 

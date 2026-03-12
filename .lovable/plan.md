@@ -1,40 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Move Brand Kit to Sidebar & Replace AI Engine with Video Parameters
+## Completed: Add All Wan 2.6 Capabilities
 
-## What Changes
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-### 1. Brand Kit → Sidebar Panel
-When the user clicks "Brand kit" in the sidebar, a floating panel opens (already wired at line 869 of AdDirectorContent) showing the full Brand Kit form (name, website, tagline, audience, CTA, colors, save button). Currently it just shows a placeholder message.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-**New file**: `src/components/ad-director/editor/BrandKitSidePanel.tsx` — extracts the Brand Kit form from ScriptInput into a reusable component that accepts `brand`, `onBrandChange`, `onSaveBrandKit`, `savingBrandKit` props.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-**AdDirectorContent.tsx** (line 869): Replace the placeholder text with `<BrandKitSidePanel>` component, passing brand state + handlers.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 2. Replace AI Engine with Video Parameters
-In `ScriptInput.tsx` (lines 334-338), replace `<AdvancedModelSettings>` with a new `<VideoParameters>` component matching the reference image:
-- **Ratio**: 21:9, 16:9, 4:3, 1:1, 3:4, 9:16, Smart (toggle buttons)
-- **Resolution**: 480p, 720p, 1080p (segmented control)
-- **Duration**: Seconds/Frames toggle + slider (2-30s) with numeric input
-- **Build Quantity**: Slider (1-4 videos)
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-**New file**: `src/components/ad-director/VideoParameters.tsx`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 3. Remove Brand Kit from ScriptInput main area
-Remove lines 152-256 (the Brand Kit card) and lines 258-297 (Logo Upload card) from ScriptInput, since these now live in the sidebar panel. The right column will contain: Reference Assets + Video Parameters. Adjust grid from `lg:grid-cols-5` to `lg:grid-cols-1` (single column) since Brand Kit moves to sidebar.
-
-### 4. Wire Video Parameters state
-Add `videoParams` state to `AdDirectorContent` (ratio, resolution, duration, buildQty) and pass to ScriptInput + generation pipeline. The `aspectRatio` and `duration` values feed into `generateScene`.
-
-### Files Changed
-- `src/components/ad-director/editor/BrandKitSidePanel.tsx` — **new** (Brand Kit form extracted)
-- `src/components/ad-director/VideoParameters.tsx` — **new** (ratio/resolution/duration/qty UI)
-- `src/components/ad-director/ScriptInput.tsx` — remove Brand Kit section, add VideoParameters
-- `src/components/ad-director/AdDirectorContent.tsx` — wire BrandKitSidePanel in sidebar panel, add videoParams state
-
-### No Breaking Changes
-- Brand Kit data flow unchanged (same `brand` state + `onBrandChange`)
-- AI Engine (AdvancedModelSettings) stays importable but removed from default view
-- Sidebar navigation already has "Brand kit" tab wired
-- Logo upload moves into BrandKitSidePanel
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

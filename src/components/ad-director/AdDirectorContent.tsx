@@ -30,7 +30,8 @@ import { TransitionsTab } from "./editor/TransitionsTab";
 import { TextTab } from "./editor/TextTab";
 import { RecordTab } from "./editor/RecordTab";
 import { MusicTab } from "./editor/MusicTab";
-
+import { BrandKitSidePanel } from "./editor/BrandKitSidePanel";
+import { DEFAULT_VIDEO_PARAMS, type VideoParams } from "./VideoParameters";
 
 import { Check } from "lucide-react";
 
@@ -71,6 +72,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   const [step, setStep] = useState<WorkflowStep>("script");
   const [script, setScript] = useState("");
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
+  const [videoParams, setVideoParams] = useState<VideoParams>(DEFAULT_VIDEO_PARAMS);
 
   // Load saved brand kit on mount
   useEffect(() => {
@@ -867,7 +869,12 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
             <div className="text-xs text-muted-foreground py-4 text-center">Filters & effects are available in the Preview editor step.</div>
           )}
           {externalActiveTab === "brand-kit" && (
-            <div className="text-xs text-muted-foreground py-4 text-center">Brand kit settings are in the Script & Assets step above.</div>
+            <BrandKitSidePanel
+              brand={brand}
+              onBrandChange={setBrand}
+              onSaveBrandKit={() => saveBrandKit.mutate(brand)}
+              savingBrandKit={saveBrandKit.isPending}
+            />
           )}
         </div>
       )}
@@ -891,6 +898,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               onSaveBrandKit={() => saveBrandKit.mutate(brand)}
               savingBrandKit={saveBrandKit.isPending}
               onLoadProject={handleLoadProject}
+              videoParams={videoParams}
+              onVideoParamsChange={setVideoParams}
             />
           </div>
         )}
