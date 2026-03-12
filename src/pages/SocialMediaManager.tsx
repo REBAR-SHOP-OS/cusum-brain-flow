@@ -71,6 +71,7 @@ export default function SocialMediaManager() {
 
   // Strategy panel
   const [showStrategy, setShowStrategy] = useState(false);
+  const [autoGenDate, setAutoGenDate] = useState<Date | undefined>(undefined);
 
   // Selection mode
   const [selectionMode, setSelectionMode] = useState(false);
