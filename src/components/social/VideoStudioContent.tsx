@@ -479,7 +479,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     finally { setMerging(false); }
   };
 
-  const isGenerating = status === "transforming" || status === "submitting" || status === "processing" || watermarking;
+  const isGenerating = status === "transforming" || status === "submitting" || status === "processing" || watermarking || imageGenerating || standaloneAudioGenerating;
 
   return (
     <div className={fullPage ? "flex flex-col h-full" : ""}>
