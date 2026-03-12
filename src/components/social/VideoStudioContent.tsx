@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save,
-  Music, Volume2, Wand2, Eye,
+  Music, Volume2, Wand2, Eye, Image as ImageIcon,
   Film, Clapperboard, Pencil, Share2
 } from "lucide-react";
 import { VideoEditor } from "./VideoEditor";
