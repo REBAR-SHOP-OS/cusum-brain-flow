@@ -1,46 +1,31 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Regenerated Images Must Never Be Duplicates
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+When "Regenerate image" is clicked, the current dedup logic only checks recent file **names** for style indices. It does not compare the **actual current image** of the post being regenerated, nor does it pass the current image to the AI as a negative reference. The AI can produce visually similar or identical images.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Solution
+Strengthen dedup in `supabase/functions/regenerate-post/index.ts` with two changes:
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. Pass the current post image as a negative reference to the AI
+When building the image prompt, include the post's **current `image_url`** as an input image with explicit instructions: "This is the PREVIOUS image. You MUST generate something COMPLETELY DIFFERENT — different composition, angle, color palette, subject arrangement, and mood."
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+This is the strongest dedup signal because the AI model can visually compare.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 2. Include the current image URL in the dedup hint
+Add the current `post.image_url` to the `dedupHint` text so it's explicitly called out as forbidden to replicate.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 3. Pass current image to `generatePixelImage` as a negative reference
+Extend `generatePixelImage` to accept an optional `previousImageUrl` parameter. When provided, add it as an `image_url` content part with a "DO NOT replicate this image" instruction.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+## Changes — single file: `supabase/functions/regenerate-post/index.ts`
+
+**`generatePixelImage` function (line 62-145):**
+- Add optional `previousImageUrl` param to `options`
+- When present, append an `image_url` content part + negative instruction text to `contentParts`
+
+**Image prompt section (lines 372-390):**
+- Pass `post.image_url` as `previousImageUrl` to `generatePixelImage`
+- Add explicit "MUST NOT resemble the previous image" to the prompt text
+
