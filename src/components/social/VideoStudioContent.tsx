@@ -36,7 +36,7 @@ interface ModeConfig {
   label: string;
   description: string;
   icon: React.ReactNode;
-  provider: "sora" | "veo";
+  provider: "sora" | "veo" | "wan";
   model: string;
   maxClipDuration: number;
   durationOptions: { value: string; label: string }[];
