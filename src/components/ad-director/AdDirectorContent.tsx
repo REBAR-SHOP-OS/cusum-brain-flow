@@ -869,7 +869,12 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
             <div className="text-xs text-muted-foreground py-4 text-center">Filters & effects are available in the Preview editor step.</div>
           )}
           {externalActiveTab === "brand-kit" && (
-            <div className="text-xs text-muted-foreground py-4 text-center">Brand kit settings are in the Script & Assets step above.</div>
+            <BrandKitSidePanel
+              brand={brand}
+              onBrandChange={setBrand}
+              onSaveBrandKit={() => saveBrandKit.mutate(brand)}
+              savingBrandKit={saveBrandKit.isPending}
+            />
           )}
         </div>
       )}
