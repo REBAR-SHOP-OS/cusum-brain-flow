@@ -425,6 +425,44 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     uploadedSceneUrlsRef.current = {}; pollCountRef.current = 0; setElapsedSecs(0);
     setGeneratedImageUrl(null); setImageGenerating(false);
     setStandaloneAudioUrl(null); setStandaloneAudioGenerating(false);
+    setAnalysisResults(null); setShowInsights(false); setAnalyzing(false);
+    setSuggestedHashtags([]); setModerationStatus("safe");
+  };
+
+  const handleAnalyzeVideo = async () => {
+    if (!videoUrl || analyzing) return;
+    setAnalyzing(true);
+    try {
+      const submitData = await invokeEdgeFunction<{ operationName: string; done: boolean }>("video-intelligence", {
+        action: "annotate", videoUrl,
+      });
+      if (submitData.done) {
+        // Unlikely but handle inline results
+        setShowInsights(true); setAnalyzing(false); return;
+      }
+      // Poll for results
+      const opName = submitData.operationName;
+      let attempts = 0;
+      const poll = async () => {
+        attempts++;
+        if (attempts > 60) { toast({ title: "Analysis timeout", variant: "destructive" }); setAnalyzing(false); return; }
+        const pollData = await invokeEdgeFunction<any>("video-intelligence", { action: "poll", operationName: opName });
+        if (pollData.done) {
+          if (pollData.results) {
+            setAnalysisResults(pollData.results);
+            setModerationStatus(pollData.moderationStatus || "safe");
+            setSuggestedHashtags(pollData.suggestedHashtags || []);
+          }
+          setShowInsights(true); setAnalyzing(false);
+        } else {
+          setTimeout(poll, 5000);
+        }
+      };
+      setTimeout(poll, 5000);
+    } catch (err: any) {
+      toast({ title: "Analysis failed", description: err?.message || "Unknown error", variant: "destructive" });
+      setAnalyzing(false);
+    }
   };
 
   const handleSaveToLibrary = async () => {
