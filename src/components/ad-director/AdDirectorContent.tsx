@@ -9,7 +9,7 @@ import { FinalPreview } from "./FinalPreview";
 import { ExportDialog } from "./ExportDialog";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
-import { FileText, Layers, Film, Loader2, ArrowLeft } from "lucide-react";
+import { FileText, Layers, Film, Loader2, ArrowLeft, X } from "lucide-react";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
   type ContinuityProfile, type ClipOutput, type ModelOverrides,
@@ -20,6 +20,16 @@ import { stitchClips } from "@/lib/videoStitch";
 import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { supabase } from "@/integrations/supabase/client";
+
+// Sidebar tab components
+import { StockImagesTab } from "./editor/StockImagesTab";
+import { StockVideoTab } from "./editor/StockVideoTab";
+import { TemplatesTab } from "./editor/TemplatesTab";
+import { GraphicsTab } from "./editor/GraphicsTab";
+import { TransitionsTab } from "./editor/TransitionsTab";
+import { TextTab } from "./editor/TextTab";
+import { RecordTab } from "./editor/RecordTab";
+import { MusicTab } from "./editor/MusicTab";
 
 
 import { Check } from "lucide-react";
