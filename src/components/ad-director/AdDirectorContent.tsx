@@ -353,7 +353,7 @@ export function AdDirectorContent() {
           : c
       ));
     }
-  }, [storyboard]);
+  }, [storyboard, segments]);
 
   const pollGeneration = async (sceneId: string, generationId: string, provider: "wan" | "veo" | "sora" = "wan") => {
     const maxAttempts = 120;
