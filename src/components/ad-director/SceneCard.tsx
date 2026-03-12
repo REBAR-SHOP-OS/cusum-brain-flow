@@ -67,6 +67,7 @@ export function SceneCard({
 }: SceneCardProps) {
   const [editing, setEditing] = useState(false);
   const [editPrompt, setEditPrompt] = useState(scene.prompt);
+  const [promptExpanded, setPromptExpanded] = useState(false);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
