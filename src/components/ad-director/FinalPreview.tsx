@@ -43,7 +43,8 @@ export function FinalPreview({
           <Film className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold">Final Preview</h3>
           <Badge variant="outline" className="text-[10px]">
-            {completedClips.length}/{storyboard.length} clips ready
+            {completedForExport.length}/{effectiveScenes.length} clips ready
+            {endCardEnabled && storyboard.length > 1 && " (+end card)"}
           </Badge>
         </div>
       </div>
