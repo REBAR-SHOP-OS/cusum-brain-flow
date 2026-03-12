@@ -56,10 +56,10 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
   return (
     <div className="space-y-6">
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* ── Left Column: Creative Brief ── */}
-        <div className="lg:col-span-3 space-y-4">
+        <div className="lg:col-span-2 space-y-4">
           {/* Quick Start Card */}
           {!script.trim() && (
             <button
