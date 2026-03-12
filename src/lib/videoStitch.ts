@@ -509,8 +509,16 @@ export async function stitchClips(
 
       const { video, targetDuration } = validatedClips[clipIndex];
       const effectiveDuration = Math.min(targetDuration, video.duration || targetDuration);
-      clipStartCumulativeTime = cumulativeTime;
-      video.currentTime = 0;
+      const wasPreStarted = clipPreStartedByCrossfade;
+      clipPreStartedByCrossfade = false;
+
+      if (wasPreStarted) {
+        // Clip already playing from crossfade — adjust cumulative time for elapsed time
+        clipStartCumulativeTime = cumulativeTime - video.currentTime;
+      } else {
+        clipStartCumulativeTime = cumulativeTime;
+        video.currentTime = 0;
+      }
 
       // Pre-load next clip for crossfade
       prepareNextClip(clipIndex + 1);
