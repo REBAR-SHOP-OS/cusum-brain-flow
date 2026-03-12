@@ -407,9 +407,19 @@ export async function stitchClips(
       musicElement.play().catch(() => console.warn("[stitchClips] Music play failed"));
     }
 
-    // Phase 2: Render clips sequentially
+    // Phase 2: Render clips with crossfade transitions
     let clipIndex = 0;
     let clipStartCumulativeTime = 0;
+    const crossfadeDur = overlays?.crossfadeDuration ?? 0.5;
+
+    // Pre-seek next clip for crossfade readiness
+    const prepareNextClip = (nextIdx: number) => {
+      if (nextIdx < validatedClips.length) {
+        const nv = validatedClips[nextIdx].video;
+        nv.currentTime = 0;
+        nv.pause();
+      }
+    };
 
     const playNextClip = () => {
       if (clipIndex >= validatedClips.length) {
@@ -426,6 +436,9 @@ export async function stitchClips(
       clipStartCumulativeTime = cumulativeTime;
       video.currentTime = 0;
 
+      // Pre-load next clip for crossfade
+      prepareNextClip(clipIndex + 1);
+
       onProgress?.({
         stage: "rendering",
         clipIndex,
@@ -436,11 +449,14 @@ export async function stitchClips(
       let animFrame: number;
       let hasDrawnFrame = false;
       let clipDone = false;
+      let nextClipStarted = false;
 
-      // Safety timeout: if clip gets stuck, force advance after 2x expected duration
+      const isLastClip = clipIndex >= validatedClips.length - 1;
+      const fadeStart = effectiveDuration - crossfadeDur;
+
       const safetyTimeout = setTimeout(() => {
         if (!clipDone) {
-          console.warn(`[stitchClips] Clip ${clipIndex + 1} stuck — forcing advance after ${(effectiveDuration * 2).toFixed(1)}s`);
+          console.warn(`[stitchClips] Clip ${clipIndex + 1} stuck — forcing advance`);
           finishClip();
         }
       }, effectiveDuration * 2000 + 5000);
@@ -465,8 +481,39 @@ export async function stitchClips(
           return;
         }
 
+        // Update music ducking
+        updateMusicDucking();
+
         if (!video.paused && !video.ended) {
-          ctx.drawImage(video, 0, 0, W, H);
+          const t = video.currentTime;
+          const inCrossfade = !isLastClip && crossfadeDur > 0 && t >= fadeStart && clipIndex + 1 < validatedClips.length;
+
+          if (inCrossfade) {
+            const progress = Math.min((t - fadeStart) / crossfadeDur, 1);
+
+            // Start next clip video if not already
+            if (!nextClipStarted) {
+              nextClipStarted = true;
+              const nv = validatedClips[clipIndex + 1].video;
+              nv.currentTime = 0;
+              nv.play().catch(() => {});
+            }
+
+            // Draw outgoing clip with decreasing alpha
+            ctx.globalAlpha = 1 - progress;
+            ctx.drawImage(video, 0, 0, W, H);
+
+            // Draw incoming clip with increasing alpha
+            const nextVideo = validatedClips[clipIndex + 1].video;
+            ctx.globalAlpha = progress;
+            ctx.drawImage(nextVideo, 0, 0, W, H);
+
+            ctx.globalAlpha = 1.0;
+          } else {
+            ctx.globalAlpha = 1.0;
+            ctx.drawImage(video, 0, 0, W, H);
+          }
+
           hasDrawnFrame = true;
 
           if (subtitleSegments.length > 0) {
@@ -486,7 +533,7 @@ export async function stitchClips(
       };
 
       const startDrawing = () => {
-        console.log(`[stitchClips] Clip ${clipIndex + 1}/${validatedClips.length} playing, dur=${effectiveDuration.toFixed(2)}s`);
+        console.log(`[stitchClips] Clip ${clipIndex + 1}/${validatedClips.length} playing, dur=${effectiveDuration.toFixed(2)}s, crossfade=${crossfadeDur}s`);
         drawFrame();
       };
 
@@ -494,7 +541,6 @@ export async function stitchClips(
       video.play().catch((err) => {
         video.removeEventListener("playing", startDrawing);
         console.error(`[stitchClips] Clip ${clipIndex + 1} play failed:`, err);
-        // Draw black frame and skip
         ctx.fillStyle = "#000000";
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = "#ff4444";
@@ -503,7 +549,6 @@ export async function stitchClips(
         ctx.fillText(`Scene ${clipIndex + 1} — playback failed`, W / 2, H / 2);
         ctx.textAlign = "start";
         hasDrawnFrame = true;
-        // Hold black frame for 1 second then advance
         setTimeout(() => finishClip(), 1000);
       });
     };

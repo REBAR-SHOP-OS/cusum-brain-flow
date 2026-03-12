@@ -279,9 +279,10 @@ export function ProVideoEditor({
     if (videoRef.current) setDuration(videoRef.current.duration);
   };
 
-  // ─── Auto-advance on video end ───
+  // ─── Auto-advance on video end with fade transition ───
+  const [sceneTransition, setSceneTransition] = useState(false);
+
   const handleVideoEnded = () => {
-    // Find the next completed clip
     const completedIndices = storyboard
       .map((s, i) => ({ i, clip: clips.find(c => c.sceneId === s.id) }))
       .filter(x => x.clip?.status === "completed" && x.clip?.videoUrl)
@@ -289,8 +290,14 @@ export function ProVideoEditor({
 
     const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
     if (nextIdx !== undefined) {
-      autoPlayPending.current = true;
-      setSelectedSceneIndex(nextIdx);
+      // Fade out current scene
+      setSceneTransition(true);
+      setTimeout(() => {
+        autoPlayPending.current = true;
+        setSelectedSceneIndex(nextIdx);
+        // Fade in next scene
+        setTimeout(() => setSceneTransition(false), 50);
+      }, 300);
     } else {
       setIsPlaying(false);
     }
