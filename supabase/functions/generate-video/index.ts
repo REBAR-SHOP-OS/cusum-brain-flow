@@ -574,7 +574,9 @@ serve(async (req) => {
 
       let result: { jobId: string; provider: string };
       try {
-        if (isVeo) {
+        if (isWan) {
+          result = await wanGenerate(apiKey, prompt, duration || 8);
+        } else if (isVeo) {
           try {
             result = await veoGenerate(apiKey, prompt, duration || 8);
           } catch (e) {
@@ -582,6 +584,9 @@ serve(async (req) => {
             if (isProviderCapacityError(message) && gptKey) {
               console.warn("Veo capacity reached on single generate, falling back to Sora");
               result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
+            } else if (isProviderCapacityError(message) && dashscopeKey) {
+              console.warn("Veo capacity reached, falling back to Wan");
+              result = await wanGenerate(dashscopeKey, prompt, duration || 8);
             } else {
               throw e;
             }
@@ -594,6 +599,9 @@ serve(async (req) => {
             if (isProviderCapacityError(message) && geminiKey) {
               console.warn("Sora capacity reached on single generate, falling back to Veo");
               result = await veoGenerate(geminiKey, prompt, duration || 8);
+            } else if (isProviderCapacityError(message) && dashscopeKey) {
+              console.warn("Sora capacity reached, falling back to Wan");
+              result = await wanGenerate(dashscopeKey, prompt, duration || 8);
             } else {
               throw e;
             }
