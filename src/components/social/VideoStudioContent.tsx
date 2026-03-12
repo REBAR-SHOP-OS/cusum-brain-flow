@@ -899,12 +899,17 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                   setStatus("idle");
                   setVideoUrl(null);
                   setSceneUrls([]);
-                  // Auto-correct duration for the target mode
                   if (t === "audio") setDuration("15");
                   else if (t === "video") setDuration("8");
+                  // Set default model for media type
+                  if (t === "image") setSelectedModel("gpt-image-1");
+                  else if (t === "video") setSelectedModel("veo-3.1");
+                  else setSelectedModel("elevenlabs");
                 }}
                 audioType={audioType}
                 onAudioTypeChange={setAudioType}
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
               />
             </div>
           )}

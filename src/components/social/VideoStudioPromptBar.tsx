@@ -491,14 +491,24 @@ export function VideoStudioPromptBar({
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Credits indicator */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/40 text-muted-foreground border border-border/20">
-            <Gauge className="w-3 h-3" />
-            <span>{remaining}s</span>
-            {rawPrompt.trim() && (
-              <span className="text-[10px] opacity-70">• Cost: {creditCost}s</span>
-            )}
-          </div>
+          {/* Cost / credits indicator */}
+          {mediaType === "video" ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/40 text-muted-foreground border border-border/20">
+              <Gauge className="w-3 h-3" />
+              <span>{remaining}s</span>
+              {rawPrompt.trim() && (
+                <span className="text-[10px] opacity-70">• Cost: {creditCost}s</span>
+              )}
+            </div>
+          ) : currentModelOption.free ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600 border border-green-500/20">
+              ✓ Free
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/40 text-muted-foreground border border-border/20">
+              {currentModelOption.costLabel}
+            </div>
+          )}
         </div>
 
         {/* Engineered prompt preview */}
