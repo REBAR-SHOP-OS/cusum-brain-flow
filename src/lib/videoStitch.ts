@@ -11,6 +11,8 @@
  *   • Honest output format (.webm)
  */
 
+import { supabase } from "@/integrations/supabase/client";
+
 export interface StitchOverlayOptions {
   logo?: { url: string; enabled: boolean; size?: number };
   endCard?: {
@@ -42,8 +44,10 @@ export interface StitchProgress {
 // ─── Helpers ───────────────────────────────────────────────
 
 async function fetchAsBlob(url: string): Promise<string> {
+  // Already a blob URL — return as-is
+  if (url.startsWith("blob:")) return url;
+
   // MUST convert to blob URL so canvas drawing is same-origin (not tainted).
-  // A tainted canvas makes captureStream() produce empty data.
   try {
     const resp = await fetch(url, { mode: "cors" });
     if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
@@ -56,6 +60,30 @@ async function fetchAsBlob(url: string): Promise<string> {
       const blob = await resp2.blob();
       if (blob.size > 0) return URL.createObjectURL(blob);
     } catch { /* fall through */ }
+
+    // Last resort: proxy through edge function to bypass CORS
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const proxyResp = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+            body: JSON.stringify({ action: "download", provider: "veo", videoUrl: url }),
+          }
+        );
+        if (proxyResp.ok) {
+          const blob = await proxyResp.blob();
+          if (blob.size > 0) return URL.createObjectURL(blob);
+        }
+      }
+    } catch { /* fall through */ }
+
     console.error(`[fetchAsBlob] Failed to fetch as blob: ${url}`, e);
     throw new Error(`Cannot fetch clip for stitching (CORS blocked). URL: ${url.substring(0, 80)}...`);
   }
