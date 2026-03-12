@@ -1002,7 +1002,15 @@ serve(async (req) => {
 
     // ── Download (proxy with auth headers) ──
     if (action === "download") {
-      if (isVeo) {
+      if (isWan) {
+        if (!videoUrl) {
+          return new Response(
+            JSON.stringify({ error: "videoUrl is required for Wan download" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        return await wanDownload(videoUrl);
+      } else if (isVeo) {
         if (!videoUrl) {
           return new Response(
             JSON.stringify({ error: "videoUrl is required for Veo download" }),
