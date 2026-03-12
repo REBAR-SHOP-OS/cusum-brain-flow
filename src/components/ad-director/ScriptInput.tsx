@@ -202,6 +202,23 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
                 {brand.name} {brand.tagline ? `· ${brand.tagline}` : ""}
               </div>
             )}
+
+            {/* Save Brand Kit Button */}
+            {onSaveBrandKit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSaveBrandKit}
+                disabled={savingBrandKit || !brand.name.trim()}
+                className="w-full text-xs gap-1.5"
+              >
+                {savingBrandKit ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+                ) : (
+                  <><Sparkles className="w-3.5 h-3.5" /> Save Brand Kit</>
+                )}
+              </Button>
+            )}
           </div>
 
           {/* Logo Upload Card */}

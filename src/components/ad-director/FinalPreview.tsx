@@ -93,6 +93,9 @@ export function FinalPreview({
             {endCardEnabled && storyboard.length > 1 && " (+end card)"}
           </Badge>
         </div>
+        <Badge variant="secondary" className="text-[9px] gap-1 font-medium">
+          ⚡ Alibaba Wan 2.6
+        </Badge>
       </div>
 
       {/* Render Progress */}
