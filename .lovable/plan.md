@@ -1,46 +1,37 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix ad-director-ai Persistent Runtime Error
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Root Cause
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+The logs reveal the real issue — it's **NOT a CPU timeout**. The AI model returns `finish_reason: "error"` with empty content, and `callAIAndExtract` retries the **same failing model** 3 times before throwing. The error is specifically in `handleWriteCinematicPrompt` (line 812 in compiled output).
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+The problem: `callAIAndExtract` (lines 223-247) only retries — it never tries the **fallback model**. Meanwhile, `callAI` (line 73) does have fallback logic for HTTP 5xx/429, but `finish_reason=error` comes back as HTTP 200 with broken content, so the fallback never triggers.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Fix
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### `supabase/functions/ad-director-ai/index.ts` — Add fallback model rotation to `callAIAndExtract`
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+Modify `callAIAndExtract` (lines 223-247) to:
+1. On first retry failure, switch to the **fallback model** from the route instead of retrying the same model
+2. Pass the route object (not just string) so it has access to `route.fallback`
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+```text
+Attempt 0: primary model
+Attempt 1: primary model (retry)  
+Attempt 2: fallback model (different model)
+```
+
+Changes:
+- **Lines 223-247**: Update `callAIAndExtract` to accept the full `ModelRoute` object, and on attempt 2, use `route.fallback` as `modelOverride`
+- **Lines 586-593, 618-625, 643-650, 668-675**: Update all `callAIAndExtract` callers to pass the route object correctly (they already do — `MODEL_ROUTES[x]` is passed as 2nd arg)
+
+The key fix is ~5 lines inside `callAIAndExtract`:
+```typescript
+// On last retry, switch to fallback model
+const useModel = (attempt === MAX_RETRIES) ? (model as ModelRoute).fallback : undefined;
+```
+
+### Files Changed
+- `supabase/functions/ad-director-ai/index.ts`
+
