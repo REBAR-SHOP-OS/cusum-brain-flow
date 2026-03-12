@@ -308,6 +308,39 @@ export function VideoStudioPromptBar({
             </Popover>
           )}
 
+          {/* Model pill — all media types */}
+          {modelOptions.length > 1 && (
+            <Popover open={modelOpen} onOpenChange={setModelOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors">
+                  <Cpu className="w-3 h-3" />
+                  {currentModelOption.label}
+                  <ChevronDown className="w-3 h-3 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-1" align="start">
+                {modelOptions.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => { onModelChange(m.id); setModelOpen(false); }}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+                      selectedModel === m.id ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    <span className="flex-1 text-left">{m.label}</span>
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full",
+                      m.free ? "bg-green-500/10 text-green-600" : "text-muted-foreground"
+                    )}>
+                      {m.costLabel}
+                    </span>
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
+
           {/* Aspect ratio pill — video & image only */}
           {(mediaType === "video" || mediaType === "image") && (
             <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
