@@ -961,7 +961,32 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
 
         {step === "storyboard" && (
           <>
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 space-y-3">
+              {/* Build version tabs */}
+              {builds.length > 1 && (
+                <div className="flex items-center gap-1 rounded-lg border border-border/30 bg-card/30 p-1 w-fit">
+                  {builds.map((b) => (
+                    <button
+                      key={b.buildIndex}
+                      onClick={() => {
+                        setActiveBuildIndex(b.buildIndex);
+                        setClips(b.clips);
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                        activeBuildIndex === b.buildIndex
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                      )}
+                    >
+                      Version {b.buildIndex + 1}
+                      {b.clips.every(c => c.status === "completed") && (
+                        <Check className="w-3 h-3 ml-1 inline" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
               <StoryboardTimeline
                 segments={segments}
                 storyboard={storyboard}
