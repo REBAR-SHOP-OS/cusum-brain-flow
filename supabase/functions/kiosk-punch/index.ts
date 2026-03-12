@@ -62,7 +62,8 @@ Deno.serve(async (req) => {
       .single();
 
     const profileEmail = (profileData?.email || "").toLowerCase();
-    const isRebarUser = profileEmail.endsWith("@rebar.shop") && profileEmail !== "kourosh@rebar.shop";
+    const CLOCK_EXEMPT = ["kourosh@rebar.shop", "saurabh@rebar.shop", "anderson@rebar.shop"];
+    const isRebarUser = profileEmail.endsWith("@rebar.shop") && !CLOCK_EXEMPT.includes(profileEmail);
 
     // Check for open shift
     const { data: openShifts } = await svc
