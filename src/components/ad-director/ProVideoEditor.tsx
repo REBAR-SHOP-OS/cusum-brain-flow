@@ -661,18 +661,12 @@ export function ProVideoEditor({
       return;
     }
 
-    // If voiceover is still playing, orphan it from audioRef so cleanup won't kill it
-    const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
-    if (voStillPlaying) {
-      if (videoRef.current) videoRef.current.pause();
-      const orphanedAudio = audioRef.current!;
-      audioRef.current = null; // Detach — cleanup effect won't touch it
+    // Stop VO cleanly instead of orphaning — VO is speed-matched so cutting tail is acceptable
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current = null;
       currentVoUrlRef.current = null;
-      orphanedAudio.onended = () => {
-        orphanedAudio.onended = null;
-        doAdvance(nextIdx);
-      };
-      return;
     }
 
     doAdvance(nextIdx);
