@@ -13,6 +13,8 @@ import {
   type PromptQualityScore, DEFAULT_BRAND, DEMO_SCRIPT,
 } from "@/types/adDirector";
 import { cn } from "@/lib/utils";
+import { stitchClips } from "@/lib/videoStitch";
+import { mergeVideoAudio } from "@/lib/videoAudioMerge";
 
 type WorkflowStep = "script" | "storyboard" | "preview";
 
