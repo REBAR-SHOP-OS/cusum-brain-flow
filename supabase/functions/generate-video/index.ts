@@ -546,6 +546,7 @@ serve(async (req) => {
       imageUrl: z.string().max(2000).optional(),
       audioUrl: z.string().max(2000).optional(),
       negativePrompt: z.string().max(2000).optional(),
+      aspectRatio: z.string().max(10).optional(),
     });
     const parsed = videoSchema.safeParse(await req.json());
     if (!parsed.success) {
