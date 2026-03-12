@@ -81,6 +81,7 @@ import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 import Estimation from "./pages/Estimation";
 import QuoteEngine from "./pages/QuoteEngine";
 import AutomationsHub from "./pages/AutomationsHub";
+import VideoStudio from "./pages/VideoStudio";
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
 
