@@ -540,6 +540,14 @@ export default function Tasks() {
     }
   };
 
+  const transferToSattar = async (taskId: string) => {
+    const { error } = await supabase.from("tasks").update({ assigned_to: SATTAR_PROFILE_ID, updated_at: new Date().toISOString() }).eq("id", taskId);
+    if (error) { toast.error(error.message); return; }
+    await writeAudit(taskId, "transfer", "assigned_to", RADIN_PROFILE_ID, SATTAR_PROFILE_ID);
+    toast.success("Task transferred to Sattar");
+    loadData();
+  };
+
   const toggleComplete = async (task: TaskRow) => {
     const isCompleted = task.status === "completed";
     if (!isCompleted && !canMarkComplete(task)) {
@@ -1027,6 +1035,15 @@ export default function Tasks() {
                               )}
                             </div>
                           </button>
+                          {currentProfileId === RADIN_PROFILE_ID && task.assigned_to === RADIN_PROFILE_ID && task.status !== "completed" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); transferToSattar(task.id); }}
+                              title="Transfer to Sattar"
+                              className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 text-muted-foreground hover:text-primary"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => deleteTask(task.id)}
                             className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 text-muted-foreground hover:text-destructive"
