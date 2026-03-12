@@ -63,7 +63,7 @@ export function useVideoCredits() {
   });
 
   const consumeCredits = useMutation({
-    mutationFn: async ({ durationSeconds, mode }: { durationSeconds: number; mode: string }) => {
+    mutationFn: async ({ durationSeconds, mode, generationId }: { durationSeconds: number; mode: string; generationId?: string }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       if (!credits) throw new Error("Credits not loaded");
@@ -93,7 +93,46 @@ export function useVideoCredits() {
         });
       if (logErr) console.error("Usage log error:", logErr);
 
+      // Write ledger entry
+      await supabase.from("credit_ledger").insert({
+        user_id: user.id,
+        generation_id: generationId || null,
+        type: "reserve",
+        amount: cost,
+        description: `Reserved ${cost}s for ${mode} ${durationSeconds}s video`,
+      });
+
       return { cost, remaining: remaining - cost };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["video_credits"] });
+    },
+  });
+
+  const refundCredits = useMutation({
+    mutationFn: async ({ cost, generationId }: { cost: number; generationId?: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      if (!credits) throw new Error("Credits not loaded");
+
+      // Restore credits
+      const newUsed = Math.max(0, credits.used_seconds - cost);
+      const { error: updateErr } = await supabase
+        .from("video_credits")
+        .update({ used_seconds: newUsed, updated_at: new Date().toISOString() })
+        .eq("id", credits.id);
+      if (updateErr) throw updateErr;
+
+      // Write refund ledger entry
+      await supabase.from("credit_ledger").insert({
+        user_id: user.id,
+        generation_id: generationId || null,
+        type: "refund",
+        amount: cost,
+        description: `Refund ${cost}s — generation failed`,
+      });
+
+      return { refunded: cost };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["video_credits"] });
@@ -123,5 +162,6 @@ export function useVideoCredits() {
     canGenerate,
     getCost,
     consumeCredits,
+    refundCredits,
   };
 }

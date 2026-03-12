@@ -15,6 +15,7 @@ import {
 import { VideoEditor } from "./VideoEditor";
 import { VideoToSocialPanel } from "./VideoToSocialPanel";
 import { useVideoCredits } from "@/hooks/useVideoCredits";
+import { useGenerations } from "@/hooks/useGenerations";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { slideshowToVideo } from "@/lib/slideshowToVideo";
@@ -111,8 +112,10 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const navigate = useNavigate();
   const { toast } = useToast();
   const { transform, isTransforming, transformResult, transformError, reset: resetTransform } = usePromptTransformer();
-  const { remaining, total, usedPercent, plan, canGenerate, getCost, consumeCredits } = useVideoCredits();
+  const { remaining, total, usedPercent, plan, canGenerate, getCost, consumeCredits, refundCredits } = useVideoCredits();
+  const { createGeneration, updateGeneration } = useGenerations();
   const [showSocialPanel, setShowSocialPanel] = useState(false);
+  const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
 
   // Form state
   const [rawPrompt, setRawPrompt] = useState("");
@@ -184,6 +187,24 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   }, [status]);
 
   useEffect(() => cleanup, [cleanup]);
+
+  // Refund credits on failure + update generation record
+  useEffect(() => {
+    if (status === "failed" && currentGenerationId) {
+      const durationSecs = parseInt(duration);
+      const creditCost = getCost(durationSecs, mode);
+      refundCredits.mutateAsync({ cost: creditCost, generationId: currentGenerationId }).catch(console.error);
+      updateGeneration.mutateAsync({ id: currentGenerationId, status: "failed", error_message: error || "Generation failed" }).catch(console.error);
+    }
+    if (status === "completed" && currentGenerationId && videoUrl) {
+      updateGeneration.mutateAsync({
+        id: currentGenerationId,
+        status: "completed",
+        output_asset_url: videoUrl,
+        actual_credits: getCost(parseInt(duration), mode),
+      }).catch(console.error);
+    }
+  }, [status]);
 
   useEffect(() => {
     if (status === "completed" && rawPrompt && !audioPrompt) {
@@ -341,17 +362,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
     // Credit check
     const durationSecs = parseInt(duration);
+    const creditCost = getCost(durationSecs, mode);
     if (!canGenerate(durationSecs, mode)) {
-      const cost = getCost(durationSecs, mode);
-      toast({ title: "Not enough credits", description: `Need ${cost}s credits, have ${remaining}s remaining.`, variant: "destructive" });
-      return;
-    }
-
-    // Consume credits upfront
-    try {
-      await consumeCredits.mutateAsync({ durationSeconds: durationSecs, mode });
-    } catch (err: any) {
-      toast({ title: "Credit error", description: err.message, variant: "destructive" });
+      toast({ title: "Not enough credits", description: `Need ${creditCost}s credits, have ${remaining}s remaining.`, variant: "destructive" });
       return;
     }
 
@@ -368,11 +381,39 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
     const result = await transform(rawPrompt, aspectRatio, parseInt(duration));
     if (!result) {
-      // Fallback: use raw prompt if transform fails
       console.warn("Prompt transform failed, using raw prompt");
     }
 
     const finalPrompt = result?.engineeredPrompt || rawPrompt.trim();
+
+    // Create generation record
+    let genRecord: any = null;
+    try {
+      genRecord = await createGeneration.mutateAsync({
+        raw_prompt: rawPrompt.trim(),
+        engineered_prompt: finalPrompt,
+        intent: result?.intent,
+        mode,
+        duration_seconds: durationSecs,
+        aspect_ratio: aspectRatio,
+        provider: currentMode.provider,
+        estimated_credits: creditCost,
+        metadata: { elements: result?.elements, platform_intent: result?.platform_intent },
+      });
+      setCurrentGenerationId(genRecord.id);
+    } catch (err) {
+      console.error("Failed to create generation record:", err);
+    }
+
+    // Consume credits upfront
+    try {
+      await consumeCredits.mutateAsync({ durationSeconds: durationSecs, mode, generationId: genRecord?.id });
+    } catch (err: any) {
+      toast({ title: "Credit error", description: err.message, variant: "destructive" });
+      if (genRecord) updateGeneration.mutateAsync({ id: genRecord.id, status: "failed", error_message: err.message });
+      setStatus("idle");
+      return;
+    }
 
     // Step 2: Generate the video
     setStatus("submitting");
@@ -655,11 +696,11 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
                 {/* Prompt Box */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Describe your video idea</Label>
+                  <Label className="text-sm font-medium">What do you want to create?</Label>
                   <Textarea
                     value={rawPrompt}
                     onChange={(e) => setRawPrompt(e.target.value)}
-                    placeholder="Describe your video idea — we'll turn it into a cinematic prompt."
+                    placeholder="Say it naturally — we'll turn it into a production-ready video prompt."
                     className={`resize-none ${fullPage ? "min-h-[140px]" : "min-h-[100px]"}`}
                     disabled={isTransforming}
                   />
@@ -730,6 +771,11 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                       <button className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors w-full">
                         <Wand2 className="w-3.5 h-3.5" />
                         <span>Engineered Prompt</span>
+                        {transformResult.intent && transformResult.intent !== "cinematic_broll" && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-violet-500/10 text-violet-600 border-violet-500/20">
+                            {transformResult.intent.replace(/_/g, " ")}
+                          </Badge>
+                        )}
                         {transformResult.isConstructionRelated && (
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-amber-500/10 text-amber-600 border-amber-500/20">
                             Construction Enhanced
@@ -1086,6 +1132,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 <div className="space-y-4 py-4">
                   <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-center">
                     <p className="text-sm font-medium text-destructive">{error}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Credits have been automatically refunded.</p>
                   </div>
                   <Button variant="outline" className="w-full gap-2" onClick={handleReset}>
                     <RotateCcw className="w-4 h-4" /> Try Again

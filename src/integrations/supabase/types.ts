@@ -2351,6 +2351,44 @@ export type Database = {
           },
         ]
       }
+      credit_ledger: {
+        Row: {
+          amount: number
+          created_at: string | null
+          description: string | null
+          generation_id: string | null
+          id: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          description?: string | null
+          generation_id?: string | null
+          id?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          description?: string | null
+          generation_id?: string | null
+          id?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_ledger_generation_id_fkey"
+            columns: ["generation_id"]
+            isOneToOne: false
+            referencedRelation: "generations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_shape_schematics: {
         Row: {
           ai_analysis: string | null
@@ -4901,6 +4939,69 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      generations: {
+        Row: {
+          actual_credits: number | null
+          aspect_ratio: string | null
+          created_at: string | null
+          duration_seconds: number
+          engineered_prompt: string | null
+          error_message: string | null
+          estimated_credits: number | null
+          id: string
+          intent: string | null
+          job_id: string | null
+          metadata: Json | null
+          mode: string
+          output_asset_url: string | null
+          provider: string | null
+          raw_prompt: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          actual_credits?: number | null
+          aspect_ratio?: string | null
+          created_at?: string | null
+          duration_seconds: number
+          engineered_prompt?: string | null
+          error_message?: string | null
+          estimated_credits?: number | null
+          id?: string
+          intent?: string | null
+          job_id?: string | null
+          metadata?: Json | null
+          mode: string
+          output_asset_url?: string | null
+          provider?: string | null
+          raw_prompt: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          actual_credits?: number | null
+          aspect_ratio?: string | null
+          created_at?: string | null
+          duration_seconds?: number
+          engineered_prompt?: string | null
+          error_message?: string | null
+          estimated_credits?: number | null
+          id?: string
+          intent?: string | null
+          job_id?: string | null
+          metadata?: Json | null
+          mode?: string
+          output_asset_url?: string | null
+          provider?: string | null
+          raw_prompt?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       gl_lines: {
         Row: {
