@@ -576,6 +576,19 @@ export function VideoStudioPromptBar({
           )}
         </div>
 
+        {/* Negative prompt input */}
+        {showNegativePrompt && mediaType === "video" && isWanModel && (
+          <div className="px-3 pb-2">
+            <input
+              type="text"
+              value={negativePrompt}
+              onChange={(e) => onNegativePromptChange?.(e.target.value)}
+              placeholder="Things to avoid: blur, text, watermark, low quality..."
+              className="w-full px-3 py-2 rounded-lg bg-destructive/5 border border-destructive/20 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-destructive/30"
+            />
+          </div>
+        )}
+
         {/* Engineered prompt preview */}
         {showEngineered && engineeredPrompt && mediaType === "video" && (
           <div className="px-3 pb-3">
