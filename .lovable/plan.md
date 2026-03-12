@@ -1,46 +1,48 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix Build Quantity: Generate Complete Ad Videos, Not Scene Duplicates
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+"Build Quantity = 4" currently duplicates every storyboard scene 4 times (cloning scene cards into the timeline). The user expects **4 complete ad video outputs** — each an independently generated full ad — not 4 copies of each scene.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## What Changes
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. `src/components/ad-director/AdDirectorContent.tsx` — Rewrite `handleGenerateAll`
+- **Remove** the storyboard/clip duplication logic (lines 556-582) that clones scene entries with `-v2`, `-v3` suffixes
+- **Instead**, run the entire generation pipeline `buildQty` times sequentially (or with light parallelism), producing `buildQty` independent sets of clips
+- Store results as separate "builds" — e.g. `Build 1`, `Build 2`, etc. — each containing clips for all scenes
+- Add a `builds` state array: `{ buildIndex: number, clips: ClipOutput[] }[]`
+- After all builds finish, the user can preview/compare/export any build
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 2. `src/components/ad-director/AdDirectorContent.tsx` — Build selector UI
+- Add a simple tab bar or dropdown in the Storyboard/Preview step: "Build 1 | Build 2 | Build 3 | Build 4"
+- The active build determines which clip set is displayed in the timeline and preview
+- Export uses the selected build's clips
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 3. `src/components/ad-director/StoryboardTimeline.tsx` — No scene duplication
+- Timeline stays clean — always shows the original storyboard scenes
+- Clips shown come from the currently selected build
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 4. `src/components/ad-director/VideoParameters.tsx` — Label clarity
+- Rename "Build Quantity" label to "Number of Ad Versions" so intent is clear
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+## Technical Flow
+```text
+User sets: 4 versions × 8s duration
+           ↓
+handleGenerateAll loops 4 times:
+  Build 1: generate scene-1 → scene-N (8s each)
+  Build 2: generate scene-1 → scene-N (8s each)
+  Build 3: ...
+  Build 4: ...
+           ↓
+Each build stored in builds[] state
+User tabs between builds to compare
+Export uses selected build
+```
+
+### Files
+- `src/components/ad-director/AdDirectorContent.tsx` — builds state, rewrite handleGenerateAll, build selector
+- `src/components/ad-director/StoryboardTimeline.tsx` — accept clips from selected build
+- `src/components/ad-director/VideoParameters.tsx` — rename label
+
