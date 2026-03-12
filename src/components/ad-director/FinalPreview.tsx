@@ -81,14 +81,14 @@ export function FinalPreview({
                 <>
                   <Loader2 className="w-8 h-8 text-primary mx-auto animate-spin" />
                   <p className="text-xs text-muted-foreground">
-                    Generating scenes... {completedClips.length}/{storyboard.length} completed
+                    Generating scenes... {completedForExport.length}/{effectiveScenes.length} completed
                   </p>
                 </>
-              ) : completedClips.length > 0 ? (
+              ) : completedForExport.length > 0 ? (
                 <>
                   <Play className="w-8 h-8 text-muted-foreground mx-auto" />
                   <p className="text-xs text-muted-foreground">
-                    {allCompleted ? "Ready to stitch — click Export" : `${storyboard.length - completedClips.length} scenes remaining`}
+                    {allCompleted ? "Ready to stitch — click Export" : `${effectiveScenes.length - completedForExport.length} scenes remaining`}
                   </p>
                   {slideshowCount > 0 && (
                     <p className="text-[10px] text-yellow-500">
