@@ -369,7 +369,8 @@ Your job: Take a scene plan and rewrite its prompt into a highly specific, visua
 Rules:
 - Be extremely specific about visual details: materials, textures, lighting angles, camera lens, movement speed
 - Avoid generic descriptions like "professional looking" or "high quality"
-- Include specific camera specs: "shot on ARRI Alexa, 35mm lens, f/2.8"
+- NEVER mention camera brand names (ARRI, RED, Sony, Canon, Blackmagic) — video models render these as on-screen text. Instead describe lens characteristics: "50mm anamorphic lens, f/2.8, shallow depth of field, 4K cinematic grade"
+- Do NOT include any text, titles, or brand names in the prompt — all text overlays are handled by the editing system
 - Specify exact lighting: "golden hour backlight with tungsten fill from 45° left"
 - Describe materials precisely: "weathered steel rebar bundles with rust patina, fresh concrete with moisture sheen"
 - Include motion details: "slow dolly forward at 2ft/s, slight crane up revealing scale"
