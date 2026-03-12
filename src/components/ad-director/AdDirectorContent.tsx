@@ -131,7 +131,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
         script, brand,
         assetDescriptions: assets.length > 0 ? assets.map(f => f.name).join(", ") : undefined,
         modelOverrides,
-      }));
+      }, { timeoutMs: 90_000 }));
 
       const { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
       const plannedBy = analyzeResult.modelUsed;
