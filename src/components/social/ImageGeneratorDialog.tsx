@@ -122,12 +122,12 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
           prompt: finalPrompt,
           model: selectedModel,
           aspectRatio: storyMode ? "9:16" : "1:1",
-          logoUrl: selectedThemes.has("logo") ? (brandKit?.logo_url || undefined) : undefined,
+          logoUrl: brandKit?.logo_url || undefined,
           brandContext: {
             business_name: brandKit?.business_name || undefined,
             description: brandKit?.description || undefined,
             value_prop: brandKit?.value_prop || undefined,
-            tagline: undefined,
+            tagline: (brandKit as any)?.tagline || undefined,
           },
         },
       });
