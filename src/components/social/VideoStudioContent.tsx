@@ -373,7 +373,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
     setStatus("submitting"); setProgress(0); setProgressLabel("");
     const requestedDuration = parseInt(duration);
-    const isMultiScene = requestedDuration > currentMode.maxClipDuration;
+    const isMultiScene = requestedDuration > effectiveMaxClip;
     isMultiRef.current = isMultiScene;
 
     try {
