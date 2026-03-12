@@ -546,7 +546,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
             })()}
 
             {/* Completed */}
-            {status === "completed" && videoUrl && !showEditor && (
+            {mediaType === "video" && status === "completed" && videoUrl && !showEditor && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-[hsl(var(--success))]">
                   <CheckCircle2 className="w-5 h-5" />
