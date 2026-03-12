@@ -72,6 +72,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   const [step, setStep] = useState<WorkflowStep>("script");
   const [script, setScript] = useState("");
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
+  const [videoParams, setVideoParams] = useState<VideoParams>(DEFAULT_VIDEO_PARAMS);
 
   // Load saved brand kit on mount
   useEffect(() => {
