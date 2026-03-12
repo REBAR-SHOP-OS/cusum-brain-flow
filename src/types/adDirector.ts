@@ -106,11 +106,11 @@ export const DEFAULT_MODEL_ROUTES: Record<string, { preferred: string; fallback:
 };
 
 export const TASK_CATEGORY_MAP: Record<string, AITaskType[]> = {
-  "Script Intelligence": ["analyze-script", "generate-storyboard", "classify-scene"],
-  "Prompt Generation": ["write-cinematic-prompt", "improve-prompt", "optimize-ad"],
-  "Evaluation": ["score-prompt-quality", "quality-review", "continuity-check"],
-  "Vision": ["analyze-reference"],
-  "Voiceover & Copy": ["rewrite-cta", "generate-subtitles", "generate-voiceover"],
+  "Script & Planning (GPT)":      ["analyze-script", "generate-storyboard"],
+  "Creative Writing (GPT)":       ["write-cinematic-prompt", "improve-prompt", "optimize-ad"],
+  "Vision & Continuity (Google)": ["analyze-reference", "continuity-check"],
+  "Evaluation (Google)":          ["score-prompt-quality", "quality-review", "classify-scene"],
+  "Copy & Voiceover (GPT)":      ["rewrite-cta", "generate-subtitles", "generate-voiceover"],
 };
 
 // ─── Storyboard Scene ────────────────────────────────────────
