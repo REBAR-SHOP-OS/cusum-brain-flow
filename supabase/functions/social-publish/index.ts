@@ -10,6 +10,34 @@ const corsHeaders = {
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+/**
+ * Refresh a Facebook Page token using the user's long-lived token.
+ * Returns a fresh page access token with current permissions, or null on failure.
+ */
+async function refreshPageToken(
+  userLongLivedToken: string,
+  pageId: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API}/${pageId}?fields=access_token&access_token=${userLongLivedToken}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.access_token) {
+        console.log(`[social-publish] Refreshed page token for page ${pageId}`);
+        return data.access_token;
+      }
+    } else {
+      const errBody = await res.text();
+      console.warn(`[social-publish] Page token refresh failed (${res.status}): ${errBody}`);
+    }
+  } catch (e) {
+    console.warn(`[social-publish] Page token refresh exception:`, e);
+  }
+  return null;
+}
+
 async function verifyAuth(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
