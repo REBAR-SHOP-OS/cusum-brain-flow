@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { buildEventPromptBlock } from "../_shared/eventCalendar.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -190,11 +191,15 @@ serve(async (req) => {
       // Pick diverse styles for each slot
       const shuffledStyles = [...VISUAL_STYLES].sort(() => Math.random() - 0.5);
 
+      // Inject upcoming event context
+      const eventBlock = buildEventPromptBlock(new Date(postDate), 3);
+
       const systemPrompt = `You are **Pixel**, a professional social media content generator for REBAR.SHOP — an AI-driven rebar fabrication company in Ontario.
 
 ${brandKit}
 
 ${intelligence}
+${eventBlock}
 
 ## CONTACT INFO (MUST appear in EVERY post caption — exactly as shown):
 📍 9 Cedar Ave, Thornhill, Ontario

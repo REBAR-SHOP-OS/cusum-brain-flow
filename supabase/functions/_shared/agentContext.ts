@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { performOCR, performOCROnBase64, analyzeDocumentWithGemini, convertPdfToImages, detectZones, extractRebarData, performMultiPassAnalysis } from "./agentDocumentUtils.ts";
 import type { ValidationRule } from "./agentTypes.ts";
+import { buildEventPromptBlock } from "./eventCalendar.ts";
 
 export async function fetchContext(
   supabase: ReturnType<typeof createClient>, 
@@ -223,6 +224,12 @@ ENFORCEMENT RULES:
 
       // Pixel-specific: fetch knowledge items tagged with metadata.agent = "social"
       if (agent === "social") {
+        // Inject upcoming event calendar
+        const eventBlock = buildEventPromptBlock(new Date(), 5);
+        if (eventBlock) {
+          brainBlock += `\n${eventBlock}`;
+        }
+
         try {
           const { data: pixelItems } = await svc
             .from("knowledge")
