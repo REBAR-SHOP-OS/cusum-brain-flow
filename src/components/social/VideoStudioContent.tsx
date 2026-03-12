@@ -620,9 +620,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           <VideoLibrary onSelectVideo={(url) => onVideoReady?.(url)} />
         </TabsContent>
 
-        <TabsContent value="generate" className={fullPage ? "flex flex-col flex-1 min-h-0" : ""}>
-          {/* Results area — fills space above prompt bar */}
-          <div className={fullPage ? "flex-1 min-h-0 overflow-y-auto pb-4" : "space-y-4"}>
+        <TabsContent value="generate" className={fullPage ? "flex flex-col" : ""}>
+          {/* Results area */}
+          <div className={fullPage ? "pb-4" : "space-y-4"}>
             {/* Progress */}
             {(status === "submitting" || status === "processing") && (() => {
               const sceneCount = isMultiRef.current ? Math.ceil(parseInt(duration) / currentMode.maxClipDuration) : 1;
