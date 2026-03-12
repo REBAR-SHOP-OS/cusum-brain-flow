@@ -207,22 +207,6 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
                 </div>
               </div>
 
-              {/* Size */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Size</Label>
-                <Select value={size} onValueChange={setSize}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currentModel.sizes.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
 
               {/* Generate */}
               <Button
