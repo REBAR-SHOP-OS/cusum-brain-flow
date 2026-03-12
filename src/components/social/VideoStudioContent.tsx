@@ -436,6 +436,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     if (refImageStorageUrl) wanExtras.imageUrl = refImageStorageUrl;
     if (audioStorageUrl) wanExtras.audioUrl = audioStorageUrl;
     if (negativePrompt.trim()) wanExtras.negativePrompt = negativePrompt.trim();
+    wanExtras.aspectRatio = "16:9";
 
     try {
       if (isMultiScene) {
