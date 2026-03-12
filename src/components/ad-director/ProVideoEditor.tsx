@@ -66,6 +66,7 @@ export function ProVideoEditor({
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
+  const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
