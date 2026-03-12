@@ -302,6 +302,45 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
         </div>
       </div>
 
+      {/* Project History */}
+      {projects.data && projects.data.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-primary" />
+            <Label className="text-sm font-semibold">Recent Projects</Label>
+            <Badge variant="outline" className="text-[9px]">{projects.data.length}</Badge>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[200px] overflow-y-auto">
+            {projects.data.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center gap-2 p-3 rounded-xl border border-border/30 bg-card/30 hover:border-primary/30 hover:bg-primary/5 transition-all group cursor-pointer"
+                onClick={() => onLoadProject?.(p)}
+              >
+                <FolderOpen className="w-4 h-4 text-muted-foreground group-hover:text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground">{format(new Date(p.updated_at), "MMM d, HH:mm")}</span>
+                    <Badge variant="outline" className={cn("text-[8px] h-4", p.status === "completed" ? "border-emerald-500/30 text-emerald-400" : "")}>
+                      {p.status}
+                    </Badge>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => { e.stopPropagation(); deleteProject.mutate(p.id); }}
+                >
+                  <Trash2 className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Primary CTA */}
       <div className="space-y-2">
         <Button
