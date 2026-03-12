@@ -141,7 +141,7 @@ export function AdDirectorContent() {
           // Try improvement
           for (let attempt = 0; attempt < MAX_IMPROVE_ATTEMPTS; attempt++) {
             try {
-              const improveRes = await invokeEdgeFunction<{
+              const improveRes = await withTimeout(invokeEdgeFunction<{
                 result: { prompt: string };
                 modelUsed: string;
               }>("ad-director-ai", {
@@ -151,10 +151,10 @@ export function AdDirectorContent() {
                 scene: rawStoryboard[idx],
                 brand,
                 modelOverrides,
-              });
+              }));
 
               // Re-score
-              const rescoreRes = await invokeEdgeFunction<{
+              const rescoreRes = await withTimeout(invokeEdgeFunction<{
                 result: PromptQualityScore;
               }>("ad-director-ai", {
                 action: "score-prompt-quality",
@@ -162,7 +162,7 @@ export function AdDirectorContent() {
                 scene: rawStoryboard[idx],
                 brand,
                 modelOverrides,
-              });
+              }));
 
               qualityResults[idx] = { quality: rescoreRes.result, scoredBy: qualityResults[idx].scoredBy };
 
