@@ -502,7 +502,7 @@ export default function TimeClock() {
                     <>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Monitor className="w-4 h-4" />
-                        <span>{presentCount} people present (kiosk)</span>
+                        <span>{presentCount} people present</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {loading ? (
