@@ -121,24 +121,31 @@ export function SceneCard({
           </div>
         </div>
 
-        {/* Objective */}
-        <p className="text-xs text-muted-foreground leading-relaxed">{scene.objective}</p>
-
-        {/* Visual Details */}
-        <div className="grid grid-cols-3 gap-2 text-[10px]">
-          <div>
-            <span className="text-muted-foreground block">Shot</span>
-            <span className="text-foreground">{scene.shotType}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground block">Camera</span>
-            <span className="text-foreground">{scene.cameraMovement}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground block">Tone</span>
-            <span className="text-foreground">{scene.emotionalTone}</span>
-          </div>
-        </div>
+        {/* Collapsible Scene Details */}
+        <Collapsible>
+          <CollapsibleTrigger className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+            <span>Scene details ▸</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-2 pt-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">{scene.objective}</p>
+            <div className="grid grid-cols-3 gap-2 text-[10px]">
+              <div>
+                <span className="text-muted-foreground block">Shot</span>
+                <span className="text-foreground">{scene.shotType}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block">Camera</span>
+                <span className="text-foreground">{scene.cameraMovement}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block">Tone</span>
+                <span className="text-foreground">{scene.emotionalTone}</span>
+              </div>
+            </div>
+            {/* Scene Intelligence Bar */}
+            <SceneIntelligenceBar intelligence={scene.sceneIntelligence} />
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Prompt */}
         <div className="space-y-1">
