@@ -31,6 +31,7 @@ export default function CEOPortal() {
     <ScrollArea className="h-full">
       <div className="p-6 space-y-5 max-w-[1440px] mx-auto">
         <BusinessHeartbeat />
+        <AITokenUsageCard />
         
         <DailyBriefingCard />
         <SLATrackerCard />
