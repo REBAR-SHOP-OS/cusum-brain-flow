@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -143,6 +144,7 @@ export function PostReviewPanel({
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [showStoryGen, setShowStoryGen] = useState(false); // rebuild-trigger-v1
   const [uploading, setUploading] = useState(false);
+  const [imageZoomOpen, setImageZoomOpen] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [fbPublishReady, setFbPublishReady] = useState<boolean | null>(null);
@@ -355,11 +357,19 @@ export function PostReviewPanel({
                 {/* ── Visual Section ── */}
                 <div className="p-4 space-y-3">
                   {post.image_url ? (
-                    <div className="rounded-lg overflow-hidden bg-muted">
+                    <div className="rounded-lg overflow-hidden bg-muted relative group">
                       {isVideo ? (
                         <video src={post.image_url} controls className="w-full rounded-lg" style={{ maxHeight: '400px' }} />
                       ) : (
-                        <img src={post.image_url} alt="Post preview" className="w-full object-contain rounded-lg" />
+                        <>
+                          <img src={post.image_url} alt="Post preview" className="w-full object-contain rounded-lg" />
+                          <button
+                            onClick={() => setImageZoomOpen(true)}
+                            className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <ZoomIn className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   ) : uploading ? (
@@ -900,6 +910,13 @@ export function PostReviewPanel({
           handleMediaReady(url, "image");
         }}
       />
+      {post?.image_url && !isVideo && (
+        <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
+          <DialogContent className="max-w-[90vw] max-h-[90vh] p-2">
+            <img src={post.image_url} alt="Full preview" className="w-full h-full object-contain" />
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }
