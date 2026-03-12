@@ -33,6 +33,7 @@ export function AdDirectorContent() {
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
+  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [modelOverrides, setModelOverrides] = useState<ModelOverrides>({});
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
