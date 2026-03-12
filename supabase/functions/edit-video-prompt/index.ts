@@ -25,6 +25,8 @@ OVERLAY edits are non-destructive additions placed ON TOP of the existing video:
 - Adding a logo, watermark, sticker, or icon to something in the scene
 - Adding text labels, titles, captions
 - "Put logo on X", "add text saying Y", "overlay the brand mark"
+- "Animated logo", "logo animation", "create logo", "logo intro", "brand intro animation", "add brand logo"
+- ANY request that mentions "logo" is ALWAYS an overlay — unless the user explicitly asks to change the background video content itself
 
 GENERATIVE edits require creating a new video:
 - Changing lighting, style, mood, camera angle
@@ -35,7 +37,9 @@ GENERATIVE edits require creating a new video:
 STEP 2 — RESPOND:
 
 If OVERLAY: output ONLY this JSON:
-{ "type": "overlay", "overlay": { "kind": "logo" | "text", "position": "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center", "size": "small" | "medium" | "large", "content": "the text content or 'brand_logo' for logo" } }
+{ "type": "overlay", "overlay": { "kind": "logo" | "text", "position": "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center", "size": "small" | "medium" | "large", "content": "the text content or 'brand_logo' for logo", "animated": true | false } }
+
+Set "animated" to true when the user requests animation, motion, fade-in, reveal, shimmer, or any dynamic effect on the overlay.
 
 If GENERATIVE: output ONLY this JSON:
 { "type": "generative", "editedPrompt": "the modified prompt as a single paragraph under 200 words" }
@@ -44,7 +48,8 @@ RULES:
 1. Keep the same subject and general scene unless told to change it
 2. Apply the requested modification precisely
 3. For generative edits, keep the result under 200 words, single paragraph, NO bullet points
-4. NEVER output anything except the JSON object`;
+4. NEVER output anything except the JSON object
+5. When in doubt about logo requests, ALWAYS classify as overlay`;
 
 const EDIT_ACTION_INSTRUCTIONS: Record<EditAction, string> = {
   "change-style": "Change the visual style of this video while keeping the same subject and scene. New style: ",

@@ -114,6 +114,7 @@ export default {
         "fade-in": "fade-in 0.2s ease-out",
         "slide-in": "slide-in 0.2s ease-out",
         "pulse-subtle": "pulse-subtle 2s ease-in-out infinite",
+        "logo-reveal": "logo-reveal 1.5s ease-out forwards",
       },
     },
   },

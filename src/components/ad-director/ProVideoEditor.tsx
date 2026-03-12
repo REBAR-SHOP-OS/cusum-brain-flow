@@ -254,7 +254,7 @@ export function ProVideoEditor({
             {sceneOverlays.map(ov => (
               <div
                 key={ov.id}
-                className="absolute pointer-events-none z-20"
+                className={`absolute pointer-events-none z-20 ${ov.animated ? "animate-logo-reveal" : ""}`}
                 style={{
                   left: `${ov.position.x}%`,
                   top: `${ov.position.y}%`,
