@@ -29,6 +29,7 @@ export interface StitchOverlayOptions {
   audioUrl?: string;
   musicUrl?: string;
   musicVolume?: number; // 0-1, default 0.3
+  crossfadeDuration?: number; // seconds, default 0.5
 }
 
 export interface StitchProgress {
