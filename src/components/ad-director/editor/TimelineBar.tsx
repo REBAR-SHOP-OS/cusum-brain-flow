@@ -72,12 +72,54 @@ export function TimelineBar({
   onDeleteOverlay, onEditOverlay, onRemoveAudioTrack,
   onRegenerateScene, onDeleteScene,
   onTrimScene, onStretchScene, onSplitScene, onDuplicateScene,
-  onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, mutedScenes,
+  onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onEditVoiceoverText,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
+  const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Drag-to-resize handlers
+  const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
+    e.stopPropagation();
+    e.preventDefault();
+    const dur = getSceneDurForDrag(index);
+    dragState.current = { index, startX: e.clientX, startDur: dur, side };
+    setIsDragging(true);
+  }, []);
+
+  const getSceneDurForDrag = (i: number) => {
+    const seg = segments.find(s => s.id === storyboard[i]?.segmentId);
+    return seg ? seg.endTime - seg.startTime : 4;
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragState.current || !trackRef.current) return;
+      const trackWidth = trackRef.current.getBoundingClientRect().width;
+      const pxPerSec = trackWidth / totalDuration;
+      const dx = e.clientX - dragState.current.startX;
+      const deltaSec = dx / pxPerSec;
+      const newDur = dragState.current.side === "right"
+        ? dragState.current.startDur + deltaSec
+        : dragState.current.startDur - deltaSec;
+      const clamped = Math.max(1, newDur);
+      onResizeScene?.(dragState.current.index, clamped);
+    };
+    const handleMouseUp = () => {
+      dragState.current = null;
+      setIsDragging(false);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging, totalDuration, onResizeScene]);
 
   const playheadPct = totalDuration > 0 ? (globalTime / totalDuration) * 100 : 0;
 
