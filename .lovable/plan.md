@@ -1,40 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Hard-Rule: Mandatory Brand Logo Animation on Intro & Outro Scenes
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The AI-generated scene details for intro and outro never mention brand logo overlay. When the user asks for "brand intro animation with logo," the system treats it as a generative edit and regenerates the video instead of applying a logo overlay. The logo should be a hard, automatic rule for intro/outro scenes.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Changes
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. `supabase/functions/ad-director-ai/index.ts` — Update mandatory structure rules
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-**Intro (lines 283-292):** Change the rules to explicitly state that a brand logo overlay animation is mandatory on the intro scene. Add to the objective/scene details that "Brand logo will be rendered as an animated overlay (fade-in with scale reveal) on this scene — this is automatic and mandatory."
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-**Outro (lines 294-302):** Similarly reinforce that the branded end card must include the logo as an animated overlay element.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-**User prompt (lines 530-533):** Add an explicit instruction: "The intro scene MUST include an animated brand logo overlay. The outro MUST include the brand logo."
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 2. `src/components/ad-director/SceneCard.tsx` — Show logo overlay status in scene details
-
-Add a visual indicator in the scene details collapsible section for intro ("hook") and outro ("closing") scenes showing:
-- A badge: "Brand Logo Overlay" with a checkmark icon
-- Text: "Animated logo will be applied automatically"
-
-This makes it visible in the UI that the logo is mandatory for these scenes.
-
-### 3. `src/components/ad-director/StoryboardTimeline.tsx` — Auto-inject overlays for intro/outro
-
-After storyboard generation, automatically inject logo overlays for intro and outro scenes so the user doesn't have to manually request them. When scenes are rendered:
-- If segment type is "hook" (intro) → auto-add an animated logo overlay at center position
-- If segment type is "closing" (outro) → auto-add a logo overlay at center position
-
-### 4. `src/components/ad-director/ProVideoEditor.tsx` — Auto-seed overlays on mount
-
-When the editor opens, scan the storyboard for intro/outro scenes and automatically add logo overlays to the `overlays` state if none exist yet for those scenes. This ensures the logo is always present without user action.
-
-## Files Modified
-- `supabase/functions/ad-director-ai/index.ts` — hard-rule logo in AI prompt for intro/outro
-- `src/components/ad-director/SceneCard.tsx` — show logo overlay badge in scene details
-- `src/components/ad-director/ProVideoEditor.tsx` — auto-inject logo overlays for intro/outro on mount
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

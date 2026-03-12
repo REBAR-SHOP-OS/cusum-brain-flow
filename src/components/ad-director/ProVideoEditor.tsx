@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +67,37 @@ export function ProVideoEditor({
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
+
+  // Auto-seed mandatory logo overlays for intro/outro scenes
+  useEffect(() => {
+    if (!brand.logoUrl || storyboard.length === 0 || segments.length === 0) return;
+    const introOutroScenes = storyboard.filter(scene => {
+      const seg = segments.find(s => s.id === scene.segmentId);
+      if (!seg) return false;
+      const lbl = seg.label.toLowerCase();
+      return lbl.includes("intro") || lbl.includes("hook") || lbl.includes("end card") || lbl.includes("closing") || lbl.includes("outro");
+    });
+    const newOverlays: VideoOverlay[] = [];
+    for (const scene of introOutroScenes) {
+      const hasLogo = overlays.some(o => o.sceneId === scene.id && o.kind === "logo");
+      if (!hasLogo) {
+        newOverlays.push({
+          id: crypto.randomUUID(),
+          kind: "logo",
+          position: { x: 35, y: 40 },
+          size: { w: 30, h: 20 },
+          content: brand.logoUrl,
+          opacity: 0.9,
+          sceneId: scene.id,
+          animated: true,
+        });
+      }
+    }
+    if (newOverlays.length > 0) {
+      setOverlays(prev => [...prev, ...newOverlays]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyboard.length, brand.logoUrl]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);

@@ -148,6 +148,13 @@ export function SceneCard({
             </div>
             {/* Scene Intelligence Bar */}
             <SceneIntelligenceBar intelligence={scene.sceneIntelligence} />
+            {/* Mandatory logo overlay indicator for intro/outro */}
+            {(segmentLabel.toLowerCase().includes("intro") || segmentLabel.toLowerCase().includes("hook") || segmentLabel.toLowerCase().includes("end card") || segmentLabel.toLowerCase().includes("closing") || segmentLabel.toLowerCase().includes("outro")) && (
+              <div className="flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-primary/10 border border-primary/20">
+                <CheckCircle2 className="w-3 h-3 text-primary" />
+                <span className="text-[10px] text-primary font-medium">Brand Logo Overlay — Animated, applied automatically</span>
+              </div>
+            )}
           </CollapsibleContent>
         </Collapsible>
 
