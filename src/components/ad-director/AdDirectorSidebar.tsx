@@ -58,10 +58,13 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab, activeTab }: A
         <SidebarItem icon={Home} label="Home" collapsed={collapsed} onClick={() => navigate("/ad-director")} />
 
         {/* Media Library */}
-        <SidebarItem icon={Image} label="Media Library" collapsed={collapsed} onClick={() => onNavigateTab?.("media")} />
+        <SidebarItem icon={Image} label="My Media" collapsed={collapsed} active={activeTab === "media"} onClick={() => onNavigateTab?.("media")} />
+
+        {/* Record */}
+        <SidebarItem icon={Camera} label="Record" collapsed={collapsed} active={activeTab === "record"} onClick={() => onNavigateTab?.("record")} />
 
         {/* Generative Picks */}
-        <SidebarItem icon={Sparkles} label="Generative Picks" collapsed={collapsed} onClick={() => navigate("/video-studio")} />
+        <SidebarItem icon={Sparkles} label="AI Generate" collapsed={collapsed} onClick={() => navigate("/video-studio")} />
 
         {/* Plugins */}
         {!collapsed && (
