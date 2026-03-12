@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Home, Image, Sparkles, Type, Camera, LayoutGrid, History,
   ChevronLeft, ChevronRight, Film, FileImage, Wand2,
+  Music, SlidersHorizontal, Layers, Palette,
 } from "lucide-react";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,13 @@ const PLUGINS = [
   { icon: FileImage, label: "Text to image", href: "/video-studio" },
   { icon: Camera, label: "Photo to clip", href: "/video-studio" },
   { icon: LayoutGrid, label: "Preset library", href: null },
+];
+
+const TOOLS = [
+  { icon: Music, label: "Audio mixer", tab: "music" },
+  { icon: SlidersHorizontal, label: "Filters & effects", tab: "settings" },
+  { icon: Layers, label: "Transitions", tab: "transitions" },
+  { icon: Palette, label: "Brand kit", tab: "brand-kit" },
 ];
 
 export function AdDirectorSidebar({ onLoadProject, onNavigateTab }: AdDirectorSidebarProps) {
@@ -68,6 +76,23 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab }: AdDirectorSi
             collapsed={collapsed}
             onClick={() => p.href ? navigate(p.href) : null}
             disabled={!p.href}
+          />
+        ))}
+
+        {/* Tools */}
+        {!collapsed && (
+          <div className="pt-3 pb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-2">Tools</span>
+          </div>
+        )}
+        {collapsed && <div className="border-t border-border/20 my-2" />}
+        {TOOLS.map((t) => (
+          <SidebarItem
+            key={t.label}
+            icon={t.icon}
+            label={t.label}
+            collapsed={collapsed}
+            onClick={() => onNavigateTab?.(t.tab)}
           />
         ))}
 
