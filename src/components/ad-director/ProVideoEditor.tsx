@@ -46,6 +46,7 @@ interface ProVideoEditorProps {
   onUpdateSegment?: (id: string, text: string) => void;
   onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
   onUpdateBrand?: (brand: BrandProfile) => void;
+  onMusicSelect?: (url: string | null) => void;
 }
 
 export function ProVideoEditor({
