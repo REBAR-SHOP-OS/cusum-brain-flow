@@ -120,11 +120,16 @@ export function ProVideoEditor({
 
   // ─── Global timeline ───
   const sceneDurations = useMemo(() => {
-    return storyboard.map((scene, i) => {
+    return storyboard.map((scene) => {
+      const clipDur = clipDurations[scene.id];
+      const voDur = voiceoverDurations[scene.id];
       const seg = segments.find(s => s.id === scene.segmentId);
-      return seg ? seg.endTime - seg.startTime : 4;
+      const segDur = seg ? seg.endTime - seg.startTime : 4;
+      // Use the longest of clip vs voiceover duration, fall back to segment timing
+      const mediaDur = clipDur && voDur ? Math.max(clipDur, voDur) : (clipDur || voDur);
+      return mediaDur || segDur;
     });
-  }, [storyboard, segments]);
+  }, [storyboard, segments, clipDurations, voiceoverDurations]);
 
   const cumulativeStarts = useMemo(() => {
     const starts: number[] = [0];
