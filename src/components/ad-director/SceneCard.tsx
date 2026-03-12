@@ -202,17 +202,25 @@ export function SceneCard({
           improving={improvingSceneId === scene.id}
         />
 
-        {/* Completed video thumbnail */}
+        {/* Completed video/image thumbnail */}
         {clip.status === "completed" && clip.videoUrl && (
           <div className="relative rounded-lg overflow-hidden">
-            <video
-              src={clip.videoUrl}
-              className="w-full aspect-video object-cover"
-              muted
-              playsInline
-              onMouseEnter={(e) => (e.target as HTMLVideoElement).play()}
-              onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
-            />
+            {clip.videoUrl.startsWith("data:image/") ? (
+              <img
+                src={clip.videoUrl}
+                alt={segmentLabel}
+                className="w-full aspect-video object-cover"
+              />
+            ) : (
+              <video
+                src={clip.videoUrl}
+                className="w-full aspect-video object-cover"
+                muted
+                playsInline
+                onMouseEnter={(e) => (e.target as HTMLVideoElement).play()}
+                onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+              />
+            )}
             {logoUrl && (
               <img
                 src={logoUrl}
