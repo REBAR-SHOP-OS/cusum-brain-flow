@@ -186,10 +186,10 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center">
-              <ImageIcon className="w-4 h-4 text-white" />
+            <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${storyMode ? "from-violet-500 to-fuchsia-500" : "from-emerald-500 to-cyan-500"} flex items-center justify-center`}>
+              {storyMode ? <Smartphone className="w-4 h-4 text-white" /> : <ImageIcon className="w-4 h-4 text-white" />}
             </div>
-            AI Ad Image Generator
+            {storyMode ? "AI Story Generator (9:16)" : "AI Ad Image Generator"}
             <Badge variant="secondary" className="text-[10px] gap-1 ml-auto">
               <Search className="w-3 h-3" />
               Pexels-powered
