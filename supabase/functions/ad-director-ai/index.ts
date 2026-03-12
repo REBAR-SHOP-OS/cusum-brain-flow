@@ -30,20 +30,29 @@ interface ModelRoute {
   maxTokens: number;
 }
 
+// ─── Provider Philosophy ────────────────────────────────────
+// GPT  = planning, reasoning, script analysis, prompt writing, ad polish, creative copy
+// Google = multimodal understanding, image/frame analysis, continuity inspection, vision, classification
+// Alibaba = video generation (handled by generate-video, not this function)
+// Fallbacks always cross provider boundaries for resilience.
+
 const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
-  "analyze-script":         { model: "google/gemini-2.5-pro", fallback: "openai/gpt-5", temperature: 0.1, maxTokens: 8192 },
-  "generate-storyboard":    { model: "google/gemini-2.5-pro", fallback: "openai/gpt-5", temperature: 0.2, maxTokens: 8192 },
-  "write-cinematic-prompt": { model: "openai/gpt-5",          fallback: "google/gemini-2.5-pro", temperature: 0.7, maxTokens: 2048 },
-  "score-prompt-quality":   { model: "google/gemini-2.5-flash", fallback: "google/gemini-2.5-flash-lite", temperature: 0.1, maxTokens: 1024 },
-  "improve-prompt":         { model: "openai/gpt-5",          fallback: "google/gemini-2.5-pro", temperature: 0.6, maxTokens: 2048 },
-  "analyze-reference":      { model: "google/gemini-2.5-pro", fallback: "openai/gpt-5", temperature: 0.2, maxTokens: 4096 },
-  "continuity-check":       { model: "google/gemini-2.5-flash", fallback: "google/gemini-2.5-flash-lite", temperature: 0.1, maxTokens: 2048 },
-  "rewrite-cta":            { model: "openai/gpt-5-mini",     fallback: "google/gemini-2.5-flash", temperature: 0.5, maxTokens: 1024 },
+  // GPT-led: reasoning, planning, creative writing
+  "analyze-script":         { model: "openai/gpt-5",           fallback: "google/gemini-2.5-pro",       temperature: 0.1, maxTokens: 8192 },
+  "generate-storyboard":    { model: "openai/gpt-5",           fallback: "google/gemini-2.5-pro",       temperature: 0.2, maxTokens: 8192 },
+  "write-cinematic-prompt": { model: "openai/gpt-5",           fallback: "google/gemini-2.5-pro",       temperature: 0.7, maxTokens: 2048 },
+  "improve-prompt":         { model: "openai/gpt-5",           fallback: "google/gemini-2.5-pro",       temperature: 0.6, maxTokens: 2048 },
+  "rewrite-cta":            { model: "openai/gpt-5-mini",      fallback: "google/gemini-2.5-flash",     temperature: 0.5, maxTokens: 1024 },
+  "generate-voiceover":     { model: "openai/gpt-5-mini",      fallback: "google/gemini-2.5-flash",     temperature: 0.4, maxTokens: 2048 },
+  "optimize-ad":            { model: "openai/gpt-5",           fallback: "google/gemini-2.5-pro",       temperature: 0.5, maxTokens: 4096 },
+
+  // Google-led: vision, multimodal, evaluation, classification
+  "score-prompt-quality":   { model: "google/gemini-2.5-flash", fallback: "openai/gpt-5-mini",          temperature: 0.1, maxTokens: 1024 },
+  "analyze-reference":      { model: "google/gemini-2.5-pro",   fallback: "openai/gpt-5",               temperature: 0.2, maxTokens: 4096 },
+  "continuity-check":       { model: "google/gemini-2.5-pro",   fallback: "google/gemini-2.5-flash",    temperature: 0.1, maxTokens: 2048 },
+  "classify-scene":         { model: "google/gemini-2.5-flash", fallback: "google/gemini-2.5-flash-lite", temperature: 0.1, maxTokens: 1024 },
+  "quality-review":         { model: "google/gemini-2.5-pro",   fallback: "openai/gpt-5",               temperature: 0.2, maxTokens: 4096 },
   "generate-subtitles":     { model: "google/gemini-2.5-flash-lite", fallback: "google/gemini-2.5-flash", temperature: 0.1, maxTokens: 2048 },
-  "generate-voiceover":     { model: "openai/gpt-5-mini",     fallback: "google/gemini-2.5-flash", temperature: 0.4, maxTokens: 2048 },
-  "classify-scene":         { model: "google/gemini-2.5-flash-lite", fallback: "google/gemini-2.5-flash", temperature: 0.1, maxTokens: 1024 },
-  "quality-review":         { model: "google/gemini-2.5-pro", fallback: "openai/gpt-5", temperature: 0.2, maxTokens: 4096 },
-  "optimize-ad":            { model: "openai/gpt-5",          fallback: "google/gemini-2.5-pro", temperature: 0.5, maxTokens: 4096 },
 };
 
 // ─── Auth Helper ────────────────────────────────────────────────
