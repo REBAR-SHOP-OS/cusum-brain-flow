@@ -63,7 +63,7 @@ async function generatePixelImage(
   prompt: string,
   svcClient: ReturnType<typeof createClient>,
   logoUrl: string | null,
-  options?: { styleIndex?: number | string },
+  options?: { styleIndex?: number | string; previousImageUrl?: string },
 ): Promise<{ imageUrl: string | null; error?: string }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) return { imageUrl: null, error: "LOVABLE_API_KEY not configured" };
@@ -87,6 +87,18 @@ async function generatePixelImage(
   for (const attempt of attempts) {
     try {
       const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+
+      // Pass previous image as negative reference to prevent duplicates
+      if (options?.previousImageUrl) {
+        contentParts.push({ type: "image_url", image_url: { url: options.previousImageUrl } });
+        contentParts.push({
+          type: "text",
+          text: "⚠️ CRITICAL DEDUP RULE: The image above is the PREVIOUS version. You MUST generate something COMPLETELY DIFFERENT. " +
+            "Use a DIFFERENT composition, camera angle, color palette, subject arrangement, lighting, and mood. " +
+            "The new image must NOT resemble the previous one in any way. Treat it as a forbidden reference.",
+        });
+      }
+
       if (attempt.useLogo && logoUrl) {
         contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
         contentParts.push({
@@ -387,7 +399,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
     console.log(`🎨 Regenerate: Using style #${selected.idx}: ${selected.style.slice(0, 60)}...`);
-    const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, { styleIndex: selected.idx });
+    const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, { styleIndex: selected.idx, previousImageUrl: post.image_url || undefined });
 
     const imageUrl = imgResult.imageUrl || post.image_url;
 
