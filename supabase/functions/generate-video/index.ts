@@ -462,7 +462,7 @@ serve(async (req) => {
       jobId: z.string().max(500).optional(),
       jobIds: z.array(z.object({
         id: z.string(),
-        provider: z.enum(["veo", "sora"]),
+        provider: z.enum(["veo", "sora", "wan"]),
         sceneIndex: z.number(),
       })).optional(),
       videoUrl: z.string().max(2000).optional(),
