@@ -533,6 +533,9 @@ ${assetDescriptions ? `Available Assets: ${assetDescriptions}` : "No reference a
 IMPORTANT: 
 - Start with a 0-2s cinematic intro establishing shot (before narration begins)
 - End with a 3-4s branded end card using brand colors (${brand?.primaryColor || "#ef4444"} to ${brand?.secondaryColor || "#1e293b"} gradient)
+- The intro scene MUST include an animated brand logo overlay — this is automatic and mandatory. Mention it in the scene objective.
+- The outro/end card MUST include the brand logo overlay — this is automatic and mandatory. Mention it in the scene objective.
+- Do NOT ask the video model to render logos or text — they are applied as CSS overlays by the editor.
 - Use specific professional transitions between every scene (no generic "cut to next")
 - Each prompt must be 80-150 words with camera specs, lighting, and material details
 
