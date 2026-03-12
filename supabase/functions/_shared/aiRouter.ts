@@ -108,6 +108,11 @@ async function _callAISingle(provider: AIProvider, model: string, opts: AIReques
   const data = await response.json();
   const choice = data.choices?.[0];
 
+  // Fire-and-forget token usage logging
+  _logUsage(provider, model, data.usage, opts).catch((e) =>
+    console.warn("AI usage log failed:", e.message)
+  );
+
   return {
     raw: data,
     content: choice?.message?.content || "",
