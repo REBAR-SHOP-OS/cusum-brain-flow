@@ -3,7 +3,7 @@ import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search } from "lucide-react";
+import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search, Video } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ export interface Automation {
   description: string;
   enabled: boolean;
   color: "purple" | "blue" | "gold" | "teal" | "red";
-  icon: "social" | "inbox" | "summary" | "comment" | "email" | "website" | "code" | "search";
+  icon: "social" | "inbox" | "summary" | "comment" | "email" | "website" | "code" | "search" | "video";
   beta?: boolean;
   route?: string;
 }
@@ -101,6 +101,15 @@ const defaultAutomations: Automation[] = [
     icon: "code",
     route: "/automations",
   },
+  {
+    id: "video-generator",
+    name: "AI Video Studio",
+    description: "Generate videos, images & audio with AI",
+    enabled: true,
+    color: "purple",
+    icon: "video",
+    route: "/video-studio",
+  },
 ];
 
 const colorGradients = {
@@ -120,6 +129,7 @@ const iconComponents = {
   website: Globe,
   code: Code,
   search: Search,
+  video: Video,
 };
 
 interface AutomationCardProps {

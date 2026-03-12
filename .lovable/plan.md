@@ -1,31 +1,27 @@
 
 
-## Add AI Video Generator Card to Automations Section
+## Fix: Restore `admin` role for `ai@rebar.shop`
 
-Add a new automation card for the Video Studio in `src/components/integrations/AutomationsSection.tsx`.
+### Problem
+The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
 
-### Changes
+Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
 
-**File: `src/components/integrations/AutomationsSection.tsx`**
+### Plan
+Run a single database migration:
 
-Add a new entry to `defaultAutomations` array:
-
-```typescript
-{
-  id: "video-generator",
-  name: "AI Video Studio",
-  description: "Generate videos, images & audio with AI",
-  enabled: true,
-  color: "purple",
-  icon: "video",  // new icon type
-  route: "/video-studio",
-}
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'admin'::app_role
+FROM public.profiles p
+WHERE p.email = 'ai@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-- Add `Video` from lucide-react to imports
-- Add `"video": Video` to the `iconComponents` map
-- Update the `Automation` type's `icon` union to include `"video"`
-- Place it after "Automations Hub" so it appears in the bottom-right slot of the grid
+This will:
+1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
+2. Apply to Live when you publish
+3. Resolve the 403 error from `system-backup`
 
-No new files needed. Single file edit.
+No code changes needed — just the migration.
 
