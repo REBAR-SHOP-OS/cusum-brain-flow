@@ -166,7 +166,8 @@ async function preloadAndValidate(
         v.playsInline = true;
         v.preload = "auto";
         v.muted = true;
-        v.crossOrigin = "anonymous";
+        // Note: crossOrigin intentionally omitted — captureStream() doesn't need it,
+        // and setting it causes CORS failures when fetchAsBlob falls back to raw URLs.
         const timeout = setTimeout(() => reject(new Error(`Clip ${i + 1} load timed out`)), 15_000);
         v.onloadedmetadata = () => {
           clearTimeout(timeout);
