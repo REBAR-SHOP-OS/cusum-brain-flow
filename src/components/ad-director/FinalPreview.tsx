@@ -51,20 +51,33 @@ export function FinalPreview({
           controls
           className="w-full rounded-lg aspect-video bg-black"
         />
-      ) : completedClips.length > 0 ? (
-        <div className="aspect-video bg-black/50 rounded-lg flex items-center justify-center">
-          <div className="text-center space-y-2">
-            <Play className="w-8 h-8 text-muted-foreground mx-auto" />
-            <p className="text-xs text-muted-foreground">
-              {allCompleted ? "Ready to stitch — click Export" : `${storyboard.length - completedClips.length} scenes remaining`}
-            </p>
+      ) : (() => {
+        const generatingCount = clips.filter(c => c.status === "generating").length;
+        const isGenerating = generatingCount > 0;
+        return (
+          <div className="aspect-video bg-black/50 rounded-lg flex items-center justify-center">
+            <div className="text-center space-y-2">
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-8 h-8 text-primary mx-auto animate-spin" />
+                  <p className="text-xs text-muted-foreground">
+                    Generating scenes... {completedClips.length}/{storyboard.length} completed
+                  </p>
+                </>
+              ) : completedClips.length > 0 ? (
+                <>
+                  <Play className="w-8 h-8 text-muted-foreground mx-auto" />
+                  <p className="text-xs text-muted-foreground">
+                    {allCompleted ? "Ready to stitch — click Export" : `${storyboard.length - completedClips.length} scenes remaining`}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Generate scenes to preview</p>
+              )}
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="aspect-video bg-black/50 rounded-lg flex items-center justify-center">
-          <p className="text-xs text-muted-foreground">Generate scenes to preview</p>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Overlay Toggles */}
       <div className="flex gap-4">
