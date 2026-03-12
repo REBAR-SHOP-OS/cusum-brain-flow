@@ -101,9 +101,15 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     setStatus("generating");
 
     try {
+      // Build final prompt with selected themes
+      const themePromptTags = VISUAL_THEMES.filter((t) => selectedThemes.has(t.id)).map((t) => t.promptTag);
+      const finalPrompt = themePromptTags.length > 0
+        ? `${prompt.trim()}. Include: ${themePromptTags.join(", ")}`
+        : prompt.trim();
+
       const { data, error: fnError } = await supabase.functions.invoke("generate-image", {
         body: {
-          prompt: prompt.trim(),
+          prompt: finalPrompt,
           model: selectedModel,
           logoUrl: brandKit?.logo_url || undefined,
           brandContext: {
