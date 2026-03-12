@@ -294,6 +294,45 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_usage_log: {
+        Row: {
+          agent_name: string | null
+          company_id: string | null
+          completion_tokens: number
+          created_at: string
+          id: string
+          model: string
+          prompt_tokens: number
+          provider: string
+          total_tokens: number
+          user_id: string | null
+        }
+        Insert: {
+          agent_name?: string | null
+          company_id?: string | null
+          completion_tokens?: number
+          created_at?: string
+          id?: string
+          model: string
+          prompt_tokens?: number
+          provider: string
+          total_tokens?: number
+          user_id?: string | null
+        }
+        Update: {
+          agent_name?: string | null
+          company_id?: string | null
+          completion_tokens?: number
+          created_at?: string
+          id?: string
+          model?: string
+          prompt_tokens?: number
+          provider?: string
+          total_tokens?: number
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       alert_dispatch_log: {
         Row: {
           channel: string
@@ -15122,6 +15161,27 @@ export type Database = {
       }
       execute_readonly_query: { Args: { sql_query: string }; Returns: Json }
       execute_write_fix: { Args: { sql_query: string }; Returns: Json }
+      get_ai_usage_daily: {
+        Args: { days_back?: number }
+        Returns: {
+          call_count: number
+          day: string
+          provider: string
+          total_tokens: number
+        }[]
+      }
+      get_ai_usage_summary: {
+        Args: { days_back?: number }
+        Returns: {
+          agent_name: string
+          call_count: number
+          model: string
+          provider: string
+          total_completion_tokens: number
+          total_prompt_tokens: number
+          total_total_tokens: number
+        }[]
+      }
       get_my_gmail_status: {
         Args: never
         Returns: {
