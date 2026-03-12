@@ -33,7 +33,7 @@ export function SeoOverview() {
   const [googleStatus, setGoogleStatus] = useState<"checking" | "connected" | "not_connected">("checking");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
-  const { syncDomain } = useSemrushSync();
+  const { syncDomain, fullExport } = useSemrushSync();
 
   // Check Google connection status
   useEffect(() => {
