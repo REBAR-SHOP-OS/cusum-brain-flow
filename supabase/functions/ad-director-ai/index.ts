@@ -505,26 +505,8 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
   const { script, brand, assetDescriptions } = body;
   if (!script) throw new Error("Script is required");
 
-  const userPrompt = `Analyze this ad script and create a complete cinematic storyboard with intro, transitions, and branded outro.
-
-Brand: ${brand?.name || "Rebar.Shop"}
-Website: ${brand?.website || "Rebar.Shop"}
-CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."}
-Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."}
-Target Audience: ${brand?.targetAudience || "Construction contractors and engineers"}
-Brand Colors: Primary ${brand?.primaryColor || "#ef4444"}, Secondary ${brand?.secondaryColor || "#1e293b"}
-Visual Aesthetic: ${brand?.referenceAesthetic || "Premium cinematic industrial B2B"}
-Font Style: ${brand?.fontStyle || "Modern Sans-Serif"}
-${assetDescriptions ? `Available Assets: ${assetDescriptions}` : "No reference assets uploaded — use text-to-video for all scenes."}
-
-IMPORTANT: 
-- Start with a 0-2s cinematic intro establishing shot (before narration begins)
-- End with a 3-4s branded end card using brand colors (${brand?.primaryColor || "#ef4444"} to ${brand?.secondaryColor || "#1e293b"} gradient)
-- The intro scene MUST include an animated brand logo overlay — this is automatic and mandatory. Mention it in the scene objective.
-- The outro/end card MUST include the brand logo overlay — this is automatic and mandatory. Mention it in the scene objective.
-- Do NOT ask the video model to render logos or text — they are applied as CSS overlays by the editor.
-- Use specific professional transitions between every scene (no generic "cut to next")
-- Each prompt must be 80-150 words with camera specs, lighting, and material details
+  const userPrompt = `Brand: ${brand?.name || "Rebar.Shop"} | Website: ${brand?.website || "Rebar.Shop"} | CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."} | Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."} | Audience: ${brand?.targetAudience || "Construction contractors and engineers"} | Colors: ${brand?.primaryColor || "#ef4444"} / ${brand?.secondaryColor || "#1e293b"} | Aesthetic: ${brand?.referenceAesthetic || "Premium cinematic industrial B2B"}
+${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}
 
 Script:
 ${script}`;
