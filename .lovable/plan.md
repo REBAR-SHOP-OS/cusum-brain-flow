@@ -1,48 +1,82 @@
 
 
-# Fix: Audio Overlapping, Missing Transitions, Voice Repeats in Pro Editor
+# Fix: Video, Script & Voiceover Timing Imbalance
 
-## Problems Found
+## Problem
 
-After auditing `ProVideoEditor.tsx` (lines 219-266, 528-550) and `videoStitch.ts`:
+Three independent durations are never synchronized:
+1. **Script segment timing** (e.g., `startTime: 0, endTime: 2`) — set by AI during script generation, static
+2. **Actual video clip duration** — determined by the generation model (often 5s, 10s, or 15s)
+3. **Voiceover TTS audio duration** — determined by text length and ElevenLabs speech rate
 
-### 1. Voice overlaps — conditional cleanup return
-The voiceover sync effect (line 219) only returns a cleanup function inside the `if (vo && isPlaying && !isMuted)` branch. The `else` branch (line 263) manually cleans up but returns **no cleanup function**. On rapid state changes (scene transitions, play/pause toggling), the old `Audio` instance can survive and overlap with a new one.
+The timeline uses segment timing for `sceneDurations` (line 120-125), but the video plays its natural duration and the voiceover plays at its own pace. This causes:
+- Voiceover finishing before/after the video ends
+- Timeline progress bar not matching actual playback
+- Auto-advance triggering based on video end, not accounting for voiceover still playing
+- Scene transitions cutting off voiceover mid-sentence
 
-### 2. Voice repeats on scene auto-advance
-`handleVideoEnded` (line 531) sets `autoPlayPending = true` then changes `selectedSceneIndex`. This triggers two effects simultaneously: the auto-play effect (line 212) calls `video.play()`, and the voiceover sync effect (line 221) creates a new Audio. The video's `onPlay` callback also sets `isPlaying(true)`, re-triggering the voiceover effect a second time — causing a duplicate Audio.
+## Solution: Use actual media durations as the source of truth
 
-### 3. No visual transition between scenes in preview
-The current "transition" (line 540) is just a 300ms CSS opacity toggle — fade to black, swap src, fade in. There is no crossfade between outgoing and incoming video in preview mode (crossfade only exists in export/stitch).
+### 1. Update `sceneDurations` to use real video duration (lines 120-125)
+Instead of `seg.endTime - seg.startTime`, use the **actual video clip duration** from the `<video>` metadata. Store each clip's real duration in state as clips load. Fall back to segment timing only if clip duration is unknown.
 
----
+### 2. Track voiceover durations and sync auto-advance (lines 531-550)
+On `handleVideoEnded`, check if the voiceover for the current scene is still playing. If so, **wait for voiceover to finish** before advancing to the next scene. This prevents mid-sentence cuts.
 
-## Fixes — `src/components/ad-director/ProVideoEditor.tsx`
+### 3. Update segment timings to reflect reality
+After voiceovers are generated, measure each voiceover blob's duration using `Audio.duration` and update segment `startTime`/`endTime` to match. This keeps the timeline accurate.
 
-### Fix 1: Always return cleanup from voiceover effect
-Restructure the effect so cleanup is **always** returned, regardless of which branch executes. Move the cleanup to the outer scope of the effect.
+### 4. Voiceover playback rate adjustment
+When a voiceover is longer than the video clip, set `audioRef.current.playbackRate` to compress it slightly (max 1.3x) to fit. When shorter, let it finish naturally and hold the scene.
 
-### Fix 2: Prevent double-trigger during auto-advance
-Add a `sceneTransitioning` ref that is `true` during the 300ms transition. The voiceover effect checks this ref and skips starting audio while transitioning. Only after the transition completes and the new video begins playing does the voiceover start.
+## File Changes
 
-### Fix 3: Debounce voiceover creation
-Add a 150ms debounce (`setTimeout`) before creating the Audio instance inside the voiceover effect. If the effect re-runs within that window (e.g., from `onPlay` re-triggering `isPlaying`), the previous timeout is cleared and only one Audio is created.
+### `src/components/ad-director/ProVideoEditor.tsx`
 
-### Fix 4: Smoother scene transition with dual-video crossfade
-Add a second hidden `<video>` element that preloads the next scene. On auto-advance:
-- Start playing the next video (hidden) 
-- Crossfade opacity over 500ms (outgoing fades out, incoming fades in)
-- After crossfade, swap the primary video ref
+**A. Add clip duration tracking state:**
+```typescript
+const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
+```
+On `handleLoaded`, store `videoRef.current.duration` keyed by current scene ID.
 
-This is a significant change. A simpler alternative: keep the CSS fade but extend it to 500ms and ensure the next video is preloaded before the fade-in begins.
+**B. Fix `sceneDurations` (line 120-125):**
+```typescript
+const sceneDurations = useMemo(() => {
+  return storyboard.map((scene) => {
+    // Priority: actual clip duration > voiceover duration > segment timing
+    const clipDur = clipDurations[scene.id];
+    const voTrack = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === scene.id);
+    const seg = segments.find(s => s.id === scene.segmentId);
+    const segDur = seg ? seg.endTime - seg.startTime : 4;
+    return clipDur || segDur;
+  });
+}, [storyboard, segments, clipDurations, audioTracks]);
+```
 
-**Recommended approach**: Keep the CSS opacity transition but fix the timing — preload the next scene's video before starting the fade, and delay the fade-in until `canplay` fires on the new src.
+**C. Fix `handleVideoEnded` (line 531-550):**
+Wait for voiceover to end before advancing:
+```typescript
+const handleVideoEnded = () => {
+  const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
+  if (voStillPlaying) {
+    // Wait for voiceover to finish, then advance
+    audioRef.current!.onended = () => advanceToNextScene();
+    return;
+  }
+  advanceToNextScene();
+};
+```
 
----
+**D. After voiceover generation (line 582-616):**
+Measure each generated voiceover blob's duration via `new Audio(url)` + `loadedmetadata` event and update segment timing accordingly, so the timeline reflects real voiceover length.
 
-## Summary of changes — single file: `ProVideoEditor.tsx`
+**E. Voiceover sync (lines 219-266):**
+When starting voiceover playback, compare voiceover duration to video duration. If voiceover is significantly longer, apply a slight speedup (max 1.3x). If shorter, play at 1x and let the remaining video time run silently.
 
-1. **Voiceover effect (lines 219-266)**: Restructure to always return cleanup. Add debounce timer ref. Check `sceneTransitioning` ref.
-2. **Scene transition (lines 528-550)**: Add `sceneTransitioning` ref, extend fade to 500ms, wait for `canplay` before fade-in.
-3. **Auto-play effect (lines 211-217)**: Gate on `!sceneTransitioning.current` to avoid race.
+### Summary
+- Single file change: `ProVideoEditor.tsx`
+- No backend changes
+- Timeline becomes accurate by using measured durations
+- Auto-advance waits for voiceover completion
+- Voiceover playback rate adjusts to fit video length
 
