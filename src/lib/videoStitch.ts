@@ -364,7 +364,7 @@ export async function stitchClips(
         });
         const voiceSource = audioCtx.createMediaElementSource(voiceElement);
         const voiceGain = audioCtx.createGain();
-        voiceGain.gain.value = 1.0;
+        voiceGain.gain.value = 1.4;
         voiceSource.connect(voiceGain);
         voiceGain.connect(compressor);
       }

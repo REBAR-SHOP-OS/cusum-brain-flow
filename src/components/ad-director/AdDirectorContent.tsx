@@ -658,7 +658,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
         },
         audioUrl,
         musicUrl: musicTrackUrl || undefined,
-        musicVolume: 0.3,
+        musicVolume: 0.15,
       });
 
       setFinalVideoUrl(finalUrl.blobUrl);
