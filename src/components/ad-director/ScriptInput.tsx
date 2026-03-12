@@ -31,6 +31,8 @@ interface ScriptInputProps {
   onSaveBrandKit?: () => void;
   savingBrandKit?: boolean;
   onLoadProject?: (project: AdProjectRow) => void;
+  videoParams: VideoParams;
+  onVideoParamsChange: (p: VideoParams) => void;
 }
 
 function estimateDuration(text: string): number {
