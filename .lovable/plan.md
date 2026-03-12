@@ -1,33 +1,36 @@
 
 
+# Fix: "Analysis failed — Failed to fetch" in Ad Director
 
-## Completed: Upgrade Wan 2.1 → Wan 2.6
+## Root Cause
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
+The logs show a clear pattern:
+1. GPT-5 rejects the `temperature` parameter (400 error: "Only the default (1) value is supported")
+2. The temperature fallback retries without temperature — this adds a wasted round trip
+3. The retry + actual generation exceeds the edge function timeout (~60s), causing "Http: connection closed before message completed"
+4. The client sees "Failed to fetch" because the connection dropped
 
-## Completed: Add All Wan 2.6 Capabilities
+## Fix
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+**Eliminate the wasted retry** by not sending `temperature` for OpenAI models in the first place. This saves ~2-5 seconds per call.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+### Changes to `supabase/functions/ad-director-ai/index.ts`
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+1. **In `callAI` (line ~83-88)**: Before building the request body, check if the model starts with `openai/`. If so, skip the `temperature` field entirely. This removes the need for the temperature fallback retry mechanism for OpenAI models.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+```typescript
+const body: any = {
+  model,
+  messages,
+  max_completion_tokens: route.maxTokens,
+};
+// Only send temperature for models that support it (not OpenAI)
+if (!model.startsWith("openai/")) {
+  body.temperature = route.temperature;
+}
+```
+
+2. **Keep the `sendWithTemperatureFallback` as safety net** — it still protects against future models that may reject temperature, but it won't fire in the normal path.
+
+This is a one-line conditional addition that eliminates the double-request penalty causing the timeout.
+
