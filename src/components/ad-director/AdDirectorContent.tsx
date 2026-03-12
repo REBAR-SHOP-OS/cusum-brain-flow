@@ -860,6 +860,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
                 generatingAny={generatingAny}
                 onImprovePrompt={handleImprovePrompt}
                 improvingSceneId={improvingSceneId}
+                logoUrl={brand.logoUrl}
               />
             </div>
             <div className="space-y-4">
