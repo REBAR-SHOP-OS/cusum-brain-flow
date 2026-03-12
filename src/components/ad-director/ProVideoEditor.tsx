@@ -9,7 +9,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Image, Music, FileText, Sliders, ImageIcon, Loader2,
   SkipBack, SkipForward, ChevronRight, ChevronLeft,
-  FolderOpen, Video, Type, Film, ImagePlus, LayoutTemplate, Shapes, ArrowRightLeft, Palette, Settings,
+  FolderOpen, Video, Type, Film, ImagePlus, LayoutTemplate, Shapes, ArrowRightLeft, Palette, Settings, SquarePen,
 } from "lucide-react";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
 import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
