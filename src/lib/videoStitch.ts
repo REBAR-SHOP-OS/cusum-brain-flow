@@ -486,6 +486,7 @@ export async function stitchClips(
     let clipIndex = 0;
     let clipStartCumulativeTime = 0;
     const crossfadeDur = overlays?.crossfadeDuration ?? 0.5;
+    let clipPreStartedByCrossfade = false;
 
     // Pre-seek next clip for crossfade readiness
     const prepareNextClip = (nextIdx: number) => {
