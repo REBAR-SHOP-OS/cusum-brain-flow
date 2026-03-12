@@ -20,6 +20,7 @@ import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { slideshowToVideo } from "@/lib/slideshowToVideo";
 import { supabase } from "@/integrations/supabase/client";
 import { VideoLibrary } from "./VideoLibrary";
+import { VideoInsightsPanel, type VideoAnalysisResults } from "./VideoInsightsPanel";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { usePromptTransformer } from "@/hooks/usePromptTransformer";
 import { applyLogoWatermark } from "@/lib/videoWatermark";
