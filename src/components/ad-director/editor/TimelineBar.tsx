@@ -5,6 +5,9 @@ import { Slider } from "@/components/ui/slider";
 import {
   ZoomIn, ZoomOut, Maximize, Music, Type, Plus, Mic,
   Volume2, VolumeX, Trash2, RefreshCw, Edit3, Move,
+  Scissors, Expand, SplitSquareHorizontal, Copy,
+  ArrowLeft, ArrowRight, VolumeOff, FileText,
+  RotateCcw, Sparkles, MoveVertical,
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
@@ -41,6 +44,23 @@ interface TimelineBarProps {
   onRemoveAudioTrack?: (index: number) => void;
   onRegenerateScene?: (sceneId: string) => void;
   onDeleteScene?: (index: number) => void;
+  // New editing actions
+  onTrimScene?: (index: number) => void;
+  onStretchScene?: (index: number) => void;
+  onSplitScene?: (index: number) => void;
+  onDuplicateScene?: (index: number) => void;
+  onMoveScene?: (index: number, dir: -1 | 1) => void;
+  onEditPrompt?: (index: number) => void;
+  onEditVoiceover?: (index: number) => void;
+  onMuteScene?: (index: number) => void;
+  mutedScenes?: Set<string>;
+  // Text overlay extras
+  onEditOverlayPosition?: (id: string, position: "top" | "center" | "bottom") => void;
+  onResizeOverlay?: (id: string, size: "small" | "medium" | "large") => void;
+  onToggleOverlayAnimation?: (id: string) => void;
+  // Audio extras
+  onReRecordVoiceover?: (sceneId: string) => void;
+  onEditVoiceoverText?: (sceneId: string) => void;
 }
 
 export function TimelineBar({
@@ -50,6 +70,10 @@ export function TimelineBar({
   videoVolume = 1, onVideoVolumeChange, onAudioTrackVolumeChange,
   onDeleteOverlay, onEditOverlay, onRemoveAudioTrack,
   onRegenerateScene, onDeleteScene,
+  onTrimScene, onStretchScene, onSplitScene, onDuplicateScene,
+  onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, mutedScenes,
+  onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
+  onReRecordVoiceover, onEditVoiceoverText,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
@@ -128,12 +152,66 @@ export function TimelineBar({
                       )}
                     </div>
                   </PopoverTrigger>
-                  <PopoverContent className="w-36 p-1.5" side="top" align="center">
+                  <PopoverContent className="w-44 p-1.5" side="top" align="center">
                     <div className="space-y-0.5">
                       <button
                         onClick={() => onSelectScene(i)}
                         className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground"
                       >Select</button>
+                      {onEditPrompt && (
+                        <button
+                          onClick={() => onEditPrompt(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><Edit3 className="w-2.5 h-2.5" />Edit Prompt</button>
+                      )}
+                      {onEditVoiceover && (
+                        <button
+                          onClick={() => onEditVoiceover(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><FileText className="w-2.5 h-2.5" />Edit Voiceover Text</button>
+                      )}
+                      {onTrimScene && (
+                        <button
+                          onClick={() => onTrimScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><Scissors className="w-2.5 h-2.5" />Trim (−1s)</button>
+                      )}
+                      {onStretchScene && (
+                        <button
+                          onClick={() => onStretchScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><Expand className="w-2.5 h-2.5" />Stretch (+1s)</button>
+                      )}
+                      {onSplitScene && (
+                        <button
+                          onClick={() => onSplitScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><SplitSquareHorizontal className="w-2.5 h-2.5" />Split</button>
+                      )}
+                      {onDuplicateScene && (
+                        <button
+                          onClick={() => onDuplicateScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><Copy className="w-2.5 h-2.5" />Duplicate</button>
+                      )}
+                      {onMoveScene && i > 0 && (
+                        <button
+                          onClick={() => onMoveScene(i, -1)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><ArrowLeft className="w-2.5 h-2.5" />Move Left</button>
+                      )}
+                      {onMoveScene && i < storyboard.length - 1 && (
+                        <button
+                          onClick={() => onMoveScene(i, 1)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><ArrowRight className="w-2.5 h-2.5" />Move Right</button>
+                      )}
+                      {onMuteScene && (
+                        <button
+                          onClick={() => onMuteScene(i)}
+                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                        ><VolumeOff className="w-2.5 h-2.5" />{mutedScenes?.has(scene.id) ? "Unmute" : "Mute Scene"}</button>
+                      )}
                       {onRegenerateScene && isCompleted && (
                         <button
                           onClick={() => onRegenerateScene(scene.id)}
@@ -191,13 +269,47 @@ export function TimelineBar({
                           <span className="text-[7px] text-white truncate">{ov.content}</span>
                         </div>
                       </PopoverTrigger>
-                      <PopoverContent className="w-36 p-1.5" side="top" align="center">
+                      <PopoverContent className="w-44 p-1.5" side="top" align="center">
                         <div className="space-y-0.5">
                           {onEditOverlay && (
                             <button
                               onClick={() => onEditOverlay(ov)}
                               className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
                             ><Edit3 className="w-2.5 h-2.5" />Edit Text</button>
+                          )}
+                          {onEditOverlayPosition && (
+                            <>
+                              <p className="text-[9px] text-muted-foreground px-2 pt-1">Position</p>
+                              <div className="flex gap-1 px-2">
+                                {(["top", "center", "bottom"] as const).map(pos => (
+                                  <button
+                                    key={pos}
+                                    onClick={() => onEditOverlayPosition(ov.id, pos)}
+                                    className="flex-1 text-[9px] py-0.5 rounded border border-border/40 hover:bg-accent/50 text-foreground capitalize"
+                                  >{pos}</button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          {onResizeOverlay && (
+                            <>
+                              <p className="text-[9px] text-muted-foreground px-2 pt-1">Size</p>
+                              <div className="flex gap-1 px-2">
+                                {(["small", "medium", "large"] as const).map(sz => (
+                                  <button
+                                    key={sz}
+                                    onClick={() => onResizeOverlay(ov.id, sz)}
+                                    className="flex-1 text-[9px] py-0.5 rounded border border-border/40 hover:bg-accent/50 text-foreground capitalize"
+                                  >{sz}</button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          {onToggleOverlayAnimation && (
+                            <button
+                              onClick={() => onToggleOverlayAnimation(ov.id)}
+                              className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                            ><Sparkles className="w-2.5 h-2.5" />{ov.animated ? "Disable Animation" : "Enable Animation"}</button>
                           )}
                           {onDeleteOverlay && (
                             <button
@@ -301,25 +413,39 @@ export function TimelineBar({
                         </div>
                       </PopoverTrigger>
                       <PopoverContent className="w-44 p-2" side="top" align="center">
-                        <div className="space-y-2">
-                          <p className="text-[10px] font-medium text-foreground">{at.label} Volume</p>
-                          <Slider
-                            value={[Math.round((at.volume ?? 1) * 100)]}
-                            min={0} max={100} step={1}
-                            onValueChange={([v]) => onAudioTrackVolumeChange?.(idx, v / 100)}
-                            className="w-full"
-                          />
-                          <div className="flex justify-between">
-                            <span className="text-[9px] text-muted-foreground">{Math.round((at.volume ?? 1) * 100)}%</span>
-                            {onRemoveAudioTrack && (
-                              <button
-                                onClick={() => onRemoveAudioTrack(idx)}
-                                className="text-[9px] text-destructive hover:underline flex items-center gap-0.5"
-                              ><Trash2 className="w-2.5 h-2.5" />Remove</button>
-                            )}
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-medium text-foreground">{at.label} Volume</p>
+                            <Slider
+                              value={[Math.round((at.volume ?? 1) * 100)]}
+                              min={0} max={100} step={1}
+                              onValueChange={([v]) => onAudioTrackVolumeChange?.(idx, v / 100)}
+                              className="w-full"
+                            />
+                            <div className="flex justify-between">
+                              <span className="text-[9px] text-muted-foreground">{Math.round((at.volume ?? 1) * 100)}%</span>
+                              {onRemoveAudioTrack && (
+                                <button
+                                  onClick={() => onRemoveAudioTrack(idx)}
+                                  className="text-[9px] text-destructive hover:underline flex items-center gap-0.5"
+                                ><Trash2 className="w-2.5 h-2.5" />Remove</button>
+                              )}
+                            </div>
+                            <div className="border-t border-border/30 pt-1.5 space-y-0.5">
+                              {onEditVoiceoverText && (
+                                <button
+                                  onClick={() => onEditVoiceoverText(at.sceneId)}
+                                  className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                                ><Edit3 className="w-2.5 h-2.5" />Edit Text</button>
+                              )}
+                              {onReRecordVoiceover && (
+                                <button
+                                  onClick={() => onReRecordVoiceover(at.sceneId)}
+                                  className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                                ><RotateCcw className="w-2.5 h-2.5" />Re-record</button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </PopoverContent>
+                        </PopoverContent>
                     </Popover>
                   );
                 })}
