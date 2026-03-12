@@ -436,6 +436,12 @@ export function PostReviewPanel({
                         </Button>
                       </label>
                     </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowStoryGen(true)}>
+                        <Smartphone className="w-3.5 h-3.5" />
+                        Auto Generate Story
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
