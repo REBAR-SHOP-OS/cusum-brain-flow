@@ -220,10 +220,11 @@ function extractToolResult(data: any): any {
   throw new Error("AI did not return structured data");
 }
 
-/** Wraps callAI + extractToolResult with up to 2 retries on malformed function calls */
+/** Wraps callAI + extractToolResult with up to 2 retries on malformed function calls.
+ *  Attempt 0-1: primary model. Attempt 2: fallback model from route. */
 async function callAIAndExtract(
   apiKey: string,
-  model: string,
+  route: ModelRoute,
   messages: any[],
   tools: any[],
   toolChoice: any,
@@ -231,9 +232,17 @@ async function callAIAndExtract(
 ): Promise<{ result: any; modelUsed: string; fallbackUsed: boolean }> {
   const MAX_RETRIES = 2;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const { data, modelUsed, fallbackUsed } = await callAI(apiKey, model, messages, tools, toolChoice, modelOverride);
+    // On last attempt, switch to fallback model
+    const effectiveOverride = (attempt === MAX_RETRIES && route.fallback)
+      ? route.fallback
+      : modelOverride;
+    const usingFallback = attempt === MAX_RETRIES && route.fallback ? true : false;
+    if (usingFallback) {
+      console.warn(`callAIAndExtract: switching to fallback model ${route.fallback} (attempt ${attempt})`);
+    }
+    const { data, modelUsed, fallbackUsed } = await callAI(apiKey, route, messages, tools, toolChoice, effectiveOverride);
     try {
-      return { result: extractToolResult(data), modelUsed, fallbackUsed };
+      return { result: extractToolResult(data), modelUsed, fallbackUsed: fallbackUsed || usingFallback };
     } catch (e) {
       const isRetryable = e instanceof Error && e.message.includes("malformed function call");
       if (isRetryable && attempt < MAX_RETRIES) {
