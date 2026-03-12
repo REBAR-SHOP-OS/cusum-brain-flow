@@ -897,8 +897,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 engineeredPrompt={transformResult?.engineeredPrompt}
                 intent={transformResult?.intent}
                 isConstructionRelated={transformResult?.isConstructionRelated}
-                creditCost={mediaType === "video" ? getCost(parseInt(duration), mode) : mediaType === "image" ? 1 : parseInt(duration)}
-                remaining={remaining}
+                totalSpent={totalSpent}
                 canGenerate={mediaType === "video" ? (effectiveVideoProvider === "wan" || canGenerate(parseInt(duration), mode)) : true}
                 isGenerating={imageGenerating || standaloneAudioGenerating}
                 isTransforming={isTransforming}

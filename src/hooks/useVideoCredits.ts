@@ -181,6 +181,7 @@ export function useVideoCredits() {
     remaining,
     total,
     usedPercent,
+    totalSpent,
     plan: credits?.plan || "free",
     canGenerate,
     getCost,
