@@ -261,18 +261,37 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
             </div>
           )}
 
+          {/* Branding */}
+          {status === "branding" && (
+            <div className="flex flex-col items-center text-center gap-3 py-10">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center">
+                <Stamp className="w-7 h-7 animate-pulse text-primary" />
+              </div>
+              <p className="font-medium">Applying brand logo…</p>
+              <p className="text-sm text-muted-foreground">Adding your company logo to the image.</p>
+            </div>
+          )}
+
           {/* Completed */}
           {status === "completed" && imageUrl && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-emerald-600">
                 <CheckCircle2 className="w-5 h-5" />
                 <span className="font-medium">Ad image generated!</span>
-                {pexelsInspired && (
-                  <Badge variant="outline" className="text-[10px] gap-1 ml-auto">
-                    <Search className="w-3 h-3" />
-                    Pexels-inspired
-                  </Badge>
-                )}
+                <div className="flex gap-1 ml-auto">
+                  {brandKit?.logo_url && (
+                    <Badge variant="outline" className="text-[10px] gap-1">
+                      <Stamp className="w-3 h-3" />
+                      Branded
+                    </Badge>
+                  )}
+                  {pexelsInspired && (
+                    <Badge variant="outline" className="text-[10px] gap-1">
+                      <Search className="w-3 h-3" />
+                      Pexels-inspired
+                    </Badge>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-lg overflow-hidden border">
