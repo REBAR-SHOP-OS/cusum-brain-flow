@@ -1112,6 +1112,8 @@ export function ProVideoEditor({
                 <TransitionsTab
                   activeTransition={editorSettings.transitionPreset}
                   onSelect={(t) => setEditorSettings(prev => ({ ...prev, transitionPreset: t }))}
+                  duration={transitionDuration}
+                  onDurationChange={setTransitionDuration}
                 />
               )}
               {activeTab === "brand-kit" && (
