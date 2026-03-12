@@ -38,7 +38,7 @@ interface ModelRoute {
 
 const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
   // Gemini Pro: reasoning, planning, creative writing (faster than GPT, avoids timeout)
-  "analyze-script":         { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.1, maxTokens: 16384 },
+  "analyze-script":         { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.1, maxTokens: 8192 },
   "generate-storyboard":    { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.2, maxTokens: 16384 },
   "write-cinematic-prompt": { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.7, maxTokens: 2048 },
   "improve-prompt":         { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.6, maxTokens: 2048 },
@@ -70,7 +70,9 @@ async function verifyAuth(req: Request) {
 }
 
 // ─── AI Gateway Call with Fallback ──────────────────────────────
-const PER_ATTEMPT_TIMEOUT_MS = 50_000; // 50s per single AI call attempt
+const PER_ATTEMPT_TIMEOUT_MS = 50_000; // 50s default per single AI call attempt
+const HEAVY_ATTEMPT_TIMEOUT_MS = 80_000; // 80s for heavy routes (analyze-script, generate-storyboard)
+const HEAVY_ROUTES: Set<string> = new Set(["analyze-script", "generate-storyboard"]);
 
 async function callAI(
   apiKey: string,
@@ -79,8 +81,10 @@ async function callAI(
   tools?: any[],
   toolChoice?: any,
   modelOverride?: string,
+  taskType?: string,
 ): Promise<{ data: any; modelUsed: string; fallbackUsed: boolean }> {
   const model = modelOverride || route.model;
+  const timeoutMs = (taskType && HEAVY_ROUTES.has(taskType)) ? HEAVY_ATTEMPT_TIMEOUT_MS : PER_ATTEMPT_TIMEOUT_MS;
 
   const body: any = {
     model,
@@ -96,7 +100,7 @@ async function callAI(
 
   const sendRequest = (payload: Record<string, unknown>) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -253,7 +257,7 @@ async function callAIAndExtract(
       console.warn(`callAIAndExtract: switching to fallback model ${route.fallback} (attempt ${attempt}, task=${taskType})`);
     }
     try {
-      const { data, modelUsed, fallbackUsed } = await callAI(apiKey, route, messages, tools, toolChoice, effectiveOverride);
+      const { data, modelUsed, fallbackUsed } = await callAI(apiKey, route, messages, tools, toolChoice, effectiveOverride, taskType);
       return { result: extractToolResult(data), modelUsed, fallbackUsed: fallbackUsed || usingFallback };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -717,6 +721,7 @@ async function handleSimpleTextTask(apiKey: string, taskType: TaskType, body: an
     undefined,
     undefined,
     modelOverride,
+    taskType,
   );
 
   return { result: { text: extractContent(data) }, modelUsed, fallbackUsed };
