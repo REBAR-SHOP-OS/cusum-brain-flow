@@ -139,6 +139,29 @@ export function useVideoCredits() {
     },
   });
 
+  const { data: totalSpent = 0 } = useQuery({
+    queryKey: ["total_spent"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return 0;
+
+      const { data, error } = await supabase
+        .from("credit_ledger")
+        .select("type, amount")
+        .eq("user_id", user.id);
+
+      if (error) { console.error("Ledger query error:", error); return 0; }
+      if (!data) return 0;
+
+      let total = 0;
+      for (const row of data) {
+        if (row.type === "reserve" || row.type === "consume") total += row.amount;
+        else if (row.type === "refund") total -= row.amount;
+      }
+      return Math.max(0, total);
+    },
+  });
+
   const remaining = credits ? credits.total_seconds - credits.used_seconds : 0;
   const total = credits?.total_seconds || 60;
   const usedPercent = credits ? Math.round((credits.used_seconds / credits.total_seconds) * 100) : 0;
@@ -158,6 +181,7 @@ export function useVideoCredits() {
     remaining,
     total,
     usedPercent,
+    totalSpent,
     plan: credits?.plan || "free",
     canGenerate,
     getCost,

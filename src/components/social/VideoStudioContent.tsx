@@ -77,7 +77,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const { brandKit } = useBrandKit();
   const { toast } = useToast();
   const { transform, isTransforming, transformResult, transformError, reset: resetTransform } = usePromptTransformer();
-  const { remaining, total, usedPercent, plan, canGenerate, getCost, consumeCredits, refundCredits } = useVideoCredits();
+  const { remaining, total, usedPercent, totalSpent, plan, canGenerate, getCost, consumeCredits, refundCredits } = useVideoCredits();
   const { createGeneration, updateGeneration } = useGenerations();
   const [showSocialPanel, setShowSocialPanel] = useState(false);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
@@ -897,8 +897,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 engineeredPrompt={transformResult?.engineeredPrompt}
                 intent={transformResult?.intent}
                 isConstructionRelated={transformResult?.isConstructionRelated}
-                creditCost={mediaType === "video" ? getCost(parseInt(duration), mode) : mediaType === "image" ? 1 : parseInt(duration)}
-                remaining={remaining}
+                totalSpent={totalSpent}
                 canGenerate={mediaType === "video" ? (effectiveVideoProvider === "wan" || canGenerate(parseInt(duration), mode)) : true}
                 isGenerating={imageGenerating || standaloneAudioGenerating}
                 isTransforming={isTransforming}

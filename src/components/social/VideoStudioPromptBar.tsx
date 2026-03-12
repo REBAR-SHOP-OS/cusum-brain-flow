@@ -102,8 +102,7 @@ interface VideoStudioPromptBarProps {
   engineeredPrompt?: string | null;
   intent?: string | null;
   isConstructionRelated?: boolean;
-  creditCost: number;
-  remaining: number;
+  totalSpent: number;
   canGenerate: boolean;
   isGenerating: boolean;
   isTransforming: boolean;
@@ -122,7 +121,7 @@ export function VideoStudioPromptBar({
   rawPrompt, onPromptChange, mode, onModeChange,
   duration, onDurationChange, aspectRatio, onAspectRatioChange,
   showEngineered, onToggleEngineered, engineeredPrompt, intent,
-  isConstructionRelated, creditCost, remaining, canGenerate,
+  isConstructionRelated, totalSpent, canGenerate,
   isGenerating, isTransforming, onGenerate, referenceImage, onReferenceImageChange,
   mediaType, onMediaTypeChange, audioType = "music", onAudioTypeChange,
   selectedModel, onModelChange,
@@ -496,10 +495,7 @@ export function VideoStudioPromptBar({
           {mediaType === "video" ? (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/40 text-muted-foreground border border-border/20">
               <Gauge className="w-3 h-3" />
-              <span>{remaining}s</span>
-              {rawPrompt.trim() && (
-                <span className="text-[10px] opacity-70">• Cost: {creditCost}s</span>
-              )}
+              <span>Spent: {totalSpent}s</span>
             </div>
           ) : currentModelOption.free ? (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
