@@ -1,33 +1,28 @@
 
 
+# Fix: "aspectRatio is not defined" Error in Video Generation
 
-## Completed: Upgrade Wan 2.1 → Wan 2.6
+## Root Cause
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
+Two bugs:
 
-## Completed: Add All Wan 2.6 Capabilities
+1. **Edge function Zod schema** (`supabase/functions/generate-video/index.ts` line 531-549) does not include `aspectRatio` field, so it's never parsed from the request body.
+2. **Client** (`VideoStudioContent.tsx` lines 444-470) never sends `aspectRatio` in the payload to the edge function — it's missing from both the single-clip and multi-scene `invokeEdgeFunction` calls.
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+The variable `aspectRatio` is referenced at lines 657 and 659 when calling `wanGenerate()` and `wanI2vGenerate()`, but since it was never destructured from the parsed body, it's `undefined` at runtime, causing the error.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Fix
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. Edge function schema — add `aspectRatio` field
+Add `aspectRatio: z.string().max(10).optional()` to the Zod schema, and destructure it from `parsed.data`.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 2. Client — send `aspectRatio` in all generate payloads
+Add `aspectRatio` to the `invokeEdgeFunction("generate-video", { ... })` calls for both single-clip and multi-scene generation paths (lines ~444 and ~466), and also in the re-generate call (~829).
+
+### 3. Bonus: also send in multi-scene generate
+The multi-scene path also needs `aspectRatio` for Wan to pick the correct resolution.
+
+## Files Changed
+- `supabase/functions/generate-video/index.ts` — 2 lines (schema + destructure)
+- `src/components/social/VideoStudioContent.tsx` — add `aspectRatio` to 3-4 invoke calls
+
