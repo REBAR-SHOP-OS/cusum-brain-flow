@@ -927,6 +927,10 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 onAudioTypeChange={setAudioType}
                 selectedModel={selectedModel}
                 onModelChange={setSelectedModel}
+                negativePrompt={negativePrompt}
+                onNegativePromptChange={setNegativePrompt}
+                customAudioFile={customAudioFile}
+                onCustomAudioFileChange={setCustomAudioFile}
               />
             </div>
           )}
