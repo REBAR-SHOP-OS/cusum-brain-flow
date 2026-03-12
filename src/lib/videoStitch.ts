@@ -357,7 +357,8 @@ export async function stitchClips(
     recorder.onerror = () => reject(new Error("MediaRecorder error during stitch"));
 
     recorder.onstop = async () => {
-      if (audioElement) audioElement.pause();
+      if (voiceElement) voiceElement.pause();
+      if (musicElement) musicElement.pause();
       if (audioCtx) audioCtx.close().catch(() => {});
 
       // Phase 3: Post-stitch validation
