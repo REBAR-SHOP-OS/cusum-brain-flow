@@ -478,6 +478,61 @@ export function VideoStudioPromptBar({
             </>
           )}
 
+          {/* Custom audio upload — Wan T2V only */}
+          {mediaType === "video" && isWanModel && !isI2vModel && (
+            <>
+              <button
+                onClick={() => audioInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors"
+              >
+                <Volume2 className="w-3 h-3" />
+                {customAudioFile ? customAudioFile.name.slice(0, 12) : "Audio sync"}
+              </button>
+              {customAudioFile && (
+                <button
+                  onClick={() => onCustomAudioFileChange?.(null)}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive border border-destructive/20 transition-colors hover:bg-destructive/20"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              )}
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/mp3,audio/wav,audio/mpeg,.mp3,.wav"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onCustomAudioFileChange?.(file);
+                  if (audioInputRef.current) audioInputRef.current.value = "";
+                }}
+                className="hidden"
+              />
+            </>
+          )}
+
+          {/* Negative prompt toggle — Wan models only */}
+          {mediaType === "video" && isWanModel && (
+            <button
+              onClick={() => setShowNegativePrompt(v => !v)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border/30 transition-colors",
+                showNegativePrompt
+                  ? "bg-destructive/10 text-destructive border-destructive/20"
+                  : "bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground"
+              )}
+            >
+              <Ban className="w-3 h-3" />
+              Negative
+            </button>
+          )}
+
+          {/* I2V hint badge */}
+          {mediaType === "video" && isI2vModel && !referenceImage && (
+            <Badge variant="outline" className="text-[10px] h-5 px-2 bg-warning/10 text-warning border-warning/20 rounded-full">
+              ⚠ Upload ref image
+            </Badge>
+          )}
+
           {/* Engineered prompt toggle — video only */}
           {mediaType === "video" && engineeredPrompt && (
             <button
