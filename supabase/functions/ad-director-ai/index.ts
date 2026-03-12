@@ -460,14 +460,23 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
   const { script, brand, assetDescriptions } = body;
   if (!script) throw new Error("Script is required");
 
-  const userPrompt = `Analyze this 30-second ad script and create a complete storyboard.
+  const userPrompt = `Analyze this ad script and create a complete cinematic storyboard with intro, transitions, and branded outro.
 
 Brand: ${brand?.name || "Rebar.Shop"}
 Website: ${brand?.website || "Rebar.Shop"}
 CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."}
 Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."}
 Target Audience: ${brand?.targetAudience || "Construction contractors and engineers"}
+Brand Colors: Primary ${brand?.primaryColor || "#ef4444"}, Secondary ${brand?.secondaryColor || "#1e293b"}
+Visual Aesthetic: ${brand?.referenceAesthetic || "Premium cinematic industrial B2B"}
+Font Style: ${brand?.fontStyle || "Modern Sans-Serif"}
 ${assetDescriptions ? `Available Assets: ${assetDescriptions}` : "No reference assets uploaded — use text-to-video for all scenes."}
+
+IMPORTANT: 
+- Start with a 0-2s cinematic intro establishing shot (before narration begins)
+- End with a 3-4s branded end card using brand colors (${brand?.primaryColor || "#ef4444"} to ${brand?.secondaryColor || "#1e293b"} gradient)
+- Use specific professional transitions between every scene (no generic "cut to next")
+- Each prompt must be 80-150 words with camera specs, lighting, and material details
 
 Script:
 ${script}`;
