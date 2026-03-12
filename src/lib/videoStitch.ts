@@ -302,10 +302,11 @@ export async function stitchClips(
 
     const renderEndCard = () => {
       const endOpts = overlays!.endCard!;
-      const endCardDuration = 3; // seconds
+      const endCardDuration = 4; // seconds
       const fps = 30;
       let frame = 0;
       const totalFrames = endCardDuration * fps;
+      const fadeInFrames = Math.round(0.5 * fps); // 0.5s fade-in
 
       const drawEndFrame = () => {
         if (frame >= totalFrames) {
@@ -314,7 +315,14 @@ export async function stitchClips(
           }, 100);
           return;
         }
+        // Fade-in: draw black first, then end card with increasing opacity
+        if (frame < fadeInFrames) {
+          ctx.fillStyle = endOpts.bgColor || "#1e293b";
+          ctx.fillRect(0, 0, W, H);
+          ctx.globalAlpha = frame / fadeInFrames;
+        }
         drawEndCard(ctx, W, H, endOpts, endCardLogoImg);
+        ctx.globalAlpha = 1.0;
         frame++;
         requestAnimationFrame(drawEndFrame);
       };

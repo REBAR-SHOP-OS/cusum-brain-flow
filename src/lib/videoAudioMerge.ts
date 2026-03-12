@@ -6,36 +6,41 @@ export async function mergeVideoAudio(
   videoSrc: string,
   audioSrc: string,
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const video = document.createElement("video");
     video.playsInline = true;
     video.preload = "auto";
+    video.muted = true; // Must be muted before src for blob URL loading
 
     const audio = document.createElement("audio");
     audio.preload = "auto";
+
+    // Fallback: if video fails to load within 5s, return original (silent) video
+    const fallbackTimer = setTimeout(() => {
+      console.warn("[mergeVideoAudio] Timeout loading video blob, returning silent video");
+      resolve(videoSrc);
+    }, 5000);
 
     let videoReady = false;
     let audioReady = false;
 
     const tryStart = () => {
       if (!videoReady || !audioReady) return;
+      clearTimeout(fallbackTimer);
 
       const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth || 1280;
       canvas.height = video.videoHeight || 720;
       const ctx = canvas.getContext("2d")!;
 
-      // Capture video frames from canvas
       const canvasStream = canvas.captureStream(30);
 
-      // Create audio context to capture audio stream
       const audioCtx = new AudioContext();
       const audioSource = audioCtx.createMediaElementSource(audio);
       const audioDestination = audioCtx.createMediaStreamDestination();
       audioSource.connect(audioDestination);
-      audioSource.connect(audioCtx.destination); // also play through speakers (muted by recorder)
+      audioSource.connect(audioCtx.destination);
 
-      // Combine video + audio tracks
       const combinedStream = new MediaStream([
         ...canvasStream.getVideoTracks(),
         ...audioDestination.stream.getAudioTracks(),
@@ -62,18 +67,16 @@ export async function mergeVideoAudio(
 
       recorder.onerror = () => {
         audioCtx.close();
-        reject(new Error("MediaRecorder error during merge"));
+        console.warn("[mergeVideoAudio] Recorder error, returning silent video");
+        resolve(videoSrc);
       };
 
       const drawFrame = () => {
-        if (video.paused || video.ended) {
-          return;
-        }
+        if (video.paused || video.ended) return;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         requestAnimationFrame(drawFrame);
       };
 
-      // Stop when video ends (video is typically the shorter/controlling track)
       video.onended = () => {
         audio.pause();
         setTimeout(() => {
@@ -82,24 +85,34 @@ export async function mergeVideoAudio(
       };
 
       recorder.start();
-      video.muted = true; // mute original video audio
       video.play().then(() => {
         audio.play();
         drawFrame();
-      }).catch(reject);
+      }).catch(() => {
+        console.warn("[mergeVideoAudio] Play failed, returning silent video");
+        resolve(videoSrc);
+      });
     };
 
     video.oncanplaythrough = () => {
       videoReady = true;
       tryStart();
     };
-    video.onerror = () => reject(new Error("Failed to load video for merge"));
+    video.onerror = () => {
+      clearTimeout(fallbackTimer);
+      console.warn("[mergeVideoAudio] Video load failed, returning silent video");
+      resolve(videoSrc);
+    };
 
     audio.oncanplaythrough = () => {
       audioReady = true;
       tryStart();
     };
-    audio.onerror = () => reject(new Error("Failed to load audio for merge"));
+    audio.onerror = () => {
+      clearTimeout(fallbackTimer);
+      console.warn("[mergeVideoAudio] Audio load failed, returning silent video");
+      resolve(videoSrc);
+    };
 
     video.src = videoSrc;
     audio.src = audioSrc;
