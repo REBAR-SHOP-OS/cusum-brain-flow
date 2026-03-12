@@ -145,14 +145,13 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const currentMode = modeConfigs.find(m => m.id === mode) || modeConfigs[1];
 
   // Derive effective provider from selected video model (override mode's default)
-  const { VIDEO_MODELS } = require("./VideoStudioPromptBar");
-  const effectiveVideoProvider = useMemo(() => {
+  const effectiveVideoProvider = useMemo((): "sora" | "veo" | "wan" => {
     if (mediaType !== "video") return currentMode.provider;
-    const vm = (VIDEO_MODELS as { id: string; provider: string }[]).find(m => m.id === selectedModel);
+    const vm = VIDEO_MODELS.find((m: { id: string; provider: string }) => m.id === selectedModel);
     return (vm?.provider as "sora" | "veo" | "wan") || currentMode.provider;
   }, [selectedModel, mediaType, currentMode.provider]);
 
-  const effectiveMaxClip = effectiveVideoProvider === "wan" ? WAN_MAX_CLIP_CLIENT : currentMode.maxClipDuration;
+  const effectiveMaxClip = effectiveVideoProvider === "wan" ? 8 : currentMode.maxClipDuration;
 
   const cleanup = useCallback(() => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
