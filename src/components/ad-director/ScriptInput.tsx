@@ -194,7 +194,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
             {/* Brand Color Preview Strip */}
             {brand.name && (
               <div
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-center truncate"
+                className="rounded-xl px-3 py-1.5 text-xs font-semibold text-center truncate"
                 style={{ backgroundColor: brand.primaryColor, color: brand.secondaryColor }}
               >
                 {brand.name} {brand.tagline ? `· ${brand.tagline}` : ""}

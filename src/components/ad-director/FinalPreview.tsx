@@ -124,7 +124,7 @@ export function FinalPreview({
       <Button
         onClick={onExport}
         disabled={!allCompleted || exporting}
-        className="w-full h-10 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-sm font-semibold"
+        className="w-full h-10 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-sm font-semibold"
       >
         {exporting ? (
           <>Stitching Final Video…</>

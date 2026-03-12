@@ -170,9 +170,19 @@ export function SceneCard({
               </div>
             </div>
           ) : (
-            <p className="text-[11px] text-foreground/80 leading-relaxed bg-background/30 rounded-lg p-2 line-clamp-3">
-              {scene.prompt}
-            </p>
+            <div>
+              <p className={cn("text-[11px] text-foreground/80 leading-relaxed bg-background/30 rounded-lg p-2", !promptExpanded && "line-clamp-3")}>
+                {scene.prompt}
+              </p>
+              {scene.prompt.length > 150 && (
+                <button
+                  onClick={() => setPromptExpanded(!promptExpanded)}
+                  className="text-[10px] text-primary hover:text-primary/80 mt-1 ml-2"
+                >
+                  {promptExpanded ? "Show less" : "Show more"}
+                </button>
+              )}
+            </div>
           )}
         </div>
 
