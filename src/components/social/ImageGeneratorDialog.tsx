@@ -6,14 +6,14 @@ import { Label } from "@/components/ui/label";
 import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp, Bird, Building2, HardHat, Landmark, TreePine, Users, Bot, Package, type LucideIcon } from "lucide-react";
 
 const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: string }[] = [
-  { id: "bird", label: "پرنده", icon: Bird, promptTag: "birds in the sky" },
-  { id: "building", label: "ساختمان", icon: Building2, promptTag: "building structure" },
-  { id: "construction", label: "پروژه ساختمانی", icon: HardHat, promptTag: "construction project site" },
-  { id: "city", label: "شهر", icon: Landmark, promptTag: "urban cityscape" },
-  { id: "nature", label: "طبیعت", icon: TreePine, promptTag: "natural landscape" },
-  { id: "workers", label: "کارگران", icon: Users, promptTag: "construction workers at work" },
-  { id: "ai", label: "هوش مصنوعی", icon: Bot, promptTag: "AI technology in construction" },
-  { id: "products", label: "محصولات ما", icon: Package, promptTag: "rebar stirrups, ties, and accessories" },
+  { id: "bird", label: "Birds", icon: Bird, promptTag: "birds in the sky" },
+  { id: "building", label: "Building", icon: Building2, promptTag: "building structure" },
+  { id: "construction", label: "Construction", icon: HardHat, promptTag: "construction project site" },
+  { id: "city", label: "City", icon: Landmark, promptTag: "urban cityscape" },
+  { id: "nature", label: "Nature", icon: TreePine, promptTag: "natural landscape" },
+  { id: "workers", label: "Workers", icon: Users, promptTag: "construction workers at work" },
+  { id: "ai", label: "AI & Build", icon: Bot, promptTag: "AI technology in construction" },
+  { id: "products", label: "Our Products", icon: Package, promptTag: "rebar stirrups, ties, and accessories" },
 ];
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
@@ -238,7 +238,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
               {/* Visual Themes */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">تم‌های تصویری</Label>
+                <Label className="text-xs text-muted-foreground">Visual Themes</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {VISUAL_THEMES.map((theme) => {
                     const Icon = theme.icon;
