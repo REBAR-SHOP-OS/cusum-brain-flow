@@ -1,27 +1,22 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Update DashScope API Key
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+### The Problem
+The `DASHSCOPE_API_KEY` secret stored in your project is still invalid — DashScope returns "Invalid API-key provided" when Wan 2.1 tries to generate video.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### What Needs to Happen
+I need to switch to implementation mode to use the `add_secret` tool to prompt you for the new key value. The key must be from the **DashScope International** console and should start with `sk-`.
 
-### Plan
-Run a single database migration:
+### Steps
+1. Use `add_secret` to request the updated `DASHSCOPE_API_KEY` value
+2. You paste the correct key from [DashScope International Console](https://dashscope-intl.console.aliyun.com/) → API Keys
+3. Redeploy the `generate-video` edge function
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
-```
+### Where to Find Your Key
+- Go to https://dashscope-intl.console.aliyun.com/
+- Navigate to **API Keys** section
+- Copy an active key (starts with `sk-`)
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
-
-No code changes needed — just the migration.
+No code changes needed — just the secret value update.
 
