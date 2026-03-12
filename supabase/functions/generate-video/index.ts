@@ -27,6 +27,7 @@ async function verifyAuth(req: Request): Promise<{ userId: string } | null> {
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const OPENAI_BASE = "https://api.openai.com/v1";
+const DASHSCOPE_BASE = "https://dashscope-intl.aliyuncs.com/api/v1";
 
 // ─── Provider config ────────────────────────────────────────
 const VEO_CLIP_DURATIONS = [4, 6, 8];
@@ -153,6 +154,92 @@ async function veoDownload(apiKey: string, videoUrl: string) {
 
   if (!resp.ok) throw new Error(`Veo download failed (${resp.status})`);
 
+  return new Response(resp.body, {
+    headers: {
+      "Content-Type": resp.headers.get("Content-Type") || "video/mp4",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    },
+  });
+}
+
+// ─── Wan (Alibaba DashScope) helpers ────────────────────────
+
+const WAN_CLIP_DURATIONS = [4, 5, 8];
+const WAN_MAX_CLIP = 8;
+
+async function wanGenerate(apiKey: string, prompt: string, duration: number) {
+  const wanDuration = snapDuration(duration, WAN_CLIP_DURATIONS);
+  const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "X-DashScope-Async": "enable",
+    },
+    body: JSON.stringify({
+      model: "wan2.1-t2v-plus",
+      input: { prompt },
+      parameters: { resolution: "720P", duration: wanDuration },
+    }),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Wan submit error:", resp.status, errText);
+    let detail = `Wan generation failed (${resp.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      const apiMsg = errJson?.message || errJson?.code;
+      if (apiMsg) detail = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
+    } catch { /* use default */ }
+    throw new Error(detail);
+  }
+
+  const data = await resp.json();
+  const taskId = data?.output?.task_id;
+  if (!taskId) throw new Error("Wan did not return a task_id");
+  return { jobId: taskId, provider: "wan" };
+}
+
+async function wanPoll(apiKey: string, taskId: string) {
+  const resp = await fetch(`${DASHSCOPE_BASE}/tasks/${taskId}`, {
+    headers: { "Authorization": `Bearer ${apiKey}` },
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Wan poll error:", resp.status, errText);
+    throw new Error(`Wan polling failed (${resp.status})`);
+  }
+
+  const data = await resp.json();
+  const output = data?.output || {};
+  const taskStatus = output.task_status;
+
+  if (taskStatus === "SUCCEEDED") {
+    const videoUrl = output.video_url || output.results?.[0]?.url;
+    return { status: "completed", videoUrl, needsAuth: false };
+  }
+
+  if (taskStatus === "FAILED") {
+    return { status: "failed", error: output.message || "Wan generation failed" };
+  }
+
+  return { status: "processing", progress: null };
+}
+
+async function wanDownloadBytes(videoUrl: string): Promise<Uint8Array> {
+  const resp = await fetch(videoUrl);
+  if (!resp.ok) throw new Error(`Wan download failed (${resp.status})`);
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
+async function wanDownload(videoUrl: string) {
+  const resp = await fetch(videoUrl);
+  if (!resp.ok) throw new Error(`Wan download failed (${resp.status})`);
   return new Response(resp.body, {
     headers: {
       "Content-Type": resp.headers.get("Content-Type") || "video/mp4",
@@ -370,12 +457,12 @@ serve(async (req) => {
 
     const videoSchema = z.object({
       action: z.enum(["generate", "poll", "download", "generate-multi", "poll-multi", "list-library", "delete-library"]),
-      provider: z.enum(["veo", "sora"]).optional(),
+      provider: z.enum(["veo", "sora", "wan"]).optional(),
       prompt: z.string().max(5000).optional(),
       jobId: z.string().max(500).optional(),
       jobIds: z.array(z.object({
         id: z.string(),
-        provider: z.enum(["veo", "sora"]),
+        provider: z.enum(["veo", "sora", "wan"]),
         sceneIndex: z.number(),
       })).optional(),
       videoUrl: z.string().max(2000).optional(),
@@ -394,9 +481,11 @@ serve(async (req) => {
     const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls } = parsed.data;
 
     const isVeo = provider === "veo";
+    const isWan = provider === "wan";
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     const gptKey = Deno.env.get("GPT_API_KEY");
-    const apiKey = isVeo ? geminiKey : gptKey;
+    const dashscopeKey = Deno.env.get("DASHSCOPE_API_KEY");
+    const apiKey = isWan ? dashscopeKey : isVeo ? geminiKey : gptKey;
 
     // ── Library: list saved videos ──
     if (action === "list-library") {
@@ -467,7 +556,7 @@ serve(async (req) => {
     }
 
     if (!apiKey) {
-      const keyName = isVeo ? "GEMINI_API_KEY" : "GPT_API_KEY";
+      const keyName = isWan ? "DASHSCOPE_API_KEY" : isVeo ? "GEMINI_API_KEY" : "GPT_API_KEY";
       return new Response(
         JSON.stringify({ error: `${keyName} is not configured` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -485,7 +574,9 @@ serve(async (req) => {
 
       let result: { jobId: string; provider: string };
       try {
-        if (isVeo) {
+        if (isWan) {
+          result = await wanGenerate(apiKey, prompt, duration || 8);
+        } else if (isVeo) {
           try {
             result = await veoGenerate(apiKey, prompt, duration || 8);
           } catch (e) {
@@ -493,6 +584,9 @@ serve(async (req) => {
             if (isProviderCapacityError(message) && gptKey) {
               console.warn("Veo capacity reached on single generate, falling back to Sora");
               result = await soraGenerate(gptKey, prompt, duration || 8, model || "sora-2");
+            } else if (isProviderCapacityError(message) && dashscopeKey) {
+              console.warn("Veo capacity reached, falling back to Wan");
+              result = await wanGenerate(dashscopeKey, prompt, duration || 8);
             } else {
               throw e;
             }
@@ -505,6 +599,9 @@ serve(async (req) => {
             if (isProviderCapacityError(message) && geminiKey) {
               console.warn("Sora capacity reached on single generate, falling back to Veo");
               result = await veoGenerate(geminiKey, prompt, duration || 8);
+            } else if (isProviderCapacityError(message) && dashscopeKey) {
+              console.warn("Sora capacity reached, falling back to Wan");
+              result = await wanGenerate(dashscopeKey, prompt, duration || 8);
             } else {
               throw e;
             }
@@ -777,12 +874,14 @@ serve(async (req) => {
             if (existingSceneUrls[job.sceneIndex]) {
               return { ...job, status: "completed", storageUrl: existingSceneUrls[job.sceneIndex] };
             }
-            const jobApiKey = job.provider === "veo" ? geminiKey : gptKey;
+            const jobApiKey = job.provider === "wan" ? dashscopeKey : job.provider === "veo" ? geminiKey : gptKey;
             if (!jobApiKey) return { ...job, status: "failed", error: "API key missing" };
 
-            const result = job.provider === "veo"
-              ? await veoPoll(jobApiKey, job.id)
-              : await soraPoll(jobApiKey, job.id);
+            const result = job.provider === "wan"
+              ? await wanPoll(jobApiKey, job.id)
+              : job.provider === "veo"
+                ? await veoPoll(jobApiKey, job.id)
+                : await soraPoll(jobApiKey, job.id);
             return { ...job, ...result };
           } catch (e) {
             return { ...job, status: "failed", error: e instanceof Error ? e.message : "Poll error" };
@@ -802,14 +901,16 @@ serve(async (req) => {
 
       if (newlyCompleted) {
         try {
-          const sceneApiKey = newlyCompleted.provider === "veo" ? geminiKey : gptKey;
-          if (!sceneApiKey) throw new Error("API key missing for download");
+          const sceneApiKey = newlyCompleted.provider === "wan" ? dashscopeKey : newlyCompleted.provider === "veo" ? geminiKey : gptKey;
+          if (!sceneApiKey && newlyCompleted.provider !== "wan") throw new Error("API key missing for download");
 
           let clipBytes: Uint8Array;
-          if (newlyCompleted.provider === "veo" && (newlyCompleted as any).videoUrl) {
-            clipBytes = await veoDownloadBytes(sceneApiKey, (newlyCompleted as any).videoUrl);
+          if (newlyCompleted.provider === "wan" && (newlyCompleted as any).videoUrl) {
+            clipBytes = await wanDownloadBytes((newlyCompleted as any).videoUrl);
+          } else if (newlyCompleted.provider === "veo" && (newlyCompleted as any).videoUrl) {
+            clipBytes = await veoDownloadBytes(sceneApiKey!, (newlyCompleted as any).videoUrl);
           } else if (newlyCompleted.provider === "sora") {
-            clipBytes = await soraDownloadBytes(sceneApiKey, newlyCompleted.id);
+            clipBytes = await soraDownloadBytes(sceneApiKey!, newlyCompleted.id);
           } else {
             throw new Error("Cannot download scene");
           }
@@ -891,9 +992,11 @@ serve(async (req) => {
         );
       }
 
-      const result = isVeo
-        ? await veoPoll(apiKey, jobId)
-        : await soraPoll(apiKey, jobId);
+      const result = isWan
+        ? await wanPoll(apiKey, jobId)
+        : isVeo
+          ? await veoPoll(apiKey, jobId)
+          : await soraPoll(apiKey, jobId);
 
       return new Response(
         JSON.stringify(result),
@@ -903,7 +1006,15 @@ serve(async (req) => {
 
     // ── Download (proxy with auth headers) ──
     if (action === "download") {
-      if (isVeo) {
+      if (isWan) {
+        if (!videoUrl) {
+          return new Response(
+            JSON.stringify({ error: "videoUrl is required for Wan download" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        return await wanDownload(videoUrl);
+      } else if (isVeo) {
         if (!videoUrl) {
           return new Response(
             JSON.stringify({ error: "videoUrl is required for Veo download" }),
