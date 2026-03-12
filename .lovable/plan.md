@@ -1,29 +1,33 @@
 
 
-# Fix: "Clip 1 failed to load" during Export
 
-## Root Cause
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-The `fetchAsBlob()` helper in `videoStitch.ts` silently falls back to the original URL when the fetch fails (CORS). The video element is then created with `crossOrigin = "anonymous"`, which causes the browser to enforce CORS on the original URL — and it fails because the source (DashScope CDN or similar) doesn't send `Access-Control-Allow-Origin` headers.
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-The irony: `fetchAsBlob` was designed to avoid CORS by converting to a blob URL, but its error handler returns the raw URL, which then fails harder because `crossOrigin` is set.
+## Completed: Add All Wan 2.6 Capabilities
 
-## Fix
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-### File: `src/lib/videoStitch.ts`
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-1. **Remove `crossOrigin = "anonymous"` from video elements in `preloadAndValidate`** — it's not needed when using blob URLs, and it breaks when falling back to raw URLs. The canvas will be "tainted" (can't extract pixels) but that's irrelevant since we use `captureStream()` not `toDataURL()`.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-2. **Improve `fetchAsBlob` to retry with a no-cors proxy fallback** — if the direct fetch fails, try without CORS mode (opaque response won't work for blob), so instead just log the warning and return the original URL without crossOrigin.
-
-3. **Remove `crossOrigin` from the video element entirely** — `captureStream()` doesn't require an untainted canvas for recording (only `toBlob`/`toDataURL` do). This is the key insight: the current code unnecessarily sets `crossOrigin` which blocks playback of cross-origin videos.
-
-### Specific Changes
-
-In `preloadAndValidate` (line 169): Remove `v.crossOrigin = "anonymous"` — this single line is the root cause. Without it, the video will load and play fine from any URL (blob or raw), and `captureStream` + `MediaRecorder` still works.
-
-Also improve `fetchAsBlob` to be more robust: add a second attempt with `mode: "no-cors"` awareness, and log clearly when falling back.
-
-## Files Modified
-1. `src/lib/videoStitch.ts` — Remove `crossOrigin` from video elements, improve fetchAsBlob error logging
-
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
