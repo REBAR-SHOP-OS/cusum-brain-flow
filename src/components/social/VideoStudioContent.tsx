@@ -91,6 +91,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [activeTab, setActiveTab] = useState("generate");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<MediaType>("video");
+  const [selectedModel, setSelectedModel] = useState("gpt-image-1");
 
   // Image generation state
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
