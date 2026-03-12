@@ -508,7 +508,7 @@ export default function TimeClock() {
                         {loading ? (
                           <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
                         ) : kioskProfiles.length === 0 ? (
-                          <p className="text-muted-foreground text-sm col-span-2 text-center py-8">No kiosk check-ins today</p>
+                          <p className="text-muted-foreground text-sm col-span-2 text-center py-8">No team members found</p>
                         ) : (
                           kioskProfiles.map((profile) => {
                             const status = statusMap.get(profile.id);
