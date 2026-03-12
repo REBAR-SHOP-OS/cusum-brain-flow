@@ -636,20 +636,31 @@ export function ProVideoEditor({
       setTimeout(() => {
         autoPlayPending.current = true;
         setSelectedSceneIndex(nextIdx);
-        // Wait for new video to be ready before completing transition
-        const checkReady = () => {
-          if (videoRef.current && videoRef.current.readyState >= 3) {
-            sceneTransitioning.current = false;
-            setSceneTransition(false);
-            if (autoPlayPending.current) {
-              videoRef.current.play().catch(() => {});
-              autoPlayPending.current = false;
+        // Check if next scene is a static card — no video readyState to wait for
+        const nextScene = storyboard[nextIdx];
+        const nextClip = clips.find(c => c.sceneId === nextScene?.id);
+        const nextIsStatic = nextScene?.generationMode === "static-card" || nextClip?.videoUrl?.startsWith("data:image/");
+        if (nextIsStatic) {
+          sceneTransitioning.current = false;
+          setSceneTransition(false);
+          setIsPlaying(true);
+          autoPlayPending.current = false;
+        } else {
+          // Wait for new video to be ready before completing transition
+          const checkReady = () => {
+            if (videoRef.current && videoRef.current.readyState >= 3) {
+              sceneTransitioning.current = false;
+              setSceneTransition(false);
+              if (autoPlayPending.current) {
+                videoRef.current.play().catch(() => {});
+                autoPlayPending.current = false;
+              }
+            } else {
+              setTimeout(checkReady, 50);
             }
-          } else {
-            setTimeout(checkReady, 50);
-          }
-        };
-        setTimeout(checkReady, 50);
+          };
+          setTimeout(checkReady, 50);
+        }
       }, 500);
     } else {
       setIsPlaying(false);
