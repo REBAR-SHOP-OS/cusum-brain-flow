@@ -910,6 +910,13 @@ export function PostReviewPanel({
           handleMediaReady(url, "image");
         }}
       />
+      {post?.image_url && !isVideo && (
+        <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
+          <DialogContent className="max-w-[90vw] max-h-[90vh] p-2">
+            <img src={post.image_url} alt="Full preview" className="w-full h-full object-contain" />
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }
