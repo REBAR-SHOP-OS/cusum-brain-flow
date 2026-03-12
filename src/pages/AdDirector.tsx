@@ -3,7 +3,7 @@ import { AdDirectorContent } from "@/components/ad-director/AdDirectorContent";
 
 export default function AdDirector() {
   return (
-    <div className="min-h-screen flex flex-col overflow-y-auto">
+    <div className="h-full overflow-y-auto flex flex-col">
       {/* Header */}
       <div className="max-w-6xl mx-auto w-full px-4 pt-6 pb-2">
         <div className="flex items-center gap-3">
