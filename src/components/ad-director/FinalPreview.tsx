@@ -67,7 +67,7 @@ export function FinalPreview({
   clips, storyboard, segments,
   subtitlesEnabled, logoEnabled, endCardEnabled,
   onToggleSubtitles, onToggleLogo, onToggleEndCard,
-  onExport, exporting, finalVideoUrl,
+  onExport, exporting, finalVideoUrl, onOpenExportDialog,
   renderStatus, renderError, renderProgress, renderLog,
   onRetry, onDownloadLog,
 }: FinalPreviewProps) {
