@@ -306,7 +306,6 @@ export function ProVideoEditor({
     setOverlays(prev => prev.filter(o => o.id !== id));
   }, []);
 
-  const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
 
   const handleTrimScene = useCallback((index: number) => {
     const scene = storyboard[index];
