@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -411,6 +411,26 @@ export function PostReviewPanel({
                       <Video className="w-3.5 h-3.5" />
                       {isVideo ? "Regenerate video" : "Generate video"}
                     </Button>
+                    <label>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const blobUrl = URL.createObjectURL(file);
+                          handleMediaReady(blobUrl, "video");
+                          e.target.value = "";
+                        }}
+                      />
+                      <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                        <span>
+                          <Upload className="w-3.5 h-3.5" />
+                          Upload Video
+                        </span>
+                      </Button>
+                    </label>
                   </div>
                 </div>
 
