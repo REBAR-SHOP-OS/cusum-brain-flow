@@ -91,6 +91,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
   const generatingAny = clips.some(c => c.status === "generating");
   const [exporting, setExporting] = useState(false);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
+  const [musicTrackUrl, setMusicTrackUrl] = useState<string | null>(null);
   const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
