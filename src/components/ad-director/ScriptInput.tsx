@@ -98,7 +98,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               value={script}
               onChange={(e) => onScriptChange(e.target.value)}
               placeholder="Paste your ad script here, or load the demo above to get started..."
-              className="min-h-[280px] bg-card/50 border-border/50 font-mono text-sm leading-relaxed pr-4 pb-10"
+              className="min-h-[280px] bg-card/50 border-border/50 font-sans text-sm leading-relaxed pr-4 pb-10"
             />
             {script.trim() && (
               <div className="absolute bottom-3 left-3 flex items-center gap-3">
