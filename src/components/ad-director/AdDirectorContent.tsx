@@ -152,7 +152,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               continuityProfile,
               previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
               modelOverrides,
-            }));
+            }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
           } catch {
             return { prompt: scene.prompt, modelUsed: "original" };
