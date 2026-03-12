@@ -160,17 +160,26 @@ async function getInternalSenderToken(svc: ReturnType<typeof createClient>): Pro
 }
 
 function createRawEmail(to: string, subject: string, body: string, fromEmail: string): string {
+  // Use MIME encoded-word (RFC 2047) for subject to handle Unicode properly
+  const encoder = new TextEncoder();
+  const subjectBytes = encoder.encode(subject);
+  const subjectB64 = btoa(String.fromCharCode(...subjectBytes));
+  const encodedSubject = `=?UTF-8?B?${subjectB64}?=`;
+
   const lines = [
     `From: ${fromEmail}`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodedSubject}`,
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
     "",
-    body,
+    btoa(String.fromCharCode(...encoder.encode(body))),
   ];
   const raw = lines.join("\r\n");
-  const b64 = btoa(unescape(encodeURIComponent(raw)));
+  // Use URL-safe base64 for Gmail API
+  const rawBytes = encoder.encode(raw);
+  const b64 = btoa(String.fromCharCode(...rawBytes));
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -192,24 +201,37 @@ async function sendAlertEmail(accessToken: string, to: string, subject: string, 
 function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentName: string): string {
   const isMissedCall = alertType === "missed_call";
   const icon = isMissedCall ? "📞" : "⏰";
+  const breachLabel = alertType.replace("response_time_", "");
   const title = isMissedCall
     ? `Missed Call from ${comm.from_address || "Unknown"}`
-    : `Unanswered Email — ${alertType.replace("response_time_", "")} breach`;
+    : `Unanswered Email \u2014 ${breachLabel} breach`;
+
+  // Calculate how long ago the email was received
+  const receivedDate = comm.received_at ? new Date(comm.received_at) : null;
+  const ageHours = receivedDate ? Math.round((Date.now() - receivedDate.getTime()) / 3_600_000 * 10) / 10 : null;
+  const ageLabel = ageHours != null ? `${ageHours}h ago` : "";
+  const receivedFormatted = receivedDate
+    ? receivedDate.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Toronto" })
+    : "N/A";
 
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:560px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
   <div style="background:#dc2626;padding:16px 24px;color:#fff;">
     <h2 style="margin:0;font-size:16px;">${icon} ${title}</h2>
   </div>
-  <div style="padding:20px 24px;font-size:14px;color:#333;line-height:1.6;">
-    <p><strong>Owner:</strong> ${ownerEmail} (AI Shadow: ${agentName})</p>
-    <p><strong>From:</strong> ${comm.from_address || "N/A"}</p>
-    <p><strong>Subject:</strong> ${comm.subject || "(no subject)"}</p>
-    <p><strong>Received:</strong> ${comm.received_at || "N/A"}</p>
-    <p><strong>Preview:</strong> ${(comm.body_preview || "").slice(0, 200)}</p>
+  <div style="padding:20px 24px;font-size:14px;color:#333;line-height:1.8;">
+    <table style="width:100%;border-collapse:collapse;">
+      <tr><td style="padding:4px 8px 4px 0;font-weight:600;white-space:nowrap;vertical-align:top;">Owner:</td><td style="padding:4px 0;">${ownerEmail} (AI Shadow: ${agentName})</td></tr>
+      <tr><td style="padding:4px 8px 4px 0;font-weight:600;white-space:nowrap;vertical-align:top;">From:</td><td style="padding:4px 0;">${comm.from_address || "N/A"}</td></tr>
+      <tr><td style="padding:4px 8px 4px 0;font-weight:600;white-space:nowrap;vertical-align:top;">To:</td><td style="padding:4px 0;">${comm.to_address || "N/A"}</td></tr>
+      <tr><td style="padding:4px 8px 4px 0;font-weight:600;white-space:nowrap;vertical-align:top;">Subject:</td><td style="padding:4px 0;">${comm.subject || "(no subject)"}</td></tr>
+      <tr><td style="padding:4px 8px 4px 0;font-weight:600;white-space:nowrap;vertical-align:top;">Received:</td><td style="padding:4px 0;">${receivedFormatted} (${ageLabel})</td></tr>
+      ${!isMissedCall ? `<tr><td style="padding:4px 8px 4px 0;font-weight:600;white-space:nowrap;vertical-align:top;">Breach:</td><td style="padding:4px 0;color:#dc2626;font-weight:600;">${breachLabel} without response</td></tr>` : ""}
+    </table>
+    ${(comm.body_preview || "").trim() ? `<div style="margin-top:12px;padding:12px;background:#f8f9fa;border-radius:6px;border-left:3px solid #dc2626;font-size:13px;color:#555;"><strong>Preview:</strong><br/>${(comm.body_preview || "").slice(0, 300)}</div>` : ""}
   </div>
   <div style="padding:12px 24px;background:#f8f9fa;font-size:11px;color:#888;text-align:center;">
-    Rebar.shop Comms Engine — Automated Alert
+    Rebar.shop Comms Engine \u2014 Automated Alert
   </div>
 </div></body></html>`;
 }
@@ -393,7 +415,7 @@ serve(async (req) => {
         const html = buildAlertHTML(alert.type, alert.owner, alert.comm, alert.agent);
         const subj = alert.type === "missed_call"
           ? `[Alert] Missed call from ${alert.comm.from_address || "Unknown"}`
-          : `[Alert] Unanswered email — ${alert.type.replace("response_time_", "")} — ${alert.comm.subject || ""}`;
+          : `[Alert] Unanswered email - ${alert.type.replace("response_time_", "")} - ${alert.comm.subject || ""}`;
 
         // Send to owner
         if (alert.owner) {
