@@ -791,7 +791,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
             {fullPage && status === "idle" && !generatedImageUrl && !standaloneAudioUrl && !imageGenerating && !standaloneAudioGenerating && (
               <div className="flex flex-col items-center justify-center h-full min-h-[300px]">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center mb-4">
-                  {mediaType === "image" ? <Image className="w-10 h-10 text-muted-foreground/30" /> :
+                  {mediaType === "image" ? <ImageIcon className="w-10 h-10 text-muted-foreground/30" /> :
                    mediaType === "audio" ? <Music className="w-10 h-10 text-muted-foreground/30" /> :
                    <Clapperboard className="w-10 h-10 text-muted-foreground/30" />}
                 </div>
