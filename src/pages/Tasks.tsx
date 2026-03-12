@@ -540,6 +540,14 @@ export default function Tasks() {
     }
   };
 
+  const transferToSattar = async (taskId: string) => {
+    const { error } = await supabase.from("tasks").update({ assigned_to: SATTAR_PROFILE_ID, updated_at: new Date().toISOString() }).eq("id", taskId);
+    if (error) { toast.error(error.message); return; }
+    await writeAudit(taskId, "transfer", "assigned_to", RADIN_PROFILE_ID, SATTAR_PROFILE_ID);
+    toast.success("Task transferred to Sattar");
+    loadData();
+  };
+
   const toggleComplete = async (task: TaskRow) => {
     const isCompleted = task.status === "completed";
     if (!isCompleted && !canMarkComplete(task)) {
