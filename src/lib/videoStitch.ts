@@ -295,47 +295,74 @@ export async function stitchClips(
       video.currentTime = 0;
 
       let animFrame: number;
+      let hasDrawnFrame = false;
+      let clipDone = false;
+
+      const finishClip = () => {
+        if (clipDone) return;
+        clipDone = true;
+        cancelAnimationFrame(animFrame);
+        video.pause();
+        cumulativeTime = clipStartCumulativeTime + effectiveDuration;
+        console.log(`[stitchClips] Clip ${clipIndex + 1}/${videos.length} done, cumTime=${cumulativeTime.toFixed(2)}s`);
+        clipIndex++;
+        playNextClip();
+      };
+
       const drawFrame = () => {
-        if (video.paused || video.ended || video.currentTime >= effectiveDuration) {
-          cancelAnimationFrame(animFrame);
-          video.pause();
-          cumulativeTime = clipStartCumulativeTime + effectiveDuration;
-          clipIndex++;
-          playNextClip();
+        if (clipDone) return;
+
+        // Only exit after we've actually drawn at least one frame
+        // and the video has advanced past the target duration
+        if (hasDrawnFrame && (video.ended || video.currentTime >= effectiveDuration)) {
+          finishClip();
           return;
         }
 
-        // Draw video frame
-        ctx.drawImage(video, 0, 0, W, H);
+        // Don't draw if video isn't actually playing yet
+        if (!video.paused && !video.ended) {
+          ctx.drawImage(video, 0, 0, W, H);
+          hasDrawnFrame = true;
 
-        // Overlay: subtitles
-        if (subtitleSegments.length > 0) {
-          const currentAbsTime = clipStartCumulativeTime + video.currentTime;
-          const activeSub = subtitleSegments.find(
-            s => currentAbsTime >= s.startTime && currentAbsTime < s.endTime
-          );
-          if (activeSub) {
-            drawSubtitle(ctx, W, H, activeSub.text);
+          // Overlay: subtitles
+          if (subtitleSegments.length > 0) {
+            const currentAbsTime = clipStartCumulativeTime + video.currentTime;
+            const activeSub = subtitleSegments.find(
+              s => currentAbsTime >= s.startTime && currentAbsTime < s.endTime
+            );
+            if (activeSub) {
+              drawSubtitle(ctx, W, H, activeSub.text);
+            }
           }
-        }
 
-        // Overlay: logo
-        if (logoImg) {
-          drawLogo(ctx, W, H, logoImg, logoSize);
+          // Overlay: logo
+          if (logoImg) {
+            drawLogo(ctx, W, H, logoImg, logoSize);
+          }
         }
 
         animFrame = requestAnimationFrame(drawFrame);
       };
 
       video.ontimeupdate = () => {
-        if (video.currentTime >= effectiveDuration) {
-          video.pause();
+        if (video.currentTime >= effectiveDuration && hasDrawnFrame) {
+          finishClip();
         }
       };
 
+      // Wait for 'playing' event to ensure first frame is decoded
+      const startDrawing = () => {
+        console.log(`[stitchClips] Clip ${clipIndex + 1}/${videos.length} playing, duration=${effectiveDuration.toFixed(2)}s`);
+        drawFrame();
+      };
+
+      video.addEventListener("playing", startDrawing, { once: true });
+
       video.play()
-        .then(() => drawFrame())
-        .catch(reject);
+        .catch((err) => {
+          video.removeEventListener("playing", startDrawing);
+          reject(err);
+        });
     };
 
     const renderEndCard = () => {
