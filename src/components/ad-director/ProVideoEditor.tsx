@@ -131,6 +131,41 @@ export function ProVideoEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storyboard.length, brand.logoUrl]);
 
+  // Auto-seed text overlays from script segments
+  useEffect(() => {
+    if (storyboard.length === 0 || segments.length === 0) return;
+    const newOverlays: VideoOverlay[] = [];
+    for (const scene of storyboard) {
+      const seg = segments.find(s => s.id === scene.segmentId);
+      if (!seg?.text?.trim()) continue;
+      const hasText = overlays.some(o => o.sceneId === scene.id && o.kind === "text");
+      if (!hasText) {
+        newOverlays.push({
+          id: crypto.randomUUID(),
+          kind: "text",
+          position: { x: 10, y: 80 },
+          size: { w: 80, h: 15 },
+          content: seg.text,
+          opacity: 0.95,
+          sceneId: scene.id,
+          animated: true,
+        });
+      }
+    }
+    if (newOverlays.length > 0) setOverlays(prev => [...prev, ...newOverlays]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyboard.length, segments]);
+
+  // Auto-generate voiceovers on mount
+  const voiceoverGenerated = useRef(false);
+  useEffect(() => {
+    if (voiceoverGenerated.current || segments.length === 0) return;
+    if (audioTracks.some(a => a.kind === "voiceover")) return;
+    voiceoverGenerated.current = true;
+    generateAllVoiceovers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments.length]);
+
   // Apply speed to video
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = speed;
