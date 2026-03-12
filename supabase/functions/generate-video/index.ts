@@ -165,12 +165,21 @@ async function veoDownload(apiKey: string, videoUrl: string) {
 
 // ─── Wan (Alibaba DashScope) helpers ────────────────────────
 
-const WAN_CLIP_DURATIONS = [4, 5, 8];
-const WAN_MAX_CLIP = 8;
+// Wan 2.6 supports 2-15s per clip at 1080P with auto-audio
+const WAN_CLIP_DURATIONS = [5, 10, 15];
+const WAN_MAX_CLIP = 15;
 
-async function wanGenerate(apiKey: string, prompt: string, duration: number) {
-  const wanDuration = snapDuration(duration, WAN_CLIP_DURATIONS);
+// Resolution map for wan2.6-t2v (size parameter uses width*height format)
+const WAN_SIZE_MAP: Record<string, string> = {
+  "16:9": "1920*1080",
+  "9:16": "1080*1920",
+  "1:1": "1440*1440",
+};
+
+async function wanGenerate(apiKey: string, prompt: string, duration: number, aspectRatio?: string) {
+  const wanDuration = Math.max(2, Math.min(15, duration));
   const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
+  const size = WAN_SIZE_MAP[aspectRatio || "16:9"] || "1920*1080";
 
   const resp = await fetch(url, {
     method: "POST",
@@ -180,9 +189,13 @@ async function wanGenerate(apiKey: string, prompt: string, duration: number) {
       "X-DashScope-Async": "enable",
     },
     body: JSON.stringify({
-      model: "wan2.1-t2v-plus",
+      model: "wan2.6-t2v",
       input: { prompt },
-      parameters: { resolution: "720P", duration: wanDuration },
+      parameters: {
+        size,
+        duration: wanDuration,
+        prompt_extend: true,
+      },
     }),
   });
 
