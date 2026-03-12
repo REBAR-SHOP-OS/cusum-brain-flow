@@ -228,14 +228,15 @@ ${TIME_SLOTS.map((slot, i) => `Post ${i + 1}: ${String(slot.hour).padStart(2, "0
    📞 647-260-9403
    🌐 www.rebar.shop
 
-## IMAGE PROMPT RULES
-- ALL images MUST be PHOTOREALISTIC — real-world professional photography style ONLY
-- ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, AI-looking art, stock photo aesthetics
-- Every image MUST look like a real photo taken with a professional camera at a real construction site, workshop, warehouse, or urban location
-- Natural lighting, real textures, authentic environments ONLY
-- The REBAR.SHOP logo MUST appear in EVERY image — no changes to color, shape, or design
+## IMAGE RULES
+- **ALL images MUST be PHOTOREALISTIC** — real-world professional photography style ONLY. ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, AI-looking art, stock photo aesthetics. Every image MUST look like a real photo taken with a professional camera at a real construction site, workshop, warehouse, or urban location. Natural lighting, real textures, authentic environments ONLY.
+- **LOGO IS MANDATORY** — The REBAR.SHOP logo MUST appear in EVERY image EXACTLY as the original — no changes to color, shape, aspect ratio, or design. If the logo cannot be loaded, DO NOT generate any image — report the error immediately.
+- **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations. NEVER produce a similar-looking image. Each generation must feel like a completely fresh creative direction.
+- **USE DIVERSE VISUAL STYLES** — Rotate between these styles and NEVER use the same style twice in a row: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes with buildings under construction, city landmarks & bridges & infrastructure, aerial drone views of large projects, real product photography in actual warehouse settings, macro close-up detail shots, dramatic sunrise/sunset lighting, logistics & delivery scenes, engineering blueprints overlaid with real products, night construction scenes, foundation-level perspectives. Each image must look like it came from a COMPLETELY DIFFERENT photo shoot. Each post's image_prompt MUST explicitly reference the assigned visual_style for that time slot.
 - English text overlays on the image (product name, tagline)
-- Each image MUST use a DIFFERENT visual style — never repeat compositions
+- Scientific and promotional style — NOT fantasy or cartoon
+- Clean, professional, visually striking — like professional documentary/commercial photography
+- Use Brain files (logo & content reference) when available
 ${instructionsText}
 
 Return valid JSON only. No markdown, no code blocks.
