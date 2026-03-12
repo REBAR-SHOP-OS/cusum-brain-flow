@@ -162,11 +162,8 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
             )}
           </div>
 
-          {/* AI Engine (collapsed) */}
-          <AdvancedModelSettings
-            modelOverrides={modelOverrides}
-            onModelOverridesChange={onModelOverridesChange}
-          />
+          {/* Video Parameters */}
+          <VideoParameters params={videoParams} onChange={onVideoParamsChange} />
         </div>
       </div>
 
