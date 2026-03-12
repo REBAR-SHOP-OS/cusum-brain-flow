@@ -1,46 +1,69 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Add Automatic Transitions and Audio-Video Balancing
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problems
+1. **No transitions** — clips cut abruptly from one to the next with hard cuts
+2. **Audio-video sync issues** — voiceover audio per-scene plays independently without duration matching; music volume doesn't duck under voiceover
+3. **No crossfade/dissolve** between scenes in the final export
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Changes
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. Crossfade transitions in `videoStitch.ts`
+Add a configurable crossfade (0.5s default) between clips during canvas rendering:
+- During the last 0.5s of each clip, start preloading and drawing the next clip with increasing opacity
+- Use `ctx.globalAlpha` to blend: outgoing clip fades from 1→0, incoming clip fades from 0→1
+- First clip has no fade-in (clean start), last clip has no fade-out (clean end to endcard)
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 2. Audio ducking and balancing in `videoStitch.ts`
+- When voiceover is present, automatically duck music volume to 15% (from 30%)
+- Normalize voiceover gain based on scene duration vs audio duration — if VO is longer than scene, slightly increase playback rate; if shorter, pad with silence
+- Add a master limiter gain node to prevent clipping when mixing voice + music
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 3. Per-scene voiceover sync in `ProVideoEditor.tsx`
+- When playing voiceover during preview, sync audio currentTime to video currentTime
+- Add `timeupdate` listener on video to keep audio in lockstep
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 4. Smooth transition preview in editor
+- During auto-advance (`handleVideoEnded`), add a brief CSS opacity transition on the video element for visual smoothness in the preview
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+## Files to modify
+
+### `src/lib/videoStitch.ts`
+- Add `crossfadeDuration` option to `StitchOverlayOptions` (default 0.5s)
+- In `playNextClip`, overlap the last N frames of current clip with first N frames of next clip using alpha blending
+- Preload next clip's first frame while current clip plays its final frames
+- Add audio ducking: when voice audio is active, reduce music gain to 0.15
+- Add gain normalization to prevent audio clipping
+
+### `src/components/ad-director/ProVideoEditor.tsx`
+- Update voiceover sync `useEffect` to track video time and sync audio position
+- Add CSS transition class to video element during scene changes
+- Pass `crossfadeDuration: 0.5` in stitch overlay options when exporting
+
+## Technical approach for crossfade
+
+```text
+Clip A:  [============|--fade--|]
+Clip B:              [|--fade--|============]
+                      ^overlap^
+
+During overlap:
+  frame: draw clipA at alpha=(1 - progress)
+         draw clipB at alpha=progress
+  where progress = (currentTime - fadeStart) / crossfadeDuration
+```
+
+The crossfade is implemented in the canvas render loop. The next clip's video element is pre-seeked to time 0 and ready before the fade begins. Both video elements play simultaneously during the overlap period.
+
+## Audio balancing approach
+
+```text
+Voice:  [====VO1====]  [====VO2====]  [===VO3===]
+Music:  [vol:0.15...] [vol:0.15...] [vol:0.15.] [vol:0.3 (no VO)]
+```
+
+- GainNode for music dynamically adjusts: 0.15 when VO plays, 0.3 during gaps
+- A DynamicsCompressorNode on the master output prevents clipping
+- Voice gain stays at 1.0 (primary audio)
+
