@@ -408,7 +408,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
           aspectRatio: "16:9",
           provider: "wan",
           model: "wan2.6-t2v",
-          negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
+          negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark, on-screen text, brand name, camera name, ARRI, RED, Sony",
         }
       );
 
