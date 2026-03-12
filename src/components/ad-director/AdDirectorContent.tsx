@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
@@ -15,6 +15,7 @@ import {
 } from "@/types/adDirector";
 import { cn } from "@/lib/utils";
 import { stitchClips } from "@/lib/videoStitch";
+import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
 
 
 import { Check } from "lucide-react";
@@ -43,9 +44,18 @@ function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
 
 export function AdDirectorContent() {
   const { toast } = useToast();
+  const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const [step, setStep] = useState<WorkflowStep>("script");
   const [script, setScript] = useState("");
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
+
+  // Load saved brand kit on mount
+  useEffect(() => {
+    if (savedBrand && !brandLoading) {
+      setBrand(savedBrand);
+    }
+  }, [savedBrand, brandLoading]);
+
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
@@ -626,6 +636,8 @@ export function AdDirectorContent() {
               onAssetsChange={setAssets}
               modelOverrides={modelOverrides}
               onModelOverridesChange={setModelOverrides}
+              onSaveBrandKit={() => saveBrandKit.mutate(brand)}
+              savingBrandKit={saveBrandKit.isPending}
             />
           </div>
         )}

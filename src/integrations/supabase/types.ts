@@ -1154,39 +1154,57 @@ export type Database = {
           business_name: string
           colors: Json
           created_at: string
+          cta: string
           description: string
+          font_style: string
           id: string
           logo_url: string | null
           media_urls: string[]
+          reference_aesthetic: string
+          tagline: string
+          target_audience: string
           updated_at: string
           user_id: string
           value_prop: string
+          website: string
         }
         Insert: {
           brand_voice?: string
           business_name?: string
           colors?: Json
           created_at?: string
+          cta?: string
           description?: string
+          font_style?: string
           id?: string
           logo_url?: string | null
           media_urls?: string[]
+          reference_aesthetic?: string
+          tagline?: string
+          target_audience?: string
           updated_at?: string
           user_id: string
           value_prop?: string
+          website?: string
         }
         Update: {
           brand_voice?: string
           business_name?: string
           colors?: Json
           created_at?: string
+          cta?: string
           description?: string
+          font_style?: string
           id?: string
           logo_url?: string | null
           media_urls?: string[]
+          reference_aesthetic?: string
+          tagline?: string
+          target_audience?: string
           updated_at?: string
           user_id?: string
           value_prop?: string
+          website?: string
         }
         Relationships: []
       }

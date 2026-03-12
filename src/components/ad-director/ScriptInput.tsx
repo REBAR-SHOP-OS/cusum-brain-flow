@@ -24,6 +24,8 @@ interface ScriptInputProps {
   onAssetsChange: (files: File[]) => void;
   modelOverrides: ModelOverrides;
   onModelOverridesChange: (overrides: ModelOverrides) => void;
+  onSaveBrandKit?: () => void;
+  savingBrandKit?: boolean;
 }
 
 function estimateDuration(text: string): number {
@@ -31,7 +33,7 @@ function estimateDuration(text: string): number {
   return Math.round(words / 2.5); // ~150 wpm = 2.5 words/sec
 }
 
-export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange, modelOverrides, onModelOverridesChange }: ScriptInputProps) {
+export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange, modelOverrides, onModelOverridesChange, onSaveBrandKit, savingBrandKit }: ScriptInputProps) {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       onAssetsChange([...assets, ...Array.from(e.target.files)]);
@@ -199,6 +201,23 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               >
                 {brand.name} {brand.tagline ? `· ${brand.tagline}` : ""}
               </div>
+            )}
+
+            {/* Save Brand Kit Button */}
+            {onSaveBrandKit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSaveBrandKit}
+                disabled={savingBrandKit || !brand.name.trim()}
+                className="w-full text-xs gap-1.5"
+              >
+                {savingBrandKit ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+                ) : (
+                  <><Sparkles className="w-3.5 h-3.5" /> Save Brand Kit</>
+                )}
+              </Button>
             )}
           </div>
 
