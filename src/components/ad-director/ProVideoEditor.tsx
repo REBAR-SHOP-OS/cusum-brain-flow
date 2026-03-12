@@ -216,8 +216,9 @@ export function ProVideoEditor({
 
   // Auto-play after scene change
   const autoPlayPending = useRef(false);
+  const sceneTransitioning = useRef(false);
   useEffect(() => {
-    if (autoPlayPending.current && videoRef.current) {
+    if (autoPlayPending.current && videoRef.current && !sceneTransitioning.current) {
       videoRef.current.play().catch(() => {});
       autoPlayPending.current = false;
     }
@@ -225,59 +226,67 @@ export function ProVideoEditor({
 
   // Sync voiceover audio with video playback (time-locked)
   const currentVoUrlRef = useRef<string | null>(null);
+  const voDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    // Always return cleanup — prevents orphan Audio instances
+    let syncHandler: (() => void) | null = null;
+    let vid: HTMLVideoElement | null = null;
+
+    const cleanup = () => {
+      if (voDebounceRef.current) { clearTimeout(voDebounceRef.current); voDebounceRef.current = null; }
+      if (vid && syncHandler) vid.removeEventListener("timeupdate", syncHandler);
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
+      currentVoUrlRef.current = null;
+    };
+
+    // Don't start voiceover during scene transition
+    if (sceneTransitioning.current) { cleanup(); return cleanup; }
+
     const sceneId = storyboard[selectedSceneIndex]?.id;
     // Skip voiceover if scene is muted
-    if (sceneId && mutedScenes.has(sceneId)) {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-      currentVoUrlRef.current = null;
-      return;
-    }
+    if (sceneId && mutedScenes.has(sceneId)) { cleanup(); return cleanup; }
+
     const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
     if (vo && isPlaying && !isMuted) {
       // Skip re-creation if same URL is already playing
       if (audioRef.current && currentVoUrlRef.current === vo.audioUrl && !audioRef.current.paused) {
-        return;
+        return cleanup;
       }
-      // Always clean up before creating new instance
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-      const a = new Audio(vo.audioUrl);
-      a.currentTime = videoRef.current?.currentTime ?? 0;
-      // Adjust voiceover playback rate if it's longer than the video clip
-      const sceneClipDur = clipDurations[sceneId!];
-      const sceneVoDur = voiceoverDurations[sceneId!];
-      if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
-        const ratio = sceneVoDur / sceneClipDur;
-        a.playbackRate = Math.min(ratio, 1.3); // cap at 1.3x speedup
-      } else {
-        a.playbackRate = 1;
-      }
-      a.play().catch(() => {});
-      audioRef.current = a;
-      currentVoUrlRef.current = vo.audioUrl;
+      // Clean up previous instance
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
 
-      // Keep voiceover in sync with video time
-      const syncHandler = () => {
-        if (audioRef.current && videoRef.current) {
-          const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
-          if (drift > 0.3) {
-            audioRef.current.currentTime = videoRef.current.currentTime;
+      // Debounce to prevent double-trigger from rapid state changes
+      voDebounceRef.current = setTimeout(() => {
+        const a = new Audio(vo.audioUrl);
+        a.currentTime = videoRef.current?.currentTime ?? 0;
+        // Adjust voiceover playback rate if it's longer than the video clip
+        const sceneClipDur = clipDurations[sceneId!];
+        const sceneVoDur = voiceoverDurations[sceneId!];
+        if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
+          a.playbackRate = Math.min(sceneVoDur / sceneClipDur, 1.3);
+        } else {
+          a.playbackRate = 1;
+        }
+        a.play().catch(() => {});
+        audioRef.current = a;
+        currentVoUrlRef.current = vo.audioUrl;
+
+        // Keep voiceover in sync with video time
+        syncHandler = () => {
+          if (audioRef.current && videoRef.current) {
+            const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
+            if (drift > 0.3) audioRef.current.currentTime = videoRef.current.currentTime;
           }
-        }
-      };
-      const vid = videoRef.current;
-      vid?.addEventListener("timeupdate", syncHandler);
-      return () => {
-        vid?.removeEventListener("timeupdate", syncHandler);
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current = null;
-        }
-        currentVoUrlRef.current = null;
-      };
+        };
+        vid = videoRef.current;
+        vid?.addEventListener("timeupdate", syncHandler);
+      }, 150);
+
+      return cleanup;
     }
     // Not playing or no voiceover — clean up
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    cleanup();
+    return cleanup;
     currentVoUrlRef.current = null;
   }, [selectedSceneIndex, isPlaying, isMuted, mutedScenes, audioTracks, storyboard]);
 
@@ -560,11 +569,25 @@ export function ProVideoEditor({
     const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
     if (nextIdx !== undefined) {
       setSceneTransition(true);
+      sceneTransitioning.current = true;
       setTimeout(() => {
         autoPlayPending.current = true;
         setSelectedSceneIndex(nextIdx);
-        setTimeout(() => setSceneTransition(false), 50);
-      }, 300);
+        // Wait for new video to be ready before completing transition
+        const checkReady = () => {
+          if (videoRef.current && videoRef.current.readyState >= 3) {
+            sceneTransitioning.current = false;
+            setSceneTransition(false);
+            if (autoPlayPending.current) {
+              videoRef.current.play().catch(() => {});
+              autoPlayPending.current = false;
+            }
+          } else {
+            setTimeout(checkReady, 50);
+          }
+        };
+        setTimeout(checkReady, 50);
+      }, 500);
     } else {
       setIsPlaying(false);
     }
