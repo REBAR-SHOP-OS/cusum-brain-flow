@@ -144,6 +144,7 @@ export function PostReviewPanel({
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [showStoryGen, setShowStoryGen] = useState(false); // rebuild-trigger-v1
   const [uploading, setUploading] = useState(false);
+  const [imageZoomOpen, setImageZoomOpen] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [fbPublishReady, setFbPublishReady] = useState<boolean | null>(null);
