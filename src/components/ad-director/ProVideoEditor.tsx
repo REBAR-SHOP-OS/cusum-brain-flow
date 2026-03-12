@@ -677,12 +677,6 @@ export function ProVideoEditor({
   }, [storyboard, clips, selectedSceneIndex]);
 
   const handleVideoEnded = useCallback(() => {
-    // Check if voiceover is still playing — wait for it before advancing
-    const voStillPlaying = audioRef.current && !audioRef.current.paused && !audioRef.current.ended;
-    if (voStillPlaying) {
-      audioRef.current!.onended = () => advanceToNextScene();
-      return;
-    }
     advanceToNextScene();
   }, [advanceToNextScene]);
   // Keep ref in sync for static card timer
