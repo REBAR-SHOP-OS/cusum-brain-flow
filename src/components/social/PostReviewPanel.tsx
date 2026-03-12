@@ -354,7 +354,7 @@ export function PostReviewPanel({
                   {post.image_url ? (
                     <div className="rounded-lg overflow-hidden bg-muted">
                       {isVideo ? (
-                        <video src={post.image_url} controls className="w-full aspect-video object-cover" />
+                        <video src={post.image_url} controls className="w-full rounded-lg" style={{ maxHeight: '400px' }} />
                       ) : (
                         <img src={post.image_url} alt="Post preview" className="w-full aspect-square object-cover" />
                       )}
