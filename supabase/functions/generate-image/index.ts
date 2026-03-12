@@ -81,7 +81,7 @@ function buildAdPrompt(
   }
 
   parts.push(`User request: ${userPrompt}`);
-  parts.push("The image must be visually striking, suitable for social media advertising, with strong composition and professional lighting. Do NOT include any text or watermarks in the image.");
+  parts.push("The image must be visually striking, suitable for social media advertising, with strong composition and professional lighting. Do NOT include any text, watermarks, or logos in the image — the brand logo will be added separately as an overlay.");
 
   return parts.join("\n");
 }

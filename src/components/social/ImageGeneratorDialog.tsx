@@ -3,12 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search } from "lucide-react";
+import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { applyLogoToImage } from "@/lib/imageWatermark";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
