@@ -124,8 +124,9 @@ export function SceneCard({
 
         {/* Collapsible Scene Details */}
         <Collapsible>
-          <CollapsibleTrigger className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-            <span>Scene details ▸</span>
+          <CollapsibleTrigger className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 group">
+            <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
+            <span>Scene details</span>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-2 pt-2">
             <p className="text-xs text-muted-foreground leading-relaxed">{scene.objective}</p>
