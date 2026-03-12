@@ -38,8 +38,8 @@ interface ModelRoute {
 
 const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
   // Gemini Pro: reasoning, planning, creative writing (faster than GPT, avoids timeout)
-  "analyze-script":         { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.1, maxTokens: 8192 },
-  "generate-storyboard":    { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.2, maxTokens: 8192 },
+  "analyze-script":         { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.1, maxTokens: 16384 },
+  "generate-storyboard":    { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.2, maxTokens: 16384 },
   "write-cinematic-prompt": { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.7, maxTokens: 2048 },
   "improve-prompt":         { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.6, maxTokens: 2048 },
   "rewrite-cta":            { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.5, maxTokens: 1024 },
