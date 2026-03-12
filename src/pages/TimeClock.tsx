@@ -159,9 +159,6 @@ export default function TimeClock() {
     face.reset();
     setAutoPunchCountdown(0);
 
-    if (kioskMode) {
-      setTimeout(() => { handleScan(); }, 3000);
-    }
   };
 
   // Build status map
