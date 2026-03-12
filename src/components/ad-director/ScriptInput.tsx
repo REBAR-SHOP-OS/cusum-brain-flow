@@ -20,7 +20,7 @@ interface ScriptInputProps {
   onAssetsChange: (files: File[]) => void;
 }
 
-export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, assets, onAssetsChange }: ScriptInputProps) {
+export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange }: ScriptInputProps) {
   const [showBrand, setShowBrand] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
