@@ -81,8 +81,10 @@ async function callAI(
   tools?: any[],
   toolChoice?: any,
   modelOverride?: string,
+  taskType?: string,
 ): Promise<{ data: any; modelUsed: string; fallbackUsed: boolean }> {
   const model = modelOverride || route.model;
+  const timeoutMs = (taskType && HEAVY_ROUTES.has(taskType)) ? HEAVY_ATTEMPT_TIMEOUT_MS : PER_ATTEMPT_TIMEOUT_MS;
 
   const body: any = {
     model,
