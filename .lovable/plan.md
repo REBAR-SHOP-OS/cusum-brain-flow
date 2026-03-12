@@ -1,22 +1,24 @@
 
+Goal: update the Wan provider key used by video generation and confirm it’s accepted.
 
-## Update DashScope API Key
+What I verified in code:
+- `generate-video` reads `DASHSCOPE_API_KEY` from backend secrets.
+- Wan requests go to the International endpoint (`dashscope-intl.aliyuncs.com`) with `Authorization: Bearer <key>`.
+- The secret name already exists in your project (`DASHSCOPE_API_KEY`), so this is an update, not a new integration.
 
-### The Problem
-The `DASHSCOPE_API_KEY` secret stored in your project is still invalid — DashScope returns "Invalid API-key provided" when Wan 2.1 tries to generate video.
+Plan:
+1. Update the existing secret `DASHSCOPE_API_KEY` in Lovable Cloud (you’ll paste the new key value).
+2. Redeploy the `generate-video` backend function so the updated secret is active.
+3. Run a direct confirmation request to `generate-video` with a minimal Wan payload.
+4. Validate success criteria:
+   - No `"Invalid API-key provided"` error
+   - Function returns a task/job response for Wan generation.
+5. If it still fails, check backend function logs immediately and classify root cause as either:
+   - key format/source issue, or
+   - account/service entitlement issue.
 
-### What Needs to Happen
-I need to switch to implementation mode to use the `add_secret` tool to prompt you for the new key value. The key must be from the **DashScope International** console and should start with `sk-`.
-
-### Steps
-1. Use `add_secret` to request the updated `DASHSCOPE_API_KEY` value
-2. You paste the correct key from [DashScope International Console](https://dashscope-intl.console.aliyun.com/) → API Keys
-3. Redeploy the `generate-video` edge function
-
-### Where to Find Your Key
-- Go to https://dashscope-intl.console.aliyun.com/
-- Navigate to **API Keys** section
-- Copy an active key (starts with `sk-`)
-
-No code changes needed — just the secret value update.
-
+Technical details:
+- Secret to update: `DASHSCOPE_API_KEY`
+- Function to redeploy: `generate-video`
+- Confirmation payload: `provider: "wan"`, `model: "wan2.1-t2v-plus"`, short prompt, 4s duration
+- Expected outcome: accepted async task creation response (not 401 invalid key)
