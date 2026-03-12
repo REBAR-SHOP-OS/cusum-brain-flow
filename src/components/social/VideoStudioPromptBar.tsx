@@ -129,7 +129,11 @@ export function VideoStudioPromptBar({
   const [modeOpen, setModeOpen] = useState(false);
   const [durationOpen, setDurationOpen] = useState(false);
   const [aspectOpen, setAspectOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const modelOptions = mediaType === "image" ? IMAGE_MODELS : mediaType === "audio" ? AUDIO_MODELS : VIDEO_MODELS;
+  const currentModelOption = modelOptions.find(m => m.id === selectedModel) || modelOptions[0];
 
   const currentMode = modes.find(m => m.id === mode) || modes[1];
   const currentAspect = aspectOptions.find(a => a.value === aspectRatio) || aspectOptions[0];
@@ -145,10 +149,10 @@ export function VideoStudioPromptBar({
 
   const generateLabel = mediaType === "image" ? "Generate" : mediaType === "audio" ? "Generate" : "Generate";
   const footerText = mediaType === "image"
-    ? "⌘+Enter to generate • Powered by GPT Image & DALL-E"
+    ? `⌘+Enter to generate • ${currentModelOption.label}`
     : mediaType === "audio"
     ? "⌘+Enter to generate • Powered by ElevenLabs"
-    : "⌘+Enter to generate • Powered by Google Veo 3.1 & OpenAI Sora";
+    : `⌘+Enter to generate • ${currentModelOption.label}`;
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
