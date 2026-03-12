@@ -188,6 +188,24 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
   useEffect(() => cleanup, [cleanup]);
 
+  // Refund credits on failure + update generation record
+  useEffect(() => {
+    if (status === "failed" && currentGenerationId) {
+      const durationSecs = parseInt(duration);
+      const creditCost = getCost(durationSecs, mode);
+      refundCredits.mutateAsync({ cost: creditCost, generationId: currentGenerationId }).catch(console.error);
+      updateGeneration.mutateAsync({ id: currentGenerationId, status: "failed", error_message: error || "Generation failed" }).catch(console.error);
+    }
+    if (status === "completed" && currentGenerationId && videoUrl) {
+      updateGeneration.mutateAsync({
+        id: currentGenerationId,
+        status: "completed",
+        output_asset_url: videoUrl,
+        actual_credits: getCost(parseInt(duration), mode),
+      }).catch(console.error);
+    }
+  }, [status]);
+
   useEffect(() => {
     if (status === "completed" && rawPrompt && !audioPrompt) {
       setAudioPrompt(`Background music for: ${rawPrompt.slice(0, 100)}`);
