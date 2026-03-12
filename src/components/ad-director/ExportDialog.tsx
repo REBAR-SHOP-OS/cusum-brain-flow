@@ -84,6 +84,7 @@ export function ExportDialog({
             <DialogDescription className="text-xs text-muted-foreground">
               Prepare your video for social channels.
             </DialogDescription>
+          </DialogHeader>
           <VideoToSocialPanel
             videoUrl={finalVideoUrl}
             aspectRatio={aspectRatio}
