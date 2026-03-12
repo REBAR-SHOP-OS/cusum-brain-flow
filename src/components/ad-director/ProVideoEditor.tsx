@@ -78,6 +78,7 @@ export function ProVideoEditor({
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
+  const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
 
   // ─── Global timeline ───
@@ -264,6 +265,36 @@ export function ProVideoEditor({
     videoRef.current.muted = !isMuted;
     setIsMuted(!isMuted);
   };
+
+  // Apply videoVolume to the video element
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.volume = videoVolume;
+  }, [videoVolume]);
+
+  // Apply per-track volume to voiceover audio
+  useEffect(() => {
+    if (audioRef.current) {
+      const sceneId = storyboard[selectedSceneIndex]?.id;
+      const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
+      if (vo) audioRef.current.volume = vo.volume ?? 1;
+    }
+  }, [audioTracks, selectedSceneIndex, storyboard]);
+
+  const handleVideoVolumeChange = useCallback((v: number) => {
+    setVideoVolume(v);
+  }, []);
+
+  const handleAudioTrackVolumeChange = useCallback((index: number, v: number) => {
+    setAudioTracks(prev => prev.map((t, i) => i === index ? { ...t, volume: v } : t));
+  }, []);
+
+  const handleRemoveAudioTrack = useCallback((index: number) => {
+    setAudioTracks(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleDeleteOverlay = useCallback((id: string) => {
+    setOverlays(prev => prev.filter(o => o.id !== id));
+  }, []);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -725,6 +756,12 @@ export function ProVideoEditor({
         onAddAudio={generateAllVoiceovers}
         textOverlays={textOverlays}
         audioTracks={audioTracks}
+        videoVolume={videoVolume}
+        onVideoVolumeChange={handleVideoVolumeChange}
+        onAudioTrackVolumeChange={handleAudioTrackVolumeChange}
+        onDeleteOverlay={handleDeleteOverlay}
+        onRemoveAudioTrack={handleRemoveAudioTrack}
+        onRegenerateScene={onRegenerateScene}
       />
 
       {/* Text Overlay Dialog */}
