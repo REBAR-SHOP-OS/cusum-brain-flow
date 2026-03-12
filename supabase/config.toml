@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.transform-video-prompt]
 verify_jwt = false
+
+[functions.edit-video-prompt]
+verify_jwt = false

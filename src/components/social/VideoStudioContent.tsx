@@ -137,6 +137,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioGenerating, setAudioGenerating] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
 
