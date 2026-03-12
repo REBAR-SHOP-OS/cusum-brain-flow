@@ -45,14 +45,23 @@ export function FinalPreview({
 
       {/* Video Player */}
       {finalVideoUrl ? (
-        <video
-          ref={videoRef}
-          src={finalVideoUrl}
-          controls
-          className="w-full rounded-lg aspect-video bg-black"
-        />
+        <div className="space-y-2">
+          <video
+            ref={videoRef}
+            src={finalVideoUrl}
+            controls
+            className="w-full rounded-lg aspect-video bg-black"
+          />
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <Badge variant="secondary" className="text-[10px]">
+              ✅ Final ad assembled — {completedClips.length} scenes
+            </Badge>
+            <span>Expected: ~{Math.round(segments.reduce((sum, s) => sum + (s.endTime - s.startTime), 0))}s</span>
+          </div>
+        </div>
       ) : (() => {
         const generatingCount = clips.filter(c => c.status === "generating").length;
+        const slideshowCount = clips.filter(c => c.status === "completed" && storyboard.find(s => s.id === c.sceneId)?.sceneIntelligence?.videoEngine === "Slideshow Fallback").length;
         const isGenerating = generatingCount > 0;
         return (
           <div className="aspect-video bg-black/50 rounded-lg flex items-center justify-center">
@@ -70,6 +79,11 @@ export function FinalPreview({
                   <p className="text-xs text-muted-foreground">
                     {allCompleted ? "Ready to stitch — click Export" : `${storyboard.length - completedClips.length} scenes remaining`}
                   </p>
+                  {slideshowCount > 0 && (
+                    <p className="text-[10px] text-yellow-500">
+                      ⚠ {slideshowCount} scene(s) are static images (slideshow fallback)
+                    </p>
+                  )}
                 </>
               ) : (
                 <p className="text-xs text-muted-foreground">Generate scenes to preview</p>

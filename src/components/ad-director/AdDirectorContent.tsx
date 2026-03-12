@@ -13,6 +13,8 @@ import {
   type PromptQualityScore, DEFAULT_BRAND, DEMO_SCRIPT,
 } from "@/types/adDirector";
 import { cn } from "@/lib/utils";
+import { stitchClips } from "@/lib/videoStitch";
+import { mergeVideoAudio } from "@/lib/videoAudioMerge";
 
 type WorkflowStep = "script" | "storyboard" | "preview";
 
@@ -278,6 +280,14 @@ export function AdDirectorContent() {
     const scene = storyboard.find(s => s.id === sceneId);
     if (!scene) return;
 
+    // Calculate duration from script segment timing
+    const segment = segments.find(seg => seg.id === scene.segmentId);
+    const rawDur = segment ? segment.endTime - segment.startTime : 5;
+    const sceneDuration = Math.min(Math.max(rawDur, 2), 15);
+
+    // Enforce motion in prompt to avoid static zoom-only results
+    const motionPrompt = scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+
     setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "generating", progress: 10 } : c));
 
     try {
@@ -288,11 +298,12 @@ export function AdDirectorContent() {
         "generate-video",
         {
           action: "generate",
-          prompt: scene.prompt,
-          duration: 15,
+          prompt: motionPrompt,
+          duration: sceneDuration,
           aspectRatio: "16:9",
           provider: "wan",
           model: "wan2.6-t2v",
+          negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
         }
       );
 
@@ -342,7 +353,7 @@ export function AdDirectorContent() {
           : c
       ));
     }
-  }, [storyboard]);
+  }, [storyboard, segments]);
 
   const pollGeneration = async (sceneId: string, generationId: string, provider: "wan" | "veo" | "sora" = "wan") => {
     const maxAttempts = 120;
@@ -432,20 +443,68 @@ export function AdDirectorContent() {
       const completedClips = clips.filter(c => c.status === "completed" && c.videoUrl);
       if (completedClips.length === 0) throw new Error("No clips to export");
 
-      if (completedClips.length === 1) {
-        setFinalVideoUrl(completedClips[0].videoUrl!);
-        toast({ title: "Video ready", description: "Your 30-second ad is ready to download." });
-        return;
+      toast({ title: "Assembling ad...", description: "Stitching clips, generating voiceover..." });
+
+      // 1. Build ordered clip list with target durations from storyboard
+      const orderedClips = storyboard
+        .map(scene => {
+          const clip = clips.find(c => c.sceneId === scene.id);
+          const segment = segments.find(s => s.id === scene.segmentId);
+          const targetDur = segment ? segment.endTime - segment.startTime : 5;
+          return clip?.status === "completed" && clip.videoUrl
+            ? { videoUrl: clip.videoUrl, targetDuration: targetDur }
+            : null;
+        })
+        .filter(Boolean) as { videoUrl: string; targetDuration: number }[];
+
+      if (orderedClips.length === 0) throw new Error("No completed clips in storyboard order");
+
+      // 2. Stitch clips into one continuous video
+      let stitchedUrl: string;
+      if (orderedClips.length === 1) {
+        stitchedUrl = orderedClips[0].videoUrl;
+      } else {
+        stitchedUrl = await stitchClips(orderedClips);
       }
 
-      setFinalVideoUrl(completedClips[0].videoUrl!);
-      toast({ title: "Preview ready", description: `${completedClips.length} clips generated. Full stitching available in export.` });
+      // 3. Generate voiceover from full script and merge
+      let finalUrl = stitchedUrl;
+      try {
+        const fullNarration = segments.map(s => s.text).join(" ");
+        if (fullNarration.trim().length > 0) {
+          const ttsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+          const ttsResponse = await fetch(ttsUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ text: fullNarration }),
+          });
+
+          if (ttsResponse.ok) {
+            const audioBlob = await ttsResponse.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            finalUrl = await mergeVideoAudio(stitchedUrl, audioUrl);
+          } else {
+            console.warn("TTS failed, exporting without voiceover");
+            toast({ title: "Voiceover skipped", description: "TTS service unavailable. Exporting silent video.", variant: "destructive" });
+          }
+        }
+      } catch (voErr: any) {
+        console.warn("Voiceover merge failed:", voErr);
+        toast({ title: "Voiceover skipped", description: voErr.message || "Audio merge failed. Exporting silent video.", variant: "destructive" });
+      }
+
+      setFinalVideoUrl(finalUrl);
+      toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched into your final ad.` });
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
       setExporting(false);
     }
-  }, [clips, toast]);
+  }, [clips, storyboard, segments, toast]);
 
   const handleDownload = () => {
     if (!finalVideoUrl) return;
