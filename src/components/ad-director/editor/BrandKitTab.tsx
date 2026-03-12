@@ -12,9 +12,9 @@ interface BrandKitTabProps {
 }
 
 export function BrandKitTab({ brand, logo, onLogoChange, onDeleteLogo, onReplaceLogo }: BrandKitTabProps) {
-  const colors = brand.colors && typeof brand.colors === "object" && !Array.isArray(brand.colors)
-    ? brand.colors as Record<string, string>
-    : {};
+  const colors: Record<string, string> = {};
+  if (brand.primaryColor) colors.primary = brand.primaryColor;
+  if (brand.secondaryColor) colors.secondary = brand.secondaryColor;
 
   return (
     <div className="space-y-4">
