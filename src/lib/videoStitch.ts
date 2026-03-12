@@ -334,8 +334,8 @@ export async function stitchClips(
 
   const hasVoice = !!overlays?.audioUrl;
   const hasMusic = !!overlays?.musicUrl;
-  const baseMusicVol = overlays?.musicVolume ?? 0.3;
-  const duckedMusicVol = Math.min(baseMusicVol * 0.5, 0.15); // duck to 50% or max 0.15
+  const baseMusicVol = overlays?.musicVolume ?? 0.15;
+  const duckedMusicVol = Math.min(baseMusicVol * 0.33, 0.05); // duck to 33% or max 0.05
 
   if (hasVoice || hasMusic) {
     try {
@@ -344,7 +344,7 @@ export async function stitchClips(
 
       // Master compressor/limiter to prevent clipping
       const compressor = audioCtx.createDynamicsCompressor();
-      compressor.threshold.value = -6;
+      compressor.threshold.value = -3;
       compressor.knee.value = 6;
       compressor.ratio.value = 12;
       compressor.attack.value = 0.003;
@@ -364,7 +364,7 @@ export async function stitchClips(
         });
         const voiceSource = audioCtx.createMediaElementSource(voiceElement);
         const voiceGain = audioCtx.createGain();
-        voiceGain.gain.value = 1.0;
+        voiceGain.gain.value = 1.4;
         voiceSource.connect(voiceGain);
         voiceGain.connect(compressor);
       }
