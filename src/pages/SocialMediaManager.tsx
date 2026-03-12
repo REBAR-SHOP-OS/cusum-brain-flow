@@ -480,18 +480,35 @@ export default function SocialMediaManager() {
               Click "Auto-generate today" and Pixel will create posts for all your connected platforms. You just approve!
             </p>
             <div className="flex gap-3 mt-4">
-              <Button
-                className="gap-2"
-                onClick={() => generatePosts()}
-                disabled={generating}
-              >
-                {generating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4" />
-                )}
-                {generating ? "Generating..." : "Auto-generate today"}
-              </Button>
+              <div className="flex items-center gap-0">
+                <Button
+                  className="gap-2 rounded-r-none"
+                  onClick={() => generatePosts({ scheduledDate: autoGenDate?.toISOString() })}
+                  disabled={generating}
+                >
+                  {generating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {generating ? "Generating..." : autoGenDate ? `Auto-generate ${format(autoGenDate, "MMM d")}` : "Auto-generate today"}
+                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" className="px-2 rounded-l-none border-l border-primary-foreground/20">
+                      <CalendarDays className="w-4 h-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={autoGenDate}
+                      onSelect={(d) => setAutoGenDate(d)}
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
               <Button variant="outline" className="gap-2" onClick={() => setShowCreateContent(true)}>
                 <Plus className="w-4 h-4" />
                 Create manually
