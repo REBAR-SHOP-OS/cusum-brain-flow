@@ -126,7 +126,7 @@ export function ProVideoEditor({
   // Preload logo image for card rendering
   useEffect(() => {
     if (brand.logoUrl) {
-      const img = new Image();
+      const img = document.createElement("img");
       img.crossOrigin = "anonymous";
       img.src = brand.logoUrl;
       img.onload = () => { logoImgRef.current = img; };
