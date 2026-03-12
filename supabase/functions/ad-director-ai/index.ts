@@ -89,27 +89,38 @@ async function callAI(
   if (tools) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
 
-  let response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const sendRequest = (payload: Record<string, unknown>) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
+
+  const sendWithTemperatureFallback = async (payload: Record<string, unknown>) => {
+    let res = await sendRequest(payload);
+
+    if (!res.ok && res.status === 400 && payload.temperature !== undefined) {
+      const errText = await res.clone().text();
+      if (errText.toLowerCase().includes("temperature") && errText.toLowerCase().includes("unsupported")) {
+        console.warn(`Model ${String(payload.model)} rejected temperature; retrying with default temperature.`);
+        const retryPayload = { ...payload };
+        delete retryPayload.temperature;
+        res = await sendRequest(retryPayload);
+      }
+    }
+
+    return res;
+  };
+
+  let response = await sendWithTemperatureFallback(body as Record<string, unknown>);
 
   // If primary fails with 5xx or 429, try fallback
   if (!response.ok && (response.status >= 500 || response.status === 429) && !modelOverride) {
     console.warn(`Primary model ${model} failed (${response.status}), falling back to ${route.fallback}`);
     body.model = route.fallback;
-    response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    response = await sendWithTemperatureFallback(body as Record<string, unknown>);
 
     if (!response.ok) {
       const errText = await response.text();
