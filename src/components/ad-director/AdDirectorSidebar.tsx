@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Home, Image, Sparkles, Type, Camera, LayoutGrid, History,
   ChevronLeft, ChevronRight, Film, FileImage, Wand2,
-  Music, SlidersHorizontal, Layers, Palette,
+  Music, SlidersHorizontal, Layers, Palette, Shapes,
 } from "lucide-react";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { cn } from "@/lib/utils";
