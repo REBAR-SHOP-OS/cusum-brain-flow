@@ -152,7 +152,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               continuityProfile,
               previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
               modelOverrides,
-            }));
+            }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
           } catch {
             return { prompt: scene.prompt, modelUsed: "original" };
@@ -175,7 +175,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               scene: rawStoryboard[idx],
               brand,
               modelOverrides,
-            }));
+            }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { quality: res.result, scoredBy: res.modelUsed };
           } catch {
             return { quality: undefined, scoredBy: "skipped" };
@@ -205,7 +205,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
                 scene: rawStoryboard[idx],
                 brand,
                 modelOverrides,
-              }));
+              }, { timeoutMs: EDGE_TIMEOUT_MS }));
 
               // Re-score
               const rescoreRes = await withTimeout(invokeEdgeFunction<{
@@ -216,7 +216,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
                 scene: rawStoryboard[idx],
                 brand,
                 modelOverrides,
-              }));
+              }, { timeoutMs: EDGE_TIMEOUT_MS }));
 
               qualityResults[idx] = { quality: rescoreRes.result, scoredBy: qualityResults[idx].scoredBy };
 
@@ -303,7 +303,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
         scene,
         brand,
         modelOverrides,
-      });
+      }, { timeoutMs: EDGE_TIMEOUT_MS });
 
       const rescoreRes = await invokeEdgeFunction<{
         result: PromptQualityScore;
@@ -314,7 +314,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
         scene,
         brand,
         modelOverrides,
-      });
+      }, { timeoutMs: EDGE_TIMEOUT_MS });
 
       setStoryboard(prev => prev.map(s => s.id === sceneId ? {
         ...s,
@@ -413,6 +413,10 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "generating", progress: 10 } : c));
 
     try {
+      // Wire videoParams into generation request
+      const effectiveRatio = videoParams.ratio === "Smart" ? "16:9" : videoParams.ratio;
+      const wanRatio = ["16:9", "9:16", "1:1"].includes(effectiveRatio) ? effectiveRatio : "16:9";
+
       const result = await invokeEdgeFunction<{
         url?: string; videoUrl?: string; generationId?: string; jobId?: string;
         provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
@@ -422,11 +426,12 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
           action: "generate",
           prompt: motionPrompt,
           duration: sceneDuration,
-          aspectRatio: "16:9",
+          aspectRatio: wanRatio,
           provider: "wan",
           model: "wan2.6-t2v",
           negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark, on-screen text, brand name, camera name, ARRI, RED, Sony",
-        }
+        },
+        { timeoutMs: EDGE_TIMEOUT_MS }
       );
 
       const videoUrl = result.url || result.videoUrl;
@@ -475,7 +480,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
           : c
       ));
     }
-  }, [storyboard, segments]);
+  }, [storyboard, segments, videoParams]);
 
   const pollGeneration = async (sceneId: string, generationId: string, provider: "wan" | "veo" | "sora" = "wan") => {
     const maxAttempts = 120;

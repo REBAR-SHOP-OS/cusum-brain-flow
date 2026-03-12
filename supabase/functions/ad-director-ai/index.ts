@@ -70,6 +70,8 @@ async function verifyAuth(req: Request) {
 }
 
 // ─── AI Gateway Call with Fallback ──────────────────────────────
+const PER_ATTEMPT_TIMEOUT_MS = 50_000; // 50s per single AI call attempt
+
 async function callAI(
   apiKey: string,
   route: ModelRoute,
@@ -92,14 +94,19 @@ async function callAI(
   if (tools) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
 
-  const sendRequest = (payload: Record<string, unknown>) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const sendRequest = (payload: Record<string, unknown>) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT_MS);
+    return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+  };
 
   const sendWithTemperatureFallback = async (payload: Record<string, unknown>) => {
     let res = await sendRequest(payload);
@@ -220,8 +227,9 @@ function extractToolResult(data: any): any {
   throw new Error("AI did not return structured data");
 }
 
-/** Wraps callAI + extractToolResult with up to 2 retries on malformed function calls.
- *  Attempt 0-1: primary model. Attempt 2: fallback model from route. */
+/** Wraps callAI + extractToolResult with retries on malformed function calls.
+ *  For heavy routes (analyze-script, generate-storyboard): 1 primary attempt, then immediately fallback.
+ *  For lighter routes: up to 2 primary attempts, then fallback. */
 async function callAIAndExtract(
   apiKey: string,
   route: ModelRoute,
@@ -229,24 +237,29 @@ async function callAIAndExtract(
   tools: any[],
   toolChoice: any,
   modelOverride?: string,
+  taskType?: string,
 ): Promise<{ result: any; modelUsed: string; fallbackUsed: boolean }> {
-  const MAX_RETRIES = 2;
+  // Heavy routes get fewer retries to stay under client timeout
+  const isHeavyRoute = taskType === "analyze-script" || taskType === "generate-storyboard";
+  const MAX_RETRIES = isHeavyRoute ? 1 : 2;
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    // On last attempt, switch to fallback model
+    // Switch to fallback on last attempt
     const effectiveOverride = (attempt === MAX_RETRIES && route.fallback)
       ? route.fallback
       : modelOverride;
     const usingFallback = attempt === MAX_RETRIES && route.fallback ? true : false;
     if (usingFallback) {
-      console.warn(`callAIAndExtract: switching to fallback model ${route.fallback} (attempt ${attempt})`);
+      console.warn(`callAIAndExtract: switching to fallback model ${route.fallback} (attempt ${attempt}, task=${taskType})`);
     }
-    const { data, modelUsed, fallbackUsed } = await callAI(apiKey, route, messages, tools, toolChoice, effectiveOverride);
     try {
+      const { data, modelUsed, fallbackUsed } = await callAI(apiKey, route, messages, tools, toolChoice, effectiveOverride);
       return { result: extractToolResult(data), modelUsed, fallbackUsed: fallbackUsed || usingFallback };
     } catch (e) {
-      const isRetryable = e instanceof Error && e.message.includes("malformed function call");
+      const msg = e instanceof Error ? e.message : String(e);
+      const isRetryable = msg.includes("malformed function call") || msg.includes("did not return structured data") || msg.includes("AbortError") || msg.includes("aborted");
       if (isRetryable && attempt < MAX_RETRIES) {
-        console.warn(`callAIAndExtract: retry ${attempt + 1}/${MAX_RETRIES} after malformed function call`);
+        console.warn(`callAIAndExtract: retry ${attempt + 1}/${MAX_RETRIES} after: ${msg} (task=${taskType})`);
         continue;
       }
       throw e;
@@ -607,6 +620,7 @@ ${script}`;
     ANALYZE_SCRIPT_TOOLS,
     { type: "function", function: { name: "create_storyboard" } },
     modelOverride,
+    "analyze-script",
   );
 }
 
