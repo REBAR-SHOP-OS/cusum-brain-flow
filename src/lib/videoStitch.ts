@@ -205,10 +205,40 @@ export async function stitchClips(
   const H = canvas.height;
 
   const canvasStream = canvas.captureStream(30);
-  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-    ? "video/webm;codecs=vp9"
-    : "video/webm";
-  const recorder = new MediaRecorder(canvasStream, {
+
+  // If audio provided, mix it into the recording stream
+  let audioElement: HTMLAudioElement | null = null;
+  let audioCtx: AudioContext | null = null;
+  const combinedStream = new MediaStream([...canvasStream.getVideoTracks()]);
+
+  if (overlays?.audioUrl) {
+    try {
+      audioElement = document.createElement("audio");
+      audioElement.preload = "auto";
+      audioElement.src = overlays.audioUrl;
+      await new Promise<void>((res, rej) => {
+        audioElement!.oncanplaythrough = () => res();
+        audioElement!.onerror = () => rej(new Error("Audio load failed"));
+        setTimeout(() => res(), 3000); // fallback if audio slow
+      });
+      audioCtx = new AudioContext();
+      const audioSource = audioCtx.createMediaElementSource(audioElement);
+      const audioDest = audioCtx.createMediaStreamDestination();
+      audioSource.connect(audioDest);
+      audioSource.connect(audioCtx.destination);
+      audioDest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
+    } catch (e) {
+      console.warn("[stitchClips] Audio mix failed, continuing without audio:", e);
+      audioElement = null;
+    }
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+    ? "video/webm;codecs=vp9,opus"
+    : MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : "video/webm";
+  const recorder = new MediaRecorder(combinedStream, {
     mimeType,
     videoBitsPerSecond: 5_000_000,
   });
