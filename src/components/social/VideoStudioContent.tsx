@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save,
-  Music, Volume2, Wand2, Eye,
+  Music, Volume2, Wand2, Eye, Image as ImageIcon,
   Film, Clapperboard, Pencil, Share2
 } from "lucide-react";
 import { VideoEditor } from "./VideoEditor";
@@ -70,6 +70,8 @@ interface VideoStudioContentProps {
   onVideoReady?: (videoUrl: string) => void;
 }
 
+type MediaType = "video" | "image" | "audio";
+
 export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStudioContentProps) {
   const { brandKit } = useBrandKit();
   const { toast } = useToast();
@@ -87,6 +89,15 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [showEngineered, setShowEngineered] = useState(false);
   const [activeTab, setActiveTab] = useState("generate");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<MediaType>("video");
+
+  // Image generation state
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [imageGenerating, setImageGenerating] = useState(false);
+
+  // Standalone audio generation state (for audio mode)
+  const [standaloneAudioUrl, setStandaloneAudioUrl] = useState<string | null>(null);
+  const [standaloneAudioGenerating, setStandaloneAudioGenerating] = useState(false);
 
   // Generation state
   const [status, setStatus] = useState<Status>("idle");
@@ -263,9 +274,51 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     } catch (err: any) { setError(err?.message || "Failed to check video status."); setStatus("failed"); }
   }, [brandKit]);
 
-  // Main generate handler
+  // Image generation handler
+  const handleGenerateImage = async () => {
+    if (!rawPrompt.trim()) return;
+    setImageGenerating(true); setGeneratedImageUrl(null); setError(null);
+    try {
+      const sizeMap: Record<string, string> = { "16:9": "1792x1024", "9:16": "1024x1792", "1:1": "1024x1024" };
+      const size = sizeMap[aspectRatio] || "1024x1024";
+      const data = await invokeEdgeFunction("generate-image", { prompt: rawPrompt.trim(), size, quality: "hd", model: "gpt-image-1" });
+      if (data?.imageUrl) {
+        setGeneratedImageUrl(data.imageUrl);
+        toast({ title: "Image ready!", description: data.revisedPrompt ? "Prompt was refined by AI" : "Image generated successfully" });
+      } else { throw new Error("No image URL returned"); }
+    } catch (err: any) { setError(err?.message || "Image generation failed"); toast({ title: "Image generation failed", description: err.message, variant: "destructive" }); }
+    finally { setImageGenerating(false); }
+  };
+
+  // Standalone audio generation handler (for audio mode)
+  const handleGenerateStandaloneAudio = async () => {
+    if (!rawPrompt.trim()) return;
+    setStandaloneAudioGenerating(true); setStandaloneAudioUrl(null); setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-music`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ prompt: rawPrompt.trim(), duration: parseInt(duration), type: audioType }),
+      });
+      if (!response.ok) { const errData = await response.json().catch(() => null); throw new Error(errData?.error || `Audio generation failed (${response.status})`); }
+      const audioBlob = await response.blob();
+      const url = URL.createObjectURL(audioBlob);
+      setStandaloneAudioUrl(url);
+      toast({ title: "Audio ready!", description: `${audioType === "music" ? "Music" : "Sound effect"} generated` });
+    } catch (err: any) { setError(err?.message || "Audio generation failed"); toast({ title: "Audio generation failed", description: err.message, variant: "destructive" }); }
+    finally { setStandaloneAudioGenerating(false); }
+  };
+
+  // Main generate handler — routes by mediaType
   const handleGenerate = async () => {
     if (!rawPrompt.trim()) return;
+
+    if (mediaType === "image") { handleGenerateImage(); return; }
+    if (mediaType === "audio") { handleGenerateStandaloneAudio(); return; }
+
+    // Video generation (existing flow)
     const durationSecs = parseInt(duration);
     const creditCost = getCost(durationSecs, mode);
     if (!canGenerate(durationSecs, mode)) {
@@ -362,6 +415,8 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     setAudioPrompt(""); setAudioGenerating(false); setAudioPlaying(false); setMerging(false);
     jobRef.current = null; multiJobsRef.current = null; isMultiRef.current = false;
     uploadedSceneUrlsRef.current = {}; pollCountRef.current = 0; setElapsedSecs(0);
+    setGeneratedImageUrl(null); setImageGenerating(false);
+    setStandaloneAudioUrl(null); setStandaloneAudioGenerating(false);
   };
 
   const handleSaveToLibrary = async () => {
@@ -424,7 +479,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     finally { setMerging(false); }
   };
 
-  const isGenerating = status === "transforming" || status === "submitting" || status === "processing" || watermarking;
+  const isGenerating = status === "transforming" || status === "submitting" || status === "processing" || watermarking || imageGenerating || standaloneAudioGenerating;
 
   return (
     <div className={fullPage ? "flex flex-col h-full" : ""}>
@@ -672,20 +727,86 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
               </div>
             )}
 
+            {/* Image result */}
+            {mediaType === "image" && generatedImageUrl && !imageGenerating && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[hsl(var(--success))]">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">Image ready!</span>
+                </div>
+                <div className="rounded-xl overflow-hidden border bg-black">
+                  <img src={generatedImageUrl} alt="Generated" className="w-full object-contain max-h-[500px]" />
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="outline" asChild>
+                    <a href={generatedImageUrl} download="generated-image.png" target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4 mr-1.5" /> Download</a>
+                  </Button>
+                  <Button variant="outline" onClick={() => { setGeneratedImageUrl(null); }}><RotateCcw className="w-4 h-4" /></Button>
+                </div>
+              </div>
+            )}
+
+            {/* Image generating */}
+            {mediaType === "image" && imageGenerating && (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+                <p className="font-semibold text-lg">Generating image…</p>
+                <p className="text-sm text-muted-foreground animate-pulse">This usually takes 10-30 seconds</p>
+              </div>
+            )}
+
+            {/* Standalone audio result */}
+            {mediaType === "audio" && standaloneAudioUrl && !standaloneAudioGenerating && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[hsl(var(--success))]">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">{audioType === "music" ? "Music" : "Sound effect"} ready!</span>
+                </div>
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <audio src={standaloneAudioUrl} controls className="w-full" />
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="outline" asChild>
+                    <a href={standaloneAudioUrl} download={`generated-${audioType}.mp3`}><Download className="w-4 h-4 mr-1.5" /> Download</a>
+                  </Button>
+                  <Button variant="outline" onClick={() => { setStandaloneAudioUrl(null); }}><RotateCcw className="w-4 h-4" /></Button>
+                </div>
+              </div>
+            )}
+
+            {/* Audio generating */}
+            {mediaType === "audio" && standaloneAudioGenerating && (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+                <p className="font-semibold text-lg">Generating {audioType === "music" ? "music" : "sound effect"}…</p>
+                <p className="text-sm text-muted-foreground animate-pulse">This usually takes 15-60 seconds</p>
+              </div>
+            )}
+
             {/* Empty state */}
-            {fullPage && status === "idle" && (
+            {fullPage && status === "idle" && !generatedImageUrl && !standaloneAudioUrl && !imageGenerating && !standaloneAudioGenerating && (
               <div className="flex flex-col items-center justify-center h-full min-h-[300px]">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center mb-4">
-                  <Clapperboard className="w-10 h-10 text-muted-foreground/30" />
+                  {mediaType === "image" ? <ImageIcon className="w-10 h-10 text-muted-foreground/30" /> :
+                   mediaType === "audio" ? <Music className="w-10 h-10 text-muted-foreground/30" /> :
+                   <Clapperboard className="w-10 h-10 text-muted-foreground/30" />}
                 </div>
-                <p className="text-muted-foreground text-sm font-medium">Your video will appear here</p>
+                <p className="text-muted-foreground text-sm font-medium">
+                  {mediaType === "image" ? "Your image will appear here" :
+                   mediaType === "audio" ? "Your audio will appear here" :
+                   "Your video will appear here"}
+                </p>
                 <p className="text-muted-foreground/50 text-xs mt-1">Describe your idea below and hit Generate</p>
               </div>
             )}
           </div>
 
           {/* Prompt Bar — pinned at bottom in full page, inline otherwise */}
-          {(status === "idle" || status === "transforming") && (
+          {(status === "idle" || status === "transforming" || (mediaType !== "video" && !isGenerating)) && (
             <div className={fullPage ? "shrink-0 pt-2" : "mt-4"}>
               <VideoStudioPromptBar
                 rawPrompt={rawPrompt}
@@ -701,14 +822,18 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 engineeredPrompt={transformResult?.engineeredPrompt}
                 intent={transformResult?.intent}
                 isConstructionRelated={transformResult?.isConstructionRelated}
-                creditCost={getCost(parseInt(duration), mode)}
+                creditCost={mediaType === "video" ? getCost(parseInt(duration), mode) : mediaType === "image" ? 1 : parseInt(duration)}
                 remaining={remaining}
-                canGenerate={canGenerate(parseInt(duration), mode)}
-                isGenerating={false}
+                canGenerate={mediaType === "video" ? canGenerate(parseInt(duration), mode) : true}
+                isGenerating={imageGenerating || standaloneAudioGenerating}
                 isTransforming={isTransforming}
                 onGenerate={handleGenerate}
                 referenceImage={referenceImage}
                 onReferenceImageChange={setReferenceImage}
+                mediaType={mediaType}
+                onMediaTypeChange={(t) => { setMediaType(t); setGeneratedImageUrl(null); setStandaloneAudioUrl(null); setError(null); }}
+                audioType={audioType}
+                onAudioTypeChange={setAudioType}
               />
             </div>
           )}
