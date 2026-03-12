@@ -396,7 +396,6 @@ export function ProVideoEditor({
 
   const toggleMute = () => {
     if (!videoRef.current) return;
-    videoRef.current.muted = !isMuted;
     setIsMuted(!isMuted);
   };
 
@@ -1012,7 +1011,7 @@ export function ProVideoEditor({
                     ref={videoRef}
                     src={videoSrc}
                     className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                    muted={isMuted}
+                    muted
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoaded}
                     onPlay={() => setIsPlaying(true)}
