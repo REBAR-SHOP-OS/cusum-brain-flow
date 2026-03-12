@@ -198,6 +198,7 @@ export function AdDirectorContent() {
     } finally {
       setAnalyzing(false);
       setAnalysisStatus("");
+      setAnalysisProgress(0);
     }
   }, [script, brand, assets, modelOverrides, toast]);
 
