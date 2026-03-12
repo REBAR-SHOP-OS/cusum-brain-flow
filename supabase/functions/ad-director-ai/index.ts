@@ -70,6 +70,8 @@ async function verifyAuth(req: Request) {
 }
 
 // ─── AI Gateway Call with Fallback ──────────────────────────────
+const PER_ATTEMPT_TIMEOUT_MS = 50_000; // 50s per single AI call attempt
+
 async function callAI(
   apiKey: string,
   route: ModelRoute,
@@ -92,14 +94,19 @@ async function callAI(
   if (tools) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
 
-  const sendRequest = (payload: Record<string, unknown>) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const sendRequest = (payload: Record<string, unknown>) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT_MS);
+    return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+  };
 
   const sendWithTemperatureFallback = async (payload: Record<string, unknown>) => {
     let res = await sendRequest(payload);
