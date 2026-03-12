@@ -159,7 +159,7 @@ serve(async (req) => {
       console.log("Pexels reference:", pexelsUrl ? "found" : "none");
 
       // Step 2: Build advertising-optimized prompt
-      const adPrompt = buildAdPrompt(prompt, brandContext, !!pexelsUrl);
+      const adPrompt = buildAdPrompt(prompt, brandContext, !!pexelsUrl, aspectRatio);
 
       // Step 3: Build message content (multi-modal with reference + logo)
       const contentParts: any[] = [{ type: "text", text: adPrompt }];

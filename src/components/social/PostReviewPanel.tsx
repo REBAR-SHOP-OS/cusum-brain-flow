@@ -859,6 +859,15 @@ export function PostReviewPanel({
           handleMediaReady(url, "video");
         }}
       />
+      <ImageGeneratorDialog
+        open={showStoryGen}
+        onOpenChange={setShowStoryGen}
+        storyMode
+        onImageReady={(url) => {
+          setShowStoryGen(false);
+          handleMediaReady(url, "image");
+        }}
+      />
     </>
   );
 }
