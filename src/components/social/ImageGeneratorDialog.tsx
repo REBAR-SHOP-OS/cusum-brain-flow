@@ -236,6 +236,32 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
                 </p>
               </div>
 
+              {/* Visual Themes */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">تم‌های تصویری</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {VISUAL_THEMES.map((theme) => {
+                    const Icon = theme.icon;
+                    const isActive = selectedThemes.has(theme.id);
+                    return (
+                      <button
+                        key={theme.id}
+                        onClick={() => toggleTheme(theme.id)}
+                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
+                          isActive
+                            ? "border-primary bg-primary/10 text-primary font-medium"
+                            : "bg-card hover:bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {theme.label}
+                        {isActive && <CheckCircle2 className="w-3 h-3" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Suggestions */}
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Try a suggestion</Label>
