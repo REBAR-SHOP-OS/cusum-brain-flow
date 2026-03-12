@@ -25,7 +25,7 @@ export function MusicTab() {
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [musicPrompt, setMusicPrompt] = useState("");
 
-  const playTrack = (track: MusicTrack) => {
+  const playTrack = async (track: MusicTrack) => {
     if (!track.url) return;
     if (playing === track.id) {
       audioRef.current?.pause();
@@ -38,8 +38,17 @@ export function MusicTab() {
     const audio = new Audio(track.url);
     audioRef.current = audio;
     audio.onended = () => setPlaying(null);
-    audio.play();
-    setPlaying(track.id);
+    audio.onerror = () => {
+      setPlaying(null);
+      toast({ title: "Playback failed", description: "Could not play this track", variant: "destructive" });
+    };
+    try {
+      await audio.play();
+      setPlaying(track.id);
+    } catch {
+      setPlaying(null);
+      toast({ title: "Playback failed", description: "Browser blocked audio playback", variant: "destructive" });
+    }
   };
 
   const handleGenerate = async () => {
