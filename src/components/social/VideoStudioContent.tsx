@@ -339,7 +339,10 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     // Video generation (existing flow)
     const durationSecs = parseInt(duration);
     const creditCost = getCost(durationSecs, mode);
-    if (!canGenerate(durationSecs, mode)) {
+    const isWanProvider = effectiveVideoProvider === "wan";
+
+    // Wan is billed externally — skip internal credit check
+    if (!isWanProvider && !canGenerate(durationSecs, mode)) {
       toast({ title: "Not enough credits", description: `Need ${creditCost}s credits, have ${remaining}s remaining.`, variant: "destructive" });
       return;
     }
@@ -357,18 +360,21 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         raw_prompt: rawPrompt.trim(), engineered_prompt: finalPrompt,
         intent: result?.intent, mode, duration_seconds: durationSecs,
         aspect_ratio: aspectRatio, provider: effectiveVideoProvider,
-        estimated_credits: creditCost,
+        estimated_credits: isWanProvider ? 0 : creditCost,
         metadata: { elements: result?.elements, platform_intent: result?.platform_intent },
       });
       setCurrentGenerationId(genRecord.id);
     } catch (err) { console.error("Failed to create generation record:", err); }
 
-    try {
-      await consumeCredits.mutateAsync({ durationSeconds: durationSecs, mode, generationId: genRecord?.id });
-    } catch (err: any) {
-      toast({ title: "Credit error", description: err.message, variant: "destructive" });
-      if (genRecord) updateGeneration.mutateAsync({ id: genRecord.id, status: "failed", error_message: err.message });
-      setStatus("idle"); return;
+    // Skip credit consumption for Wan (billed externally via DashScope)
+    if (!isWanProvider) {
+      try {
+        await consumeCredits.mutateAsync({ durationSeconds: durationSecs, mode, generationId: genRecord?.id });
+      } catch (err: any) {
+        toast({ title: "Credit error", description: err.message, variant: "destructive" });
+        if (genRecord) updateGeneration.mutateAsync({ id: genRecord.id, status: "failed", error_message: err.message });
+        setStatus("idle"); return;
+      }
     }
 
     setStatus("submitting"); setProgress(0); setProgressLabel("");
@@ -893,7 +899,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 isConstructionRelated={transformResult?.isConstructionRelated}
                 creditCost={mediaType === "video" ? getCost(parseInt(duration), mode) : mediaType === "image" ? 1 : parseInt(duration)}
                 remaining={remaining}
-                canGenerate={mediaType === "video" ? canGenerate(parseInt(duration), mode) : true}
+                canGenerate={mediaType === "video" ? (effectiveVideoProvider === "wan" || canGenerate(parseInt(duration), mode)) : true}
                 isGenerating={imageGenerating || standaloneAudioGenerating}
                 isTransforming={isTransforming}
                 onGenerate={handleGenerate}
