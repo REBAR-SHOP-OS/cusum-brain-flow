@@ -988,7 +988,7 @@ export function ProVideoEditor({
         {/* ─── Center Canvas ─── */}
         <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative">
           {/* AI Command Bar — floating at top */}
-          <div className="absolute top-3 left-3 right-3 z-30 flex gap-2 items-center p-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10">
+          <div className="absolute top-3 left-3 right-3 z-30 flex gap-2 items-center p-1.5 rounded-xl bg-black/40 backdrop-blur-xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
             {aiProcessing ? (
               <Loader2 className="w-4 h-4 text-primary shrink-0 animate-spin ml-1.5" />
             ) : (
