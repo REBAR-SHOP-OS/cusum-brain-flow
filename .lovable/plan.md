@@ -1,28 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix AI Image Generator - Billing Limit on OpenAI
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The "AI Image" button fails because the OpenAI API key (`GPT_API_KEY`) has reached its billing hard limit. Every request to GPT Image 1 or DALL-E 3 returns a 400 error: `"Billing hard limit has been reached."`
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Solution
-Switch the default models to use **Lovable AI Gemini image models** which are already supported in the `generate-image` edge function and don't require the OpenAI API key.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Changes
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### File: `src/components/social/ImageGeneratorDialog.tsx`
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-1. **Replace model options** — swap OpenAI models for Gemini image models:
-   - `google/gemini-3-pro-image-preview` → "Gemini Pro Image" (highest quality)
-   - `google/gemini-3.1-flash-image-preview` → "Gemini Flash Image" (fast, pro-level quality)
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-2. **Update default selected model** to `google/gemini-3-pro-image-preview`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-3. **Remove size selector** for Gemini models (Gemini image generation doesn't support explicit size parameters — it generates based on the prompt)
-
-4. **Update button label** to reflect the selected model name
-
-### File: `supabase/functions/generate-image/index.ts`
-
-No changes needed — the Gemini path already works via the `selectedModel.startsWith("google/gemini")` branch using `LOVABLE_API_KEY`.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

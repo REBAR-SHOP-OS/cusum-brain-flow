@@ -27,30 +27,22 @@ interface ModelOption {
 
 const modelOptions: ModelOption[] = [
   {
-    id: "gpt-image-1",
-    label: "GPT Image 1",
-    description: "OpenAI's latest — highest quality, best prompt following",
-    sizes: [
-      { value: "1024x1024", label: "Square (1024×1024)" },
-      { value: "1536x1024", label: "Landscape (1536×1024)" },
-      { value: "1024x1536", label: "Portrait (1024×1536)" },
-    ],
+    id: "google/gemini-3-pro-image-preview",
+    label: "Gemini Pro Image",
+    description: "Highest quality — best for detailed, professional images",
+    sizes: [],
   },
   {
-    id: "dall-e-3",
-    label: "DALL·E 3",
-    description: "Creative and artistic, great for stylized content",
-    sizes: [
-      { value: "1024x1024", label: "Square (1024×1024)" },
-      { value: "1792x1024", label: "Landscape (1792×1024)" },
-      { value: "1024x1792", label: "Portrait (1024×1792)" },
-    ],
+    id: "google/gemini-3.1-flash-image-preview",
+    label: "Gemini Flash Image",
+    description: "Fast generation with pro-level quality",
+    sizes: [],
   },
 ];
 
 export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: ImageGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gpt-image-1");
+  const [selectedModel, setSelectedModel] = useState("google/gemini-3-pro-image-preview");
   const [size, setSize] = useState("1024x1024");
   const [status, setStatus] = useState<Status>("idle");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -65,7 +57,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     onOpenChange(false);
     setTimeout(() => {
       setPrompt("");
-      setSelectedModel("gpt-image-1");
+      setSelectedModel("google/gemini-3-pro-image-preview");
       setSize("1024x1024");
       setStatus("idle");
       setImageUrl(null);
@@ -76,12 +68,6 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
   const handleModelChange = (modelId: string) => {
     setSelectedModel(modelId);
-    const model = modelOptions.find((m) => m.id === modelId);
-    if (model) {
-      // Reset to first landscape size
-      const landscape = model.sizes.find((s) => s.label.includes("Landscape")) || model.sizes[0];
-      setSize(landscape.value);
-    }
   };
 
   const handleGenerate = async () => {
@@ -100,12 +86,9 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("generate-image", {
-        body: {
+          body: {
           prompt: brandedPrompt,
           model: selectedModel,
-          size,
-          quality: "high",
-          style: selectedModel === "dall-e-3" ? "vivid" : undefined,
         },
       });
 
@@ -224,22 +207,6 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
                 </div>
               </div>
 
-              {/* Size */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Size</Label>
-                <Select value={size} onValueChange={setSize}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currentModel.sizes.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
 
               {/* Generate */}
               <Button
