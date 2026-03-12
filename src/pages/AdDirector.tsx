@@ -26,7 +26,7 @@ export default function AdDirector() {
               <Clapperboard className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">AI Video Director</h1>
+              <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>AI Video Director</h1>
               <p className="text-sm text-muted-foreground">
                 Script to cinematic video in minutes
               </p>

@@ -988,7 +988,7 @@ export function ProVideoEditor({
         {/* ─── Center Canvas ─── */}
         <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative">
           {/* AI Command Bar — floating at top */}
-          <div className="absolute top-3 left-3 right-3 z-30 flex gap-2 items-center p-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10">
+          <div className="absolute top-3 left-3 right-3 z-30 flex gap-2 items-center p-1.5 rounded-xl bg-black/40 backdrop-blur-xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
             {aiProcessing ? (
               <Loader2 className="w-4 h-4 text-primary shrink-0 animate-spin ml-1.5" />
             ) : (
@@ -1037,11 +1037,15 @@ export function ProVideoEditor({
                   />
                 )}
                 {brand.logoUrl && (
-                  <img
-                    src={brand.logoUrl}
-                    alt="Brand watermark"
-                    className="absolute bottom-14 right-4 h-10 w-auto object-contain opacity-70 pointer-events-none z-10"
-                  />
+                  <div className="absolute bottom-16 right-4 z-10 pointer-events-none">
+                    <div className="bg-black/20 backdrop-blur-sm rounded-lg p-1.5 border border-white/[0.06]">
+                      <img
+                        src={brand.logoUrl}
+                        alt="Brand watermark"
+                        className="h-8 w-auto object-contain opacity-80"
+                      />
+                    </div>
+                  </div>
                 )}
                 {sceneOverlays.map(ov => (
                   <div
@@ -1057,7 +1061,7 @@ export function ProVideoEditor({
                     {ov.kind === "logo" ? (
                       <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain" />
                     ) : (
-                      <span className="text-white font-bold text-sm drop-shadow-lg bg-black/40 px-2 py-1 rounded">
+                      <span className="text-white font-semibold text-sm drop-shadow-lg bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/[0.08]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                         {ov.content}
                       </span>
                     )}
@@ -1076,7 +1080,7 @@ export function ProVideoEditor({
 
           {/* Playback Controls */}
           {videoSrc && (
-            <div className="shrink-0 flex items-center gap-3 px-4 py-2 bg-black/70 backdrop-blur-sm border-t border-white/5">
+            <div className="shrink-0 flex items-center gap-3 px-4 py-2 bg-black/40 backdrop-blur-xl border-t border-white/[0.06] shadow-[0_-4px_24px_rgba(0,0,0,0.3)]">
               <button onClick={() => skipScene(-1)} className="text-white/60 hover:text-white" disabled={selectedSceneIndex === 0}>
                 <SkipBack className="w-4 h-4" />
               </button>
