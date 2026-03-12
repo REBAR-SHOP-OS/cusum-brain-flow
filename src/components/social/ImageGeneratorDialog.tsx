@@ -3,12 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search } from "lucide-react";
+import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { applyLogoToImage } from "@/lib/imageWatermark";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
@@ -16,7 +17,7 @@ interface ImageGeneratorDialogProps {
   onImageReady?: (imageUrl: string) => void;
 }
 
-type Status = "idle" | "searching" | "generating" | "completed" | "failed";
+type Status = "idle" | "searching" | "generating" | "branding" | "completed" | "failed";
 
 interface ModelOption {
   id: string;
@@ -50,7 +51,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
   const handleClose = () => {
-    if (status === "searching" || status === "generating") return;
+    if (status === "searching" || status === "generating" || status === "branding") return;
     onOpenChange(false);
     setTimeout(() => {
       setPrompt("");
@@ -98,7 +99,19 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
         return;
       }
 
-      setImageUrl(data.imageUrl);
+      let finalImageUrl = data.imageUrl;
+
+      // Apply brand logo overlay if available
+      if (brandKit?.logo_url && finalImageUrl) {
+        try {
+          setStatus("branding");
+          finalImageUrl = await applyLogoToImage(finalImageUrl, brandKit.logo_url);
+        } catch (logoErr) {
+          console.warn("Logo overlay failed, using image without logo:", logoErr);
+        }
+      }
+
+      setImageUrl(finalImageUrl);
       setRevisedPrompt(data.revisedPrompt);
       setPexelsInspired(!!data.pexelsInspired);
       setStatus("completed");
@@ -248,18 +261,37 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
             </div>
           )}
 
+          {/* Branding */}
+          {status === "branding" && (
+            <div className="flex flex-col items-center text-center gap-3 py-10">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center">
+                <Stamp className="w-7 h-7 animate-pulse text-primary" />
+              </div>
+              <p className="font-medium">Applying brand logo…</p>
+              <p className="text-sm text-muted-foreground">Adding your company logo to the image.</p>
+            </div>
+          )}
+
           {/* Completed */}
           {status === "completed" && imageUrl && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-emerald-600">
                 <CheckCircle2 className="w-5 h-5" />
                 <span className="font-medium">Ad image generated!</span>
-                {pexelsInspired && (
-                  <Badge variant="outline" className="text-[10px] gap-1 ml-auto">
-                    <Search className="w-3 h-3" />
-                    Pexels-inspired
-                  </Badge>
-                )}
+                <div className="flex gap-1 ml-auto">
+                  {brandKit?.logo_url && (
+                    <Badge variant="outline" className="text-[10px] gap-1">
+                      <Stamp className="w-3 h-3" />
+                      Branded
+                    </Badge>
+                  )}
+                  {pexelsInspired && (
+                    <Badge variant="outline" className="text-[10px] gap-1">
+                      <Search className="w-3 h-3" />
+                      Pexels-inspired
+                    </Badge>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-lg overflow-hidden border">
