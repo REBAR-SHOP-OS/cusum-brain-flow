@@ -53,7 +53,7 @@ export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment,
-  onUpdateStoryboard, onUpdateBrand,
+  onUpdateStoryboard, onUpdateBrand, onMusicSelect,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
