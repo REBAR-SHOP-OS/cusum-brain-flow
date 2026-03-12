@@ -97,6 +97,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [endCardEnabled, setEndCardEnabled] = useState(true);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   // Logo watermark is always mandatory when logo exists — no toggle
   const logoEnabled = !!brand.logoUrl;
 
