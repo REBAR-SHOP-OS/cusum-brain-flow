@@ -25,6 +25,17 @@ const steps: { id: WorkflowStep; label: string; icon: React.ReactNode }[] = [
 const QUALITY_THRESHOLD = 7.0;
 const MAX_IMPROVE_ATTEMPTS = 2;
 
+const EDGE_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out — the AI model took too long. Please try again.")), ms)
+    ),
+  ]);
+}
+
 export function AdDirectorContent() {
   const { toast } = useToast();
   const [step, setStep] = useState<WorkflowStep>("script");
@@ -34,6 +45,7 @@ export function AdDirectorContent() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [generationStatus, setGenerationStatus] = useState("");
   const [modelOverrides, setModelOverrides] = useState<ModelOverrides>({});
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
