@@ -350,6 +350,10 @@ export function SeoOverview() {
             {syncDomain.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <BarChart3 className="w-4 h-4 mr-1" />}
             Sync SEMrush API
           </Button>
+          <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => domain && fullExport.mutate({ domain_id: domain.id, domain: domain.domain })} disabled={fullExport.isPending || !domain}>
+            {fullExport.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
+            {fullExport.isPending ? "Pulling All Data…" : "Pull All SEMrush Data"}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => syncGsc.mutate()} disabled={syncGsc.isPending || !domain || googleStatus !== "connected"}>
             {syncGsc.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
             Sync Search Console
