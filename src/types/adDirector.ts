@@ -192,6 +192,40 @@ export const DEFAULT_BRAND: BrandProfile = {
   referenceAesthetic: "Premium cinematic industrial B2B",
 };
 
+export interface IntroOutroCardSettings {
+  headline: string;
+  subheadline: string;
+  cta: string;
+  website: string;
+  gradientStart: string;
+  gradientEnd: string;
+  textColor: string;
+  fontFamily: string;
+  headlineFontSize: number;
+  subFontSize: number;
+  logoPosition: "top" | "center" | "bottom";
+  logoScale: number;
+  showLogo: boolean;
+  layout: "centered" | "left" | "logo-top" | "minimal";
+}
+
+export const DEFAULT_CARD_SETTINGS = (brand: BrandProfile): IntroOutroCardSettings => ({
+  headline: brand.name || "Brand Name",
+  subheadline: brand.tagline || "",
+  cta: brand.cta || "",
+  website: brand.website || "",
+  gradientStart: brand.primaryColor || "#ef4444",
+  gradientEnd: brand.secondaryColor || "#1e293b",
+  textColor: "#ffffff",
+  fontFamily: "sans-serif",
+  headlineFontSize: 64,
+  subFontSize: 32,
+  logoPosition: "top",
+  logoScale: 1,
+  showLogo: true,
+  layout: "centered",
+});
+
 export const DEMO_SCRIPT = `30-Second Ad Script — Rebar.Shop
 
 0:00–0:04 — Hook

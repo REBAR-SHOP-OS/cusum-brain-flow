@@ -11,7 +11,8 @@ import {
   SkipBack, SkipForward, ChevronRight, ChevronLeft,
   FolderOpen, Video, Type, Film, ImagePlus, LayoutTemplate, Shapes, ArrowRightLeft, Palette, Settings,
 } from "lucide-react";
-import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile } from "@/types/adDirector";
+import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
+import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
 import { type EditorSettings, type LogoSettings, DEFAULT_EDITOR_SETTINGS, DEFAULT_LOGO_SETTINGS } from "@/types/editorSettings";
 import { MediaTab } from "./editor/MediaTab";
@@ -30,9 +31,10 @@ import { TemplatesTab } from "./editor/TemplatesTab";
 import { GraphicsTab } from "./editor/GraphicsTab";
 import { TransitionsTab } from "./editor/TransitionsTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
+import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 
-type EditorTab = "media" | "record" | "text" | "music" | "stock-video" | "stock-images" | "templates" | "graphics" | "transitions" | "brand-kit" | "script" | "settings";
+type EditorTab = "media" | "record" | "text" | "music" | "stock-video" | "stock-images" | "templates" | "graphics" | "transitions" | "brand-kit" | "script" | "settings" | "card-editor";
 
 const TABS: { id: EditorTab; label: string; icon: React.ReactNode }[] = [
   { id: "media", label: "My Media", icon: <FolderOpen className="w-4 h-4" /> },
@@ -117,6 +119,69 @@ export function ProVideoEditor({
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
   const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
   const [voiceoverDurations, setVoiceoverDurations] = useState<Record<string, number>>({});
+  const [cardSettingsMap, setCardSettingsMap] = useState<Record<string, IntroOutroCardSettings>>({});
+  const liveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
+
+  // Preload logo image for card rendering
+  useEffect(() => {
+    if (brand.logoUrl) {
+      const img = document.createElement("img");
+      img.crossOrigin = "anonymous";
+      img.src = brand.logoUrl;
+      img.onload = () => { logoImgRef.current = img; };
+    } else {
+      logoImgRef.current = null;
+    }
+  }, [brand.logoUrl]);
+
+  // Get or create card settings for current scene
+  const currentCardSettings = useMemo(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return null;
+    return cardSettingsMap[scene.id] || null;
+  }, [storyboard, selectedSceneIndex, cardSettingsMap]);
+
+  const handleCardSettingsChange = useCallback((s: IntroOutroCardSettings) => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    setCardSettingsMap(prev => ({ ...prev, [scene.id]: s }));
+  }, [storyboard, selectedSceneIndex]);
+
+  // Live canvas redraw when editing a static card
+  useEffect(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    const settings = cardSettingsMap[scene.id];
+    if (!settings || !liveCanvasRef.current) return;
+    const canvas = liveCanvasRef.current;
+    canvas.width = 1280;
+    canvas.height = 720;
+    drawCardToCanvas(canvas, settings, logoImgRef.current);
+  }, [cardSettingsMap, storyboard, selectedSceneIndex]);
+
+  const handleApplyCard = useCallback(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    const settings = cardSettingsMap[scene.id];
+    if (!settings) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280;
+    canvas.height = 720;
+    drawCardToCanvas(canvas, settings, logoImgRef.current);
+    const dataUrl = canvas.toDataURL("image/png");
+    onUpdateClipUrl?.(scene.id, dataUrl);
+    toast({ title: "Card updated", description: "Intro/outro card applied." });
+  }, [storyboard, selectedSceneIndex, cardSettingsMap, onUpdateClipUrl, toast]);
+
+  const openCardEditor = useCallback(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    if (!cardSettingsMap[scene.id]) {
+      setCardSettingsMap(prev => ({ ...prev, [scene.id]: DEFAULT_CARD_SETTINGS(brand) }));
+    }
+    handleSetActiveTab("card-editor" as EditorTab);
+  }, [storyboard, selectedSceneIndex, cardSettingsMap, brand, handleSetActiveTab]);
 
   // ─── Global timeline ───
   const sceneDurations = useMemo(() => {
@@ -1060,6 +1125,14 @@ export function ProVideoEditor({
               )}
               {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
               {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
+              {activeTab === "card-editor" && currentCardSettings && (
+                <IntroOutroEditor
+                  settings={currentCardSettings}
+                  brand={brand}
+                  onChange={handleCardSettingsChange}
+                  onApply={handleApplyCard}
+                />
+              )}
             </div>
           )}
         </div>
@@ -1097,11 +1170,30 @@ export function ProVideoEditor({
             {videoSrc ? (
               <>
                 {isStaticCard ? (
-                  <img
-                    src={videoSrc}
-                    alt="End Card"
-                    className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                  />
+                  <>
+                    {currentCardSettings ? (
+                      <canvas
+                        ref={liveCanvasRef}
+                        width={1280}
+                        height={720}
+                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
+                      />
+                    ) : (
+                      <img
+                        src={videoSrc}
+                        alt="End Card"
+                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
+                      />
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="absolute bottom-20 right-4 z-20 gap-1.5 text-xs"
+                      onClick={openCardEditor}
+                    >
+                      <Palette className="w-3.5 h-3.5" /> Edit Card
+                    </Button>
+                  </>
                 ) : (
                   <video
                     ref={videoRef}
