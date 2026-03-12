@@ -554,6 +554,23 @@ export function AdDirectorContent() {
 
       setFinalVideoUrl(finalUrl.blobUrl);
       toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched — ${finalUrl.duration.toFixed(1)}s, ${(finalUrl.blob.size / 1024 / 1024).toFixed(1)}MB` });
+
+      // Auto-save project as completed
+      try {
+        await saveProject.mutateAsync({
+          id: projectIdRef.current ?? undefined,
+          name: brand.name ? `${brand.name} Ad` : "Untitled Ad",
+          brandName: brand.name,
+          script,
+          segments,
+          storyboard,
+          clips,
+          continuity,
+          status: "completed",
+        });
+      } catch (e) {
+        console.warn("Auto-save failed:", e);
+      }
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
