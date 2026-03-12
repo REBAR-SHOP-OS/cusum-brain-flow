@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
@@ -15,6 +15,7 @@ import {
 } from "@/types/adDirector";
 import { cn } from "@/lib/utils";
 import { stitchClips } from "@/lib/videoStitch";
+import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
 
 
 import { Check } from "lucide-react";
