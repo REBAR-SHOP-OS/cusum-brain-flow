@@ -274,9 +274,51 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     } catch (err: any) { setError(err?.message || "Failed to check video status."); setStatus("failed"); }
   }, [brandKit]);
 
-  // Main generate handler
+  // Image generation handler
+  const handleGenerateImage = async () => {
+    if (!rawPrompt.trim()) return;
+    setImageGenerating(true); setGeneratedImageUrl(null); setError(null);
+    try {
+      const sizeMap: Record<string, string> = { "16:9": "1792x1024", "9:16": "1024x1792", "1:1": "1024x1024" };
+      const size = sizeMap[aspectRatio] || "1024x1024";
+      const data = await invokeEdgeFunction("generate-image", { prompt: rawPrompt.trim(), size, quality: "hd", model: "gpt-image-1" });
+      if (data?.imageUrl) {
+        setGeneratedImageUrl(data.imageUrl);
+        toast({ title: "Image ready!", description: data.revisedPrompt ? "Prompt was refined by AI" : "Image generated successfully" });
+      } else { throw new Error("No image URL returned"); }
+    } catch (err: any) { setError(err?.message || "Image generation failed"); toast({ title: "Image generation failed", description: err.message, variant: "destructive" }); }
+    finally { setImageGenerating(false); }
+  };
+
+  // Standalone audio generation handler (for audio mode)
+  const handleGenerateStandaloneAudio = async () => {
+    if (!rawPrompt.trim()) return;
+    setStandaloneAudioGenerating(true); setStandaloneAudioUrl(null); setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-music`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ prompt: rawPrompt.trim(), duration: parseInt(duration), type: audioType }),
+      });
+      if (!response.ok) { const errData = await response.json().catch(() => null); throw new Error(errData?.error || `Audio generation failed (${response.status})`); }
+      const audioBlob = await response.blob();
+      const url = URL.createObjectURL(audioBlob);
+      setStandaloneAudioUrl(url);
+      toast({ title: "Audio ready!", description: `${audioType === "music" ? "Music" : "Sound effect"} generated` });
+    } catch (err: any) { setError(err?.message || "Audio generation failed"); toast({ title: "Audio generation failed", description: err.message, variant: "destructive" }); }
+    finally { setStandaloneAudioGenerating(false); }
+  };
+
+  // Main generate handler — routes by mediaType
   const handleGenerate = async () => {
     if (!rawPrompt.trim()) return;
+
+    if (mediaType === "image") { handleGenerateImage(); return; }
+    if (mediaType === "audio") { handleGenerateStandaloneAudio(); return; }
+
+    // Video generation (existing flow)
     const durationSecs = parseInt(duration);
     const creditCost = getCost(durationSecs, mode);
     if (!canGenerate(durationSecs, mode)) {
