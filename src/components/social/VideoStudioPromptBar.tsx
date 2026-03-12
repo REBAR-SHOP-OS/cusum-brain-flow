@@ -60,6 +60,7 @@ export const VIDEO_MODELS: ModelOption[] = [
   { id: "veo-3.1", label: "Google Veo 3.1", provider: "veo", costLabel: "Credits", free: false },
   { id: "sora-2", label: "OpenAI Sora", provider: "sora", costLabel: "Credits", free: false },
   { id: "sora-2-pro", label: "Sora Pro", provider: "sora", costLabel: "Credits", free: false },
+  { id: "wan-2.1", label: "Alibaba Wan 2.1", provider: "wan", costLabel: "~$0.07/s", free: false },
 ];
 
 export const AUDIO_MODELS: ModelOption[] = [
