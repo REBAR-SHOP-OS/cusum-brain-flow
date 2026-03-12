@@ -100,7 +100,7 @@ async function callAI(
 
   const sendRequest = (payload: Record<string, unknown>) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
