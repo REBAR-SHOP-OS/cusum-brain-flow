@@ -140,6 +140,7 @@ export function PostReviewPanel({
   const [deleting, setDeleting] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
+  const [showStoryGen, setShowStoryGen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
