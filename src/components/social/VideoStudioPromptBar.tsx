@@ -121,7 +121,7 @@ export function VideoStudioPromptBar({
   rawPrompt, onPromptChange, mode, onModeChange,
   duration, onDurationChange, aspectRatio, onAspectRatioChange,
   showEngineered, onToggleEngineered, engineeredPrompt, intent,
-  isConstructionRelated, creditCost, remaining, canGenerate,
+  isConstructionRelated, totalSpent, canGenerate,
   isGenerating, isTransforming, onGenerate, referenceImage, onReferenceImageChange,
   mediaType, onMediaTypeChange, audioType = "music", onAudioTypeChange,
   selectedModel, onModelChange,
