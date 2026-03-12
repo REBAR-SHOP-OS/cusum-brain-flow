@@ -396,7 +396,6 @@ export function ProVideoEditor({
 
   const toggleMute = () => {
     if (!videoRef.current) return;
-    videoRef.current.muted = !isMuted;
     setIsMuted(!isMuted);
   };
 
