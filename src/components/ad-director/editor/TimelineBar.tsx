@@ -269,13 +269,47 @@ export function TimelineBar({
                           <span className="text-[7px] text-white truncate">{ov.content}</span>
                         </div>
                       </PopoverTrigger>
-                      <PopoverContent className="w-36 p-1.5" side="top" align="center">
+                      <PopoverContent className="w-44 p-1.5" side="top" align="center">
                         <div className="space-y-0.5">
                           {onEditOverlay && (
                             <button
                               onClick={() => onEditOverlay(ov)}
                               className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
                             ><Edit3 className="w-2.5 h-2.5" />Edit Text</button>
+                          )}
+                          {onEditOverlayPosition && (
+                            <>
+                              <p className="text-[9px] text-muted-foreground px-2 pt-1">Position</p>
+                              <div className="flex gap-1 px-2">
+                                {(["top", "center", "bottom"] as const).map(pos => (
+                                  <button
+                                    key={pos}
+                                    onClick={() => onEditOverlayPosition(ov.id, pos)}
+                                    className="flex-1 text-[9px] py-0.5 rounded border border-border/40 hover:bg-accent/50 text-foreground capitalize"
+                                  >{pos}</button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          {onResizeOverlay && (
+                            <>
+                              <p className="text-[9px] text-muted-foreground px-2 pt-1">Size</p>
+                              <div className="flex gap-1 px-2">
+                                {(["small", "medium", "large"] as const).map(sz => (
+                                  <button
+                                    key={sz}
+                                    onClick={() => onResizeOverlay(ov.id, sz)}
+                                    className="flex-1 text-[9px] py-0.5 rounded border border-border/40 hover:bg-accent/50 text-foreground capitalize"
+                                  >{sz}</button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          {onToggleOverlayAnimation && (
+                            <button
+                              onClick={() => onToggleOverlayAnimation(ov.id)}
+                              className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
+                            ><Sparkles className="w-2.5 h-2.5" />{ov.animated ? "Disable Animation" : "Enable Animation"}</button>
                           )}
                           {onDeleteOverlay && (
                             <button
