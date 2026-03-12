@@ -54,7 +54,7 @@ interface ProVideoEditorProps {
 export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
-  onRegenerateScene, onUpdateClipUrl, onUpdateSegment,
+  onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming,
   onUpdateStoryboard, onUpdateBrand, onMusicSelect,
 }: ProVideoEditorProps) {
   const { toast } = useToast();

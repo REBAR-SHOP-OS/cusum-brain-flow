@@ -900,6 +900,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
               onRegenerateScene={generateScene}
               onUpdateClipUrl={(sceneId, url) => setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: url, progress: 100 } : c))}
               onUpdateSegment={(id, text) => setSegments(prev => prev.map(s => s.id === id ? { ...s, text } : s))}
+              onUpdateSegmentTiming={(id, startTime, endTime) => setSegments(prev => prev.map(s => s.id === id ? { ...s, startTime, endTime } : s))}
               onUpdateStoryboard={setStoryboard}
               onUpdateBrand={setBrand}
               onMusicSelect={setMusicTrackUrl}
