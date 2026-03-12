@@ -231,7 +231,7 @@ export function VideoStudioPromptBar({
               placeholder={placeholder}
               disabled={isGenerating || isTransforming}
               rows={3}
-              className="w-full bg-transparent text-foreground text-sm placeholder:text-muted-foreground/60 resize-none outline-none border-none focus:ring-0 leading-relaxed"
+              className="w-full bg-transparent text-foreground text-sm placeholder:text-muted-foreground/60 resize-none outline-none border-none focus:ring-0 leading-relaxed scrollbar-none overflow-y-auto"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();

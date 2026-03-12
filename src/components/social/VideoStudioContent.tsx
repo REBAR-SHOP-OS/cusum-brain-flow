@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { VideoEditor } from "./VideoEditor";
 import { VideoToSocialPanel } from "./VideoToSocialPanel";
-import { VideoStudioPromptBar } from "./VideoStudioPromptBar";
+import { VideoStudioPromptBar, VIDEO_MODELS } from "./VideoStudioPromptBar";
 import { useVideoCredits } from "@/hooks/useVideoCredits";
 import { useGenerations } from "@/hooks/useGenerations";
 import { useToast } from "@/hooks/use-toast";
@@ -143,6 +143,15 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const progressTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const currentMode = modeConfigs.find(m => m.id === mode) || modeConfigs[1];
+
+  // Derive effective provider from selected video model (override mode's default)
+  const effectiveVideoProvider = useMemo((): "sora" | "veo" | "wan" => {
+    if (mediaType !== "video") return currentMode.provider;
+    const vm = VIDEO_MODELS.find((m: { id: string; provider: string }) => m.id === selectedModel);
+    return (vm?.provider as "sora" | "veo" | "wan") || currentMode.provider;
+  }, [selectedModel, mediaType, currentMode.provider]);
+
+  const effectiveMaxClip = effectiveVideoProvider === "wan" ? 8 : currentMode.maxClipDuration;
 
   const cleanup = useCallback(() => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
@@ -347,7 +356,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
       genRecord = await createGeneration.mutateAsync({
         raw_prompt: rawPrompt.trim(), engineered_prompt: finalPrompt,
         intent: result?.intent, mode, duration_seconds: durationSecs,
-        aspect_ratio: aspectRatio, provider: currentMode.provider,
+        aspect_ratio: aspectRatio, provider: effectiveVideoProvider,
         estimated_credits: creditCost,
         metadata: { elements: result?.elements, platform_intent: result?.platform_intent },
       });
@@ -364,17 +373,17 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
     setStatus("submitting"); setProgress(0); setProgressLabel("");
     const requestedDuration = parseInt(duration);
-    const isMultiScene = requestedDuration > currentMode.maxClipDuration;
+    const isMultiScene = requestedDuration > effectiveMaxClip;
     isMultiRef.current = isMultiScene;
 
     try {
       if (isMultiScene) {
-        const sceneCount = Math.ceil(requestedDuration / currentMode.maxClipDuration);
+        const sceneCount = Math.ceil(requestedDuration / effectiveMaxClip);
         setProgressLabel(`Generating ${sceneCount} scenes...`);
         const data = await invokeEdgeFunction("generate-video", {
-          action: "generate-multi", provider: currentMode.provider, prompt: finalPrompt,
+          action: "generate-multi", provider: effectiveVideoProvider, prompt: finalPrompt,
           duration: requestedDuration,
-          model: currentMode.model === "sora-2-pro" ? "sora-2-pro" : currentMode.model === "sora-2" ? "sora-2" : undefined,
+          model: selectedModel,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
@@ -393,9 +402,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         pollTimerRef.current = setTimeout(pollMultiScene, 5000);
       } else {
         const data = await invokeEdgeFunction("generate-video", {
-          action: "generate", provider: currentMode.provider, prompt: finalPrompt,
+          action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt,
           duration: requestedDuration,
-          model: currentMode.model === "sora-2-pro" ? "sora-2-pro" : currentMode.model === "sora-2" ? "sora-2" : undefined,
+          model: selectedModel,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
