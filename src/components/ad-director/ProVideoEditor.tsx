@@ -9,7 +9,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Image, Music, FileText, Sliders, ImageIcon, Loader2,
   SkipBack, SkipForward, ChevronRight, ChevronLeft,
-  FolderOpen, Video, Type, Film, ImagePlus, LayoutTemplate, Shapes, ArrowRightLeft, Palette, Settings,
+  FolderOpen, Video, Type, Film, ImagePlus, LayoutTemplate, Shapes, ArrowRightLeft, Palette, Settings, SquarePen,
 } from "lucide-react";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
 import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
@@ -48,6 +48,7 @@ const TABS: { id: EditorTab; label: string; icon: React.ReactNode }[] = [
   { id: "transitions", label: "Transitions", icon: <ArrowRightLeft className="w-4 h-4" /> },
   { id: "brand-kit", label: "Brand Kit", icon: <Palette className="w-4 h-4" /> },
   { id: "script", label: "Script", icon: <FileText className="w-4 h-4" /> },
+  { id: "card-editor", label: "Card Editor", icon: <SquarePen className="w-4 h-4" /> },
   { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
 ];
 
