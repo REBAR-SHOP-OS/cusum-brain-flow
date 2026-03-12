@@ -22,6 +22,9 @@ type EditTool =
   | "change-lighting"
   | "remove-object"
   | "replace-background"
+  | "subtitle"
+  | "text-overlay"
+  | "resize-platform"
   | null;
 
 interface EditToolConfig {
