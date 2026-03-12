@@ -129,19 +129,19 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
           </div>
 
           {/* Script Textarea with counters */}
-          <div className="relative">
+          <div className="relative rounded-xl bg-card/30 backdrop-blur-xl border border-white/[0.08] p-1">
             <Textarea
               value={script}
               onChange={(e) => onScriptChange(e.target.value)}
               placeholder="Paste your ad script here, or load the demo above to get started..."
-              className="min-h-[280px] bg-card/50 border-border/50 font-sans text-sm leading-relaxed pr-4 pb-10"
+              className="min-h-[280px] bg-transparent border-0 font-[Space_Grotesk] text-sm leading-relaxed pr-4 pb-10 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {script.trim() && (
               <div className="absolute bottom-3 left-3 flex items-center gap-3">
-                <span className="text-[10px] text-muted-foreground/70 bg-card/80 px-2 py-0.5 rounded-md border border-border/30">
+                <span className="text-[10px] text-muted-foreground/70 bg-black/20 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/[0.08]">
                   {wordCount} words
                 </span>
-                <span className="text-[10px] text-muted-foreground/70 bg-card/80 px-2 py-0.5 rounded-md border border-border/30">
+                <span className="text-[10px] text-muted-foreground/70 bg-black/20 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/[0.08]">
                   ~{estDuration}s
                 </span>
               </div>
