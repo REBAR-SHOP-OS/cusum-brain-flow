@@ -16,10 +16,11 @@ interface AdDirectorSidebarProps {
 }
 
 const PLUGINS = [
-  { icon: Type, label: "Text to clip", href: "/video-studio" },
-  { icon: FileImage, label: "Text to image", href: "/video-studio" },
-  { icon: Camera, label: "Photo to clip", href: "/video-studio" },
-  { icon: LayoutGrid, label: "Preset library", href: null },
+  { icon: Type, label: "Text to clip", tab: "text" },
+  { icon: FileImage, label: "Stock Images", tab: "stock-images" },
+  { icon: Film, label: "Stock Video", tab: "stock-video" },
+  { icon: LayoutGrid, label: "Templates", tab: "templates" },
+  { icon: Shapes, label: "Graphics", tab: "graphics" },
 ];
 
 const TOOLS = [
