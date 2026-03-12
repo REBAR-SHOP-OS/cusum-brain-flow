@@ -143,19 +143,46 @@ export function ProVideoEditor({
 
     setAiProcessing(true);
     try {
-      const result = await invokeEdgeFunction<{ editedPrompt: string }>(
+      const result = await invokeEdgeFunction<any>(
         "edit-video-prompt",
         { originalPrompt: scene.prompt, editAction: "custom", editDetail: aiCommand }
       );
-      const newPrompt = result.editedPrompt;
-      if (typeof newPrompt === "string" && newPrompt.length > 0) {
-        pushHistory(storyboard);
-        const updated = storyboard.map((s, i) =>
-          i === selectedSceneIndex ? { ...s, prompt: newPrompt, promptQuality: undefined } : s
-        );
-        onUpdateStoryboard?.(updated);
-        onRegenerateScene?.(scene.id);
-        toast({ title: "Regenerating scene", description: "AI is applying your edit…" });
+
+      if (result.type === "overlay") {
+        // Apply overlay without regeneration
+        const overlay = result.overlay as { kind: string; position: string; size: string; content: string };
+        const posMap: Record<string, { x: number; y: number }> = {
+          "top-left": { x: 5, y: 5 }, "top-right": { x: 80, y: 5 },
+          "bottom-left": { x: 5, y: 80 }, "bottom-right": { x: 80, y: 80 },
+          "center": { x: 40, y: 40 },
+        };
+        const sizeMap: Record<string, { w: number; h: number }> = {
+          small: { w: 10, h: 10 }, medium: { w: 15, h: 15 }, large: { w: 25, h: 25 },
+        };
+        const content = overlay.content === "brand_logo" && brand.logoUrl ? brand.logoUrl : overlay.content;
+        const newOverlay: VideoOverlay = {
+          id: crypto.randomUUID(),
+          kind: (overlay.kind as VideoOverlay["kind"]) || "logo",
+          position: posMap[overlay.position] || posMap["bottom-right"],
+          size: sizeMap[overlay.size] || sizeMap["medium"],
+          content,
+          opacity: 0.85,
+          sceneId: scene.id,
+        };
+        setOverlays(prev => [...prev, newOverlay]);
+        toast({ title: "Overlay added", description: `${overlay.kind} overlay applied — no regeneration needed.` });
+      } else {
+        // Generative edit — rewrite prompt and regenerate
+        const newPrompt = result.editedPrompt;
+        if (typeof newPrompt === "string" && newPrompt.length > 0) {
+          pushHistory(storyboard);
+          const updated = storyboard.map((s, i) =>
+            i === selectedSceneIndex ? { ...s, prompt: newPrompt, promptQuality: undefined } : s
+          );
+          onUpdateStoryboard?.(updated);
+          onRegenerateScene?.(scene.id);
+          toast({ title: "Regenerating scene", description: "AI is applying your edit…" });
+        }
       }
       setAiCommand("");
     } catch (err: any) {
@@ -164,6 +191,10 @@ export function ProVideoEditor({
       setAiProcessing(false);
     }
   };
+
+  // Overlays for current scene
+  const currentSceneId = storyboard[selectedSceneIndex]?.id;
+  const sceneOverlays = overlays.filter(o => o.sceneId === currentSceneId);
 
   // Logo handlers
   const handleDeleteLogo = () => {
