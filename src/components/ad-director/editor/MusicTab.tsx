@@ -25,7 +25,7 @@ export function MusicTab() {
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [musicPrompt, setMusicPrompt] = useState("");
 
-  const playTrack = (track: MusicTrack) => {
+  const playTrack = async (track: MusicTrack) => {
     if (!track.url) return;
     if (playing === track.id) {
       audioRef.current?.pause();
@@ -38,8 +38,17 @@ export function MusicTab() {
     const audio = new Audio(track.url);
     audioRef.current = audio;
     audio.onended = () => setPlaying(null);
-    audio.play();
-    setPlaying(track.id);
+    audio.onerror = () => {
+      setPlaying(null);
+      toast({ title: "Playback failed", description: "Could not play this track", variant: "destructive" });
+    };
+    try {
+      await audio.play();
+      setPlaying(track.id);
+    } catch {
+      setPlaying(null);
+      toast({ title: "Playback failed", description: "Browser blocked audio playback", variant: "destructive" });
+    }
   };
 
   const handleGenerate = async () => {
@@ -135,10 +144,10 @@ export function MusicTab() {
           </div>
         )}
         {tracks.map(track => (
-          <button
+          <div
             key={track.id}
             onClick={() => setSelectedTrack(track.id)}
-            className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left ${
+            className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left cursor-pointer ${
               selectedTrack === track.id ? "border-primary bg-primary/5" : "border-border/30 hover:border-border/60"
             }`}
           >
@@ -153,7 +162,7 @@ export function MusicTab() {
               <div className="text-[10px] text-muted-foreground">{track.duration}</div>
             </div>
             <Badge variant="secondary" className="text-[9px]">{track.type}</Badge>
-          </button>
+          </div>
         ))}
       </div>
 
