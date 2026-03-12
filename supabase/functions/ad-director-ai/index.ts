@@ -181,40 +181,88 @@ async function callAI(
 }
 
 function extractToolResult(data: any): any {
+  // 1. Try tool_calls first (preferred path)
   const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
   if (toolCall?.function?.arguments) {
-    return JSON.parse(toolCall.function.arguments);
+    try {
+      return JSON.parse(toolCall.function.arguments);
+    } catch {
+      // Tool call arguments might be truncated — fall through to repair
+      return repairAndParseJSON(toolCall.function.arguments);
+    }
   }
 
-  // Fallback: model returned content instead of a tool call — extract JSON from it
+  // 2. Fallback: model returned content as text
   const content = data.choices?.[0]?.message?.content || "";
-  if (!content) throw new Error("AI did not return structured data");
+  if (!content) {
+    console.error("extractToolResult: No tool_calls and no content in response. Full response:", JSON.stringify(data).slice(0, 1000));
+    throw new Error("AI did not return structured data");
+  }
 
-  let cleaned = content
-    .replace(/```json\s*/gi, "")
-    .replace(/```\s*/g, "")
-    .trim();
+  return extractJSONFromText(content);
+}
 
-  const jsonStart = cleaned.search(/[\{\[]/);
-  const jsonEnd = Math.max(cleaned.lastIndexOf("}"), cleaned.lastIndexOf("]"));
-  if (jsonStart === -1 || jsonEnd === -1) throw new Error("AI did not return structured data");
+function extractJSONFromText(content: string): any {
+  // Try direct parse
+  try { return JSON.parse(content); } catch { /* continue */ }
 
-  cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+  // Extract from markdown code blocks
+  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try { return JSON.parse(codeBlockMatch[1].trim()); } catch { /* continue */ }
+    // Try repair on code block content
+    try { return repairAndParseJSON(codeBlockMatch[1].trim()); } catch { /* continue */ }
+  }
+
+  // Find JSON object/array in mixed text
+  const jsonMatch = content.match(/[\{\[][\s\S]*$/);
+  if (jsonMatch) {
+    // Try to find matching closing bracket
+    let candidate = jsonMatch[0];
+    const lastBrace = candidate.lastIndexOf("}");
+    const lastBracket = candidate.lastIndexOf("]");
+    const lastClose = Math.max(lastBrace, lastBracket);
+    if (lastClose > 0) {
+      candidate = candidate.substring(0, lastClose + 1);
+    }
+    try { return JSON.parse(candidate); } catch { /* continue */ }
+    try { return repairAndParseJSON(candidate); } catch { /* continue */ }
+  }
+
+  // Check for refusal
+  const refusalIndicators = ["I cannot", "I'm unable", "As a language model", "I apologize"];
+  if (refusalIndicators.some(r => content.toLowerCase().includes(r.toLowerCase()))) {
+    throw new Error("AI refused to process the request");
+  }
+
+  console.error("extractJSONFromText failed. Content preview:", content.slice(0, 500));
+  throw new Error("AI did not return structured data");
+}
+
+function repairAndParseJSON(json: string): any {
+  // Clean common issues
+  let repaired = json
+    .replace(/,\s*}/g, "}")
+    .replace(/,\s*]/g, "]")
+    .replace(/[\x00-\x1F\x7F]/g, " ")
+    .replace(/\n/g, " ");
+
+  // Count unbalanced braces/brackets and close them
+  let braces = 0, brackets = 0;
+  for (const char of repaired) {
+    if (char === "{") braces++;
+    if (char === "}") braces--;
+    if (char === "[") brackets++;
+    if (char === "]") brackets--;
+  }
+  while (brackets > 0) { repaired += "]"; brackets--; }
+  while (braces > 0) { repaired += "}"; braces--; }
 
   try {
-    return JSON.parse(cleaned);
-  } catch {
-    // Fix trailing commas and control chars
-    cleaned = cleaned
-      .replace(/,\s*}/g, "}")
-      .replace(/,\s*]/g, "]")
-      .replace(/[\x00-\x1F\x7F]/g, "");
-    try {
-      return JSON.parse(cleaned);
-    } catch (e) {
-      console.error("Failed to parse AI content as JSON:", content.slice(0, 500));
-      throw new Error("AI did not return structured data");
-    }
+    return JSON.parse(repaired);
+  } catch (e) {
+    console.error("repairAndParseJSON failed:", repaired.slice(0, 300));
+    throw new Error("AI did not return structured data");
   }
 }
 
