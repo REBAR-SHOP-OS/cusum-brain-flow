@@ -601,7 +601,7 @@ export function AdDirectorContent() {
               {idx < steps.length - 1 && (
                 <div className={cn(
                   "w-8 h-px mx-1 hidden sm:block",
-                  isCompleted ? "bg-emerald-500/40" : "bg-border/30"
+                  isCompleted ? "bg-primary/40" : "bg-border/30"
                 )} />
               )}
             </div>
