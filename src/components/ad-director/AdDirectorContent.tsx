@@ -794,32 +794,16 @@ export function AdDirectorContent() {
 
         {step === "preview" && (
           <div className="lg:col-span-3 space-y-4">
-            <Button variant="ghost" size="sm" onClick={() => setStep("storyboard")} className="gap-1 text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Back to Storyboard
-            </Button>
-            <FinalPreview
+            <ProVideoEditor
               clips={clips}
               storyboard={storyboard}
               segments={segments}
-              subtitlesEnabled={subtitlesEnabled}
-              logoEnabled={logoEnabled}
-              endCardEnabled={endCardEnabled}
-              onToggleSubtitles={() => setSubtitlesEnabled(!subtitlesEnabled)}
-              onToggleLogo={() => {}} // Logo is mandatory — no toggle
-              onToggleEndCard={() => setEndCardEnabled(!endCardEnabled)}
+              brand={brand}
+              finalVideoUrl={finalVideoUrl}
+              onBack={() => setStep("storyboard")}
               onExport={handleExport}
               exporting={exporting}
-              finalVideoUrl={finalVideoUrl}
             />
-            {finalVideoUrl && (
-              <div className="mt-4 flex justify-center">
-                <Button onClick={handleDownload} variant="outline" className="gap-2 rounded-2xl px-6">
-                  <Film className="w-4 h-4" />
-                  Download Final Video
-                </Button>
-              </div>
-            )}
           </div>
         )}
       </div>
