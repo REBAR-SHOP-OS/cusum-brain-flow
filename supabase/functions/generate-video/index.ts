@@ -734,7 +734,9 @@ serve(async (req) => {
         scenePrompts.map(async (scenePrompt, i) => {
           try {
             let result: { jobId: string; provider: string };
-            if (isVeo) {
+            if (isWan) {
+              result = await wanGenerate(apiKey, scenePrompt, clipDuration, aspect_ratio);
+            } else if (isVeo) {
               try {
                 result = await veoGenerate(apiKey, scenePrompt, clipDuration);
               } catch (e) {
