@@ -331,7 +331,7 @@ export function VideoStudioPromptBar({
                     <span className="flex-1 text-left">{m.label}</span>
                     <span className={cn(
                       "text-[10px] px-1.5 py-0.5 rounded-full",
-                      m.free ? "bg-green-500/10 text-green-600" : "text-muted-foreground"
+                      m.free ? "bg-primary/10 text-primary" : "text-muted-foreground"
                     )}>
                       {m.costLabel}
                     </span>
