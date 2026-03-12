@@ -42,7 +42,7 @@ const modelOptions: ModelOption[] = [
 
 export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: ImageGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gpt-image-1");
+  const [selectedModel, setSelectedModel] = useState("google/gemini-3-pro-image-preview");
   const [size, setSize] = useState("1024x1024");
   const [status, setStatus] = useState<Status>("idle");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
