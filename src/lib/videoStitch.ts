@@ -341,7 +341,7 @@ export async function stitchClips(
       resolve({ blobUrl, blob, duration: validation.duration! });
     };
 
-    recorder.start();
+    recorder.start(1000); // Request data every 1s for reliability
 
     if (audioElement) {
       audioElement.play().catch(() => console.warn("[stitchClips] Audio play failed"));
