@@ -1,46 +1,57 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Pexels-Powered AI Image Generator for Advertising
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+The AI Image Generator currently generates images from scratch using only the user's text prompt. The user wants it to leverage Pexels stock photos as a visual reference/inspiration, combined with the brand context, to produce the best possible advertising images for the company.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Approach
+Enhance the `generate-image` edge function to first search Pexels for relevant stock photos based on the user's prompt, then feed those reference images into Gemini's image editing capability to create a branded, advertising-optimized image.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Changes
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. `supabase/functions/generate-image/index.ts`
+- Before calling Gemini, search Pexels for 1-2 top photos matching the prompt keywords
+- Pass the best Pexels photo URL as a reference image to Gemini using the image editing API (multi-modal input: text instruction + reference image)
+- Enhance the prompt with brand context (business name, industry, value prop from brand kit) and advertising direction
+- The AI instruction will say: "Using this reference image as inspiration, create a professional advertising image for [brand]. [user prompt]"
+- Fallback: if Pexels returns no results, generate from text-only as before
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 2. `src/components/social/ImageGeneratorDialog.tsx`
+- Add a "Pexels-powered" badge/indicator so the user knows the system uses stock inspiration
+- During generation, show a two-step status: "Finding inspiration..." → "Generating your ad image..."
+- Pass brand kit context (business_name, description, value_prop) in the request body so the edge function can build an advertising-focused prompt
+- Update placeholder text to be advertising-oriented: "Describe the advertising image you want..."
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 3. Edge function flow (detailed)
+```text
+User prompt + brand context
+        │
+        ▼
+  ┌─────────────┐
+  │ Pexels API  │ ← search top 1 photo matching prompt keywords
+  └──────┬──────┘
+         │ reference image URL
+         ▼
+  ┌──────────────────┐
+  │ Gemini Image API │ ← text: ad-optimized prompt + brand info
+  │  (edit mode)     │   image: Pexels reference photo
+  └──────┬───────────┘
+         │
+         ▼
+   Generated ad image
+```
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+The Gemini call uses the existing image editing pattern:
+```typescript
+messages: [{
+  role: "user",
+  content: [
+    { type: "text", text: advertisingPrompt },
+    { type: "image_url", image_url: { url: pexelsPhotoUrl } }
+  ]
+}]
+```
+
+This ensures every generated image is grounded in real, high-quality stock photography while being customized for the company's advertising needs.
+
