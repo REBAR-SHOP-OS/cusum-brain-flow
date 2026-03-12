@@ -298,6 +298,7 @@ export function AdDirectorContent() {
 
       const videoUrl = result.url || result.videoUrl;
       const genId = result.jobId || result.generationId;
+      const provider = result.provider || "wan";
 
       // Slideshow fallback — treat first image as completed thumbnail
       if (result.mode === "slideshow" && result.imageUrls?.length) {
@@ -326,7 +327,13 @@ export function AdDirectorContent() {
             ? { ...c, status: "generating", generationId: genId, progress: 30 }
             : c
         ));
-        pollGeneration(sceneId, genId);
+        pollGeneration(sceneId, genId, provider);
+      } else {
+        setClips(prev => prev.map(c =>
+          c.sceneId === sceneId
+            ? { ...c, status: "failed", error: "No job id or video URL returned", progress: 0 }
+            : c
+        ));
       }
     } catch (err: any) {
       setClips(prev => prev.map(c =>
