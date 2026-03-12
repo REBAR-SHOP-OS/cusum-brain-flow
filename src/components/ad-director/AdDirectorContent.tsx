@@ -910,6 +910,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               onUpdateStoryboard={setStoryboard}
               onUpdateBrand={setBrand}
               onMusicSelect={setMusicTrackUrl}
+              externalActiveTab={externalActiveTab}
+              onActiveTabChanged={onActiveTabChanged}
             />
           </div>
         )}

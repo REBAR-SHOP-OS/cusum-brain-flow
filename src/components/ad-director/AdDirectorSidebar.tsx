@@ -97,6 +97,7 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab, activeTab }: A
             icon={t.icon}
             label={t.label}
             collapsed={collapsed}
+            active={activeTab === t.tab}
             onClick={() => onNavigateTab?.(t.tab)}
           />
         ))}
