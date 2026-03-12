@@ -10,9 +10,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save,
   Music, Volume2, ChevronDown, ChevronUp, Wand2, Zap, Crown, Eye, EyeOff,
-  Film, Upload, ExternalLink, Clapperboard, Pencil
+  Film, Upload, ExternalLink, Clapperboard, Pencil, Share2, Gauge
 } from "lucide-react";
 import { VideoEditor } from "./VideoEditor";
+import { VideoToSocialPanel } from "./VideoToSocialPanel";
+import { useVideoCredits } from "@/hooks/useVideoCredits";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { slideshowToVideo } from "@/lib/slideshowToVideo";
@@ -109,6 +111,8 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const navigate = useNavigate();
   const { toast } = useToast();
   const { transform, isTransforming, transformResult, transformError, reset: resetTransform } = usePromptTransformer();
+  const { remaining, total, usedPercent, plan, canGenerate, getCost, consumeCredits } = useVideoCredits();
+  const [showSocialPanel, setShowSocialPanel] = useState(false);
 
   // Form state
   const [rawPrompt, setRawPrompt] = useState("");
@@ -335,6 +339,22 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const handleGenerate = async () => {
     if (!rawPrompt.trim()) return;
 
+    // Credit check
+    const durationSecs = parseInt(duration);
+    if (!canGenerate(durationSecs, mode)) {
+      const cost = getCost(durationSecs, mode);
+      toast({ title: "Not enough credits", description: `Need ${cost}s credits, have ${remaining}s remaining.`, variant: "destructive" });
+      return;
+    }
+
+    // Consume credits upfront
+    try {
+      await consumeCredits.mutateAsync({ durationSeconds: durationSecs, mode });
+    } catch (err: any) {
+      toast({ title: "Credit error", description: err.message, variant: "destructive" });
+      return;
+    }
+
     // Step 1: Transform the prompt
     setStatus("transforming");
     setProgress(0);
@@ -473,6 +493,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     setError(null);
     setAudioUrl(null);
     setShowEditor(false);
+    setShowSocialPanel(false);
     setAudioPrompt("");
     setAudioGenerating(false);
     setAudioPlaying(false);
@@ -739,10 +760,27 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                   <p className="text-xs text-amber-600">⚠️ Prompt transform unavailable, using your text directly.</p>
                 )}
 
+                {/* Credits Display */}
+                <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                  <Gauge className="w-4 h-4 text-primary flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-medium">{remaining}s / {total}s remaining</span>
+                      <Badge variant="secondary" className="text-[10px]">{plan}</Badge>
+                    </div>
+                    <Progress value={usedPercent} className="h-1.5" />
+                  </div>
+                  {rawPrompt.trim() && (
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      Cost: {getCost(parseInt(duration), mode)}s
+                    </span>
+                  )}
+                </div>
+
                 {/* Generate Button */}
                 <Button
                   className="w-full gap-2 h-11"
-                  disabled={!rawPrompt.trim() || isTransforming}
+                  disabled={!rawPrompt.trim() || isTransforming || !canGenerate(parseInt(duration), mode)}
                   onClick={handleGenerate}
                   size="lg"
                 >
@@ -750,6 +788,11 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Engineering prompt...
+                    </>
+                  ) : !canGenerate(parseInt(duration), mode) ? (
+                    <>
+                      <Gauge className="w-4 h-4" />
+                      Not enough credits
                     </>
                   ) : (
                     <>
@@ -950,8 +993,22 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                     <Button variant="outline" asChild>
                       <a href={videoUrl} download target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4" /></a>
                     </Button>
+                    <Button variant="outline" className="gap-1.5" onClick={() => setShowSocialPanel(!showSocialPanel)}>
+                      <Share2 className="w-4 h-4" /> Post
+                    </Button>
                     <Button variant="outline" onClick={handleReset}><RotateCcw className="w-4 h-4" /></Button>
                   </div>
+
+                  {/* Social Post Panel */}
+                  {showSocialPanel && (
+                    <div className="border rounded-lg p-3 bg-muted/30">
+                      <VideoToSocialPanel
+                        videoUrl={videoUrl}
+                        aspectRatio={aspectRatio}
+                        onClose={() => setShowSocialPanel(false)}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

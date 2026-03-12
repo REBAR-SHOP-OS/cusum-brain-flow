@@ -13635,6 +13635,80 @@ export type Database = {
         }
         Relationships: []
       }
+      video_credits: {
+        Row: {
+          created_at: string
+          id: string
+          period_end: string
+          period_start: string
+          plan: string
+          total_seconds: number
+          updated_at: string
+          used_seconds: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          period_end?: string
+          period_start?: string
+          plan?: string
+          total_seconds?: number
+          updated_at?: string
+          used_seconds?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          period_end?: string
+          period_start?: string
+          plan?: string
+          total_seconds?: number
+          updated_at?: string
+          used_seconds?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      video_usage_log: {
+        Row: {
+          created_at: string
+          credits_id: string | null
+          generation_mode: string
+          id: string
+          prompt: string | null
+          seconds_used: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits_id?: string | null
+          generation_mode: string
+          id?: string
+          prompt?: string | null
+          seconds_used: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits_id?: string | null
+          generation_mode?: string
+          id?: string
+          prompt?: string | null
+          seconds_used?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_usage_log_credits_id_fkey"
+            columns: ["credits_id"]
+            isOneToOne: false
+            referencedRelation: "video_credits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vizzy_fix_requests: {
         Row: {
           affected_area: string | null
