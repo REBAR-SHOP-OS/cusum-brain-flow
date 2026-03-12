@@ -48,19 +48,19 @@ const modeConfigs: ModeConfig[] = [
     id: "fast", label: "Fast", description: "Quick iterations for social content",
     icon: <Zap className="w-4 h-4" />, provider: "sora", model: "sora-2",
     maxClipDuration: 12, badge: "~2 min",
-    durationOptions: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }],
+    durationOptions: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
   },
   {
     id: "balanced", label: "Balanced", description: "High-quality cinematic video",
     icon: <Film className="w-4 h-4" />, provider: "veo", model: "veo-3.1",
     maxClipDuration: 8, badge: "~3 min",
-    durationOptions: [{ value: "4", label: "4s" }, { value: "6", label: "6s" }, { value: "8", label: "8s" }],
+    durationOptions: [{ value: "4", label: "4s" }, { value: "6", label: "6s" }, { value: "8", label: "8s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
   },
   {
     id: "premium", label: "Premium", description: "Highest fidelity production quality",
     icon: <Crown className="w-4 h-4" />, provider: "sora", model: "sora-2-pro",
     maxClipDuration: 12, badge: "~5 min",
-    durationOptions: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }],
+    durationOptions: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
   },
 ];
 
