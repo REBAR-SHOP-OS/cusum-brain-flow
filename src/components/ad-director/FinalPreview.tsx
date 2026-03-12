@@ -199,7 +199,13 @@ export function FinalPreview({
 
       {/* Export */}
       <Button
-        onClick={onExport}
+        onClick={() => {
+          if (isAssembled && finalVideoUrl && onOpenExportDialog) {
+            onOpenExportDialog();
+          } else {
+            onExport();
+          }
+        }}
         disabled={!allCompleted || exporting || isRendering}
         className="w-full h-10 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-sm font-semibold"
       >
