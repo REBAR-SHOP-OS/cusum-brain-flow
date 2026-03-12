@@ -144,10 +144,10 @@ export function MusicTab() {
           </div>
         )}
         {tracks.map(track => (
-          <button
+          <div
             key={track.id}
             onClick={() => setSelectedTrack(track.id)}
-            className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left ${
+            className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left cursor-pointer ${
               selectedTrack === track.id ? "border-primary bg-primary/5" : "border-border/30 hover:border-border/60"
             }`}
           >
@@ -162,7 +162,7 @@ export function MusicTab() {
               <div className="text-[10px] text-muted-foreground">{track.duration}</div>
             </div>
             <Badge variant="secondary" className="text-[9px]">{track.type}</Badge>
-          </button>
+          </div>
         ))}
       </div>
 
