@@ -486,6 +486,7 @@ export async function stitchClips(
     let clipIndex = 0;
     let clipStartCumulativeTime = 0;
     const crossfadeDur = overlays?.crossfadeDuration ?? 0.5;
+    let clipPreStartedByCrossfade = false;
 
     // Pre-seek next clip for crossfade readiness
     const prepareNextClip = (nextIdx: number) => {
@@ -508,8 +509,16 @@ export async function stitchClips(
 
       const { video, targetDuration } = validatedClips[clipIndex];
       const effectiveDuration = Math.min(targetDuration, video.duration || targetDuration);
-      clipStartCumulativeTime = cumulativeTime;
-      video.currentTime = 0;
+      const wasPreStarted = clipPreStartedByCrossfade;
+      clipPreStartedByCrossfade = false;
+
+      if (wasPreStarted) {
+        // Clip already playing from crossfade — adjust cumulative time for elapsed time
+        clipStartCumulativeTime = cumulativeTime - video.currentTime;
+      } else {
+        clipStartCumulativeTime = cumulativeTime;
+        video.currentTime = 0;
+      }
 
       // Pre-load next clip for crossfade
       prepareNextClip(clipIndex + 1);
@@ -569,6 +578,7 @@ export async function stitchClips(
             // Start next clip video if not already
             if (!nextClipStarted) {
               nextClipStarted = true;
+              clipPreStartedByCrossfade = true;
               const nv = validatedClips[clipIndex + 1].video;
               nv.currentTime = 0;
               nv.play().catch(() => {});
@@ -612,20 +622,25 @@ export async function stitchClips(
         drawFrame();
       };
 
-      video.addEventListener("playing", startDrawing, { once: true });
-      video.play().catch((err) => {
-        video.removeEventListener("playing", startDrawing);
-        console.error(`[stitchClips] Clip ${clipIndex + 1} play failed:`, err);
-        ctx.fillStyle = "#000000";
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = "#ff4444";
-        ctx.font = "24px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(`Scene ${clipIndex + 1} — playback failed`, W / 2, H / 2);
-        ctx.textAlign = "start";
-        hasDrawnFrame = true;
-        setTimeout(() => finishClip(), 1000);
-      });
+      if (wasPreStarted) {
+        // Already playing from crossfade — just attach draw loop directly
+        startDrawing();
+      } else {
+        video.addEventListener("playing", startDrawing, { once: true });
+        video.play().catch((err) => {
+          video.removeEventListener("playing", startDrawing);
+          console.error(`[stitchClips] Clip ${clipIndex + 1} play failed:`, err);
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#ff4444";
+          ctx.font = "24px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(`Scene ${clipIndex + 1} — playback failed`, W / 2, H / 2);
+          ctx.textAlign = "start";
+          hasDrawnFrame = true;
+          setTimeout(() => finishClip(), 1000);
+        });
+      }
     };
 
     const renderEndCard = () => {
