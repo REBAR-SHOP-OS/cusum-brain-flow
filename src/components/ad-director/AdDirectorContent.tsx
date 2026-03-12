@@ -7,7 +7,7 @@ import { StoryboardTimeline } from "./StoryboardTimeline";
 import { ContinuityInspector } from "./ContinuityInspector";
 import { FinalPreview } from "./FinalPreview";
 import { Progress } from "@/components/ui/progress";
-import { FileText, Layers, Film, Loader2 } from "lucide-react";
+import { FileText, Layers, Film, Loader2, ArrowLeft } from "lucide-react";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
   type ContinuityProfile, type ClipOutput, type ModelOverrides,
