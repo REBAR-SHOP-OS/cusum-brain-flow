@@ -635,6 +635,19 @@ export function ProVideoEditor({
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover" });
+        // Measure actual voiceover duration
+        try {
+          const tempAudio = new Audio(url);
+          await new Promise<void>((resolve) => {
+            tempAudio.addEventListener("loadedmetadata", () => {
+              if (tempAudio.duration && isFinite(tempAudio.duration)) {
+                setVoiceoverDurations(prev => ({ ...prev, [scene.id]: tempAudio.duration }));
+              }
+              resolve();
+            });
+            tempAudio.addEventListener("error", () => resolve());
+          });
+        } catch { /* ignore measurement errors */ }
       }
       // Replace voiceover tracks, keep music
       setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
