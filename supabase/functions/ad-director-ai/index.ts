@@ -192,22 +192,58 @@ function extractToolResult(data: any): any {
     }
   }
 
-  // 2. Fallback: model returned content as text
+  // 2. Fallback: model returned content as text (also check on finish_reason error)
   const content = data.choices?.[0]?.message?.content || "";
-  if (!content) {
-    const finishReason = data.choices?.[0]?.finish_reason;
-    // Gemini sometimes returns finish_reason "error" with MALFORMED_FUNCTION_CALL — treat as retryable
-    if (finishReason === "error") {
-      console.error("extractToolResult: AI returned finish_reason=error (likely MALFORMED_FUNCTION_CALL). Will throw for retry.");
-      throw new Error("AI returned malformed function call — please retry");
+  const finishReason = data.choices?.[0]?.finish_reason;
+
+  // Even on finish_reason "error", check if there's parseable content first
+  if (content) {
+    console.warn("extractToolResult: extracting JSON from content text. finish_reason:", finishReason, "length:", content.length);
+    try {
+      return extractJSONFromText(content);
+    } catch (e) {
+      // If finish_reason was error, throw retryable; otherwise re-throw parse error
+      if (finishReason === "error") {
+        console.error("extractToolResult: content parse failed + finish_reason=error. Retryable.");
+        throw new Error("AI returned malformed function call — please retry");
+      }
+      throw e;
     }
-    console.error("extractToolResult: No tool_calls and no content. finish_reason:", finishReason, "keys:", JSON.stringify(Object.keys(data.choices?.[0]?.message || {})), "raw:", JSON.stringify(data).slice(0, 800));
-    throw new Error("AI did not return structured data");
   }
 
-  console.warn("extractToolResult: AI returned content instead of tool_calls, extracting JSON from text. Length:", content.length);
+  // No content at all
+  if (finishReason === "error") {
+    console.error("extractToolResult: finish_reason=error, no content. Retryable.");
+    throw new Error("AI returned malformed function call — please retry");
+  }
+  console.error("extractToolResult: No tool_calls and no content. finish_reason:", finishReason, "raw:", JSON.stringify(data).slice(0, 800));
+  throw new Error("AI did not return structured data");
+}
 
-  return extractJSONFromText(content);
+/** Wraps callAI + extractToolResult with up to 2 retries on malformed function calls */
+async function callAIAndExtract(
+  apiKey: string,
+  model: string,
+  messages: any[],
+  tools: any[],
+  toolChoice: any,
+  modelOverride?: string,
+): Promise<{ result: any; modelUsed: string; fallbackUsed: boolean }> {
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const { data, modelUsed, fallbackUsed } = await callAI(apiKey, model, messages, tools, toolChoice, modelOverride);
+    try {
+      return { result: extractToolResult(data), modelUsed, fallbackUsed };
+    } catch (e) {
+      const isRetryable = e instanceof Error && e.message.includes("malformed function call");
+      if (isRetryable && attempt < MAX_RETRIES) {
+        console.warn(`callAIAndExtract: retry ${attempt + 1}/${MAX_RETRIES} after malformed function call`);
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error("callAIAndExtract: exhausted retries");
 }
 
 function extractJSONFromText(content: string): any {
@@ -547,7 +583,7 @@ IMPORTANT:
 Script:
 ${script}`;
 
-  const { data, modelUsed, fallbackUsed } = await callAI(
+  return await callAIAndExtract(
     apiKey,
     MODEL_ROUTES["analyze-script"],
     [{ role: "system", content: ANALYZE_SCRIPT_PROMPT }, { role: "user", content: userPrompt }],
@@ -555,8 +591,6 @@ ${script}`;
     { type: "function", function: { name: "create_storyboard" } },
     modelOverride,
   );
-
-  return { result: extractToolResult(data), modelUsed, fallbackUsed };
 }
 
 async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
@@ -581,7 +615,7 @@ Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
 ${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the first scene."}
 ${continuityProfile ? `Continuity: ${JSON.stringify(continuityProfile)}` : ""}`;
 
-  const { data, modelUsed, fallbackUsed } = await callAI(
+  return await callAIAndExtract(
     apiKey,
     MODEL_ROUTES["write-cinematic-prompt"],
     [{ role: "system", content: WRITE_CINEMATIC_PROMPT_SYSTEM }, { role: "user", content: userPrompt }],
@@ -589,8 +623,6 @@ ${continuityProfile ? `Continuity: ${JSON.stringify(continuityProfile)}` : ""}`;
     { type: "function", function: { name: "write_prompt" } },
     modelOverride,
   );
-
-  return { result: extractToolResult(data), modelUsed, fallbackUsed };
 }
 
 async function handleScorePromptQuality(apiKey: string, body: any, modelOverride?: string) {
@@ -608,7 +640,7 @@ Scene Context:
 
 Brand: ${brand?.name || "N/A"} targeting ${brand?.targetAudience || "B2B"}`;
 
-  const { data, modelUsed, fallbackUsed } = await callAI(
+  return await callAIAndExtract(
     apiKey,
     MODEL_ROUTES["score-prompt-quality"],
     [{ role: "system", content: SCORE_QUALITY_PROMPT }, { role: "user", content: userPrompt }],
@@ -616,8 +648,6 @@ Brand: ${brand?.name || "N/A"} targeting ${brand?.targetAudience || "B2B"}`;
     { type: "function", function: { name: "score_prompt" } },
     modelOverride,
   );
-
-  return { result: extractToolResult(data), modelUsed, fallbackUsed };
 }
 
 async function handleImprovePrompt(apiKey: string, body: any, modelOverride?: string) {
@@ -635,7 +665,7 @@ ${qualityScore?.suggestion ? `Suggestion: ${qualityScore.suggestion}` : ""}
 Scene: ${scene?.objective || "N/A"} — ${scene?.emotionalTone || "N/A"}
 Brand: ${brand?.name || "N/A"}`;
 
-  const { data, modelUsed, fallbackUsed } = await callAI(
+  return await callAIAndExtract(
     apiKey,
     MODEL_ROUTES["improve-prompt"],
     [{ role: "system", content: IMPROVE_PROMPT_SYSTEM }, { role: "user", content: userPrompt }],
@@ -643,8 +673,6 @@ Brand: ${brand?.name || "N/A"}`;
     { type: "function", function: { name: "write_prompt" } },
     modelOverride,
   );
-
-  return { result: extractToolResult(data), modelUsed, fallbackUsed };
 }
 
 async function handleSimpleTextTask(apiKey: string, taskType: TaskType, body: any, systemPrompt: string, modelOverride?: string) {
