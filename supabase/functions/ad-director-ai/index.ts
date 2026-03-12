@@ -640,7 +640,7 @@ Scene Context:
 
 Brand: ${brand?.name || "N/A"} targeting ${brand?.targetAudience || "B2B"}`;
 
-  const { data, modelUsed, fallbackUsed } = await callAI(
+  return await callAIAndExtract(
     apiKey,
     MODEL_ROUTES["score-prompt-quality"],
     [{ role: "system", content: SCORE_QUALITY_PROMPT }, { role: "user", content: userPrompt }],
@@ -648,8 +648,6 @@ Brand: ${brand?.name || "N/A"} targeting ${brand?.targetAudience || "B2B"}`;
     { type: "function", function: { name: "score_prompt" } },
     modelOverride,
   );
-
-  return { result: extractToolResult(data), modelUsed, fallbackUsed };
 }
 
 async function handleImprovePrompt(apiKey: string, body: any, modelOverride?: string) {
