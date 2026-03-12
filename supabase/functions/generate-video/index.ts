@@ -176,10 +176,21 @@ const WAN_SIZE_MAP: Record<string, string> = {
   "1:1": "1440*1440",
 };
 
-async function wanGenerate(apiKey: string, prompt: string, duration: number, aspectRatio?: string) {
+async function wanGenerate(
+  apiKey: string, prompt: string, duration: number,
+  aspectRatio?: string, negativePrompt?: string, audioUrl?: string,
+) {
   const wanDuration = Math.max(2, Math.min(15, duration));
   const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
   const size = WAN_SIZE_MAP[aspectRatio || "16:9"] || "1920*1080";
+
+  const params: Record<string, unknown> = {
+    size,
+    duration: wanDuration,
+    prompt_extend: true,
+  };
+  if (negativePrompt) params.negative_prompt = negativePrompt;
+  if (audioUrl) params.audio_url = audioUrl;
 
   const resp = await fetch(url, {
     method: "POST",
@@ -191,11 +202,7 @@ async function wanGenerate(apiKey: string, prompt: string, duration: number, asp
     body: JSON.stringify({
       model: "wan2.6-t2v",
       input: { prompt },
-      parameters: {
-        size,
-        duration: wanDuration,
-        prompt_extend: true,
-      },
+      parameters: params,
     }),
   });
 
@@ -214,6 +221,56 @@ async function wanGenerate(apiKey: string, prompt: string, duration: number, asp
   const data = await resp.json();
   const taskId = data?.output?.task_id;
   if (!taskId) throw new Error("Wan did not return a task_id");
+  return { jobId: taskId, provider: "wan" };
+}
+
+// ─── Wan I2V (Image-to-Video) helper ────────────────────────
+
+async function wanI2vGenerate(
+  apiKey: string, prompt: string, imageUrl: string, duration: number,
+  aspectRatio?: string, negativePrompt?: string, flash = false,
+) {
+  const wanDuration = Math.max(2, Math.min(15, duration));
+  const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
+  const size = WAN_SIZE_MAP[aspectRatio || "16:9"] || "1920*1080";
+  const model = flash ? "wan2.6-i2v-flash" : "wan2.6-i2v";
+
+  const params: Record<string, unknown> = {
+    size,
+    duration: wanDuration,
+    prompt_extend: true,
+  };
+  if (negativePrompt) params.negative_prompt = negativePrompt;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "X-DashScope-Async": "enable",
+    },
+    body: JSON.stringify({
+      model,
+      input: { prompt, img_url: imageUrl },
+      parameters: params,
+    }),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Wan I2V submit error:", resp.status, errText);
+    let detail = `Wan I2V generation failed (${resp.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      const apiMsg = errJson?.message || errJson?.code;
+      if (apiMsg) detail = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
+    } catch { /* use default */ }
+    throw new Error(detail);
+  }
+
+  const data = await resp.json();
+  const taskId = data?.output?.task_id;
+  if (!taskId) throw new Error("Wan I2V did not return a task_id");
   return { jobId: taskId, provider: "wan" };
 }
 
@@ -486,6 +543,9 @@ serve(async (req) => {
       model: z.string().max(50).optional(),
       fileId: z.string().max(500).optional(),
       existingSceneUrls: z.record(z.string(), z.string()).optional(),
+      imageUrl: z.string().max(2000).optional(),
+      audioUrl: z.string().max(2000).optional(),
+      negativePrompt: z.string().max(2000).optional(),
     });
     const parsed = videoSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -494,7 +554,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls } = parsed.data;
+    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt } = parsed.data;
 
     const isVeo = provider === "veo";
     const isWan = provider === "wan";
@@ -591,7 +651,13 @@ serve(async (req) => {
       let result: { jobId: string; provider: string };
       try {
         if (isWan) {
-          result = await wanGenerate(apiKey, prompt, duration || 8);
+          // Check if this is an I2V request (image URL provided)
+          if (imageUrl) {
+            const isFlash = model === "wan2.6-i2v-flash";
+            result = await wanI2vGenerate(apiKey, prompt, imageUrl, duration || 8, aspectRatio, negativePrompt, isFlash);
+          } else {
+            result = await wanGenerate(apiKey, prompt, duration || 8, aspectRatio, negativePrompt, inputAudioUrl);
+          }
         } else if (isVeo) {
           try {
             result = await veoGenerate(apiKey, prompt, duration || 8);
@@ -736,7 +802,7 @@ serve(async (req) => {
           try {
             let result: { jobId: string; provider: string };
             if (isWan) {
-              result = await wanGenerate(apiKey, scenePrompt, clipDuration, aspect_ratio);
+              result = await wanGenerate(apiKey, scenePrompt, clipDuration, undefined, negativePrompt, inputAudioUrl);
             } else if (isVeo) {
               try {
                 result = await veoGenerate(apiKey, scenePrompt, clipDuration);

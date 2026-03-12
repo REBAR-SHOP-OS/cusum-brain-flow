@@ -92,6 +92,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<MediaType>("video");
   const [selectedModel, setSelectedModel] = useState("gpt-image-1");
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
+  const [customAudioStorageUrl, setCustomAudioStorageUrl] = useState<string | null>(null);
 
   // Image generation state
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
@@ -151,7 +154,8 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     return (vm?.provider as "sora" | "veo" | "wan") || currentMode.provider;
   }, [selectedModel, mediaType, currentMode.provider]);
 
-  const effectiveMaxClip = effectiveVideoProvider === "wan" ? 8 : currentMode.maxClipDuration;
+  const effectiveMaxClip = effectiveVideoProvider === "wan" ? 15 : currentMode.maxClipDuration;
+  const isI2vModel = selectedModel === "wan-2.6-i2v" || selectedModel === "wan-2.6-i2v-flash";
 
   const cleanup = useCallback(() => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
@@ -336,6 +340,12 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     if (mediaType === "image") { handleGenerateImage(); return; }
     if (mediaType === "audio") { handleGenerateStandaloneAudio(); return; }
 
+    // I2V requires a reference image
+    if (isI2vModel && !referenceImage) {
+      toast({ title: "Reference image required", description: "Wan I2V models need a reference image to animate.", variant: "destructive" });
+      return;
+    }
+
     // Video generation (existing flow)
     const durationSecs = parseInt(duration);
     const creditCost = getCost(durationSecs, mode);
@@ -382,6 +392,51 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     const isMultiScene = requestedDuration > effectiveMaxClip;
     isMultiRef.current = isMultiScene;
 
+    // Upload reference image to storage if present (for I2V)
+    let refImageStorageUrl: string | undefined;
+    if (referenceImage && isI2vModel) {
+      try {
+        setProgressLabel("Uploading reference image...");
+        const resp = await fetch(referenceImage);
+        const blob = await resp.blob();
+        const { data: { user } } = await supabase.auth.getUser();
+        const fileName = `ref-images/${user?.id}/${crypto.randomUUID()}.${blob.type.includes("png") ? "png" : "jpg"}`;
+        const { error: upErr } = await supabase.storage.from("social-media-assets").upload(fileName, blob, { contentType: blob.type, upsert: false });
+        if (upErr) throw upErr;
+        const { data: pubData } = supabase.storage.from("social-media-assets").getPublicUrl(fileName);
+        refImageStorageUrl = pubData.publicUrl;
+      } catch (err: any) {
+        console.error("Ref image upload failed:", err);
+        toast({ title: "Image upload failed", description: err.message, variant: "destructive" });
+        setStatus("idle"); return;
+      }
+    }
+
+    // Upload custom audio file to storage if present (for Wan audio sync)
+    let audioStorageUrl: string | undefined;
+    if (customAudioFile && effectiveVideoProvider === "wan") {
+      try {
+        setProgressLabel("Uploading audio file...");
+        const { data: { user } } = await supabase.auth.getUser();
+        const ext = customAudioFile.name.split(".").pop() || "mp3";
+        const fileName = `audio-sync/${user?.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("social-media-assets").upload(fileName, customAudioFile, { contentType: customAudioFile.type, upsert: false });
+        if (upErr) throw upErr;
+        const { data: pubData } = supabase.storage.from("social-media-assets").getPublicUrl(fileName);
+        audioStorageUrl = pubData.publicUrl;
+      } catch (err: any) {
+        console.error("Audio file upload failed:", err);
+        toast({ title: "Audio upload failed", description: err.message, variant: "destructive" });
+        setStatus("idle"); return;
+      }
+    }
+
+    // Build extra params for Wan models
+    const wanExtras: Record<string, unknown> = {};
+    if (refImageStorageUrl) wanExtras.imageUrl = refImageStorageUrl;
+    if (audioStorageUrl) wanExtras.audioUrl = audioStorageUrl;
+    if (negativePrompt.trim()) wanExtras.negativePrompt = negativePrompt.trim();
+
     try {
       if (isMultiScene) {
         const sceneCount = Math.ceil(requestedDuration / effectiveMaxClip);
@@ -390,6 +445,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           action: "generate-multi", provider: effectiveVideoProvider, prompt: finalPrompt,
           duration: requestedDuration,
           model: selectedModel,
+          ...wanExtras,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
@@ -411,6 +467,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt,
           duration: requestedDuration,
           model: selectedModel,
+          ...wanExtras,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
@@ -443,6 +500,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     setStandaloneAudioUrl(null); setStandaloneAudioGenerating(false);
     setAnalysisResults(null); setShowInsights(false); setAnalyzing(false);
     setSuggestedHashtags([]); setModerationStatus("safe");
+    setNegativePrompt(""); setCustomAudioFile(null); setCustomAudioStorageUrl(null);
   };
 
   const handleAnalyzeVideo = async () => {
@@ -924,6 +982,10 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 onAudioTypeChange={setAudioType}
                 selectedModel={selectedModel}
                 onModelChange={setSelectedModel}
+                negativePrompt={negativePrompt}
+                onNegativePromptChange={setNegativePrompt}
+                customAudioFile={customAudioFile}
+                onCustomAudioFileChange={setCustomAudioFile}
               />
             </div>
           )}

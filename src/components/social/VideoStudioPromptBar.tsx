@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import {
   Video, Image, Music, Zap, Film, Crown, Sparkles, Loader2,
-  ChevronDown, Eye, EyeOff, Gauge, Upload, X, Cpu
+  ChevronDown, Eye, EyeOff, Gauge, Upload, X, Cpu, ImagePlus, Volume2, Ban
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -61,6 +61,8 @@ export const VIDEO_MODELS: ModelOption[] = [
   { id: "sora-2", label: "OpenAI Sora", provider: "sora", costLabel: "Credits", free: false },
   { id: "sora-2-pro", label: "Sora Pro", provider: "sora", costLabel: "Credits", free: false },
   { id: "wan-2.6", label: "Alibaba Wan 2.6", provider: "wan", costLabel: "~$0.10/s", free: false },
+  { id: "wan-2.6-i2v", label: "Wan 2.6 Image→Video", provider: "wan", costLabel: "~$0.10/s", free: false },
+  { id: "wan-2.6-i2v-flash", label: "Wan 2.6 I2V Flash", provider: "wan", costLabel: "~$0.05/s", free: false },
 ];
 
 export const AUDIO_MODELS: ModelOption[] = [
@@ -115,6 +117,10 @@ interface VideoStudioPromptBarProps {
   onAudioTypeChange?: (t: "music" | "sfx") => void;
   selectedModel: string;
   onModelChange: (m: string) => void;
+  negativePrompt?: string;
+  onNegativePromptChange?: (val: string) => void;
+  customAudioFile?: File | null;
+  onCustomAudioFileChange?: (file: File | null) => void;
 }
 
 export function VideoStudioPromptBar({
@@ -125,15 +131,22 @@ export function VideoStudioPromptBar({
   isGenerating, isTransforming, onGenerate, referenceImage, onReferenceImageChange,
   mediaType, onMediaTypeChange, audioType = "music", onAudioTypeChange,
   selectedModel, onModelChange,
+  negativePrompt = "", onNegativePromptChange,
+  customAudioFile, onCustomAudioFileChange,
 }: VideoStudioPromptBarProps) {
   const [modeOpen, setModeOpen] = useState(false);
   const [durationOpen, setDurationOpen] = useState(false);
   const [aspectOpen, setAspectOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [showNegativePrompt, setShowNegativePrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const modelOptions = mediaType === "image" ? IMAGE_MODELS : mediaType === "audio" ? AUDIO_MODELS : VIDEO_MODELS;
   const currentModelOption = modelOptions.find(m => m.id === selectedModel) || modelOptions[0];
+
+  const isWanModel = currentModelOption?.provider === "wan";
+  const isI2vModel = selectedModel === "wan-2.6-i2v" || selectedModel === "wan-2.6-i2v-flash";
 
   const currentMode = modes.find(m => m.id === mode) || modes[1];
   const currentAspect = aspectOptions.find(a => a.value === aspectRatio) || aspectOptions[0];
@@ -465,6 +478,61 @@ export function VideoStudioPromptBar({
             </>
           )}
 
+          {/* Custom audio upload — Wan T2V only */}
+          {mediaType === "video" && isWanModel && !isI2vModel && (
+            <>
+              <button
+                onClick={() => audioInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/30 transition-colors"
+              >
+                <Volume2 className="w-3 h-3" />
+                {customAudioFile ? customAudioFile.name.slice(0, 12) : "Audio sync"}
+              </button>
+              {customAudioFile && (
+                <button
+                  onClick={() => onCustomAudioFileChange?.(null)}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive border border-destructive/20 transition-colors hover:bg-destructive/20"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              )}
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/mp3,audio/wav,audio/mpeg,.mp3,.wav"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onCustomAudioFileChange?.(file);
+                  if (audioInputRef.current) audioInputRef.current.value = "";
+                }}
+                className="hidden"
+              />
+            </>
+          )}
+
+          {/* Negative prompt toggle — Wan models only */}
+          {mediaType === "video" && isWanModel && (
+            <button
+              onClick={() => setShowNegativePrompt(v => !v)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border/30 transition-colors",
+                showNegativePrompt
+                  ? "bg-destructive/10 text-destructive border-destructive/20"
+                  : "bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground"
+              )}
+            >
+              <Ban className="w-3 h-3" />
+              Negative
+            </button>
+          )}
+
+          {/* I2V hint badge */}
+          {mediaType === "video" && isI2vModel && !referenceImage && (
+            <Badge variant="outline" className="text-[10px] h-5 px-2 bg-warning/10 text-warning border-warning/20 rounded-full">
+              ⚠ Upload ref image
+            </Badge>
+          )}
+
           {/* Engineered prompt toggle — video only */}
           {mediaType === "video" && engineeredPrompt && (
             <button
@@ -507,6 +575,19 @@ export function VideoStudioPromptBar({
             </div>
           )}
         </div>
+
+        {/* Negative prompt input */}
+        {showNegativePrompt && mediaType === "video" && isWanModel && (
+          <div className="px-3 pb-2">
+            <input
+              type="text"
+              value={negativePrompt}
+              onChange={(e) => onNegativePromptChange?.(e.target.value)}
+              placeholder="Things to avoid: blur, text, watermark, low quality..."
+              className="w-full px-3 py-2 rounded-lg bg-destructive/5 border border-destructive/20 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-destructive/30"
+            />
+          </div>
+        )}
 
         {/* Engineered prompt preview */}
         {showEngineered && engineeredPrompt && mediaType === "video" && (
