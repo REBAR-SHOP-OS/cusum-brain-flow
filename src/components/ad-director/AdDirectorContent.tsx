@@ -636,6 +636,8 @@ export function AdDirectorContent() {
               onAssetsChange={setAssets}
               modelOverrides={modelOverrides}
               onModelOverridesChange={setModelOverrides}
+              onSaveBrandKit={() => saveBrandKit.mutate(brand)}
+              savingBrandKit={saveBrandKit.isPending}
             />
           </div>
         )}
