@@ -157,7 +157,7 @@ serve(async (req) => {
         .update({ is_active: false })
         .in("id", profileIds);
 
-      console.log(`Evening auto clock-out: closed ${idsToClose.length} office shifts, exempted ${shopExempted.length} shop workers`);
+      console.log(`Evening 6 PM auto clock-out: closed ${idsToClose.length} office shifts, exempted ${shopExempted.length} shop workers`);
 
       return new Response(
         JSON.stringify({ ok: true, mode: "evening", closed: idsToClose.length, exempted: shopExempted.length, clock_out_time: clockOutTime }),
