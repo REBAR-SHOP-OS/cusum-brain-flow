@@ -141,18 +141,19 @@ export function ProVideoEditor({
 
     setAiProcessing(true);
     try {
-      const result = await invokeEdgeFunction<{ result: { prompt: string } }>(
+      const result = await invokeEdgeFunction<{ editedPrompt: string }>(
         "edit-video-prompt",
-        { originalPrompt: scene.prompt, editAction: aiCommand }
+        { originalPrompt: scene.prompt, editAction: "custom", editDetail: aiCommand }
       );
-      const newPrompt = result.result?.prompt || result.result;
+      const newPrompt = result.editedPrompt;
       if (typeof newPrompt === "string" && newPrompt.length > 0) {
         pushHistory(storyboard);
         const updated = storyboard.map((s, i) =>
           i === selectedSceneIndex ? { ...s, prompt: newPrompt, promptQuality: undefined } : s
         );
         onUpdateStoryboard?.(updated);
-        toast({ title: "Prompt updated", description: `Scene ${selectedSceneIndex + 1} modified by AI` });
+        onRegenerateScene?.(scene.id);
+        toast({ title: "Regenerating scene", description: "AI is applying your edit…" });
       }
       setAiCommand("");
     } catch (err: any) {
