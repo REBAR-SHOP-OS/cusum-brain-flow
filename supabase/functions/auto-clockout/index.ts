@@ -92,7 +92,7 @@ serve(async (req) => {
       );
 
     } else {
-      // Evening mode: close ONLY office worker shifts at 5 PM ET
+      // Evening mode: close ONLY office worker shifts at 6 PM ET
       // Shop workers (non-@rebar.shop emails OR Kourosh Zand) are exempt
       const clockOutTime = new Date().toISOString();
 
