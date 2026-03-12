@@ -147,8 +147,40 @@ async function callAI(
 
 function extractToolResult(data: any): any {
   const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-  if (!toolCall?.function?.arguments) throw new Error("AI did not return structured data");
-  return JSON.parse(toolCall.function.arguments);
+  if (toolCall?.function?.arguments) {
+    return JSON.parse(toolCall.function.arguments);
+  }
+
+  // Fallback: model returned content instead of a tool call — extract JSON from it
+  const content = data.choices?.[0]?.message?.content || "";
+  if (!content) throw new Error("AI did not return structured data");
+
+  let cleaned = content
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
+
+  const jsonStart = cleaned.search(/[\{\[]/);
+  const jsonEnd = Math.max(cleaned.lastIndexOf("}"), cleaned.lastIndexOf("]"));
+  if (jsonStart === -1 || jsonEnd === -1) throw new Error("AI did not return structured data");
+
+  cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Fix trailing commas and control chars
+    cleaned = cleaned
+      .replace(/,\s*}/g, "}")
+      .replace(/,\s*]/g, "]")
+      .replace(/[\x00-\x1F\x7F]/g, "");
+    try {
+      return JSON.parse(cleaned);
+    } catch (e) {
+      console.error("Failed to parse AI content as JSON:", content.slice(0, 500));
+      throw new Error("AI did not return structured data");
+    }
+  }
 }
 
 function extractContent(data: any): string {
