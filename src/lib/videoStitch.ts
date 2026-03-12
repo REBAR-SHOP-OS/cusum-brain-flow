@@ -27,6 +27,8 @@ export interface StitchOverlayOptions {
     segments: { text: string; startTime: number; endTime: number }[];
   };
   audioUrl?: string;
+  musicUrl?: string;
+  musicVolume?: number; // 0-1, default 0.3
 }
 
 export interface StitchProgress {
@@ -279,30 +281,63 @@ export async function stitchClips(
   const canvasStream = canvas.captureStream(30);
   const combinedStream = new MediaStream([...canvasStream.getVideoTracks()]);
 
-  // Audio setup
-  let audioElement: HTMLAudioElement | null = null;
+  // Audio setup — mix voice + music via AudioContext
+  let voiceElement: HTMLAudioElement | null = null;
+  let musicElement: HTMLAudioElement | null = null;
   let audioCtx: AudioContext | null = null;
 
-  if (overlays?.audioUrl) {
+  const hasVoice = !!overlays?.audioUrl;
+  const hasMusic = !!overlays?.musicUrl;
+
+  if (hasVoice || hasMusic) {
     try {
-      const audioBlobUrl = await fetchAsBlob(overlays.audioUrl);
-      audioElement = document.createElement("audio");
-      audioElement.preload = "auto";
-      audioElement.src = audioBlobUrl;
-      await new Promise<void>((res, rej) => {
-        audioElement!.oncanplaythrough = () => res();
-        audioElement!.onerror = () => rej(new Error("Audio load failed"));
-        setTimeout(() => res(), 5000);
-      });
       audioCtx = new AudioContext();
-      const audioSource = audioCtx.createMediaElementSource(audioElement);
       const audioDest = audioCtx.createMediaStreamDestination();
-      audioSource.connect(audioDest);
-      audioSource.connect(audioCtx.destination);
+
+      // Voice track
+      if (hasVoice) {
+        const voiceBlobUrl = await fetchAsBlob(overlays!.audioUrl!);
+        voiceElement = document.createElement("audio");
+        voiceElement.preload = "auto";
+        voiceElement.src = voiceBlobUrl;
+        await new Promise<void>((res, rej) => {
+          voiceElement!.oncanplaythrough = () => res();
+          voiceElement!.onerror = () => rej(new Error("Voice audio load failed"));
+          setTimeout(() => res(), 5000);
+        });
+        const voiceSource = audioCtx.createMediaElementSource(voiceElement);
+        const voiceGain = audioCtx.createGain();
+        voiceGain.gain.value = 1.0;
+        voiceSource.connect(voiceGain);
+        voiceGain.connect(audioDest);
+        voiceSource.connect(audioCtx.destination);
+      }
+
+      // Music track
+      if (hasMusic) {
+        const musicBlobUrl = await fetchAsBlob(overlays!.musicUrl!);
+        musicElement = document.createElement("audio");
+        musicElement.preload = "auto";
+        musicElement.loop = true; // Loop music under entire video
+        musicElement.src = musicBlobUrl;
+        await new Promise<void>((res, rej) => {
+          musicElement!.oncanplaythrough = () => res();
+          musicElement!.onerror = () => rej(new Error("Music audio load failed"));
+          setTimeout(() => res(), 5000);
+        });
+        const musicSource = audioCtx.createMediaElementSource(musicElement);
+        const musicGain = audioCtx.createGain();
+        musicGain.gain.value = overlays?.musicVolume ?? 0.3;
+        musicSource.connect(musicGain);
+        musicGain.connect(audioDest);
+        musicSource.connect(audioCtx.destination);
+      }
+
       audioDest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
     } catch (e) {
       console.warn("[stitchClips] Audio mix failed, continuing without audio:", e);
-      audioElement = null;
+      voiceElement = null;
+      musicElement = null;
     }
   }
 
@@ -322,7 +357,8 @@ export async function stitchClips(
     recorder.onerror = () => reject(new Error("MediaRecorder error during stitch"));
 
     recorder.onstop = async () => {
-      if (audioElement) audioElement.pause();
+      if (voiceElement) voiceElement.pause();
+      if (musicElement) musicElement.pause();
       if (audioCtx) audioCtx.close().catch(() => {});
 
       // Phase 3: Post-stitch validation
@@ -343,8 +379,11 @@ export async function stitchClips(
 
     recorder.start(1000); // Request data every 1s for reliability
 
-    if (audioElement) {
-      audioElement.play().catch(() => console.warn("[stitchClips] Audio play failed"));
+    if (voiceElement) {
+      voiceElement.play().catch(() => console.warn("[stitchClips] Voice play failed"));
+    }
+    if (musicElement) {
+      musicElement.play().catch(() => console.warn("[stitchClips] Music play failed"));
     }
 
     // Phase 2: Render clips sequentially

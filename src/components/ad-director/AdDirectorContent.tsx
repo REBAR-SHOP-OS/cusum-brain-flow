@@ -91,6 +91,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
   const generatingAny = clips.some(c => c.status === "generating");
   const [exporting, setExporting] = useState(false);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
+  const [musicTrackUrl, setMusicTrackUrl] = useState<string | null>(null);
   const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
@@ -625,7 +626,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
       const finalUrl = await stitchClips(orderedClips, {
         logo: {
           url: brand.logoUrl || "",
-          enabled: !!brand.logoUrl, // Always enabled when logo exists
+          enabled: !!brand.logoUrl,
           size: 80,
         },
         endCard: {
@@ -642,6 +643,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
           segments: segments.map(s => ({ text: s.text, startTime: s.startTime, endTime: s.endTime })),
         },
         audioUrl,
+        musicUrl: musicTrackUrl || undefined,
+        musicVolume: 0.3,
       });
 
       setFinalVideoUrl(finalUrl.blobUrl);
@@ -899,6 +902,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
               onUpdateSegment={(id, text) => setSegments(prev => prev.map(s => s.id === id ? { ...s, text } : s))}
               onUpdateStoryboard={setStoryboard}
               onUpdateBrand={setBrand}
+              onMusicSelect={setMusicTrackUrl}
             />
           </div>
         )}

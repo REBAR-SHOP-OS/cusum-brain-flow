@@ -46,13 +46,14 @@ interface ProVideoEditorProps {
   onUpdateSegment?: (id: string, text: string) => void;
   onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
   onUpdateBrand?: (brand: BrandProfile) => void;
+  onMusicSelect?: (url: string | null) => void;
 }
 
 export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment,
-  onUpdateStoryboard, onUpdateBrand,
+  onUpdateStoryboard, onUpdateBrand, onMusicSelect,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -408,7 +409,9 @@ export function ProVideoEditor({
             onUpdateClipUrl={onUpdateClipUrl}
           />
         )}
-        {activeTab === "music" && <MusicTab />}
+        {activeTab === "music" && (
+          <MusicTab onTrackSelect={(track) => onMusicSelect?.(track?.url ?? null)} />
+        )}
         {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
         {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
         {activeTab === "logo" && (
