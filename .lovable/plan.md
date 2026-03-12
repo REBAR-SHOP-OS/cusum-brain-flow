@@ -1,27 +1,47 @@
 
 
-## Fix: Restore `admin` role for `ai@rebar.shop`
+## Activate Image & Audio Modes in Video Studio
 
-### Problem
-The previous migration to restore the admin role failed due to database connection pool exhaustion. Now that you've upgraded the instance, the pool is clear but the migration needs to be re-applied.
+The Image and Audio mode icons are currently disabled placeholders. Both backend edge functions already exist (`generate-image` for GPT Image/DALL-E, `elevenlabs-music` for music/SFX). This plan activates them as full modes in the Studio.
 
-Both Test and Live environments are missing the `admin` role for `ai@rebar.shop`, which is why the `system-backup` edge function returns 403.
+### Architecture
 
-### Plan
-Run a single database migration:
+Add a `mediaType` state (`"video" | "image" | "audio"`) to `VideoStudioContent.tsx`. The prompt bar icons become clickable toggles. Each mode adjusts the UI (hiding irrelevant controls) and routes to the correct backend.
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'admin'::app_role
-FROM public.profiles p
-WHERE p.email = 'ai@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+### Changes
+
+**1. `VideoStudioPromptBar.tsx`**
+- Accept `mediaType` and `onMediaTypeChange` props
+- Make Image and Audio icon buttons active/clickable (remove `cursor-default`, add click handlers)
+- Conditionally hide duration/mode pills for image mode (images don't need duration or Fast/Balanced/Premium)
+- For audio mode: hide aspect ratio, show duration as audio length (5s/15s/30s), hide mode selector, show music/sfx toggle
+- Update placeholder text per mode: "Describe the image..." / "Describe the sound or music..." / "Describe the video..."
+
+**2. `VideoStudioContent.tsx`**
+- Add `mediaType` state, pass to prompt bar
+- Image mode generate flow: call `generate-image` edge function with the prompt + aspect ratio mapped to size, display result as an image card with download button
+- Audio mode generate flow: call `elevenlabs-music` edge function with prompt + duration + type (music/sfx), display result as an audio player with download
+- Reuse credit system: image = 1 credit, audio = varies by duration
+- Keep video generation flow unchanged
+- Show appropriate results UI per mode (image preview vs audio player vs video player)
+
+**3. Props additions to `VideoStudioPromptBar`**
+```typescript
+mediaType: "video" | "image" | "audio";
+onMediaTypeChange: (t: "video" | "image" | "audio") => void;
+audioType?: "music" | "sfx";
+onAudioTypeChange?: (t: "music" | "sfx") => void;
 ```
 
-This will:
-1. Add the `admin` role back to `ai@rebar.shop` in Test immediately
-2. Apply to Live when you publish
-3. Resolve the 403 error from `system-backup`
+### UI Behavior per Mode
 
-No code changes needed — just the migration.
+| Control | Video | Image | Audio |
+|---------|-------|-------|-------|
+| Mode (Fast/Balanced/Premium) | Yes | No | No |
+| Aspect Ratio | Yes | Yes (mapped to size) | No |
+| Duration | Yes | No | Yes (5s/15s/30s) |
+| Ref Image | Yes | Yes (for editing) | No |
+| Music/SFX toggle | No | No | Yes |
+
+### No new edge functions needed — existing `generate-image` and `elevenlabs-music` are reused directly.
 
