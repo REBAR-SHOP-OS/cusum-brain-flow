@@ -87,19 +87,22 @@ export interface SceneIntelligence {
 }
 
 export const AVAILABLE_MODELS = [
-  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", category: "reasoning" },
-  { id: "openai/gpt-5", label: "GPT-5", category: "creative" },
-  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", category: "fast" },
-  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", category: "ultrafast" },
-  { id: "openai/gpt-5-mini", label: "GPT-5 Mini", category: "balanced" },
+  // GPT: planning, reasoning, creative writing, ad polish
+  { id: "openai/gpt-5", label: "GPT-5", category: "planning" },
+  { id: "openai/gpt-5-mini", label: "GPT-5 Mini", category: "copy" },
+  // Google: vision, multimodal, evaluation, classification
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", category: "vision" },
+  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", category: "evaluation" },
+  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", category: "classification" },
 ] as const;
 
-export const DEFAULT_MODEL_ROUTES: Record<string, { preferred: string; fallback: string }> = {
-  "Script Intelligence": { preferred: "google/gemini-2.5-pro", fallback: "openai/gpt-5" },
-  "Prompt Generation": { preferred: "openai/gpt-5", fallback: "google/gemini-2.5-pro" },
-  "Evaluation": { preferred: "google/gemini-2.5-flash", fallback: "google/gemini-2.5-flash-lite" },
-  "Vision": { preferred: "google/gemini-2.5-pro", fallback: "openai/gpt-5" },
-  "Voiceover & Copy": { preferred: "openai/gpt-5-mini", fallback: "google/gemini-2.5-flash" },
+// Provider philosophy: GPT=planning/creative, Google=vision/eval, Alibaba=video (external)
+export const DEFAULT_MODEL_ROUTES: Record<string, { preferred: string; fallback: string; provider: string }> = {
+  "Script & Planning (GPT)":   { preferred: "openai/gpt-5",           fallback: "google/gemini-2.5-pro",   provider: "OpenAI" },
+  "Creative Writing (GPT)":    { preferred: "openai/gpt-5",           fallback: "google/gemini-2.5-pro",   provider: "OpenAI" },
+  "Vision & Continuity (Google)": { preferred: "google/gemini-2.5-pro", fallback: "openai/gpt-5",          provider: "Google" },
+  "Evaluation (Google)":       { preferred: "google/gemini-2.5-flash", fallback: "openai/gpt-5-mini",      provider: "Google" },
+  "Copy & Voiceover (GPT)":   { preferred: "openai/gpt-5-mini",      fallback: "google/gemini-2.5-flash", provider: "OpenAI" },
 };
 
 export const TASK_CATEGORY_MAP: Record<string, AITaskType[]> = {
