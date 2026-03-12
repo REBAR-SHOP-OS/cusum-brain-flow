@@ -629,7 +629,7 @@ Deno.serve(async (req) => {
               `![${slot.product}](${imgResult.imageUrl})\n\n` +
               `**Caption:**\n${dynContent.caption}` +
               PIXEL_CONTACT_INFO +
-              `\n\n**Hashtags:**\n${dynContent.hashtags}` +
+              `\n\n${dynContent.hashtags}` +
               persianBlock
             );
           } else {
