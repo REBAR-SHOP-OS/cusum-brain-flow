@@ -79,8 +79,8 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab, activeTab }: A
             icon={p.icon}
             label={p.label}
             collapsed={collapsed}
-            onClick={() => p.href ? navigate(p.href) : null}
-            disabled={!p.href}
+            active={activeTab === p.tab}
+            onClick={() => onNavigateTab?.(p.tab)}
           />
         ))}
 
