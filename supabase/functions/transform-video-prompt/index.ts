@@ -1,0 +1,204 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const CONSTRUCTION_KEYWORDS = [
+  "rebar", "steel", "fabrication", "machine", "cage", "construction",
+  "concrete", "pour", "crane", "scaffold", "welding", "cutting",
+  "bending", "formwork", "site", "building", "foundation", "beam",
+  "column", "slab", "reinforcement", "bar", "mesh", "stirrup",
+  "factory", "plant", "shop", "yard", "warehouse", "industrial",
+];
+
+const CONSTRUCTION_ENHANCEMENTS = [
+  "ultra realistic industrial textures",
+  "fine dust particles floating in dramatic lighting",
+  "metallic surface reflections and sparks",
+  "heavy machinery with precise mechanical detail",
+  "construction documentary cinematography",
+  "hard hat workers in safety gear",
+  "raw steel and concrete material close-ups",
+  "volumetric light through factory windows",
+];
+
+const SYSTEM_PROMPT = `You are an expert cinematic video prompt engineer. Your job is to transform casual, simple user descriptions into rich, detailed, cinematic video generation prompts optimized for AI video models (Google Veo, OpenAI Sora).
+
+RULES:
+1. Extract and enhance these visual elements from the user's raw text:
+   - SUBJECT: The main focus of the scene
+   - ENVIRONMENT: Where the scene takes place
+   - ACTION: What is happening, movement, dynamics
+   - CAMERA: Camera movement (drone, tracking, close-up, dolly, crane, handheld, steadicam)
+   - LIGHTING: Time of day, light quality, mood (golden hour, dramatic, industrial, neon)
+   - STYLE: Visual style (cinematic, documentary, commercial, editorial, moody)
+   - REALISM: Level of photorealism desired
+
+2. REMOVE all marketing buzzwords, sales language, and non-visual fluff
+3. ADD cinematic specificity: lens type feelings, depth of field, color grading notes
+4. Keep the prompt under 200 words
+5. Write as a single flowing paragraph — NO bullet points, NO labels
+6. The output should read like a film director's shot description
+
+RESPOND WITH ONLY A JSON OBJECT in this exact format:
+{
+  "engineeredPrompt": "The full cinematic prompt...",
+  "elements": {
+    "subject": "extracted subject",
+    "environment": "extracted environment",
+    "action": "extracted action",
+    "camera": "suggested camera movement",
+    "lighting": "suggested lighting",
+    "style": "suggested style",
+    "realism": "photorealistic|stylized|hyperreal"
+  },
+  "isConstructionRelated": true|false
+}`;
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Auth check
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { rawPrompt, aspectRatio, duration } = await req.json();
+    if (!rawPrompt || typeof rawPrompt !== "string" || rawPrompt.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ error: "rawPrompt is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "LOVABLE_API_KEY is not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Detect construction context
+    const lowerPrompt = rawPrompt.toLowerCase();
+    const isConstructionRelated = CONSTRUCTION_KEYWORDS.some(kw => lowerPrompt.includes(kw));
+
+    // Build context-aware user message
+    let userMessage = `Transform this casual video description into a cinematic prompt:\n\n"${rawPrompt}"`;
+    
+    if (aspectRatio) {
+      userMessage += `\n\nTarget aspect ratio: ${aspectRatio}`;
+    }
+    if (duration) {
+      userMessage += `\nTarget duration: ${duration} seconds`;
+    }
+    if (isConstructionRelated) {
+      const enhancements = CONSTRUCTION_ENHANCEMENTS.slice(0, 4).join(", ");
+      userMessage += `\n\nThis is construction/industrial content. Enhance with: ${enhancements}`;
+    }
+
+    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userMessage },
+        ],
+      }),
+    });
+
+    if (!aiResp.ok) {
+      if (aiResp.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (aiResp.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "AI credits exhausted. Please add credits." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const errText = await aiResp.text();
+      console.error("AI gateway error:", aiResp.status, errText);
+      return new Response(
+        JSON.stringify({ error: "Prompt transformation failed" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const aiData = await aiResp.json();
+    const content = aiData.choices?.[0]?.message?.content || "";
+
+    // Parse JSON from response (handle markdown code blocks)
+    let parsed: any;
+    try {
+      const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      // Fallback: use the raw content as the engineered prompt
+      parsed = {
+        engineeredPrompt: content.trim(),
+        elements: {
+          subject: rawPrompt,
+          environment: "unspecified",
+          action: "unspecified",
+          camera: "cinematic",
+          lighting: "dramatic",
+          style: "cinematic",
+          realism: "photorealistic",
+        },
+        isConstructionRelated,
+      };
+    }
+
+    return new Response(
+      JSON.stringify({
+        engineeredPrompt: parsed.engineeredPrompt,
+        elements: parsed.elements,
+        isConstructionRelated: parsed.isConstructionRelated ?? isConstructionRelated,
+        rawPrompt: rawPrompt.trim(),
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (e) {
+    console.error("transform-video-prompt error:", e);
+    return new Response(
+      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
