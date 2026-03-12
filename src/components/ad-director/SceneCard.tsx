@@ -222,6 +222,17 @@ export function SceneCard({
             <RotateCcw className="w-3 h-3 mr-1" />
             {clip.status === "completed" ? "Regenerate" : "Generate"}
           </Button>
+          {clip.status === "completed" && clip.videoUrl && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px]"
+              onClick={() => downloadFile(clip.videoUrl!, `scene-${index + 1}-${segmentLabel}.mp4`)}
+            >
+              <Download className="w-3 h-3 mr-1" />
+              Download
+            </Button>
+          )}
         </div>
 
       </div>

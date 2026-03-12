@@ -56,15 +56,15 @@ export function useAdProjectHistory() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const row = {
+      const row: any = {
         user_id: user.id,
         name: project.name,
         brand_name: project.brandName ?? null,
         script: project.script ?? null,
-        segments: (project.segments ?? []) as unknown as Record<string, unknown>[],
-        storyboard: (project.storyboard ?? []) as unknown as Record<string, unknown>[],
-        clips: (project.clips ?? []) as unknown as Record<string, unknown>[],
-        continuity: (project.continuity ?? null) as unknown as Record<string, unknown> | null,
+        segments: JSON.parse(JSON.stringify(project.segments ?? [])),
+        storyboard: JSON.parse(JSON.stringify(project.storyboard ?? [])),
+        clips: JSON.parse(JSON.stringify(project.clips ?? [])),
+        continuity: project.continuity ? JSON.parse(JSON.stringify(project.continuity)) : null,
         final_video_url: project.finalVideoUrl ?? null,
         status: project.status ?? "draft",
         updated_at: new Date().toISOString(),
