@@ -587,7 +587,7 @@ export function AdDirectorContent() {
               >
                 <div className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all shrink-0",
-                  isCompleted && "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30",
+                  isCompleted && "bg-accent/20 text-accent-foreground ring-1 ring-accent/30",
                   isActive && "bg-primary text-primary-foreground shadow-md shadow-primary/30",
                   !isActive && !isCompleted && "bg-card/50 text-muted-foreground ring-1 ring-border/30"
                 )}>
