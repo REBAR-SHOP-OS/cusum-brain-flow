@@ -1,103 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# InVideo-Style Professional Video Editor
+## Completed: Add All Wan 2.6 Capabilities
 
-## What We're Building
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-A complete redesign of the Video Editor into an InVideo-style professional editing interface with:
-- Full-screen video player with AI command bar below it
-- Tabbed side panel: **Media**, **Music**, **Script**, **Settings**, **Logo**
-- Per-clip media properties (trim, position, zoom, rotation, color)
-- Audio & SFX management per clip
-- Chapter-based script editing with stock media and voiceover per paragraph
-- Global settings: overlay preset, transition preset, subtitle preset, sticker preset, text preset, SFX/media volume sliders
-- Logo panel: position (X/Y), zoom, delete/replace, live preview
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Architecture
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│  Video Player (full width, aspect-video)                │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │  <video> with custom controls + timeline            ││
-│  └─────────────────────────────────────────────────────┘│
-│  ┌─────────────────────────────────────────────────────┐│
-│  │  AI Command Bar: "Give me a command to edit..."     ││
-│  └─────────────────────────────────────────────────────┘│
-│  ┌─────────────────────────────────────────────────────┐│
-│  │  Tabbed Panel                                       ││
-│  │  [Media] [Music] [Script] [Settings] [Logo]         ││
-│  │  ───────────────────────────────────────────        ││
-│  │  (content based on active tab)                      ││
-│  └─────────────────────────────────────────────────────┘│
-│  [Edit ▼]  [Download ▼]   bottom action bar            │
-└─────────────────────────────────────────────────────────┘
-```
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-## Files
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### 1. New: `src/components/ad-director/ProVideoEditor.tsx`
-The main editor shell — replaces the current `VideoEditor` usage. Contains:
-- Video player with custom play/pause, volume, speed, time display, fullscreen
-- AI command input bar with send button and settings toggle
-- Tab navigation: Media, Music, Script, Settings, Logo
-- Renders the active tab panel component
-- Bottom action bar: Edit dropdown, Download dropdown
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 2. New: `src/components/ad-director/editor/MediaTab.tsx`
-- Shows chapter clips as thumbnail cards with duration badges
-- Script subtitle preview strip below thumbnails
-- "Replace media" section: Uploaded media, Stock media, Generative Media buttons
-- Media info card: chapter/media name, duration, transition type, audio volume
-- "Media properties" drill-down view with:
-  - Duration display, trim toggle + from/to inputs
-  - Center point (X/Y), Position (X/Y), Zoom & Rotation controls
-  - Color hex picker
-  - Audio & SFX sub-tab: Upload audio, Stock SFX, Generate SFX buttons
-  - Apply / Reset buttons
-
-### 3. New: `src/components/ad-director/editor/MusicTab.tsx`
-- Music track cards (Generated Music, uploaded, stock)
-- Chapter selector pills
-- Replace music: Uploaded music, Stock music buttons
-- Music info: name, duration, waveform preview placeholder
-- "Music properties" drill-down
-
-### 4. New: `src/components/ad-director/editor/ScriptTab.tsx`
-- Chapter sections with editable paragraph blocks
-- Each paragraph: text area + side actions (+ Add, Stock media, Narrator voice-over)
-- Inline editing with save
-
-### 5. New: `src/components/ad-director/editor/SettingsTab.tsx`
-- Overlay Preset dropdown (None, ...)
-- Transition Preset dropdown (None, ...)
-- Subtitle Preset dropdown (Standard, ...)
-- Sticker Preset dropdown (None, ...)
-- Text Preset dropdown (Minimal, ...)
-- SFX Master Volume slider (0-100%)
-- Media Audio Master Volume slider (0-100%)
-- Reset + Save changes buttons
-
-### 6. New: `src/components/ad-director/editor/LogoTab.tsx`
-- Position: X/Y number inputs
-- Zoom: percentage input
-- Logo preview card with current logo image
-- Actions: Delete logo (red), Replace Logo buttons
-- Save changes button
-
-### 7. Modified: `src/components/ad-director/AdDirectorContent.tsx`
-- In the "preview" step, replace `FinalPreview` with `ProVideoEditor` when a final video exists or clips are ready
-- Pass clips, storyboard, segments, brand, and all settings as props
-
-### 8. Modified: `src/types/adDirector.ts`
-- Add `EditorSettings` interface for overlay/transition/subtitle/sticker/text presets and volume levels
-- Add `LogoSettings` interface for position, zoom
-
-## Visual Standards
-- Dark theme matching InVideo: `bg-[#1a1a2e]` style cards, `border-border/30` subtle borders
-- Tab underline indicator (active tab gets bottom border highlight)
-- Rounded input fields with dark backgrounds
-- Red accent for destructive actions (Delete logo)
-- Blue/purple accent for primary save actions
-- Compact, information-dense layout
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
