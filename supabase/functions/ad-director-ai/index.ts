@@ -70,7 +70,9 @@ async function verifyAuth(req: Request) {
 }
 
 // ─── AI Gateway Call with Fallback ──────────────────────────────
-const PER_ATTEMPT_TIMEOUT_MS = 50_000; // 50s per single AI call attempt
+const PER_ATTEMPT_TIMEOUT_MS = 50_000; // 50s default per single AI call attempt
+const HEAVY_ATTEMPT_TIMEOUT_MS = 80_000; // 80s for heavy routes (analyze-script, generate-storyboard)
+const HEAVY_ROUTES: Set<string> = new Set(["analyze-script", "generate-storyboard"]);
 
 async function callAI(
   apiKey: string,
