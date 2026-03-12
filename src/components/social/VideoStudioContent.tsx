@@ -603,8 +603,8 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const isGenerating = status === "transforming" || status === "submitting" || status === "processing" || watermarking || imageGenerating || standaloneAudioGenerating;
 
   return (
-    <div className={fullPage ? "flex flex-col h-full" : ""}>
-      <Tabs value={activeTab} onValueChange={setActiveTab} className={fullPage ? "flex flex-col h-full" : ""}>
+    <div className={fullPage ? "flex flex-col" : ""}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className={fullPage ? "flex flex-col" : ""}>
         <TabsList className="w-full mb-4 shrink-0">
           <TabsTrigger value="generate" className="flex-1 gap-1.5">
             <Clapperboard className="w-3.5 h-3.5" />
@@ -620,9 +620,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           <VideoLibrary onSelectVideo={(url) => onVideoReady?.(url)} />
         </TabsContent>
 
-        <TabsContent value="generate" className={fullPage ? "flex flex-col flex-1 min-h-0" : ""}>
-          {/* Results area — fills space above prompt bar */}
-          <div className={fullPage ? "flex-1 min-h-0 overflow-y-auto pb-4" : "space-y-4"}>
+        <TabsContent value="generate" className={fullPage ? "flex flex-col" : ""}>
+          {/* Results area */}
+          <div className={fullPage ? "pb-4" : "space-y-4"}>
             {/* Progress */}
             {(status === "submitting" || status === "processing") && (() => {
               const sceneCount = isMultiRef.current ? Math.ceil(parseInt(duration) / currentMode.maxClipDuration) : 1;
