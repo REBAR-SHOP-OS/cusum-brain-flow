@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save,
   Music, Volume2, Wand2, Eye, Image as ImageIcon,
-  Film, Clapperboard, Pencil, Share2
+  Film, Clapperboard, Pencil, Share2, Search
 } from "lucide-react";
 import { VideoEditor } from "./VideoEditor";
 import { VideoToSocialPanel } from "./VideoToSocialPanel";
