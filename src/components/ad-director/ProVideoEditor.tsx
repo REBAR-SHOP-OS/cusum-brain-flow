@@ -9,6 +9,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Image, Music, FileText, Sliders, ImageIcon, Loader2,
   SkipBack, SkipForward, ChevronRight, ChevronLeft,
+  FolderOpen, Video, Type, Film, ImagePlus, LayoutTemplate, Shapes, ArrowRightLeft, Palette, Settings,
 } from "lucide-react";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
@@ -21,16 +22,31 @@ import { LogoTab } from "./editor/LogoTab";
 import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { EffectsPanel } from "./editor/EffectsPanel";
 import { TextOverlayDialog } from "./editor/TextOverlayDialog";
+import { RecordTab } from "./editor/RecordTab";
+import { TextTab } from "./editor/TextTab";
+import { StockVideoTab } from "./editor/StockVideoTab";
+import { StockImagesTab } from "./editor/StockImagesTab";
+import { TemplatesTab } from "./editor/TemplatesTab";
+import { GraphicsTab } from "./editor/GraphicsTab";
+import { TransitionsTab } from "./editor/TransitionsTab";
+import { BrandKitTab } from "./editor/BrandKitTab";
 import { supabase } from "@/integrations/supabase/client";
 
-type EditorTab = "media" | "music" | "script" | "settings" | "logo";
+type EditorTab = "media" | "record" | "text" | "music" | "stock-video" | "stock-images" | "templates" | "graphics" | "transitions" | "brand-kit" | "script" | "settings";
 
 const TABS: { id: EditorTab; label: string; icon: React.ReactNode }[] = [
-  { id: "media", label: "Media", icon: <Image className="w-4 h-4" /> },
+  { id: "media", label: "My Media", icon: <FolderOpen className="w-4 h-4" /> },
+  { id: "record", label: "Record", icon: <Video className="w-4 h-4" /> },
+  { id: "text", label: "Text", icon: <Type className="w-4 h-4" /> },
   { id: "music", label: "Music", icon: <Music className="w-4 h-4" /> },
+  { id: "stock-video", label: "Stock Video", icon: <Film className="w-4 h-4" /> },
+  { id: "stock-images", label: "Stock Images", icon: <ImagePlus className="w-4 h-4" /> },
+  { id: "templates", label: "Templates", icon: <LayoutTemplate className="w-4 h-4" /> },
+  { id: "graphics", label: "Graphics", icon: <Shapes className="w-4 h-4" /> },
+  { id: "transitions", label: "Transitions", icon: <ArrowRightLeft className="w-4 h-4" /> },
+  { id: "brand-kit", label: "Brand Kit", icon: <Palette className="w-4 h-4" /> },
   { id: "script", label: "Script", icon: <FileText className="w-4 h-4" /> },
-  { id: "settings", label: "Settings", icon: <Sliders className="w-4 h-4" /> },
-  { id: "logo", label: "Logo", icon: <ImageIcon className="w-4 h-4" /> },
+  { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
 ];
 
 interface ProVideoEditorProps {
@@ -756,20 +772,32 @@ export function ProVideoEditor({
                   onUpdateClipUrl={onUpdateClipUrl}
                 />
               )}
+              {activeTab === "record" && <RecordTab />}
+              {activeTab === "text" && <TextTab onAddText={() => setTextDialogOpen(true)} />}
               {activeTab === "music" && (
                 <MusicTab onTrackSelect={(track) => handleMusicSelect(track?.url ?? null)} />
               )}
-              {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
-              {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
-              {activeTab === "logo" && (
-                <LogoTab
-                  logo={logoSettings}
+              {activeTab === "stock-video" && <StockVideoTab />}
+              {activeTab === "stock-images" && <StockImagesTab />}
+              {activeTab === "templates" && <TemplatesTab />}
+              {activeTab === "graphics" && <GraphicsTab />}
+              {activeTab === "transitions" && (
+                <TransitionsTab
+                  activeTransition={editorSettings.transitionPreset}
+                  onSelect={(t) => setEditorSettings(prev => ({ ...prev, transitionPreset: t }))}
+                />
+              )}
+              {activeTab === "brand-kit" && (
+                <BrandKitTab
                   brand={brand}
-                  onChange={setLogoSettings}
+                  logo={logoSettings}
+                  onLogoChange={setLogoSettings}
                   onDeleteLogo={handleDeleteLogo}
                   onReplaceLogo={handleReplaceLogo}
                 />
               )}
+              {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
+              {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
             </div>
           )}
         </div>

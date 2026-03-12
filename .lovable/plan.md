@@ -1,43 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Expand Editor Sidebar to InVideo-Style Layout
+## Completed: Add All Wan 2.6 Capabilities
 
-## What Changes
-Replace the current 5-tab sidebar (Media, Music, Script, Settings, Logo) with the full InVideo-style sidebar matching the reference image:
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-| Tab | Icon | Content |
-|-----|------|---------|
-| My Media | FolderOpen | Existing MediaTab (clips + scenes) |
-| Record & Create | Video | Webcam/screen record placeholders + AI generate button |
-| Text | Type | Text style presets + "Add Text Overlay" button (opens TextOverlayDialog) |
-| Music | Music | Existing MusicTab (with search bar + waveform cards like reference) |
-| Stock Video | Film | Search input + placeholder grid of stock clips |
-| Stock Images | ImagePlus | Search input + placeholder grid of stock images |
-| Templates | LayoutTemplate | Grid of scene template preset cards |
-| Graphics | Shapes | Sticker/shape/emoji category grid |
-| Transitions | ArrowRightLeft | Transition picker (Cut, Fade, Wipe, Slide, Zoom) updates editorSettings |
-| Brand Kit | Palette | Brand colors, fonts, logo from existing brand prop |
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-Script, Settings, and Logo move into sub-sections or remain accessible (Script under the timeline, Settings via gear in top bar, Logo inside Brand Kit).
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Files
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### New tab components (`src/components/ad-director/editor/`)
-- `RecordTab.tsx` — Camera/screen record UI + AI generate
-- `TextTab.tsx` — Text presets + add overlay button
-- `StockVideoTab.tsx` — Search + placeholder grid
-- `StockImagesTab.tsx` — Search + placeholder grid
-- `TemplatesTab.tsx` — Template preset cards
-- `GraphicsTab.tsx` — Shape/sticker categories
-- `TransitionsTab.tsx` — Transition type selector, calls `onSelectTransition`
-- `BrandKitTab.tsx` — Brand colors/fonts/logo editor using existing `brand` prop + LogoTab
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### Modified: `src/components/ad-director/ProVideoEditor.tsx`
-- Update `EditorTab` type to include all 10 tabs
-- Update `TABS` array with new icons and labels (matching InVideo order)
-- Import and render new tab components in the sidebar content area
-- Move Script/Settings to secondary access (Script stays in TABS but lower priority; Settings accessible via top bar gear icon)
-- Wire Text tab to open `TextOverlayDialog`
-- Wire Transitions tab to update `editorSettings.transitionPreset`
-- Wire Brand Kit to show brand + logo controls
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
