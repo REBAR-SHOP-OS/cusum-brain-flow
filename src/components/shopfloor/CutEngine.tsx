@@ -77,6 +77,14 @@ export function CutEngine({
     }
   }, [barCode, isRunning]);
 
+  // Sync internal bars state to lockedBars when a run starts,
+  // so supervisor edits start from the actual loaded value
+  useEffect(() => {
+    if (isRunning && lockedBars != null && !operatorOverride) {
+      setBars(lockedBars);
+    }
+  }, [isRunning, lockedBars]);
+
   const handleStockChange = (len: number) => {
     setSelectedStock(len);
     onStockLengthChange?.(len);
