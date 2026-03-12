@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { performOCR, performOCROnBase64, analyzeDocumentWithGemini, convertPdfToImages, detectZones, extractRebarData, performMultiPassAnalysis } from "./agentDocumentUtils.ts";
 import type { ValidationRule } from "./agentTypes.ts";
+import { buildEventPromptBlock } from "./eventCalendar.ts";
 
 export async function fetchContext(
   supabase: ReturnType<typeof createClient>, 
