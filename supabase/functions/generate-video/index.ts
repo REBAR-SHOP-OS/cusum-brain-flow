@@ -350,12 +350,16 @@ async function soraDownload(apiKey: string, videoId: string) {
 // ─── Multi-scene helpers ────────────────────────────────────
 
 async function generateScenePrompts(
-  geminiKey: string,
   basePrompt: string,
   sceneCount: number,
   clipDuration: number,
 ): Promise<string[]> {
-  // Use Gemini to split the prompt into distinct continuous scenes
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!lovableKey) {
+    console.warn("LOVABLE_API_KEY not set, using duplicate prompts for scenes");
+    return Array(sceneCount).fill(basePrompt);
+  }
+
   const systemPrompt = `You are a video director. Given a video concept, create exactly ${sceneCount} distinct continuous camera shots that together tell a cohesive visual story. Each shot will be ${clipDuration} seconds of continuous action.
 
 Rules:
@@ -368,37 +372,36 @@ Rules:
 Example output format:
 ["A sweeping aerial shot of...", "Close-up of hands..."]`;
 
-  const resp = await fetch(
-    `${GEMINI_BASE}/models/gemini-2.5-flash:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `Video concept: ${basePrompt}` }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: {
-          temperature: 0.8,
-          responseMimeType: "application/json",
-        },
-      }),
-    }
-  );
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${lovableKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Video concept: ${basePrompt}` },
+      ],
+    }),
+  });
 
   if (!resp.ok) {
     console.error("Scene prompt generation failed:", resp.status);
-    // Fallback: duplicate the original prompt for each scene
     return Array(sceneCount).fill(basePrompt);
   }
 
   try {
     const data = await resp.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const scenes = JSON.parse(text);
-    if (Array.isArray(scenes) && scenes.length === sceneCount) {
-      return scenes.map(String);
+    const text = data.choices?.[0]?.message?.content || "";
+    // Extract JSON array from response (may be wrapped in markdown code fences)
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const scenes = JSON.parse(jsonMatch[0]);
+      if (Array.isArray(scenes) && scenes.length === sceneCount) {
+        return scenes.map(String);
+      }
     }
   } catch (e) {
     console.error("Failed to parse scene prompts:", e);
@@ -717,10 +720,8 @@ serve(async (req) => {
       const clipDuration = maxClip;
       const sceneCount = Math.ceil(requestedDuration / clipDuration);
 
-      // Use Gemini to generate scene-specific prompts (always use geminiKey for this)
-      const effectiveGeminiKey = geminiKey || apiKey;
+      // Use Lovable AI to generate scene-specific prompts
       const scenePrompts = await generateScenePrompts(
-        effectiveGeminiKey,
         prompt,
         sceneCount,
         clipDuration,
@@ -734,7 +735,9 @@ serve(async (req) => {
         scenePrompts.map(async (scenePrompt, i) => {
           try {
             let result: { jobId: string; provider: string };
-            if (isVeo) {
+            if (isWan) {
+              result = await wanGenerate(apiKey, scenePrompt, clipDuration, aspect_ratio);
+            } else if (isVeo) {
               try {
                 result = await veoGenerate(apiKey, scenePrompt, clipDuration);
               } catch (e) {
