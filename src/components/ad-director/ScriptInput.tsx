@@ -15,11 +15,12 @@ interface ScriptInputProps {
   onBrandChange: (b: BrandProfile) => void;
   onAnalyze: () => void;
   analyzing: boolean;
+  analysisStatus?: string;
   assets: File[];
   onAssetsChange: (files: File[]) => void;
 }
 
-export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, assets, onAssetsChange }: ScriptInputProps) {
+export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange }: ScriptInputProps) {
   const [showBrand, setShowBrand] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -175,6 +176,21 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
           </>
         )}
       </Button>
+
+      {/* Analysis Progress Card */}
+      {analyzing && analysisStatus && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
+            </div>
+            <span className="text-sm font-medium text-foreground">{analysisStatus}</span>
+          </div>
+          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary/60 rounded-full animate-pulse" style={{ width: '60%' }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

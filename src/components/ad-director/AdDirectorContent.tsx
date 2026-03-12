@@ -28,6 +28,7 @@ export function AdDirectorContent() {
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState("");
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
   const [storyboard, setStoryboard] = useState<StoryboardScene[]>([]);
@@ -44,6 +45,20 @@ export function AdDirectorContent() {
   // ─── Analyze Script ──────────────────────────────────────
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true);
+    const statusMessages = [
+      "Reading your script...",
+      "Identifying hook, problem, and solution...",
+      "Breaking script into timed scenes...",
+      "Generating storyboard with visual styles...",
+      "Building continuity profile...",
+      "Optimizing scene prompts...",
+    ];
+    let msgIndex = 0;
+    setAnalysisStatus(statusMessages[0]);
+    const statusInterval = setInterval(() => {
+      msgIndex = Math.min(msgIndex + 1, statusMessages.length - 1);
+      setAnalysisStatus(statusMessages[msgIndex]);
+    }, 3000);
     try {
       const assetDescriptions = assets.length > 0
         ? assets.map(f => f.name).join(", ")
@@ -76,7 +91,9 @@ export function AdDirectorContent() {
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
     } finally {
+      clearInterval(statusInterval);
       setAnalyzing(false);
+      setAnalysisStatus("");
     }
   }, [script, brand, assets, toast]);
 
@@ -264,6 +281,7 @@ export function AdDirectorContent() {
               onBrandChange={setBrand}
               onAnalyze={handleAnalyze}
               analyzing={analyzing}
+              analysisStatus={analysisStatus}
               assets={assets}
               onAssetsChange={setAssets}
             />
