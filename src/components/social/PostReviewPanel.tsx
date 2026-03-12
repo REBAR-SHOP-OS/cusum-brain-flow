@@ -403,6 +403,10 @@ export function PostReviewPanel({
                       {regenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                       {regenerating ? "Regenerating..." : "Regenerate image"}
                     </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowImageGen(true)}>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      AI Image
+                    </Button>
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowVideoGen(true)}>
                       <Video className="w-3.5 h-3.5" />
                       {isVideo ? "Regenerate video" : "Generate video"}
