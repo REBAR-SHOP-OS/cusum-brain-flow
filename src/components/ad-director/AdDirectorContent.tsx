@@ -633,7 +633,12 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
     setFinalVideoUrl(project.final_video_url);
     projectIdRef.current = project.id;
 
-    if (project.storyboard?.length > 0) {
+    const hasCompletedClips = (project.clips ?? []).some(
+      (c: any) => c.status === "completed" && c.videoUrl
+    );
+    if (hasCompletedClips) {
+      setStep("preview");
+    } else if (project.storyboard?.length > 0) {
       setStep("storyboard");
     }
     toast({ title: "Project loaded", description: project.name });
@@ -670,6 +675,23 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
     const hasNewCompleted = clips.some(c => c.status === "completed" && c.videoUrl && !c.videoUrl.includes("generated-videos"));
     if (hasNewCompleted) {
       uploadCompletedClips();
+    }
+
+    // Auto-save project when clips have completed with storage URLs
+    const hasStorageClips = clips.some(c => c.status === "completed" && c.videoUrl?.includes("generated-videos"));
+    if (hasStorageClips && projectIdRef.current) {
+      saveProject.mutate({
+        id: projectIdRef.current,
+        name: brand.name + " Ad",
+        brandName: brand.name,
+        script,
+        segments,
+        storyboard,
+        clips,
+        continuity,
+        finalVideoUrl,
+        status: finalVideoUrl ? "completed" : "generating",
+      });
     }
   }, [clips]);
 
