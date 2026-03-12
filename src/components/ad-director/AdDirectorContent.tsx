@@ -78,8 +78,9 @@ export function AdDirectorContent() {
   const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
-  const [logoEnabled, setLogoEnabled] = useState(true);
   const [endCardEnabled, setEndCardEnabled] = useState(true);
+  // Logo watermark is always mandatory when logo exists — no toggle
+  const logoEnabled = !!brand.logoUrl;
 
   // ─── Multi-Step Analysis Pipeline ────────────────────────
   const handleAnalyze = useCallback(async () => {
