@@ -52,7 +52,8 @@ export function AdDirectorContent() {
   const [storyboard, setStoryboard] = useState<StoryboardScene[]>([]);
   const [continuity, setContinuity] = useState<ContinuityProfile | null>(null);
   const [clips, setClips] = useState<ClipOutput[]>([]);
-  const [generatingAny, setGeneratingAny] = useState(false);
+  // Derive generatingAny reactively from clips state
+  const generatingAny = clips.some(c => c.status === "generating");
   const [exporting, setExporting] = useState(false);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
@@ -367,24 +368,21 @@ export function AdDirectorContent() {
 
   // ─── Generate All ──────────────────────────────────────
   const handleGenerateAll = useCallback(async () => {
-    setGeneratingAny(true);
-    const total = storyboard.filter(s => {
+    const scenesToGenerate = storyboard.filter(s => {
       const c = clips.find(c => c.sceneId === s.id);
       return c?.status !== "completed";
-    }).length;
-    let done = 0;
-    for (const scene of storyboard) {
-      const clip = clips.find(c => c.sceneId === scene.id);
-      if (clip?.status === "completed") continue;
-      done++;
-      setGenerationStatus(`Generating scene ${done} of ${total}...`);
+    });
+    const total = scenesToGenerate.length;
+    let launched = 0;
+    for (const scene of scenesToGenerate) {
+      launched++;
+      setGenerationStatus(`Launching scene ${launched} of ${total}...`);
       await generateScene(scene.id);
       await new Promise(r => setTimeout(r, 2000));
     }
-    setGeneratingAny(false);
     setGenerationStatus("");
     setStep("preview");
-    toast({ title: "Generation complete", description: "All scenes generated. Ready to export." });
+    toast({ title: "All scenes launched", description: "Scenes are generating. Check progress below." });
   }, [storyboard, clips, generateScene, toast]);
 
   // ─── Export ──────────────────────────────────────
@@ -420,18 +418,29 @@ export function AdDirectorContent() {
   return (
     <div className="space-y-6">
       {/* Global Progress — visible on all tabs */}
-      {(analyzing || generatingAny || exporting) && (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex items-center gap-3">
-            <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
-            <span className="text-sm font-medium text-foreground">
-              {analyzing ? analysisStatus : generatingAny ? generationStatus : "Exporting..."}
-            </span>
-            {analyzing && <span className="ml-auto text-xs text-muted-foreground">{analysisProgress}%</span>}
+      {(analyzing || generatingAny || exporting) && (() => {
+        const genTotal = clips.length;
+        const genCompleted = clips.filter(c => c.status === "completed").length;
+        const genProgress = genTotal > 0 ? Math.round((genCompleted / genTotal) * 100) : 0;
+        const statusText = analyzing
+          ? analysisStatus
+          : generatingAny
+            ? (generationStatus || `Generating scenes... ${genCompleted}/${genTotal} completed`)
+            : "Exporting...";
+        const progressValue = analyzing ? analysisProgress : generatingAny ? genProgress : undefined;
+        return (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
+              <span className="text-sm font-medium text-foreground">{statusText}</span>
+              {progressValue !== undefined && (
+                <span className="ml-auto text-xs text-muted-foreground">{progressValue}%</span>
+              )}
+            </div>
+            {progressValue !== undefined && <Progress value={progressValue} className="h-2" />}
           </div>
-          {analyzing && <Progress value={analysisProgress} className="h-2" />}
-        </div>
-      )}
+        );
+      })()}
 
       {/* Workflow Steps */}
       <div className="flex items-center gap-1 bg-card/30 rounded-xl p-1 border border-border/30">
