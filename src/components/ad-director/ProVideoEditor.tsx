@@ -1037,11 +1037,15 @@ export function ProVideoEditor({
                   />
                 )}
                 {brand.logoUrl && (
-                  <img
-                    src={brand.logoUrl}
-                    alt="Brand watermark"
-                    className="absolute bottom-14 right-4 h-10 w-auto object-contain opacity-70 pointer-events-none z-10"
-                  />
+                  <div className="absolute bottom-16 right-4 z-10 pointer-events-none">
+                    <div className="bg-black/20 backdrop-blur-sm rounded-lg p-1.5 border border-white/[0.06]">
+                      <img
+                        src={brand.logoUrl}
+                        alt="Brand watermark"
+                        className="h-8 w-auto object-contain opacity-80"
+                      />
+                    </div>
+                  </div>
                 )}
                 {sceneOverlays.map(ov => (
                   <div
