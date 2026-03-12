@@ -195,9 +195,12 @@ function extractToolResult(data: any): any {
   // 2. Fallback: model returned content as text
   const content = data.choices?.[0]?.message?.content || "";
   if (!content) {
-    console.error("extractToolResult: No tool_calls and no content in response. Full response:", JSON.stringify(data).slice(0, 1000));
+    const finishReason = data.choices?.[0]?.finish_reason;
+    console.error("extractToolResult: No tool_calls and no content. finish_reason:", finishReason, "keys:", JSON.stringify(Object.keys(data.choices?.[0]?.message || {})), "raw:", JSON.stringify(data).slice(0, 800));
     throw new Error("AI did not return structured data");
   }
+
+  console.warn("extractToolResult: AI returned content instead of tool_calls, extracting JSON from text. Length:", content.length);
 
   return extractJSONFromText(content);
 }
