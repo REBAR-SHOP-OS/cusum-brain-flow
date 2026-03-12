@@ -11,7 +11,8 @@ import {
   SkipBack, SkipForward, ChevronRight, ChevronLeft,
   FolderOpen, Video, Type, Film, ImagePlus, LayoutTemplate, Shapes, ArrowRightLeft, Palette, Settings,
 } from "lucide-react";
-import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile } from "@/types/adDirector";
+import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
+import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
 import { type EditorSettings, type LogoSettings, DEFAULT_EDITOR_SETTINGS, DEFAULT_LOGO_SETTINGS } from "@/types/editorSettings";
 import { MediaTab } from "./editor/MediaTab";
