@@ -102,8 +102,7 @@ interface VideoStudioPromptBarProps {
   engineeredPrompt?: string | null;
   intent?: string | null;
   isConstructionRelated?: boolean;
-  creditCost: number;
-  remaining: number;
+  totalSpent: number;
   canGenerate: boolean;
   isGenerating: boolean;
   isTransforming: boolean;
