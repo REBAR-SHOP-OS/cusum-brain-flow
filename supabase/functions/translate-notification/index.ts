@@ -17,64 +17,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const payload = await req.json();
-    const record = payload?.record;
-
-    if (!record) {
-      return new Response(JSON.stringify({ skipped: "no record" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { id: notifId, user_id, title, description } = record;
-    if (!user_id || !title) {
-      return new Response(JSON.stringify({ skipped: "missing user_id or title" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const svc = createClient(supabaseUrl, serviceKey);
-
-    // Get recipient's preferred language
-    const { data: profile } = await svc
-      .from("profiles")
-      .select("preferred_language")
-      .eq("user_id", user_id)
-      .maybeSingle();
-
-    const lang = profile?.preferred_language || "en";
-    if (lang === "en") {
-      return new Response(JSON.stringify({ skipped: "english user" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Translate title + description
-    const { title: localTitle, body: localBody } = await translateNotification(
-      supabaseUrl,
-      anonKey,
-      title,
-      description || "",
-      lang
-    );
-
-    // Store translation in separate columns, never overwrite original English
-    if (localTitle !== title || localBody !== (description || "")) {
-      const { error } = await svc
-        .from("notifications")
-        .update({ title_local: localTitle, description_local: localBody })
-        .eq("id", notifId);
-
-      if (error) {
-        console.error("Failed to update translated notification:", error);
-      }
-    }
-
+    // Translation disabled — all notifications must be English-only
     return new Response(
-      JSON.stringify({ ok: true, lang, notifId }),
+      JSON.stringify({ skipped: "translation disabled" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

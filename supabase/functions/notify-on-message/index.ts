@@ -175,43 +175,35 @@ async function handleSupportMessage(
 
   if (!companyProfiles || companyProfiles.length === 0) return;
 
-  // Group by language and translate once per language group
-  const byLang = groupByLanguage(companyProfiles);
-
+  // All notifications in English — no translation
   const notifRows: any[] = [];
   const pushPromises: Promise<any>[] = [];
 
-  for (const [lang, langProfiles] of Object.entries(byLang)) {
-    const { title: localTitle, body: localBody } = await translateNotification(
-      supabaseUrl, anonKey, titleEn, preview, lang
+  for (const p of companyProfiles) {
+    notifRows.push({
+      user_id: p.user_id,
+      type: "notification",
+      title: titleEn,
+      description: preview,
+      link_to: "/support-inbox",
+      agent_name: "Support",
+      priority: "high",
+      metadata: { conversation_id },
+    });
+
+    pushPromises.push(
+      fetch(sendPushUrl, {
+        method: "POST",
+        headers: pushHeaders,
+        body: JSON.stringify({
+          user_id: p.user_id,
+          title: titleEn,
+          body: preview,
+          linkTo: "/support-inbox",
+          tag: `support-${conversation_id}`,
+        }),
+      }).catch(() => {})
     );
-
-    for (const p of langProfiles) {
-      notifRows.push({
-        user_id: p.user_id,
-        type: "notification",
-        title: localTitle,
-        description: localBody,
-        link_to: "/support-inbox",
-        agent_name: "Support",
-        priority: "high",
-        metadata: { conversation_id },
-      });
-
-      pushPromises.push(
-        fetch(sendPushUrl, {
-          method: "POST",
-          headers: pushHeaders,
-          body: JSON.stringify({
-            user_id: p.user_id,
-            title: localTitle,
-            body: localBody,
-            linkTo: "/support-inbox",
-            tag: `support-${conversation_id}`,
-          }),
-        }).catch(() => {})
-      );
-    }
   }
 
   if (notifRows.length > 0) {

@@ -197,9 +197,9 @@ export function useNotifications() {
           if (payload.eventType === "INSERT") {
             playMockingjayWhistle();
             const newRow = payload.new as any;
-            // Use translated version for browser/toast notifications, English for Inbox
-            const toastTitle = newRow.title_local || newRow.title;
-            const toastDesc = newRow.description_local || newRow.description;
+            // Always use English title/description
+            const toastTitle = newRow.title;
+            const toastDesc = newRow.description;
             showBrowserNotification(toastTitle, toastDesc, newRow.link_to);
 
             // Team chat messages: dispatch custom event for ChatPanelContext
