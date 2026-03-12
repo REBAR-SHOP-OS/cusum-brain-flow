@@ -4,7 +4,10 @@ import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
   Sparkles, Loader2, BookOpen, ShieldCheck, CheckSquare, Trash2,
+  CalendarDays,
 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
