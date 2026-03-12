@@ -185,6 +185,10 @@ export function ProVideoEditor({
   // Sync voiceover audio with video playback (time-locked)
   useEffect(() => {
     const sceneId = storyboard[selectedSceneIndex]?.id;
+    // Skip voiceover if scene is muted
+    if (sceneId && mutedScenes.has(sceneId)) {
+      return;
+    }
     const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
     if (vo && isPlaying && !isMuted) {
       const a = new Audio(vo.audioUrl);
@@ -218,7 +222,7 @@ export function ProVideoEditor({
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSceneIndex, isPlaying, isMuted]);
+  }, [selectedSceneIndex, isPlaying, isMuted, mutedScenes]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
