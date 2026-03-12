@@ -31,9 +31,10 @@ import { TemplatesTab } from "./editor/TemplatesTab";
 import { GraphicsTab } from "./editor/GraphicsTab";
 import { TransitionsTab } from "./editor/TransitionsTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
+import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 
-type EditorTab = "media" | "record" | "text" | "music" | "stock-video" | "stock-images" | "templates" | "graphics" | "transitions" | "brand-kit" | "script" | "settings";
+type EditorTab = "media" | "record" | "text" | "music" | "stock-video" | "stock-images" | "templates" | "graphics" | "transitions" | "brand-kit" | "script" | "settings" | "card-editor";
 
 const TABS: { id: EditorTab; label: string; icon: React.ReactNode }[] = [
   { id: "media", label: "My Media", icon: <FolderOpen className="w-4 h-4" /> },
