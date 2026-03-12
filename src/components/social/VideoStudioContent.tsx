@@ -679,7 +679,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
             )}
 
             {/* Video Editor */}
-            {status === "completed" && videoUrl && showEditor && (
+            {mediaType === "video" && status === "completed" && videoUrl && showEditor && (
               <VideoEditor
                 videoUrl={videoUrl}
                 engineeredPrompt={transformResult?.engineeredPrompt || rawPrompt}
