@@ -1125,6 +1125,14 @@ export function ProVideoEditor({
               )}
               {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
               {activeTab === "settings" && <SettingsTab settings={editorSettings} onChange={setEditorSettings} />}
+              {activeTab === "card-editor" && currentCardSettings && (
+                <IntroOutroEditor
+                  settings={currentCardSettings}
+                  brand={brand}
+                  onChange={handleCardSettingsChange}
+                  onApply={handleApplyCard}
+                />
+              )}
             </div>
           )}
         </div>
