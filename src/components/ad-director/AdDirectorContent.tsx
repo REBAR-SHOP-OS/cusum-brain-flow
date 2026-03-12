@@ -667,7 +667,11 @@ export function AdDirectorContent() {
         )}
 
         {step === "preview" && (
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 space-y-4">
+            <Button variant="ghost" size="sm" onClick={() => setStep("storyboard")} className="gap-1 text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back to Storyboard
+            </Button>
             <FinalPreview
               clips={clips}
               storyboard={storyboard}
