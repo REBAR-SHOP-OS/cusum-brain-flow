@@ -268,6 +268,11 @@ export async function stitchClips(
 
     recorder.start();
 
+    // Start audio playback alongside first clip
+    if (audioElement) {
+      audioElement.play().catch(() => console.warn("[stitchClips] Audio play failed"));
+    }
+
     let clipIndex = 0;
     let clipStartCumulativeTime = 0;
 
