@@ -583,7 +583,7 @@ IMPORTANT:
 Script:
 ${script}`;
 
-  const { data, modelUsed, fallbackUsed } = await callAI(
+  return await callAIAndExtract(
     apiKey,
     MODEL_ROUTES["analyze-script"],
     [{ role: "system", content: ANALYZE_SCRIPT_PROMPT }, { role: "user", content: userPrompt }],
@@ -591,8 +591,6 @@ ${script}`;
     { type: "function", function: { name: "create_storyboard" } },
     modelOverride,
   );
-
-  return { result: extractToolResult(data), modelUsed, fallbackUsed };
 }
 
 async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
