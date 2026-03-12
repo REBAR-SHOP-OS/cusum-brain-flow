@@ -443,20 +443,68 @@ export function AdDirectorContent() {
       const completedClips = clips.filter(c => c.status === "completed" && c.videoUrl);
       if (completedClips.length === 0) throw new Error("No clips to export");
 
-      if (completedClips.length === 1) {
-        setFinalVideoUrl(completedClips[0].videoUrl!);
-        toast({ title: "Video ready", description: "Your 30-second ad is ready to download." });
-        return;
+      toast({ title: "Assembling ad...", description: "Stitching clips, generating voiceover..." });
+
+      // 1. Build ordered clip list with target durations from storyboard
+      const orderedClips = storyboard
+        .map(scene => {
+          const clip = clips.find(c => c.sceneId === scene.id);
+          const segment = segments.find(s => s.id === scene.segmentId);
+          const targetDur = segment ? segment.endTime - segment.startTime : 5;
+          return clip?.status === "completed" && clip.videoUrl
+            ? { videoUrl: clip.videoUrl, targetDuration: targetDur }
+            : null;
+        })
+        .filter(Boolean) as { videoUrl: string; targetDuration: number }[];
+
+      if (orderedClips.length === 0) throw new Error("No completed clips in storyboard order");
+
+      // 2. Stitch clips into one continuous video
+      let stitchedUrl: string;
+      if (orderedClips.length === 1) {
+        stitchedUrl = orderedClips[0].videoUrl;
+      } else {
+        stitchedUrl = await stitchClips(orderedClips);
       }
 
-      setFinalVideoUrl(completedClips[0].videoUrl!);
-      toast({ title: "Preview ready", description: `${completedClips.length} clips generated. Full stitching available in export.` });
+      // 3. Generate voiceover from full script and merge
+      let finalUrl = stitchedUrl;
+      try {
+        const fullNarration = segments.map(s => s.text).join(" ");
+        if (fullNarration.trim().length > 0) {
+          const ttsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+          const ttsResponse = await fetch(ttsUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ text: fullNarration }),
+          });
+
+          if (ttsResponse.ok) {
+            const audioBlob = await ttsResponse.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            finalUrl = await mergeVideoAudio(stitchedUrl, audioUrl);
+          } else {
+            console.warn("TTS failed, exporting without voiceover");
+            toast({ title: "Voiceover skipped", description: "TTS service unavailable. Exporting silent video.", variant: "destructive" });
+          }
+        }
+      } catch (voErr: any) {
+        console.warn("Voiceover merge failed:", voErr);
+        toast({ title: "Voiceover skipped", description: voErr.message || "Audio merge failed. Exporting silent video.", variant: "destructive" });
+      }
+
+      setFinalVideoUrl(finalUrl);
+      toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched into your final ad.` });
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
       setExporting(false);
     }
-  }, [clips, toast]);
+  }, [clips, storyboard, segments, toast]);
 
   const handleDownload = () => {
     if (!finalVideoUrl) return;
