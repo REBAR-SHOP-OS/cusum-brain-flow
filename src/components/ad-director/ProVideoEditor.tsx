@@ -150,7 +150,7 @@ export function ProVideoEditor({
 
       if (result.type === "overlay") {
         // Apply overlay without regeneration
-        const overlay = result.overlay as { kind: string; position: string; size: string; content: string };
+        const overlay = result.overlay as { kind: string; position: string; size: string; content: string; animated?: boolean };
         const posMap: Record<string, { x: number; y: number }> = {
           "top-left": { x: 5, y: 5 }, "top-right": { x: 80, y: 5 },
           "bottom-left": { x: 5, y: 80 }, "bottom-right": { x: 80, y: 80 },
@@ -168,9 +168,10 @@ export function ProVideoEditor({
           content,
           opacity: 0.85,
           sceneId: scene.id,
+          animated: overlay.animated || false,
         };
         setOverlays(prev => [...prev, newOverlay]);
-        toast({ title: "Overlay added", description: `${overlay.kind} overlay applied — no regeneration needed.` });
+        toast({ title: "Overlay added", description: `${overlay.kind} overlay applied${overlay.animated ? " with animation" : ""} — no regeneration needed.` });
       } else {
         // Generative edit — rewrite prompt and regenerate
         const newPrompt = result.editedPrompt;
