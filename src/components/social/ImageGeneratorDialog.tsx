@@ -3,12 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2 } from "lucide-react";
+import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
@@ -16,13 +16,12 @@ interface ImageGeneratorDialogProps {
   onImageReady?: (imageUrl: string) => void;
 }
 
-type Status = "idle" | "generating" | "completed" | "failed";
+type Status = "idle" | "searching" | "generating" | "completed" | "failed";
 
 interface ModelOption {
   id: string;
   label: string;
   description: string;
-  sizes: { value: string; label: string }[];
 }
 
 const modelOptions: ModelOption[] = [
@@ -30,65 +29,64 @@ const modelOptions: ModelOption[] = [
     id: "google/gemini-3-pro-image-preview",
     label: "Gemini Pro Image",
     description: "Highest quality — best for detailed, professional images",
-    sizes: [],
   },
   {
     id: "google/gemini-3.1-flash-image-preview",
     label: "Gemini Flash Image",
     description: "Fast generation with pro-level quality",
-    sizes: [],
   },
 ];
 
 export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: ImageGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("google/gemini-3-pro-image-preview");
-  const [size, setSize] = useState("1024x1024");
   const [status, setStatus] = useState<Status>("idle");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [revisedPrompt, setRevisedPrompt] = useState<string | null>(null);
+  const [pexelsInspired, setPexelsInspired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { brandKit } = useBrandKit();
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
   const handleClose = () => {
-    if (status === "generating") return;
+    if (status === "searching" || status === "generating") return;
     onOpenChange(false);
     setTimeout(() => {
       setPrompt("");
       setSelectedModel("google/gemini-3-pro-image-preview");
-      setSize("1024x1024");
       setStatus("idle");
       setImageUrl(null);
       setRevisedPrompt(null);
+      setPexelsInspired(false);
       setError(null);
     }, 300);
-  };
-
-  const handleModelChange = (modelId: string) => {
-    setSelectedModel(modelId);
   };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
-    setStatus("generating");
+    setStatus("searching");
     setError(null);
     setImageUrl(null);
     setRevisedPrompt(null);
+    setPexelsInspired(false);
 
-    // Auto-inject branding from brand kit
-    const logoDesc = brandKit?.logo_url
-      ? `IMPORTANT: Include a subtle but visible watermark of the ${brandKit.business_name || "company"} logo in the bottom-right corner.`
-      : "";
-    const brandedPrompt = `${prompt.trim()}. ${logoDesc}`.trim();
+    // Brief delay to show "Finding inspiration" step
+    await new Promise((r) => setTimeout(r, 800));
+    setStatus("generating");
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("generate-image", {
-          body: {
-          prompt: brandedPrompt,
+        body: {
+          prompt: prompt.trim(),
           model: selectedModel,
+          brandContext: {
+            business_name: brandKit?.business_name || undefined,
+            description: brandKit?.description || undefined,
+            value_prop: brandKit?.value_prop || undefined,
+            tagline: undefined,
+          },
         },
       });
 
@@ -102,6 +100,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
       setImageUrl(data.imageUrl);
       setRevisedPrompt(data.revisedPrompt);
+      setPexelsInspired(!!data.pexelsInspired);
       setStatus("completed");
     } catch (err) {
       console.error("Image generation error:", err);
@@ -114,6 +113,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
     setStatus("idle");
     setImageUrl(null);
     setRevisedPrompt(null);
+    setPexelsInspired(false);
     setError(null);
   };
 
@@ -134,7 +134,11 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center">
               <ImageIcon className="w-4 h-4 text-white" />
             </div>
-            AI Image Generator
+            AI Ad Image Generator
+            <Badge variant="secondary" className="text-[10px] gap-1 ml-auto">
+              <Search className="w-3 h-3" />
+              Pexels-powered
+            </Badge>
           </DialogTitle>
         </DialogHeader>
 
@@ -149,7 +153,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
                   {modelOptions.map((m) => (
                     <button
                       key={m.id}
-                      onClick={() => handleModelChange(m.id)}
+                      onClick={() => setSelectedModel(m.id)}
                       className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
                         selectedModel === m.id
                           ? "border-primary bg-primary/5 ring-1 ring-primary/20"
@@ -176,13 +180,16 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
               {/* Prompt */}
               <div className="space-y-1.5">
-                <Label className="text-sm">Describe your image</Label>
+                <Label className="text-sm">Describe your advertising image</Label>
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="A professional social media banner with modern design..."
+                  placeholder="A professional product showcase for social media ads..."
                   className="min-h-[100px] resize-none"
                 />
+                <p className="text-[10px] text-muted-foreground">
+                  The AI will search Pexels for visual inspiration, then generate a unique ad image using your brand context.
+                </p>
               </div>
 
               {/* Suggestions */}
@@ -207,7 +214,6 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
                 </div>
               </div>
 
-
               {/* Generate */}
               <Button
                 className="w-full gap-2"
@@ -215,9 +221,20 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
                 onClick={handleGenerate}
               >
                 <Sparkles className="w-4 h-4" />
-                Generate with {currentModel.label}
+                Generate Ad Image with {currentModel.label}
               </Button>
             </>
+          )}
+
+          {/* Searching Pexels */}
+          {status === "searching" && (
+            <div className="flex flex-col items-center text-center gap-3 py-10">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center">
+                <Search className="w-7 h-7 animate-pulse text-primary" />
+              </div>
+              <p className="font-medium">Finding visual inspiration…</p>
+              <p className="text-sm text-muted-foreground">Searching Pexels for the best reference photos.</p>
+            </div>
           )}
 
           {/* Generating */}
@@ -226,8 +243,8 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
               <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center">
                 <Loader2 className="w-7 h-7 animate-spin text-primary" />
               </div>
-              <p className="font-medium">Generating your image…</p>
-              <p className="text-sm text-muted-foreground">This usually takes 10-30 seconds.</p>
+              <p className="font-medium">Generating your ad image…</p>
+              <p className="text-sm text-muted-foreground">Combining brand context with visual inspiration. This takes 10-30 seconds.</p>
             </div>
           )}
 
@@ -236,20 +253,26 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-emerald-600">
                 <CheckCircle2 className="w-5 h-5" />
-                <span className="font-medium">Image generated!</span>
+                <span className="font-medium">Ad image generated!</span>
+                {pexelsInspired && (
+                  <Badge variant="outline" className="text-[10px] gap-1 ml-auto">
+                    <Search className="w-3 h-3" />
+                    Pexels-inspired
+                  </Badge>
+                )}
               </div>
 
               <div className="rounded-lg overflow-hidden border">
                 <img
                   src={imageUrl}
-                  alt="Generated image"
+                  alt="Generated advertising image"
                   className="w-full object-contain max-h-[400px]"
                 />
               </div>
 
               {revisedPrompt && (
                 <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">Revised prompt:</span> {revisedPrompt}
+                  <span className="font-medium text-foreground">AI notes:</span> {revisedPrompt}
                 </div>
               )}
 
