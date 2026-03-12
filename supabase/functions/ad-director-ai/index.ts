@@ -196,6 +196,11 @@ function extractToolResult(data: any): any {
   const content = data.choices?.[0]?.message?.content || "";
   if (!content) {
     const finishReason = data.choices?.[0]?.finish_reason;
+    // Gemini sometimes returns finish_reason "error" with MALFORMED_FUNCTION_CALL — treat as retryable
+    if (finishReason === "error") {
+      console.error("extractToolResult: AI returned finish_reason=error (likely MALFORMED_FUNCTION_CALL). Will throw for retry.");
+      throw new Error("AI returned malformed function call — please retry");
+    }
     console.error("extractToolResult: No tool_calls and no content. finish_reason:", finishReason, "keys:", JSON.stringify(Object.keys(data.choices?.[0]?.message || {})), "raw:", JSON.stringify(data).slice(0, 800));
     throw new Error("AI did not return structured data");
   }
