@@ -273,8 +273,6 @@ export function ProVideoEditor({
     voDebounceRef.current = setTimeout(() => {
       if (cancelled) return;
       const a = new Audio(vo.url);
-      // For static cards, start at 0; for video scenes, sync to video time
-      a.currentTime = isStaticCard ? 0 : (videoRef.current?.currentTime ?? 0);
       // Adjust voiceover playback rate if it's longer than the video clip
       const sceneClipDur = clipDurations[sceneId!];
       const sceneVoDur = voiceoverDurations[sceneId!];
@@ -287,12 +285,29 @@ export function ProVideoEditor({
       if (sceneId && mutedScenes.has(sceneId)) {
         a.volume = 0;
       }
-      a.play().catch(() => {});
       audioRef.current = a;
       currentVoUrlRef.current = vo.url;
 
-      // Sync only for video scenes, not static cards
+      // For video scenes, sync VO start to video's actual playing event
+      const currentClip = clips.find(c => c.sceneId === sceneId);
+      const isStaticCard = storyboard[selectedSceneIndex]?.generationMode === "static-card" || currentClip?.videoUrl?.startsWith("data:image/");
+
       if (!isStaticCard && videoRef.current) {
+        const onPlaying = () => {
+          if (cancelled || !audioRef.current) return;
+          audioRef.current.currentTime = videoRef.current?.currentTime ?? 0;
+          audioRef.current.play().catch(() => {});
+          videoRef.current?.removeEventListener("playing", onPlaying);
+        };
+        // If video is already playing, start immediately
+        if (!videoRef.current.paused && videoRef.current.readyState >= 3) {
+          a.currentTime = videoRef.current.currentTime ?? 0;
+          a.play().catch(() => {});
+        } else {
+          videoRef.current.addEventListener("playing", onPlaying);
+        }
+
+        // Sync drift correction
         syncHandler = () => {
           if (audioRef.current && videoRef.current) {
             const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
@@ -301,6 +316,10 @@ export function ProVideoEditor({
         };
         vid = videoRef.current;
         vid.addEventListener("timeupdate", syncHandler);
+      } else {
+        // Static card — play immediately
+        a.currentTime = 0;
+        a.play().catch(() => {});
       }
     }, 50);
 
