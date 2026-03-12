@@ -102,8 +102,11 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   useEffect(() => { storyboardRef.current = storyboard; }, [storyboard]);
   const [continuity, setContinuity] = useState<ContinuityProfile | null>(null);
   const [clips, setClips] = useState<ClipOutput[]>([]);
-  // Derive generatingAny reactively from clips state
-  const generatingAny = clips.some(c => c.status === "generating");
+  // Multi-build state: each build is an independent set of clips for all scenes
+  const [builds, setBuilds] = useState<{ buildIndex: number; clips: ClipOutput[] }[]>([]);
+  const [activeBuildIndex, setActiveBuildIndex] = useState(0);
+  // Derive generatingAny reactively from clips state + all builds
+  const generatingAny = clips.some(c => c.status === "generating") || builds.some(b => b.clips.some(c => c.status === "generating"));
   const [exporting, setExporting] = useState(false);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [musicTrackUrl, setMusicTrackUrl] = useState<string | null>(null);
