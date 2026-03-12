@@ -1,46 +1,48 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Audio Overlapping, Missing Transitions, Voice Repeats in Pro Editor
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problems Found
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+After auditing `ProVideoEditor.tsx` (lines 219-266, 528-550) and `videoStitch.ts`:
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. Voice overlaps — conditional cleanup return
+The voiceover sync effect (line 219) only returns a cleanup function inside the `if (vo && isPlaying && !isMuted)` branch. The `else` branch (line 263) manually cleans up but returns **no cleanup function**. On rapid state changes (scene transitions, play/pause toggling), the old `Audio` instance can survive and overlap with a new one.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 2. Voice repeats on scene auto-advance
+`handleVideoEnded` (line 531) sets `autoPlayPending = true` then changes `selectedSceneIndex`. This triggers two effects simultaneously: the auto-play effect (line 212) calls `video.play()`, and the voiceover sync effect (line 221) creates a new Audio. The video's `onPlay` callback also sets `isPlaying(true)`, re-triggering the voiceover effect a second time — causing a duplicate Audio.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 3. No visual transition between scenes in preview
+The current "transition" (line 540) is just a 300ms CSS opacity toggle — fade to black, swap src, fade in. There is no crossfade between outgoing and incoming video in preview mode (crossfade only exists in export/stitch).
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+---
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+## Fixes — `src/components/ad-director/ProVideoEditor.tsx`
+
+### Fix 1: Always return cleanup from voiceover effect
+Restructure the effect so cleanup is **always** returned, regardless of which branch executes. Move the cleanup to the outer scope of the effect.
+
+### Fix 2: Prevent double-trigger during auto-advance
+Add a `sceneTransitioning` ref that is `true` during the 300ms transition. The voiceover effect checks this ref and skips starting audio while transitioning. Only after the transition completes and the new video begins playing does the voiceover start.
+
+### Fix 3: Debounce voiceover creation
+Add a 150ms debounce (`setTimeout`) before creating the Audio instance inside the voiceover effect. If the effect re-runs within that window (e.g., from `onPlay` re-triggering `isPlaying`), the previous timeout is cleared and only one Audio is created.
+
+### Fix 4: Smoother scene transition with dual-video crossfade
+Add a second hidden `<video>` element that preloads the next scene. On auto-advance:
+- Start playing the next video (hidden) 
+- Crossfade opacity over 500ms (outgoing fades out, incoming fades in)
+- After crossfade, swap the primary video ref
+
+This is a significant change. A simpler alternative: keep the CSS fade but extend it to 500ms and ensure the next video is preloaded before the fade-in begins.
+
+**Recommended approach**: Keep the CSS opacity transition but fix the timing — preload the next scene's video before starting the fade, and delay the fade-in until `canplay` fires on the new src.
+
+---
+
+## Summary of changes — single file: `ProVideoEditor.tsx`
+
+1. **Voiceover effect (lines 219-266)**: Restructure to always return cleanup. Add debounce timer ref. Check `sceneTransitioning` ref.
+2. **Scene transition (lines 528-550)**: Add `sceneTransitioning` ref, extend fade to 500ms, wait for `canplay` before fade-in.
+3. **Auto-play effect (lines 211-217)**: Gate on `!sceneTransitioning.current` to avoid race.
+
