@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { stitchClips, type StitchOverlayOptions, type StitchProgress } from "@/lib/videoStitch";
+export type { StitchProgress };
 
 export type RenderStatus =
   | "idle"
