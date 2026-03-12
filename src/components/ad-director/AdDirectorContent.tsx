@@ -912,6 +912,15 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
           </div>
         )}
       </div>
+
+      <ExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        finalVideoUrl={finalVideoUrl}
+        brandName={brand.name}
+        onExport={handleExport}
+        exporting={exporting}
+      />
     </div>
   );
 }
