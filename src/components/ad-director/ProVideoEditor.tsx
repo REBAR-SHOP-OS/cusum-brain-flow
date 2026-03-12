@@ -413,14 +413,19 @@ export function ProVideoEditor({
     }
   }, [videoVolume, selectedSceneIndex, mutedScenes, storyboard]);
 
-  // Apply per-track volume to voiceover audio
+  // Apply per-track volume to voiceover audio (also handles mutedScenes)
   useEffect(() => {
     if (audioRef.current) {
       const sceneId = storyboard[selectedSceneIndex]?.id;
-      const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
-      if (vo) audioRef.current.volume = vo.volume ?? 1;
+      const isMutedScene = sceneId ? mutedScenes.has(sceneId) : false;
+      if (isMutedScene) {
+        audioRef.current.volume = 0;
+      } else {
+        const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
+        audioRef.current.volume = vo?.volume ?? 1;
+      }
     }
-  }, [audioTracks, selectedSceneIndex, storyboard]);
+  }, [audioTracks, selectedSceneIndex, storyboard, mutedScenes]);
 
   const handleVideoVolumeChange = useCallback((v: number) => {
     setVideoVolume(v);
