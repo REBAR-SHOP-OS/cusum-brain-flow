@@ -690,7 +690,7 @@ export function AdDirectorContent() {
               <div className="mt-4 flex justify-center">
                 <Button onClick={handleDownload} variant="outline" className="gap-2 rounded-2xl px-6">
                   <Film className="w-4 h-4" />
-                  Download Final MP4
+                  Download Final Video
                 </Button>
               </div>
             )}

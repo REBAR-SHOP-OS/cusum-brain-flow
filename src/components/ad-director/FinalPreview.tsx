@@ -1,10 +1,12 @@
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Download, Play, Film, Type, Image as ImageIcon, LayoutTemplate, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Download, Play, Film, Type, Image as ImageIcon, LayoutTemplate, Loader2, AlertTriangle, RefreshCw, FileDown } from "lucide-react";
 import { type ClipOutput, type StoryboardScene, type ScriptSegment } from "@/types/adDirector";
+import type { RenderStatus, RenderLogEntry, StitchProgress } from "@/hooks/useRenderPipeline";
 
 interface FinalPreviewProps {
   clips: ClipOutput[];
@@ -19,6 +21,45 @@ interface FinalPreviewProps {
   onExport: () => void;
   exporting: boolean;
   finalVideoUrl: string | null;
+  // Render pipeline state (optional — backward compatible)
+  renderStatus?: RenderStatus;
+  renderError?: { message: string; stage: string } | null;
+  renderProgress?: StitchProgress | null;
+  renderLog?: RenderLogEntry[];
+  onRetry?: () => void;
+  onDownloadLog?: () => void;
+}
+
+const STAGE_LABELS: Record<string, string> = {
+  generating_voice: "Generating voiceover…",
+  assembly_in_progress: "Stitching clips…",
+  validating: "Validating output…",
+  assembled: "Complete",
+  render_failed: "Failed",
+};
+
+function RenderProgressBar({ status, progress }: { status?: RenderStatus; progress?: StitchProgress | null }) {
+  if (!status || status === "idle" || status === "assembled" || status === "render_failed") return null;
+
+  const stageLabel = STAGE_LABELS[status] || status;
+  const clipInfo = progress?.clipIndex !== undefined && progress?.clipTotal
+    ? ` (${progress.clipIndex + 1}/${progress.clipTotal})`
+    : "";
+
+  const pct = progress?.clipTotal && progress.clipIndex !== undefined
+    ? Math.round(((progress.clipIndex + 1) / progress.clipTotal) * 100)
+    : undefined;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+        <span>{stageLabel}{clipInfo}</span>
+        {pct !== undefined && <span className="ml-auto">{pct}%</span>}
+      </div>
+      {pct !== undefined && <Progress value={pct} className="h-1.5" />}
+    </div>
+  );
 }
 
 export function FinalPreview({
@@ -26,8 +67,9 @@ export function FinalPreview({
   subtitlesEnabled, logoEnabled, endCardEnabled,
   onToggleSubtitles, onToggleLogo, onToggleEndCard,
   onExport, exporting, finalVideoUrl,
+  renderStatus, renderError, renderProgress, renderLog,
+  onRetry, onDownloadLog,
 }: FinalPreviewProps) {
-  // When end card is enabled, the last scene is replaced (not appended)
   const effectiveScenes = endCardEnabled && storyboard.length > 1
     ? storyboard.slice(0, -1)
     : storyboard;
@@ -35,6 +77,10 @@ export function FinalPreview({
   const completedForExport = completedClips.filter(c => effectiveScenes.some(s => s.id === c.sceneId));
   const allCompleted = completedForExport.length === effectiveScenes.length && effectiveScenes.length > 0;
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const isFailed = renderStatus === "render_failed";
+  const isAssembled = renderStatus === "assembled" || (!renderStatus && !!finalVideoUrl);
+  const isRendering = renderStatus === "generating_voice" || renderStatus === "assembly_in_progress" || renderStatus === "validating";
 
   return (
     <div className="rounded-2xl border border-border/50 bg-card/50 p-4 space-y-4">
@@ -49,8 +95,41 @@ export function FinalPreview({
         </div>
       </div>
 
-      {/* Video Player */}
-      {finalVideoUrl ? (
+      {/* Render Progress */}
+      {isRendering && (
+        <RenderProgressBar status={renderStatus} progress={renderProgress} />
+      )}
+
+      {/* Render Failed */}
+      {isFailed && renderError && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="space-y-1 min-w-0">
+              <p className="text-sm font-semibold text-destructive">Render failed</p>
+              <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
+                Stage: {renderError.stage}
+              </Badge>
+              <p className="text-xs text-muted-foreground break-words">{renderError.message}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {onRetry && (
+              <Button size="sm" variant="outline" onClick={onRetry} className="gap-1.5 text-xs">
+                <RefreshCw className="w-3.5 h-3.5" /> Retry Render
+              </Button>
+            )}
+            {onDownloadLog && renderLog && renderLog.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={onDownloadLog} className="gap-1.5 text-xs text-muted-foreground">
+                <FileDown className="w-3.5 h-3.5" /> Download Log
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Video Player — only when validated */}
+      {isAssembled && finalVideoUrl ? (
         <div className="space-y-2">
           <video
             ref={videoRef}
@@ -70,9 +149,8 @@ export function FinalPreview({
             )}s</span>
           </div>
         </div>
-      ) : (() => {
+      ) : !isFailed && !isRendering ? (() => {
         const generatingCount = clips.filter(c => c.status === "generating").length;
-        const slideshowCount = clips.filter(c => c.status === "completed" && storyboard.find(s => s.id === c.sceneId)?.sceneIntelligence?.videoEngine === "Slideshow Fallback").length;
         const isGenerating = generatingCount > 0;
         return (
           <div className="aspect-video bg-black/50 rounded-lg flex items-center justify-center">
@@ -90,11 +168,6 @@ export function FinalPreview({
                   <p className="text-xs text-muted-foreground">
                     {allCompleted ? "Ready to stitch — click Export" : `${effectiveScenes.length - completedForExport.length} scenes remaining`}
                   </p>
-                  {slideshowCount > 0 && (
-                    <p className="text-[10px] text-yellow-500">
-                      ⚠ {slideshowCount} scene(s) are static images (slideshow fallback)
-                    </p>
-                  )}
                 </>
               ) : (
                 <p className="text-xs text-muted-foreground">Generate scenes to preview</p>
@@ -102,7 +175,7 @@ export function FinalPreview({
             </div>
           </div>
         );
-      })()}
+      })() : null}
 
       {/* Overlay Toggles */}
       <div className="flex gap-6">
@@ -123,15 +196,18 @@ export function FinalPreview({
       {/* Export */}
       <Button
         onClick={onExport}
-        disabled={!allCompleted || exporting}
+        disabled={!allCompleted || exporting || isRendering}
         className="w-full h-10 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-sm font-semibold"
       >
-        {exporting ? (
-          <>Stitching Final Video…</>
+        {exporting || isRendering ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            {STAGE_LABELS[renderStatus || "assembly_in_progress"] || "Stitching…"}
+          </>
         ) : (
           <>
             <Download className="w-4 h-4 mr-2" />
-            Export 30s Ad (MP4)
+            Export 30s Ad
           </>
         )}
       </Button>
