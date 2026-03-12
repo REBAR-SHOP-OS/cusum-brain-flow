@@ -460,7 +460,7 @@ export async function stitchClips(
       // Phase 3: Post-stitch validation
       onProgress?.({ stage: "validating", message: "Validating output..." });
       const blob = new Blob(chunks, { type: mimeType });
-      const validation = await validateBlob(blob);
+      const validation = await validateBlob(blob, cumulativeTime);
 
       if (!validation.valid) {
         reject(new Error(`Stitch validation failed: ${validation.error}`));
