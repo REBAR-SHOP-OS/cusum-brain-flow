@@ -13,6 +13,8 @@ import { AdvancedModelSettings } from "./AdvancedModelSettings";
 import { cn } from "@/lib/utils";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ScriptInputProps {
   script: string;
@@ -38,6 +40,34 @@ function estimateDuration(text: string): number {
 
 export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAnalyze, analyzing, analysisStatus, assets, onAssetsChange, modelOverrides, onModelOverridesChange, onSaveBrandKit, savingBrandKit, onLoadProject }: ScriptInputProps) {
   const { projects, deleteProject } = useAdProjectHistory();
+  const { toast } = useToast();
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const handleLogoUpload = async (file: File) => {
+    setUploadingLogo(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({ title: "Please sign in", description: "Authentication required to upload logo", variant: "destructive" });
+        return;
+      }
+      const ext = file.name.split(".").pop() || "png";
+      const fileName = `${user.id}/logo-${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("brand-assets")
+        .upload(fileName, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data: publicData } = supabase.storage.from("brand-assets").getPublicUrl(fileName);
+      onBrandChange({ ...brand, logoUrl: publicData.publicUrl });
+      toast({ title: "Logo uploaded", description: "Watermark will be applied to all clips" });
+    } catch (err: any) {
+      console.error("Logo upload failed:", err);
+      toast({ title: "Logo upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       onAssetsChange([...assets, ...Array.from(e.target.files)]);
@@ -230,7 +260,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
             <div className="flex items-center gap-2 mb-3">
               <ImageIcon className="w-4 h-4 text-primary" />
               <Label className="text-sm font-medium">Brand Logo</Label>
-              <Badge variant="outline" className="text-[9px] ml-auto">Optional</Badge>
+              <Badge variant="secondary" className="text-[9px] ml-auto">Mandatory Watermark</Badge>
             </div>
             {brand.logoUrl ? (
               <div className="flex items-center gap-3">
@@ -244,15 +274,22 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               <>
                 <input type="file" accept="image/*" onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) onBrandChange({ ...brand, logoUrl: URL.createObjectURL(file) });
+                  if (file) handleLogoUpload(file);
                 }} className="hidden" id="logo-upload" />
-                <label htmlFor="logo-upload" className="flex items-center gap-3 p-3 rounded-xl border border-border/20 bg-background/30 hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer group">
+                <label htmlFor="logo-upload" className={cn(
+                  "flex items-center gap-3 p-3 rounded-xl border border-border/20 bg-background/30 hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer group",
+                  uploadingLogo && "opacity-50 pointer-events-none"
+                )}>
                   <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                    <ImageIcon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    {uploadingLogo ? (
+                      <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                    ) : (
+                      <ImageIcon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    )}
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-foreground">Upload logo</p>
-                    <p className="text-[10px] text-muted-foreground">Used in watermark & end card</p>
+                    <p className="text-xs font-medium text-foreground">{uploadingLogo ? "Uploading…" : "Upload logo"}</p>
+                    <p className="text-[10px] text-muted-foreground">Watermarked on every clip & final export</p>
                   </div>
                 </label>
               </>

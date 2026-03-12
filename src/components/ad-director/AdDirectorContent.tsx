@@ -78,8 +78,9 @@ export function AdDirectorContent() {
   const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
-  const [logoEnabled, setLogoEnabled] = useState(true);
   const [endCardEnabled, setEndCardEnabled] = useState(true);
+  // Logo watermark is always mandatory when logo exists — no toggle
+  const logoEnabled = !!brand.logoUrl;
 
   // ─── Multi-Step Analysis Pipeline ────────────────────────
   const handleAnalyze = useCallback(async () => {
@@ -529,11 +530,33 @@ export function AdDirectorContent() {
         toast({ title: "Voiceover skipped", description: voErr.message || "TTS failed. Exporting silent video.", variant: "destructive" });
       }
 
-      // 3. Stitch clips with overlays + audio in a single pass
+      // 2b. Try server-side assembly first (GCE)
+      let serverAssemblyUrl: string | null = null;
+      try {
+        const gceResult = await invokeEdgeFunction<{ fallback?: boolean; expectedOutputUrl?: string; status?: string }>(
+          "gce-video-assembly",
+          {
+            clips: orderedClips,
+            logoUrl: brand.logoUrl,
+            brand: { name: brand.name, tagline: brand.tagline, website: brand.website, primaryColor: brand.primaryColor, bgColor: brand.secondaryColor },
+            subtitles: subtitlesEnabled ? segments.map(s => ({ text: s.text, startTime: s.startTime, endTime: s.endTime })) : [],
+            endCard: endCardEnabled,
+            audioUrl,
+          }
+        );
+        if (!gceResult.fallback && gceResult.expectedOutputUrl) {
+          serverAssemblyUrl = gceResult.expectedOutputUrl;
+          // TODO: Poll GCS for completion in production
+        }
+      } catch (e) {
+        console.warn("GCE assembly unavailable, using browser fallback:", e);
+      }
+
+      // 3. Stitch clips with overlays + audio in a single pass (browser fallback)
       const finalUrl = await stitchClips(orderedClips, {
         logo: {
           url: brand.logoUrl || "",
-          enabled: logoEnabled && !!brand.logoUrl,
+          enabled: !!brand.logoUrl, // Always enabled when logo exists
           size: 80,
         },
         endCard: {
@@ -576,7 +599,7 @@ export function AdDirectorContent() {
     } finally {
       setExporting(false);
     }
-  }, [clips, storyboard, segments, brand, logoEnabled, endCardEnabled, subtitlesEnabled, toast]);
+  }, [clips, storyboard, segments, brand, endCardEnabled, subtitlesEnabled, toast]);
 
   const handleDownload = () => {
     if (!finalVideoUrl) return;
@@ -758,7 +781,7 @@ export function AdDirectorContent() {
                 logoEnabled={logoEnabled}
                 endCardEnabled={endCardEnabled}
                 onToggleSubtitles={() => setSubtitlesEnabled(!subtitlesEnabled)}
-                onToggleLogo={() => setLogoEnabled(!logoEnabled)}
+                onToggleLogo={() => {}} // Logo is mandatory — no toggle
                 onToggleEndCard={() => setEndCardEnabled(!endCardEnabled)}
                 onExport={handleExport}
                 exporting={exporting}
@@ -782,7 +805,7 @@ export function AdDirectorContent() {
               logoEnabled={logoEnabled}
               endCardEnabled={endCardEnabled}
               onToggleSubtitles={() => setSubtitlesEnabled(!subtitlesEnabled)}
-              onToggleLogo={() => setLogoEnabled(!logoEnabled)}
+              onToggleLogo={() => {}} // Logo is mandatory — no toggle
               onToggleEndCard={() => setEndCardEnabled(!endCardEnabled)}
               onExport={handleExport}
               exporting={exporting}
