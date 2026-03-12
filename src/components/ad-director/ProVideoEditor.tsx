@@ -238,7 +238,17 @@ export function ProVideoEditor({
   }, [audioTracks, storyboard, selectedSceneIndex]);
 
   // Main playback effect — only re-runs on play state or scene change
+  // NOTE: mutedScenes removed from deps to prevent audio teardown/restart glitches;
+  // muted-scene volume is handled in the volume effect below.
   useEffect(() => {
+    const sceneId = storyboard[selectedSceneIndex]?.id;
+    const vo = currentSceneVoRef.current;
+
+    // If same VO is already playing, don't touch it — no cleanup returned
+    if (audioRef.current && currentVoUrlRef.current === vo?.url && !audioRef.current.paused) {
+      return; // Keep playing, no teardown
+    }
+
     let cancelled = false;
     let syncHandler: (() => void) | null = null;
     let vid: HTMLVideoElement | null = null;
@@ -254,53 +264,48 @@ export function ProVideoEditor({
     // Don't start voiceover during scene transition
     if (sceneTransitioning.current) { cleanup(); return cleanup; }
 
-    const sceneId = storyboard[selectedSceneIndex]?.id;
-    // Skip voiceover if scene is muted
-    if (sceneId && mutedScenes.has(sceneId)) { cleanup(); return cleanup; }
+    if (!vo || !isPlaying || isMuted) { cleanup(); return cleanup; }
 
-    const vo = currentSceneVoRef.current;
-    if (vo && isPlaying && !isMuted) {
-      // Skip re-creation if same URL is already playing
-      if (audioRef.current && currentVoUrlRef.current === vo.url && !audioRef.current.paused) {
-        return cleanup;
+    // Clean up previous instance
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
+
+    // Debounce to prevent double-trigger from rapid state changes
+    voDebounceRef.current = setTimeout(() => {
+      if (cancelled) return;
+      const a = new Audio(vo.url);
+      // For static cards, start at 0; for video scenes, sync to video time
+      a.currentTime = isStaticCard ? 0 : (videoRef.current?.currentTime ?? 0);
+      // Adjust voiceover playback rate if it's longer than the video clip
+      const sceneClipDur = clipDurations[sceneId!];
+      const sceneVoDur = voiceoverDurations[sceneId!];
+      if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
+        a.playbackRate = Math.min(sceneVoDur / sceneClipDur, 1.3);
+      } else {
+        a.playbackRate = 1;
       }
-      // Clean up previous instance
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
+      // Apply muted-scene volume inline
+      if (sceneId && mutedScenes.has(sceneId)) {
+        a.volume = 0;
+      }
+      a.play().catch(() => {});
+      audioRef.current = a;
+      currentVoUrlRef.current = vo.url;
 
-      // Debounce to prevent double-trigger from rapid state changes
-      voDebounceRef.current = setTimeout(() => {
-        if (cancelled) return; // Guard against stale callback
-        const a = new Audio(vo.url);
-        a.currentTime = videoRef.current?.currentTime ?? 0;
-        // Adjust voiceover playback rate if it's longer than the video clip
-        const sceneClipDur = clipDurations[sceneId!];
-        const sceneVoDur = voiceoverDurations[sceneId!];
-        if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
-          a.playbackRate = Math.min(sceneVoDur / sceneClipDur, 1.3);
-        } else {
-          a.playbackRate = 1;
-        }
-        a.play().catch(() => {});
-        audioRef.current = a;
-        currentVoUrlRef.current = vo.url;
-
-        // Keep voiceover in sync with video time
+      // Sync only for video scenes, not static cards
+      if (!isStaticCard && videoRef.current) {
         syncHandler = () => {
           if (audioRef.current && videoRef.current) {
             const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
-            if (drift > 0.3) audioRef.current.currentTime = videoRef.current.currentTime;
+            if (drift > 0.5) audioRef.current.currentTime = videoRef.current.currentTime;
           }
         };
         vid = videoRef.current;
-        vid?.addEventListener("timeupdate", syncHandler);
-      }, 150);
+        vid.addEventListener("timeupdate", syncHandler);
+      }
+    }, 150);
 
-      return cleanup;
-    }
-    // Not playing or no voiceover — clean up
-    cleanup();
     return cleanup;
-  }, [selectedSceneIndex, isPlaying, isMuted, mutedScenes]);
+  }, [selectedSceneIndex, isPlaying, isMuted]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
@@ -408,14 +413,19 @@ export function ProVideoEditor({
     }
   }, [videoVolume, selectedSceneIndex, mutedScenes, storyboard]);
 
-  // Apply per-track volume to voiceover audio
+  // Apply per-track volume to voiceover audio (also handles mutedScenes)
   useEffect(() => {
     if (audioRef.current) {
       const sceneId = storyboard[selectedSceneIndex]?.id;
-      const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
-      if (vo) audioRef.current.volume = vo.volume ?? 1;
+      const isMutedScene = sceneId ? mutedScenes.has(sceneId) : false;
+      if (isMutedScene) {
+        audioRef.current.volume = 0;
+      } else {
+        const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
+        audioRef.current.volume = vo?.volume ?? 1;
+      }
     }
-  }, [audioTracks, selectedSceneIndex, storyboard]);
+  }, [audioTracks, selectedSceneIndex, storyboard, mutedScenes]);
 
   const handleVideoVolumeChange = useCallback((v: number) => {
     setVideoVolume(v);

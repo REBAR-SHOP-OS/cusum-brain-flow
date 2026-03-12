@@ -1,126 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Voiceover Glitching During Playback
+## Completed: Add All Wan 2.6 Capabilities
 
-## Root Causes Found
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-1. **Cleanup destroys audio then recreates it**: When `mutedScenes` (or any dep) changes, React calls the cleanup function which **pauses and nullifies** `audioRef.current`. The effect then re-runs, finds no audio playing, and creates a brand-new `Audio` instance — causing an audible restart/glitch.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-2. **The "same URL playing" guard is bypassed by cleanup**: Line 264 checks `audioRef.current` but cleanup already set it to `null`. So the guard never triggers on re-runs.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-3. **Time sync too aggressive**: The `timeupdate` sync handler corrects drift at 0.3s threshold, causing audible jumps on minor buffering.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-4. **Static card voiceover syncs to nonexistent video**: For static cards, `videoRef.current?.currentTime` is meaningless, setting wrong start time.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-## Solution — `src/components/ad-director/ProVideoEditor.tsx`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### A. Separate muting from creation/destruction
-Remove `mutedScenes` from the main playback effect deps. Instead, handle scene muting in the existing volume effect (line 412-418) — just set `audioRef.current.volume = 0` when muted.
-
-### B. Protect audio from unnecessary teardown
-In the cleanup function, **don't** null out `audioRef.current` unless `cancelled` was explicitly set by a real scene/play-state change. Use a separate `shouldDestroy` flag.
-
-Actually, simpler approach: **move the "same URL" check before the `let cancelled` flag**, and return a no-op cleanup if audio should keep playing.
-
-### C. Increase drift threshold
-Change `0.3` → `0.5` seconds to avoid audible correction jumps.
-
-### D. Handle static card voiceover start time
-When `isStaticCard`, start voiceover at `currentTime` from the static card timer, not `videoRef.current?.currentTime`.
-
-### Concrete changes
-
-**Main playback effect (lines 240-303)** — rewrite:
-
-```typescript
-useEffect(() => {
-  const sceneId = storyboard[selectedSceneIndex]?.id;
-  const vo = currentSceneVoRef.current;
-
-  // If same VO is already playing, don't touch it
-  if (audioRef.current && currentVoUrlRef.current === vo?.url && !audioRef.current.paused) {
-    return; // No cleanup — keep playing
-  }
-
-  let cancelled = false;
-  let syncHandler: (() => void) | null = null;
-  let vid: HTMLVideoElement | null = null;
-
-  const cleanup = () => {
-    cancelled = true;
-    if (voDebounceRef.current) { clearTimeout(voDebounceRef.current); voDebounceRef.current = null; }
-    if (vid && syncHandler) vid.removeEventListener("timeupdate", syncHandler);
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
-    currentVoUrlRef.current = null;
-  };
-
-  if (sceneTransitioning.current) { cleanup(); return cleanup; }
-
-  if (!vo || !isPlaying || isMuted) { cleanup(); return cleanup; }
-
-  // Clean up previous
-  if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
-
-  voDebounceRef.current = setTimeout(() => {
-    if (cancelled) return;
-    const a = new Audio(vo.url);
-    // For static cards, start at 0; for video, sync to video time
-    a.currentTime = isStaticCard ? 0 : (videoRef.current?.currentTime ?? 0);
-    const sceneClipDur = clipDurations[sceneId!];
-    const sceneVoDur = voiceoverDurations[sceneId!];
-    if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
-      a.playbackRate = Math.min(sceneVoDur / sceneClipDur, 1.3);
-    } else {
-      a.playbackRate = 1;
-    }
-    // Apply muted-scene volume
-    if (sceneId && mutedScenes.has(sceneId)) {
-      a.volume = 0;
-    }
-    a.play().catch(() => {});
-    audioRef.current = a;
-    currentVoUrlRef.current = vo.url;
-
-    // Sync only for video scenes, not static cards
-    if (!isStaticCard && videoRef.current) {
-      syncHandler = () => {
-        if (audioRef.current && videoRef.current) {
-          const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
-          if (drift > 0.5) audioRef.current.currentTime = videoRef.current.currentTime;
-        }
-      };
-      vid = videoRef.current;
-      vid.addEventListener("timeupdate", syncHandler);
-    }
-  }, 150);
-
-  return cleanup;
-}, [selectedSceneIndex, isPlaying, isMuted]);
-// Removed mutedScenes from deps — handled via volume effect
-```
-
-**Volume effect (lines 412-418)** — also handle mutedScenes:
-```typescript
-useEffect(() => {
-  if (audioRef.current) {
-    const sceneId = storyboard[selectedSceneIndex]?.id;
-    const isMutedScene = sceneId ? mutedScenes.has(sceneId) : false;
-    if (isMutedScene) {
-      audioRef.current.volume = 0;
-    } else {
-      const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
-      audioRef.current.volume = vo?.volume ?? 1;
-    }
-  }
-}, [audioTracks, selectedSceneIndex, storyboard, mutedScenes]);
-```
-
-### Summary
-| Issue | Fix |
-|-------|-----|
-| Audio destroyed on every dep change | Early return if same URL playing |
-| `mutedScenes` change restarts audio | Remove from deps, handle via volume |
-| Drift sync too tight (0.3s) | Increase to 0.5s |
-| Static card wrong start time | Use 0 instead of videoRef.currentTime |
-| Static card sync to video | Skip timeupdate listener |
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
