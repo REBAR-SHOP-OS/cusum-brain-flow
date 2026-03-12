@@ -569,11 +569,25 @@ export function ProVideoEditor({
     const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
     if (nextIdx !== undefined) {
       setSceneTransition(true);
+      sceneTransitioning.current = true;
       setTimeout(() => {
         autoPlayPending.current = true;
         setSelectedSceneIndex(nextIdx);
-        setTimeout(() => setSceneTransition(false), 50);
-      }, 300);
+        // Wait for new video to be ready before completing transition
+        const checkReady = () => {
+          if (videoRef.current && videoRef.current.readyState >= 3) {
+            sceneTransitioning.current = false;
+            setSceneTransition(false);
+            if (autoPlayPending.current) {
+              videoRef.current.play().catch(() => {});
+              autoPlayPending.current = false;
+            }
+          } else {
+            setTimeout(checkReady, 50);
+          }
+        };
+        setTimeout(checkReady, 50);
+      }, 500);
     } else {
       setIsPlaying(false);
     }
