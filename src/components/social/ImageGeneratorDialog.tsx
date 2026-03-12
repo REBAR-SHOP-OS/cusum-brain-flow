@@ -99,7 +99,19 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
         return;
       }
 
-      setImageUrl(data.imageUrl);
+      let finalImageUrl = data.imageUrl;
+
+      // Apply brand logo overlay if available
+      if (brandKit?.logo_url && finalImageUrl) {
+        try {
+          setStatus("branding");
+          finalImageUrl = await applyLogoToImage(finalImageUrl, brandKit.logo_url);
+        } catch (logoErr) {
+          console.warn("Logo overlay failed, using image without logo:", logoErr);
+        }
+      }
+
+      setImageUrl(finalImageUrl);
       setRevisedPrompt(data.revisedPrompt);
       setPexelsInspired(!!data.pexelsInspired);
       setStatus("completed");
