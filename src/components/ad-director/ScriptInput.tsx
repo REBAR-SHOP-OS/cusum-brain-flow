@@ -166,6 +166,9 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               />
             </div>
 
+            {/* Divider */}
+            <div className="border-t border-border/20" />
+
             {/* Colors inline */}
             <div className="flex items-center gap-4 pt-1">
               <div className="flex items-center gap-2">
