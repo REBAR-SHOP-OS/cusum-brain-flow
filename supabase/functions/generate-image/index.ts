@@ -153,16 +153,16 @@ serve(async (req) => {
       // Step 2: Build advertising-optimized prompt
       const adPrompt = buildAdPrompt(prompt, brandContext, !!pexelsUrl);
 
-      // Step 3: Build message content (multi-modal if reference exists)
-      let messageContent: any;
+      // Step 3: Build message content (multi-modal with reference + logo)
+      const contentParts: any[] = [{ type: "text", text: adPrompt }];
       if (pexelsUrl) {
-        messageContent = [
-          { type: "text", text: adPrompt },
-          { type: "image_url", image_url: { url: pexelsUrl } },
-        ];
-      } else {
-        messageContent = adPrompt;
+        contentParts.push({ type: "image_url", image_url: { url: pexelsUrl } });
       }
+      if (logoUrl) {
+        contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+        contentParts.push({ type: "text", text: "Incorporate this company logo naturally as a branded watermark in the corner of the image — preserve its exact colors, shape, and design." });
+      }
+      const messageContent = contentParts.length === 1 ? adPrompt : contentParts;
 
       const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",

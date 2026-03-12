@@ -82,6 +82,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
         body: {
           prompt: prompt.trim(),
           model: selectedModel,
+          logoUrl: brandKit?.logo_url || undefined,
           brandContext: {
             business_name: brandKit?.business_name || undefined,
             description: brandKit?.description || undefined,
