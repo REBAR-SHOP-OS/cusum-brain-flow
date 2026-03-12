@@ -30,7 +30,7 @@ const TOOLS = [
   { icon: Palette, label: "Brand kit", tab: "brand-kit" },
 ];
 
-export function AdDirectorSidebar({ onLoadProject, onNavigateTab }: AdDirectorSidebarProps) {
+export function AdDirectorSidebar({ onLoadProject, onNavigateTab, activeTab }: AdDirectorSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const { projects } = useAdProjectHistory();
