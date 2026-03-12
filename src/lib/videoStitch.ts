@@ -39,13 +39,22 @@ export interface StitchProgress {
 // ─── Helpers ───────────────────────────────────────────────
 
 async function fetchAsBlob(url: string): Promise<string> {
+  // MUST convert to blob URL so canvas drawing is same-origin (not tainted).
+  // A tainted canvas makes captureStream() produce empty data.
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { mode: "cors" });
     if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
     const blob = await resp.blob();
     return URL.createObjectURL(blob);
-  } catch {
-    return url;
+  } catch (e) {
+    // Try no-cors as fallback — opaque response, but we can still get blob
+    try {
+      const resp2 = await fetch(url, { mode: "no-cors" });
+      const blob = await resp2.blob();
+      if (blob.size > 0) return URL.createObjectURL(blob);
+    } catch { /* fall through */ }
+    console.error(`[fetchAsBlob] Failed to fetch as blob: ${url}`, e);
+    throw new Error(`Cannot fetch clip for stitching (CORS blocked). URL: ${url.substring(0, 80)}...`);
   }
 }
 
@@ -332,7 +341,7 @@ export async function stitchClips(
       resolve({ blobUrl, blob, duration: validation.duration! });
     };
 
-    recorder.start();
+    recorder.start(1000); // Request data every 1s for reliability
 
     if (audioElement) {
       audioElement.play().catch(() => console.warn("[stitchClips] Audio play failed"));
