@@ -676,6 +676,23 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
     if (hasNewCompleted) {
       uploadCompletedClips();
     }
+
+    // Auto-save project when clips have completed with storage URLs
+    const hasStorageClips = clips.some(c => c.status === "completed" && c.videoUrl?.includes("generated-videos"));
+    if (hasStorageClips && projectIdRef.current) {
+      saveProject.mutate({
+        id: projectIdRef.current,
+        name: brand.name + " Ad",
+        brandName: brand.name,
+        script,
+        segments,
+        storyboard,
+        clips,
+        continuity,
+        finalVideoUrl,
+        status: finalVideoUrl ? "completed" : "generating",
+      });
+    }
   }, [clips]);
 
   return (

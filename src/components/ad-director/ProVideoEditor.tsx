@@ -208,8 +208,11 @@ export function ProVideoEditor({
             onEnded={() => setIsPlaying(false)}
           />
         ) : (
-          <div className="w-full aspect-video flex items-center justify-center bg-muted/10">
-            <span className="text-sm text-muted-foreground">No video available</span>
+          <div className="w-full aspect-video flex flex-col items-center justify-center bg-muted/10 gap-3">
+            <span className="text-sm text-muted-foreground">No video available — generate scenes first</span>
+            <Button variant="outline" size="sm" onClick={onBack}>
+              <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Back to Storyboard
+            </Button>
           </div>
         )}
 
