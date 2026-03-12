@@ -66,6 +66,14 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded }: AdDi
     }
   }, [savedBrand, brandLoading]);
 
+  // Load project from sidebar
+  useEffect(() => {
+    if (externalLoadProject) {
+      handleLoadProject(externalLoadProject);
+      onProjectLoaded?.();
+    }
+  }, [externalLoadProject]);
+
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
