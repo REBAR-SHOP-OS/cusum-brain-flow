@@ -550,54 +550,67 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   // ─── Generate All (with buildQty support) ──────────────
   const handleGenerateAll = useCallback(async () => {
     const buildQty = videoParams.buildQty || 1;
-    const scenesToGenerate = storyboard.filter(s => {
-      const c = clips.find(c => c.sceneId === s.id);
-      return c?.status !== "completed";
-    });
+    const baseScenes = storyboard;
 
-    // If buildQty > 1, create extra clip entries for each variant
-    if (buildQty > 1) {
-      setClips(prev => {
-        const newClips = [...prev];
-        for (const scene of scenesToGenerate) {
-          for (let v = 2; v <= buildQty; v++) {
-            const variantId = `${scene.id}-v${v}`;
-            if (!newClips.find(c => c.sceneId === variantId)) {
-              newClips.push({ sceneId: variantId, status: "idle", progress: 0 });
-            }
-          }
-        }
-        return newClips;
+    if (buildQty <= 1) {
+      // Single build — original behaviour
+      const scenesToGen = baseScenes.filter(s => {
+        const c = clips.find(c => c.sceneId === s.id);
+        return c?.status !== "completed";
       });
-      // Also duplicate storyboard entries for variant scenes
-      setStoryboard(prev => {
-        const newSb = [...prev];
-        for (const scene of scenesToGenerate) {
-          for (let v = 2; v <= buildQty; v++) {
-            const variantId = `${scene.id}-v${v}`;
-            if (!newSb.find(s => s.id === variantId)) {
-              newSb.push({ ...scene, id: variantId });
-            }
-          }
-        }
-        return newSb;
-      });
-    }
-
-    const totalJobs = scenesToGenerate.length * buildQty;
-    let launched = 0;
-    for (const scene of scenesToGenerate) {
-      for (let v = 1; v <= buildQty; v++) {
-        const sceneId = v === 1 ? scene.id : `${scene.id}-v${v}`;
+      let launched = 0;
+      for (const scene of scenesToGen) {
         launched++;
-        setGenerationStatus(`Launching build ${launched} of ${totalJobs}...`);
-        await generateScene(sceneId);
+        setGenerationStatus(`Generating scene ${launched} of ${scenesToGen.length}...`);
+        await generateScene(scene.id);
         await new Promise(r => setTimeout(r, 2000));
       }
+      setGenerationStatus("");
+      setStep("preview");
+      toast({ title: "Generation complete", description: `${scenesToGen.length} scenes generated.` });
+      return;
     }
+
+    // Multi-build: run the full pipeline buildQty times, each producing a complete set of clips
+    const newBuilds: { buildIndex: number; clips: ClipOutput[] }[] = [];
+    for (let b = 0; b < buildQty; b++) {
+      newBuilds.push({
+        buildIndex: b,
+        clips: baseScenes.map(s => ({ sceneId: s.id, status: "idle" as const, progress: 0 })),
+      });
+    }
+    setBuilds(newBuilds);
+    setActiveBuildIndex(0);
+
+    const totalJobs = baseScenes.length * buildQty;
+    let launched = 0;
+
+    for (let b = 0; b < buildQty; b++) {
+      setActiveBuildIndex(b);
+      // Set the main clips state to this build's clips so generateScene updates the right entries
+      setClips(newBuilds[b].clips);
+
+      for (const scene of baseScenes) {
+        launched++;
+        setGenerationStatus(`Build ${b + 1}/${buildQty} — scene ${launched} of ${totalJobs}...`);
+        await generateScene(scene.id);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      // Snapshot current clips state into the build
+      setClips(prev => {
+        newBuilds[b] = { ...newBuilds[b], clips: [...prev] };
+        setBuilds([...newBuilds]);
+        return prev;
+      });
+    }
+
+    // Set active build to first and load its clips
+    setActiveBuildIndex(0);
+    setClips(newBuilds[0].clips);
     setGenerationStatus("");
     setStep("preview");
-    toast({ title: "All builds launched", description: `${totalJobs} clips generating. Check progress below.` });
+    toast({ title: "All versions generated", description: `${buildQty} ad versions × ${baseScenes.length} scenes completed.` });
   }, [storyboard, clips, generateScene, toast, videoParams.buildQty]);
 
   // ─── Export ──────────────────────────────────────
