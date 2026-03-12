@@ -225,6 +225,9 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                           : "text-muted-foreground"
                       )}>
                         {status === "published" ? "Published ✅" : status}
+                        {status === "scheduled" && firstPost.neel_approved && (
+                          <span className="text-green-500 font-medium ml-1">· Approved</span>
+                        )}
                       </span>
                     </div>
                   </button>
