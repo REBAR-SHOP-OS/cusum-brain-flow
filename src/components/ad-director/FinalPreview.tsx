@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Download, Play, Film, Type, Image as ImageIcon, LayoutTemplate } from "lucide-react";
+import { Download, Play, Film, Type, Image as ImageIcon, LayoutTemplate, Loader2 } from "lucide-react";
 import { type ClipOutput, type StoryboardScene, type ScriptSegment } from "@/types/adDirector";
 
 interface FinalPreviewProps {
