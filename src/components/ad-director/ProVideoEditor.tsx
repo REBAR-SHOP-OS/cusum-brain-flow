@@ -197,17 +197,26 @@ export function ProVideoEditor({
       {/* Video Player */}
       <div className="rounded-xl overflow-hidden border border-border/30 bg-black relative">
         {videoSrc ? (
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            className="w-full aspect-video"
-            muted={isMuted}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoaded}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onEnded={() => setIsPlaying(false)}
-          />
+          <>
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              className="w-full aspect-video"
+              muted={isMuted}
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={handleLoaded}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+            />
+            {brand.logoUrl && (
+              <img
+                src={brand.logoUrl}
+                alt="Brand watermark"
+                className="absolute bottom-14 right-4 h-10 w-auto object-contain opacity-70 pointer-events-none z-10"
+              />
+            )}
+          </>
         ) : (
           <div className="w-full aspect-video flex flex-col items-center justify-center bg-muted/10 gap-3">
             <span className="text-sm text-muted-foreground">No video available — generate scenes first</span>

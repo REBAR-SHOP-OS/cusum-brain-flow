@@ -197,14 +197,23 @@ export function SceneCard({
 
         {/* Completed video thumbnail */}
         {clip.status === "completed" && clip.videoUrl && (
-          <video
-            src={clip.videoUrl}
-            className="w-full rounded-lg aspect-video object-cover"
-            muted
-            playsInline
-            onMouseEnter={(e) => (e.target as HTMLVideoElement).play()}
-            onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
-          />
+          <div className="relative rounded-lg overflow-hidden">
+            <video
+              src={clip.videoUrl}
+              className="w-full aspect-video object-cover"
+              muted
+              playsInline
+              onMouseEnter={(e) => (e.target as HTMLVideoElement).play()}
+              onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+            />
+            {logoUrl && (
+              <img
+                src={logoUrl}
+                alt="Brand watermark"
+                className="absolute bottom-2 right-2 h-8 w-auto object-contain opacity-70 pointer-events-none"
+              />
+            )}
+          </div>
         )}
 
         {clip.status === "failed" && clip.error && (
