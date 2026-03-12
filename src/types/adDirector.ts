@@ -40,6 +40,78 @@ export interface ScriptSegment {
   endTime: number;
 }
 
+// ─── Multi-Model Routing Types ───────────────────────────────
+
+export type AITaskType =
+  | "analyze-script"
+  | "generate-storyboard"
+  | "write-cinematic-prompt"
+  | "score-prompt-quality"
+  | "improve-prompt"
+  | "analyze-reference"
+  | "continuity-check"
+  | "rewrite-cta"
+  | "generate-subtitles"
+  | "generate-voiceover"
+  | "classify-scene"
+  | "quality-review"
+  | "optimize-ad";
+
+export interface ModelRoute {
+  taskType: AITaskType;
+  preferredModel: string;
+  fallbackModel: string;
+  qualityThreshold: number;
+  retryStrategy: "fallback" | "retry-same" | "skip";
+}
+
+export type ModelOverrides = Partial<Record<AITaskType, string>>;
+
+export interface PromptQualityScore {
+  realism: number;
+  specificity: number;
+  visualRichness: number;
+  continuityStrength: number;
+  brandRelevance: number;
+  emotionalPersuasion: number;
+  cinematicClarity: number;
+  overall: number;
+  suggestion?: string;
+}
+
+export interface SceneIntelligence {
+  plannedBy: string;
+  promptWrittenBy: string;
+  promptScoredBy?: string;
+  videoEngine?: string;
+}
+
+export const AVAILABLE_MODELS = [
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", category: "reasoning" },
+  { id: "openai/gpt-5", label: "GPT-5", category: "creative" },
+  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", category: "fast" },
+  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", category: "ultrafast" },
+  { id: "openai/gpt-5-mini", label: "GPT-5 Mini", category: "balanced" },
+] as const;
+
+export const DEFAULT_MODEL_ROUTES: Record<string, { preferred: string; fallback: string }> = {
+  "Script Intelligence": { preferred: "google/gemini-2.5-pro", fallback: "openai/gpt-5" },
+  "Prompt Generation": { preferred: "openai/gpt-5", fallback: "google/gemini-2.5-pro" },
+  "Evaluation": { preferred: "google/gemini-2.5-flash", fallback: "google/gemini-2.5-flash-lite" },
+  "Vision": { preferred: "google/gemini-2.5-pro", fallback: "openai/gpt-5" },
+  "Voiceover & Copy": { preferred: "openai/gpt-5-mini", fallback: "google/gemini-2.5-flash" },
+};
+
+export const TASK_CATEGORY_MAP: Record<string, AITaskType[]> = {
+  "Script Intelligence": ["analyze-script", "generate-storyboard", "classify-scene"],
+  "Prompt Generation": ["write-cinematic-prompt", "improve-prompt", "optimize-ad"],
+  "Evaluation": ["score-prompt-quality", "quality-review", "continuity-check"],
+  "Vision": ["analyze-reference"],
+  "Voiceover & Copy": ["rewrite-cta", "generate-subtitles", "generate-voiceover"],
+};
+
+// ─── Storyboard Scene ────────────────────────────────────────
+
 export interface StoryboardScene {
   id: string;
   segmentId: string;
@@ -57,6 +129,8 @@ export interface StoryboardScene {
   referenceAssetUrl?: string | null;
   continuityLock: boolean;
   locked: boolean;
+  sceneIntelligence?: SceneIntelligence;
+  promptQuality?: PromptQualityScore;
 }
 
 export interface ContinuityProfile {
