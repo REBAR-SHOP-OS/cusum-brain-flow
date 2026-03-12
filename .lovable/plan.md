@@ -1,59 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Align Image Generator Dialog with Pixel Agent's Logic
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The AI Image Generator dialog uses a generic advertising prompt, while the Pixel Agent (in `agentToolExecutor.ts` and `auto-generate-post`) has a detailed photorealistic, product-focused prompt system with mandatory logo inclusion and diverse visual styles. The user wants the dialog to match this quality.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Changes
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. `supabase/functions/generate-image/index.ts` — Rewrite `buildAdPrompt`
-Replace the current generic prompt with the Pixel Agent's photorealistic rules:
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-- **Photorealistic mandate**: "ALL images MUST be PHOTOREALISTIC — real-world professional photography style ONLY. ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract."
-- **Product showcase**: Include REBAR.SHOP products (rebar stirrups, ties, accessories) in the scene based on the user's prompt
-- **Visual style rotation**: Reference the 12 diverse styles (construction sites, drone views, macro shots, warehouse settings, etc.)
-- **Logo via reference image**: When the brand kit has a `logo_url`, fetch it and pass it as a second reference image to Gemini alongside the Pexels reference, with the instruction: "Incorporate the provided company logo as a branded watermark exactly as shown — no changes to color, shape, or design."
-- **Keep the Pexels reference flow** but enhance the combined prompt
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 2. `supabase/functions/generate-image/index.ts` — Add logo as multi-modal input
-Currently the logo is applied client-side via Canvas. The Pixel Agent also passes the logo directly to Gemini as a reference image. We'll do **both**:
-- Pass `logo_url` (from request body or brand context) to Gemini as an additional image input so the AI can integrate it naturally into the composition
-- Keep the client-side Canvas overlay as a fallback guarantee
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-Update the edge function to accept `logoUrl` in the request body and include it in the multi-modal content array:
-```text
-content: [
-  { type: "text", text: pixelAgentStylePrompt },
-  { type: "image_url", image_url: { url: pexelsRef } },    // Pexels inspiration
-  { type: "image_url", image_url: { url: logoUrl } },      // Brand logo
-  { type: "text", text: "Incorporate this logo as a branded watermark." }
-]
-```
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 3. `src/components/social/ImageGeneratorDialog.tsx` — Pass logo URL
-- Add `brandKit?.logo_url` to the request body sent to the edge function
-- Keep the existing client-side Canvas logo overlay as a guaranteed fallback
-
-### 4. Prompt template (inside `buildAdPrompt`)
-```text
-PHOTOREALISTIC ADVERTISING IMAGE — {business_name}
-
-RULES:
-- Real-world professional photography ONLY. Natural lighting, real textures.
-- FORBIDDEN: CGI, 3D renders, illustrations, cartoons, fantasy, abstract.
-- Feature {business_name} products prominently in the scene.
-- Clean, professional, visually striking — like commercial photography.
-- {user_prompt}
-
-Brand: {business_name} | {value_prop}
-Tagline: {tagline}
-
-Visual style: Choose from construction sites, warehouse product shots,
-macro detail shots, drone aerial views, urban infrastructure, etc.
-
-Do NOT render any text or logo — the logo overlay is handled separately.
-```
-
-This aligns the dialog's generation quality with the Pixel Agent's standards while keeping the Pexels inspiration and client-side logo overlay intact.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
