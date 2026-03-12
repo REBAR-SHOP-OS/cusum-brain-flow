@@ -61,6 +61,17 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
   const { brandKit } = useBrandKit();
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
+
+  const toggleTheme = (id: string) => {
+    setSelectedThemes((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const handleClose = () => {
     if (status === "searching" || status === "generating" || status === "branding") return;
     onOpenChange(false);
