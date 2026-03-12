@@ -43,7 +43,7 @@ export function ExportDialog({
   const handleExport = async () => {
     if (!finalVideoUrl) {
       onExport();
-      onOpenChange(false);
+      return;
       return;
     }
 
