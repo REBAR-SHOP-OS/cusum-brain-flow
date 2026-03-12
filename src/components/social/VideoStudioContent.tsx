@@ -112,8 +112,10 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const navigate = useNavigate();
   const { toast } = useToast();
   const { transform, isTransforming, transformResult, transformError, reset: resetTransform } = usePromptTransformer();
-  const { remaining, total, usedPercent, plan, canGenerate, getCost, consumeCredits } = useVideoCredits();
+  const { remaining, total, usedPercent, plan, canGenerate, getCost, consumeCredits, refundCredits } = useVideoCredits();
+  const { createGeneration, updateGeneration } = useGenerations();
   const [showSocialPanel, setShowSocialPanel] = useState(false);
+  const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
 
   // Form state
   const [rawPrompt, setRawPrompt] = useState("");
