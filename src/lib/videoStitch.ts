@@ -334,8 +334,8 @@ export async function stitchClips(
 
   const hasVoice = !!overlays?.audioUrl;
   const hasMusic = !!overlays?.musicUrl;
-  const baseMusicVol = overlays?.musicVolume ?? 0.3;
-  const duckedMusicVol = Math.min(baseMusicVol * 0.5, 0.15); // duck to 50% or max 0.15
+  const baseMusicVol = overlays?.musicVolume ?? 0.15;
+  const duckedMusicVol = Math.min(baseMusicVol * 0.33, 0.05); // duck to 33% or max 0.05
 
   if (hasVoice || hasMusic) {
     try {
