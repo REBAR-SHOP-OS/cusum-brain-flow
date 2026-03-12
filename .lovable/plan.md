@@ -1,32 +1,33 @@
 
 
-# Improve Analysis Feedback — Always-Visible Progress
 
-## Problem
-The analysis progress indicator is only visible on the "Script & Assets" tab. If you navigate away (or are already on "Preview & Export"), you see nothing — no spinner, no status, no indication anything is happening. Also, status messages still reference "GPT-5" even though we switched to Gemini.
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-## Changes
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-### 1. Move progress indicator to a global position (above tabs)
-In `AdDirectorContent.tsx`: When `analyzing` is true, render a prominent progress bar + status text **above the workflow tabs** so it's visible regardless of which step is active. This replaces the tab-specific indicator.
+## Completed: Add All Wan 2.6 Capabilities
 
-### 2. Add step-based progress tracking
-Replace the static 60% pulse bar with actual step tracking:
-- Step 1/4: "Analyzing script structure..." (0-25%)
-- Step 2/4: "Writing cinematic prompts..." (25-50%)
-- Step 3/4: "Scoring prompt quality..." (50-75%)
-- Step 4/4: "Auto-improving weak prompts..." (75-95%)
-- Done: 100%
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-Add an `analysisProgress` number state alongside `analysisStatus`.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 3. Fix model labels in status messages
-Update the `handleAnalyze` function status strings from "GPT-5 analyzing..." to "Analyzing script structure..." (model-agnostic, since the model may change).
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 4. Keep the ScriptInput progress card as secondary
-Remove the progress card from `ScriptInput.tsx` (lines 189-202) since the global one handles it.
-
-## Files Modified
-- `src/components/ad-director/AdDirectorContent.tsx` — add global progress bar above tabs, add `analysisProgress` state, update status messages
-- `src/components/ad-director/ScriptInput.tsx` — remove the local progress card (lines 189-202)
-
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation

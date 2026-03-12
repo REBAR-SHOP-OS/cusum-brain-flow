@@ -5,7 +5,8 @@ import { ScriptInput } from "./ScriptInput";
 import { StoryboardTimeline } from "./StoryboardTimeline";
 import { ContinuityInspector } from "./ContinuityInspector";
 import { FinalPreview } from "./FinalPreview";
-import { FileText, Layers, Film } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { FileText, Layers, Film, Loader2 } from "lucide-react";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
   type ContinuityProfile, type ClipOutput, type ModelOverrides,
@@ -32,6 +33,7 @@ export function AdDirectorContent() {
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
+  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [modelOverrides, setModelOverrides] = useState<ModelOverrides>({});
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
@@ -51,8 +53,9 @@ export function AdDirectorContent() {
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true);
     try {
-      // Step 1: Analyze script + generate storyboard (GPT-5)
-      setAnalysisStatus("GPT-5 analyzing script structure...");
+      // Step 1: Analyze script + generate storyboard
+      setAnalysisStatus("Analyzing script structure...");
+      setAnalysisProgress(10);
       const analyzeResult = await invokeEdgeFunction<{
         result: { segments: ScriptSegment[]; storyboard: StoryboardScene[]; continuityProfile: ContinuityProfile };
         modelUsed: string;
@@ -67,8 +70,9 @@ export function AdDirectorContent() {
       const { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
       const plannedBy = analyzeResult.modelUsed;
 
-      // Step 2: Write cinematic prompts for each scene (GPT-5)
-      setAnalysisStatus("GPT-5 writing cinematic prompts...");
+      // Step 2: Write cinematic prompts for each scene
+      setAnalysisStatus("Writing cinematic prompts...");
+      setAnalysisProgress(30);
       const promptResults = await Promise.all(
         rawStoryboard.map(async (scene, idx) => {
           try {
@@ -90,8 +94,9 @@ export function AdDirectorContent() {
         })
       );
 
-      // Step 3: Score prompt quality (Gemini Flash)
-      setAnalysisStatus("Gemini Flash scoring prompt quality...");
+      // Step 3: Score prompt quality
+      setAnalysisStatus("Scoring prompt quality...");
+      setAnalysisProgress(55);
       const qualityResults = await Promise.all(
         promptResults.map(async (pr, idx) => {
           try {
@@ -114,6 +119,7 @@ export function AdDirectorContent() {
 
       // Step 4: Auto-improve prompts below threshold
       setAnalysisStatus("Auto-improving weak prompts...");
+      setAnalysisProgress(75);
       const finalPrompts = await Promise.all(
         promptResults.map(async (pr, idx) => {
           const quality = qualityResults[idx]?.quality;
@@ -162,6 +168,7 @@ export function AdDirectorContent() {
 
       // Build final storyboard
       setAnalysisStatus("Assembling storyboard...");
+      setAnalysisProgress(95);
       const storyboardWithDefaults: StoryboardScene[] = rawStoryboard.map((s, idx) => ({
         ...s,
         prompt: finalPrompts[idx].prompt,
@@ -191,6 +198,7 @@ export function AdDirectorContent() {
     } finally {
       setAnalyzing(false);
       setAnalysisStatus("");
+      setAnalysisProgress(0);
     }
   }, [script, brand, assets, modelOverrides, toast]);
 
@@ -391,6 +399,18 @@ export function AdDirectorContent() {
 
   return (
     <div className="space-y-6">
+      {/* Global Analysis Progress — visible on all tabs */}
+      {analyzing && analysisStatus && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
+            <span className="text-sm font-medium text-foreground">{analysisStatus}</span>
+            <span className="ml-auto text-xs text-muted-foreground">{analysisProgress}%</span>
+          </div>
+          <Progress value={analysisProgress} className="h-2" />
+        </div>
+      )}
+
       {/* Workflow Steps */}
       <div className="flex items-center gap-1 bg-card/30 rounded-xl p-1 border border-border/30">
         {steps.map((s) => (
