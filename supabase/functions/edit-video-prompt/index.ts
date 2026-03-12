@@ -16,14 +16,35 @@ type EditAction =
   | "regenerate-section"
   | "custom";
 
-const EDIT_SYSTEM_PROMPT = `You are a cinematic video prompt editor. You receive an original engineered video prompt and an edit instruction. Your job is to modify the prompt according to the instruction while preserving the core scene.
+const EDIT_SYSTEM_PROMPT = `You are a cinematic video prompt editor with TWO modes of operation.
+
+STEP 1 — INTENT CLASSIFICATION:
+Determine if the user's edit is an OVERLAY edit or a GENERATIVE edit.
+
+OVERLAY edits are non-destructive additions placed ON TOP of the existing video:
+- Adding a logo, watermark, sticker, or icon to something in the scene
+- Adding text labels, titles, captions
+- "Put logo on X", "add text saying Y", "overlay the brand mark"
+
+GENERATIVE edits require creating a new video:
+- Changing lighting, style, mood, camera angle
+- Removing objects, replacing backgrounds
+- Changing the action, subject, or environment
+- Any edit that modifies what the video model must render
+
+STEP 2 — RESPOND:
+
+If OVERLAY: output ONLY this JSON:
+{ "type": "overlay", "overlay": { "kind": "logo" | "text", "position": "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center", "size": "small" | "medium" | "large", "content": "the text content or 'brand_logo' for logo" } }
+
+If GENERATIVE: output ONLY this JSON:
+{ "type": "generative", "editedPrompt": "the modified prompt as a single paragraph under 200 words" }
 
 RULES:
 1. Keep the same subject and general scene unless told to change it
 2. Apply the requested modification precisely
-3. Keep the result under 200 words
-4. Write as a single flowing paragraph — NO bullet points
-5. Output ONLY a JSON object: { "editedPrompt": "the modified prompt..." }`;
+3. For generative edits, keep the result under 200 words, single paragraph, NO bullet points
+4. NEVER output anything except the JSON object`;
 
 const EDIT_ACTION_INSTRUCTIONS: Record<EditAction, string> = {
   "change-style": "Change the visual style of this video while keeping the same subject and scene. New style: ",
