@@ -220,21 +220,40 @@ export default function SocialMediaManager() {
           <h1 className="text-base sm:text-xl font-semibold">Social Media</h1>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-          <Button
-            onClick={() => generatePosts()}
-            disabled={generating}
-            variant="outline"
-            size="sm"
-            className="gap-1.5 flex-1 sm:flex-initial"
-          >
-            {generating ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5" />
-            )}
-            <span className="hidden sm:inline">{generating ? "Generating..." : "Auto-generate today"}</span>
-            <span className="sm:hidden">{generating ? "..." : "Auto"}</span>
-          </Button>
+          <div className="flex items-center gap-0">
+            <Button
+              onClick={() => generatePosts({ scheduledDate: autoGenDate?.toISOString() })}
+              disabled={generating}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 flex-1 sm:flex-initial rounded-r-none"
+            >
+              {generating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {generating ? "Generating..." : autoGenDate ? `Auto-generate ${format(autoGenDate, "MMM d")}` : "Auto-generate today"}
+              </span>
+              <span className="sm:hidden">{generating ? "..." : "Auto"}</span>
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="px-2 rounded-l-none border-l-0">
+                  <CalendarDays className="w-3.5 h-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={autoGenDate}
+                  onSelect={(d) => setAutoGenDate(d)}
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
           <Button
             variant={showApprovals ? "default" : "outline"}
             size="sm"
