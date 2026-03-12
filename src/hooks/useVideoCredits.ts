@@ -162,5 +162,6 @@ export function useVideoCredits() {
     canGenerate,
     getCost,
     consumeCredits,
+    refundCredits,
   };
 }
