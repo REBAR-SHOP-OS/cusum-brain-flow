@@ -51,10 +51,10 @@ const modeConfigs: ModeConfig[] = [
     durationOptions: [{ value: "4", label: "4s" }, { value: "8", label: "8s" }, { value: "12", label: "12s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
   },
   {
-    id: "balanced", label: "Balanced", description: "High-quality cinematic video",
-    icon: <Film className="w-4 h-4" />, provider: "veo", model: "veo-3.1",
-    maxClipDuration: 8, badge: "~3 min",
-    durationOptions: [{ value: "4", label: "4s" }, { value: "6", label: "6s" }, { value: "8", label: "8s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
+    id: "balanced", label: "Balanced", description: "High-quality cinematic video with audio",
+    icon: <Film className="w-4 h-4" />, provider: "wan", model: "wan2.6-t2v",
+    maxClipDuration: 15, badge: "~3 min",
+    durationOptions: [{ value: "5", label: "5s" }, { value: "10", label: "10s" }, { value: "15", label: "15s" }, { value: "30", label: "30s" }, { value: "60", label: "60s" }],
   },
   {
     id: "premium", label: "Premium", description: "Highest fidelity production quality",

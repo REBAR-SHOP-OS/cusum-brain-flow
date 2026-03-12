@@ -713,7 +713,7 @@ serve(async (req) => {
       }
 
       const requestedDuration = duration || 30;
-      const maxClip = isVeo ? VEO_MAX_CLIP : SORA_MAX_CLIP;
+      const maxClip = isWan ? WAN_MAX_CLIP : isVeo ? VEO_MAX_CLIP : SORA_MAX_CLIP;
       const clipDuration = maxClip;
       const sceneCount = Math.ceil(requestedDuration / clipDuration);
 
