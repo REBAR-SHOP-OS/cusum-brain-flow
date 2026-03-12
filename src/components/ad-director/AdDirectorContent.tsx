@@ -413,6 +413,10 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "generating", progress: 10 } : c));
 
     try {
+      // Wire videoParams into generation request
+      const effectiveRatio = videoParams.ratio === "Smart" ? "16:9" : videoParams.ratio;
+      const wanRatio = ["16:9", "9:16", "1:1"].includes(effectiveRatio) ? effectiveRatio : "16:9";
+
       const result = await invokeEdgeFunction<{
         url?: string; videoUrl?: string; generationId?: string; jobId?: string;
         provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
@@ -422,11 +426,12 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
           action: "generate",
           prompt: motionPrompt,
           duration: sceneDuration,
-          aspectRatio: "16:9",
+          aspectRatio: wanRatio,
           provider: "wan",
           model: "wan2.6-t2v",
           negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark, on-screen text, brand name, camera name, ARRI, RED, Sony",
-        }
+        },
+        { timeoutMs: EDGE_TIMEOUT_MS }
       );
 
       const videoUrl = result.url || result.videoUrl;
