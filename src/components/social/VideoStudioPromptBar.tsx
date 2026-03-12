@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import {
   Video, Image, Music, Zap, Film, Crown, Sparkles, Loader2,
-  ChevronDown, Eye, EyeOff, Gauge, Upload, X, Cpu
+  ChevronDown, Eye, EyeOff, Gauge, Upload, X, Cpu, ImagePlus, Volume2, Ban
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";

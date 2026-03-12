@@ -802,7 +802,7 @@ serve(async (req) => {
           try {
             let result: { jobId: string; provider: string };
             if (isWan) {
-              result = await wanGenerate(apiKey, scenePrompt, clipDuration, aspect_ratio);
+              result = await wanGenerate(apiKey, scenePrompt, clipDuration, undefined, negativePrompt, inputAudioUrl);
             } else if (isVeo) {
               try {
                 result = await veoGenerate(apiKey, scenePrompt, clipDuration);
