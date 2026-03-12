@@ -44,6 +44,23 @@ interface TimelineBarProps {
   onRemoveAudioTrack?: (index: number) => void;
   onRegenerateScene?: (sceneId: string) => void;
   onDeleteScene?: (index: number) => void;
+  // New editing actions
+  onTrimScene?: (index: number) => void;
+  onStretchScene?: (index: number) => void;
+  onSplitScene?: (index: number) => void;
+  onDuplicateScene?: (index: number) => void;
+  onMoveScene?: (index: number, dir: -1 | 1) => void;
+  onEditPrompt?: (index: number) => void;
+  onEditVoiceover?: (index: number) => void;
+  onMuteScene?: (index: number) => void;
+  mutedScenes?: Set<string>;
+  // Text overlay extras
+  onEditOverlayPosition?: (id: string, position: "top" | "center" | "bottom") => void;
+  onResizeOverlay?: (id: string, size: "small" | "medium" | "large") => void;
+  onToggleOverlayAnimation?: (id: string) => void;
+  // Audio extras
+  onReRecordVoiceover?: (sceneId: string) => void;
+  onEditVoiceoverText?: (sceneId: string) => void;
 }
 
 export function TimelineBar({
