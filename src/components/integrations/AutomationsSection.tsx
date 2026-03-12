@@ -110,6 +110,15 @@ const defaultAutomations: Automation[] = [
     icon: "video",
     route: "/video-studio",
   },
+  {
+    id: "ad-director",
+    name: "AI Video Director",
+    description: "Script-to-video 30s B2B ad production",
+    enabled: true,
+    color: "red",
+    icon: "video",
+    route: "/ad-director",
+  },
 ];
 
 const colorGradients = {
