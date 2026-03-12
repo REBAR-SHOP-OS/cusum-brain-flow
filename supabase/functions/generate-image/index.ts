@@ -131,7 +131,7 @@ serve(async (req) => {
       );
     }
 
-    const { prompt, model, brandContext, logoUrl } = await req.json();
+    const { prompt, model, brandContext, logoUrl, aspectRatio } = await req.json();
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
