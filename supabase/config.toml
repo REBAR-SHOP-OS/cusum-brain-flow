@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.video-to-social]
 verify_jwt = false
+
+[functions.video-intelligence]
+verify_jwt = false

@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Video, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Library, Save,
   Music, Volume2, Wand2, Eye, Image as ImageIcon,
-  Film, Clapperboard, Pencil, Share2
+  Film, Clapperboard, Pencil, Share2, Search
 } from "lucide-react";
 import { VideoEditor } from "./VideoEditor";
 import { VideoToSocialPanel } from "./VideoToSocialPanel";
@@ -20,6 +20,7 @@ import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { slideshowToVideo } from "@/lib/slideshowToVideo";
 import { supabase } from "@/integrations/supabase/client";
 import { VideoLibrary } from "./VideoLibrary";
+import { VideoInsightsPanel, type VideoAnalysisResults } from "./VideoInsightsPanel";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { usePromptTransformer } from "@/hooks/usePromptTransformer";
 import { applyLogoWatermark } from "@/lib/videoWatermark";
@@ -121,6 +122,13 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [showEditor, setShowEditor] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
+
+  // Video analysis state
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState<VideoAnalysisResults | null>(null);
+  const [moderationStatus, setModerationStatus] = useState<"safe" | "flagged">("safe");
+  const [suggestedHashtags, setSuggestedHashtags] = useState<string[]>([]);
+  const [showInsights, setShowInsights] = useState(false);
 
   // Refs
   const jobRef = useRef<{ id: string; provider: string } | null>(null);
@@ -417,6 +425,44 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     uploadedSceneUrlsRef.current = {}; pollCountRef.current = 0; setElapsedSecs(0);
     setGeneratedImageUrl(null); setImageGenerating(false);
     setStandaloneAudioUrl(null); setStandaloneAudioGenerating(false);
+    setAnalysisResults(null); setShowInsights(false); setAnalyzing(false);
+    setSuggestedHashtags([]); setModerationStatus("safe");
+  };
+
+  const handleAnalyzeVideo = async () => {
+    if (!videoUrl || analyzing) return;
+    setAnalyzing(true);
+    try {
+      const submitData = await invokeEdgeFunction<{ operationName: string; done: boolean }>("video-intelligence", {
+        action: "annotate", videoUrl,
+      });
+      if (submitData.done) {
+        // Unlikely but handle inline results
+        setShowInsights(true); setAnalyzing(false); return;
+      }
+      // Poll for results
+      const opName = submitData.operationName;
+      let attempts = 0;
+      const poll = async () => {
+        attempts++;
+        if (attempts > 60) { toast({ title: "Analysis timeout", variant: "destructive" }); setAnalyzing(false); return; }
+        const pollData = await invokeEdgeFunction<any>("video-intelligence", { action: "poll", operationName: opName });
+        if (pollData.done) {
+          if (pollData.results) {
+            setAnalysisResults(pollData.results);
+            setModerationStatus(pollData.moderationStatus || "safe");
+            setSuggestedHashtags(pollData.suggestedHashtags || []);
+          }
+          setShowInsights(true); setAnalyzing(false);
+        } else {
+          setTimeout(poll, 5000);
+        }
+      };
+      setTimeout(poll, 5000);
+    } catch (err: any) {
+      toast({ title: "Analysis failed", description: err?.message || "Unknown error", variant: "destructive" });
+      setAnalyzing(false);
+    }
   };
 
   const handleSaveToLibrary = async () => {
@@ -664,16 +710,29 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                   <Button variant="outline" asChild>
                     <a href={videoUrl} download target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4" /></a>
                   </Button>
-                  <Button variant="outline" className="gap-1.5" onClick={() => setShowSocialPanel(!showSocialPanel)}>
-                    <Share2 className="w-4 h-4" /> Post
-                  </Button>
-                  <Button variant="outline" onClick={handleReset}><RotateCcw className="w-4 h-4" /></Button>
+                   <Button variant="outline" className="gap-1.5" onClick={() => setShowSocialPanel(!showSocialPanel)}>
+                     <Share2 className="w-4 h-4" /> Post
+                   </Button>
+                   <Button variant="outline" className="gap-1.5" onClick={handleAnalyzeVideo} disabled={analyzing}>
+                     {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                     {analyzing ? "Analyzing..." : "Analyze"}
+                   </Button>
+                   <Button variant="outline" onClick={handleReset}><RotateCcw className="w-4 h-4" /></Button>
                 </div>
 
                 {showSocialPanel && (
                   <div className="border rounded-lg p-3 bg-muted/30">
                     <VideoToSocialPanel videoUrl={videoUrl} aspectRatio={aspectRatio} onClose={() => setShowSocialPanel(false)} />
                   </div>
+                )}
+
+                {showInsights && analysisResults && (
+                  <VideoInsightsPanel
+                    results={analysisResults}
+                    moderationStatus={moderationStatus}
+                    suggestedHashtags={suggestedHashtags}
+                    onClose={() => setShowInsights(false)}
+                  />
                 )}
               </div>
             )}
