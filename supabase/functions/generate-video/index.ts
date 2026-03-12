@@ -728,7 +728,7 @@ serve(async (req) => {
                 const message = getErrorMessage(e);
                 if (isProviderCapacityError(message) && gptKey) {
                   console.warn(`Veo capacity reached on scene ${i + 1}, falling back to Sora`);
-                  result = await soraGenerate(gptKey, scenePrompt, clipDuration, model || "sora-2");
+                  result = await soraGenerate(gptKey, scenePrompt, clipDuration, "sora-2");
                 } else {
                   throw e;
                 }
