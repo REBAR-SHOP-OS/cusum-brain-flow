@@ -5,11 +5,11 @@ import { ScriptInput } from "./ScriptInput";
 import { StoryboardTimeline } from "./StoryboardTimeline";
 import { ContinuityInspector } from "./ContinuityInspector";
 import { FinalPreview } from "./FinalPreview";
-import { Badge } from "@/components/ui/badge";
-import { Clapperboard, FileText, Layers, Film } from "lucide-react";
+import { FileText, Layers, Film } from "lucide-react";
 import {
-  type AdProject, type BrandProfile, type ScriptSegment, type StoryboardScene,
-  type ContinuityProfile, type ClipOutput, DEFAULT_BRAND, DEMO_SCRIPT,
+  type BrandProfile, type ScriptSegment, type StoryboardScene,
+  type ContinuityProfile, type ClipOutput, type ModelOverrides,
+  type PromptQualityScore, DEFAULT_BRAND, DEMO_SCRIPT,
 } from "@/types/adDirector";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,9 @@ const steps: { id: WorkflowStep; label: string; icon: React.ReactNode }[] = [
   { id: "preview", label: "Preview & Export", icon: <Film className="w-4 h-4" /> },
 ];
 
+const QUALITY_THRESHOLD = 7.0;
+const MAX_IMPROVE_ATTEMPTS = 2;
+
 export function AdDirectorContent() {
   const { toast } = useToast();
   const [step, setStep] = useState<WorkflowStep>("script");
@@ -29,6 +32,7 @@ export function AdDirectorContent() {
   const [assets, setAssets] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
+  const [modelOverrides, setModelOverrides] = useState<ModelOverrides>({});
 
   const [segments, setSegments] = useState<ScriptSegment[]>([]);
   const [storyboard, setStoryboard] = useState<StoryboardScene[]>([]);
@@ -37,69 +41,211 @@ export function AdDirectorContent() {
   const [generatingAny, setGeneratingAny] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
+  const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [logoEnabled, setLogoEnabled] = useState(true);
   const [endCardEnabled, setEndCardEnabled] = useState(true);
 
-  // ─── Analyze Script ──────────────────────────────────────
+  // ─── Multi-Step Analysis Pipeline ────────────────────────
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true);
-    const statusMessages = [
-      "Reading your script...",
-      "Identifying hook, problem, and solution...",
-      "Breaking script into timed scenes...",
-      "Generating storyboard with visual styles...",
-      "Building continuity profile...",
-      "Optimizing scene prompts...",
-    ];
-    let msgIndex = 0;
-    setAnalysisStatus(statusMessages[0]);
-    const statusInterval = setInterval(() => {
-      msgIndex = Math.min(msgIndex + 1, statusMessages.length - 1);
-      setAnalysisStatus(statusMessages[msgIndex]);
-    }, 3000);
     try {
-      const assetDescriptions = assets.length > 0
-        ? assets.map(f => f.name).join(", ")
-        : undefined;
+      // Step 1: Analyze script + generate storyboard (Gemini Pro)
+      setAnalysisStatus("Gemini Pro analyzing script structure...");
+      const analyzeResult = await invokeEdgeFunction<{
+        result: { segments: ScriptSegment[]; storyboard: StoryboardScene[]; continuityProfile: ContinuityProfile };
+        modelUsed: string;
+        fallbackUsed: boolean;
+      }>("ad-director-ai", {
+        action: "analyze-script",
+        script, brand,
+        assetDescriptions: assets.length > 0 ? assets.map(f => f.name).join(", ") : undefined,
+        modelOverrides,
+      });
 
-      const result = await invokeEdgeFunction<{
-        segments: ScriptSegment[];
-        storyboard: StoryboardScene[];
-        continuityProfile: ContinuityProfile;
-      }>("analyze-ad-script", { script, brand, assetDescriptions });
+      const { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
+      const plannedBy = analyzeResult.modelUsed;
 
-      // Add defaults
-      const storyboardWithDefaults = result.storyboard.map(s => ({
+      // Step 2: Write cinematic prompts for each scene (GPT-5)
+      setAnalysisStatus("GPT-5 writing cinematic prompts...");
+      const promptResults = await Promise.all(
+        rawStoryboard.map(async (scene, idx) => {
+          try {
+            const res = await invokeEdgeFunction<{
+              result: { prompt: string; reasoning?: string };
+              modelUsed: string;
+            }>("ad-director-ai", {
+              action: "write-cinematic-prompt",
+              scene,
+              brand,
+              continuityProfile,
+              previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
+              modelOverrides,
+            });
+            return { prompt: res.result.prompt, modelUsed: res.modelUsed };
+          } catch {
+            return { prompt: scene.prompt, modelUsed: "original" };
+          }
+        })
+      );
+
+      // Step 3: Score prompt quality (Gemini Flash)
+      setAnalysisStatus("Gemini Flash scoring prompt quality...");
+      const qualityResults = await Promise.all(
+        promptResults.map(async (pr, idx) => {
+          try {
+            const res = await invokeEdgeFunction<{
+              result: PromptQualityScore;
+              modelUsed: string;
+            }>("ad-director-ai", {
+              action: "score-prompt-quality",
+              prompt: pr.prompt,
+              scene: rawStoryboard[idx],
+              brand,
+              modelOverrides,
+            });
+            return { quality: res.result, scoredBy: res.modelUsed };
+          } catch {
+            return { quality: undefined, scoredBy: "skipped" };
+          }
+        })
+      );
+
+      // Step 4: Auto-improve prompts below threshold
+      setAnalysisStatus("Auto-improving weak prompts...");
+      const finalPrompts = await Promise.all(
+        promptResults.map(async (pr, idx) => {
+          const quality = qualityResults[idx]?.quality;
+          if (!quality || quality.overall >= QUALITY_THRESHOLD) {
+            return pr;
+          }
+          // Try improvement
+          for (let attempt = 0; attempt < MAX_IMPROVE_ATTEMPTS; attempt++) {
+            try {
+              const improveRes = await invokeEdgeFunction<{
+                result: { prompt: string };
+                modelUsed: string;
+              }>("ad-director-ai", {
+                action: "improve-prompt",
+                prompt: pr.prompt,
+                qualityScore: quality,
+                scene: rawStoryboard[idx],
+                brand,
+                modelOverrides,
+              });
+
+              // Re-score
+              const rescoreRes = await invokeEdgeFunction<{
+                result: PromptQualityScore;
+              }>("ad-director-ai", {
+                action: "score-prompt-quality",
+                prompt: improveRes.result.prompt,
+                scene: rawStoryboard[idx],
+                brand,
+                modelOverrides,
+              });
+
+              qualityResults[idx] = { quality: rescoreRes.result, scoredBy: qualityResults[idx].scoredBy };
+
+              if (rescoreRes.result.overall >= QUALITY_THRESHOLD) {
+                return { prompt: improveRes.result.prompt, modelUsed: improveRes.modelUsed };
+              }
+              pr = { prompt: improveRes.result.prompt, modelUsed: improveRes.modelUsed };
+            } catch {
+              break;
+            }
+          }
+          return pr;
+        })
+      );
+
+      // Build final storyboard
+      setAnalysisStatus("Assembling storyboard...");
+      const storyboardWithDefaults: StoryboardScene[] = rawStoryboard.map((s, idx) => ({
         ...s,
+        prompt: finalPrompts[idx].prompt,
         continuityLock: true,
         locked: false,
         referenceAssetUrl: null,
+        sceneIntelligence: {
+          plannedBy,
+          promptWrittenBy: finalPrompts[idx].modelUsed,
+          promptScoredBy: qualityResults[idx]?.scoredBy,
+        },
+        promptQuality: qualityResults[idx]?.quality,
       }));
 
-      setSegments(result.segments);
+      setSegments(newSegments);
       setStoryboard(storyboardWithDefaults);
-      setContinuity(result.continuityProfile);
+      setContinuity(continuityProfile);
       setClips(storyboardWithDefaults.map(s => ({
         sceneId: s.id,
         status: "idle" as const,
         progress: 0,
       })));
       setStep("storyboard");
-      toast({ title: "Storyboard created", description: `${result.storyboard.length} scenes analyzed` });
+      toast({ title: "Storyboard created", description: `${storyboardWithDefaults.length} scenes analyzed with multi-model pipeline` });
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
     } finally {
-      clearInterval(statusInterval);
       setAnalyzing(false);
       setAnalysisStatus("");
     }
-  }, [script, brand, assets, toast]);
+  }, [script, brand, assets, modelOverrides, toast]);
+
+  // ─── Manual Improve Prompt ────────────────────────────────
+  const handleImprovePrompt = useCallback(async (sceneId: string) => {
+    const scene = storyboard.find(s => s.id === sceneId);
+    if (!scene) return;
+
+    setImprovingSceneId(sceneId);
+    try {
+      const improveRes = await invokeEdgeFunction<{
+        result: { prompt: string };
+        modelUsed: string;
+      }>("ad-director-ai", {
+        action: "improve-prompt",
+        prompt: scene.prompt,
+        qualityScore: scene.promptQuality,
+        scene,
+        brand,
+        modelOverrides,
+      });
+
+      const rescoreRes = await invokeEdgeFunction<{
+        result: PromptQualityScore;
+        modelUsed: string;
+      }>("ad-director-ai", {
+        action: "score-prompt-quality",
+        prompt: improveRes.result.prompt,
+        scene,
+        brand,
+        modelOverrides,
+      });
+
+      setStoryboard(prev => prev.map(s => s.id === sceneId ? {
+        ...s,
+        prompt: improveRes.result.prompt,
+        promptQuality: rescoreRes.result,
+        sceneIntelligence: {
+          ...s.sceneIntelligence!,
+          promptWrittenBy: improveRes.modelUsed,
+          promptScoredBy: rescoreRes.modelUsed,
+        },
+      } : s));
+
+      toast({ title: "Prompt improved", description: `New quality: ${rescoreRes.result.overall.toFixed(1)}/10` });
+    } catch (err: any) {
+      toast({ title: "Improvement failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImprovingSceneId(null);
+    }
+  }, [storyboard, brand, modelOverrides, toast]);
 
   // ─── Prompt Edit ──────────────────────────────────────
   const handlePromptChange = (id: string, prompt: string) => {
-    setStoryboard(prev => prev.map(s => s.id === id ? { ...s, prompt } : s));
+    setStoryboard(prev => prev.map(s => s.id === id ? { ...s, prompt, promptQuality: undefined } : s));
   };
 
   const handleContinuityToggle = (id: string) => {
@@ -114,7 +260,6 @@ export function AdDirectorContent() {
     setClips(prev => prev.map(c => c.sceneId === sceneId ? { ...c, status: "generating", progress: 10 } : c));
 
     try {
-      // Use existing generate-video edge function
       const result = await invokeEdgeFunction<{ url?: string; videoUrl?: string; generationId?: string }>(
         "generate-video",
         {
@@ -135,8 +280,12 @@ export function AdDirectorContent() {
             ? { ...c, status: "completed", videoUrl, progress: 100, generationId: result.generationId }
             : c
         ));
+        // Track video engine in scene intelligence
+        setStoryboard(prev => prev.map(s => s.id === sceneId ? {
+          ...s,
+          sceneIntelligence: { ...s.sceneIntelligence!, videoEngine: "Alibaba Wan 2.6" },
+        } : s));
       } else if (result.generationId) {
-        // Poll for completion
         setClips(prev => prev.map(c =>
           c.sceneId === sceneId
             ? { ...c, status: "generating", generationId: result.generationId, progress: 30 }
@@ -180,7 +329,6 @@ export function AdDirectorContent() {
           ));
           return;
         }
-        // Still processing — update progress
         setClips(prev => prev.map(c =>
           c.sceneId === sceneId
             ? { ...c, progress: Math.min(90, 30 + (i / maxAttempts) * 60) }
@@ -200,12 +348,10 @@ export function AdDirectorContent() {
   // ─── Generate All ──────────────────────────────────────
   const handleGenerateAll = useCallback(async () => {
     setGeneratingAny(true);
-    // Generate scenes sequentially for continuity
     for (const scene of storyboard) {
       const clip = clips.find(c => c.sceneId === scene.id);
-      if (clip?.status === "completed") continue; // Skip completed
+      if (clip?.status === "completed") continue;
       await generateScene(scene.id);
-      // Wait a bit between scenes
       await new Promise(r => setTimeout(r, 2000));
     }
     setGeneratingAny(false);
@@ -220,15 +366,12 @@ export function AdDirectorContent() {
       const completedClips = clips.filter(c => c.status === "completed" && c.videoUrl);
       if (completedClips.length === 0) throw new Error("No clips to export");
 
-      // If only one clip, use it directly
       if (completedClips.length === 1) {
         setFinalVideoUrl(completedClips[0].videoUrl!);
         toast({ title: "Video ready", description: "Your 30-second ad is ready to download." });
         return;
       }
 
-      // For multiple clips, create a simple concatenation by downloading and using the first clip as preview
-      // Full stitching would require canvas/ffmpeg — for now show the first clip
       setFinalVideoUrl(completedClips[0].videoUrl!);
       toast({ title: "Preview ready", description: `${completedClips.length} clips generated. Full stitching available in export.` });
     } catch (err: any) {
@@ -250,7 +393,7 @@ export function AdDirectorContent() {
     <div className="space-y-6">
       {/* Workflow Steps */}
       <div className="flex items-center gap-1 bg-card/30 rounded-xl p-1 border border-border/30">
-        {steps.map((s, i) => (
+        {steps.map((s) => (
           <button
             key={s.id}
             onClick={() => setStep(s.id)}
@@ -259,7 +402,6 @@ export function AdDirectorContent() {
               step === s.id
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground hover:bg-card/50",
-              // Disable if not reached yet
               s.id === "storyboard" && segments.length === 0 && "opacity-40 pointer-events-none",
               s.id === "preview" && storyboard.length === 0 && "opacity-40 pointer-events-none",
             )}
@@ -284,6 +426,8 @@ export function AdDirectorContent() {
               analysisStatus={analysisStatus}
               assets={assets}
               onAssetsChange={setAssets}
+              modelOverrides={modelOverrides}
+              onModelOverridesChange={setModelOverrides}
             />
           </div>
         )}
@@ -300,6 +444,8 @@ export function AdDirectorContent() {
                 onRegenerate={generateScene}
                 onGenerateAll={handleGenerateAll}
                 generatingAny={generatingAny}
+                onImprovePrompt={handleImprovePrompt}
+                improvingSceneId={improvingSceneId}
               />
             </div>
             <div className="space-y-4">
