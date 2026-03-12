@@ -83,9 +83,12 @@ async function callAI(
   const body: any = {
     model,
     messages,
-    temperature: route.temperature,
     max_completion_tokens: route.maxTokens,
   };
+  // Only send temperature for models that support it (not OpenAI)
+  if (!model.startsWith("openai/")) {
+    body.temperature = route.temperature;
+  }
   if (tools) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
 
