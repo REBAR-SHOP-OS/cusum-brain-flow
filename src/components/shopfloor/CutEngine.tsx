@@ -242,7 +242,7 @@ export function CutEngine({
             <div className="h-9 w-9" />
           )}
           <div className="text-center">
-            <span className={cn("text-3xl font-black font-mono", isOverCapacity && "text-amber-400")}>{isRunning && lockedBars != null ? lockedBars : bars}</span>
+            <span className={cn("text-3xl font-black font-mono", isOverCapacity && "text-amber-400")}>{isRunning && lockedBars != null && !isSupervisor ? lockedBars : bars}</span>
             <span className={cn("text-xs ml-1.5 uppercase tracking-wider", mutedClasses)}>
               Bars
             </span>
