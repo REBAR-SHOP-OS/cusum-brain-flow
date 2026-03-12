@@ -108,7 +108,7 @@ serve(async (req) => {
         model: "dall-e-3",
         prompt,
         size: size || "1024x1024",
-        quality: quality || "hd",
+        quality: quality || "high",
         style: style || "vivid",
         n: 1,
       }),
