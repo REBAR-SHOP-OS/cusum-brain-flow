@@ -180,14 +180,34 @@ export function ProVideoEditor({
     }
   }, [selectedSceneIndex]);
 
-  // Sync voiceover audio with playback
+  // Sync voiceover audio with video playback (time-locked)
   useEffect(() => {
     const sceneId = storyboard[selectedSceneIndex]?.id;
     const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
     if (vo && isPlaying && !isMuted) {
       const a = new Audio(vo.audioUrl);
+      a.currentTime = videoRef.current?.currentTime ?? 0;
       a.play().catch(() => {});
       audioRef.current = a;
+
+      // Keep voiceover in sync with video time
+      const syncHandler = () => {
+        if (audioRef.current && videoRef.current) {
+          const drift = Math.abs(audioRef.current.currentTime - videoRef.current.currentTime);
+          if (drift > 0.3) {
+            audioRef.current.currentTime = videoRef.current.currentTime;
+          }
+        }
+      };
+      const vid = videoRef.current;
+      vid?.addEventListener("timeupdate", syncHandler);
+      return () => {
+        vid?.removeEventListener("timeupdate", syncHandler);
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+      };
     }
     return () => {
       if (audioRef.current) {
