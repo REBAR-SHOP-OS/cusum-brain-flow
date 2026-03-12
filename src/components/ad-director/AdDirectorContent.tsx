@@ -30,7 +30,8 @@ import { TransitionsTab } from "./editor/TransitionsTab";
 import { TextTab } from "./editor/TextTab";
 import { RecordTab } from "./editor/RecordTab";
 import { MusicTab } from "./editor/MusicTab";
-
+import { BrandKitSidePanel } from "./editor/BrandKitSidePanel";
+import { DEFAULT_VIDEO_PARAMS, type VideoParams } from "./VideoParameters";
 
 import { Check } from "lucide-react";
 
