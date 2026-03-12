@@ -988,9 +988,11 @@ serve(async (req) => {
         );
       }
 
-      const result = isVeo
-        ? await veoPoll(apiKey, jobId)
-        : await soraPoll(apiKey, jobId);
+      const result = isWan
+        ? await wanPoll(apiKey, jobId)
+        : isVeo
+          ? await veoPoll(apiKey, jobId)
+          : await soraPoll(apiKey, jobId);
 
       return new Response(
         JSON.stringify(result),
