@@ -720,10 +720,8 @@ serve(async (req) => {
       const clipDuration = maxClip;
       const sceneCount = Math.ceil(requestedDuration / clipDuration);
 
-      // Use Gemini to generate scene-specific prompts (always use geminiKey for this)
-      const effectiveGeminiKey = geminiKey || apiKey;
+      // Use Lovable AI to generate scene-specific prompts
       const scenePrompts = await generateScenePrompts(
-        effectiveGeminiKey,
         prompt,
         sceneCount,
         clipDuration,
