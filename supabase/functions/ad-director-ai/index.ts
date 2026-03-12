@@ -84,7 +84,7 @@ async function callAI(
     model,
     messages,
     temperature: route.temperature,
-    max_tokens: route.maxTokens,
+    max_completion_tokens: route.maxTokens,
   };
   if (tools) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
