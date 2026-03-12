@@ -81,6 +81,7 @@ export function ProVideoEditor({
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
   const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
+  const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
 
   // ─── Global timeline ───
   const sceneDurations = useMemo(() => {
