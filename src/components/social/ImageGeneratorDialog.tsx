@@ -22,7 +22,7 @@ import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { applyLogoToImage } from "@/lib/imageWatermark";
+import { applyLogoToImage, ensureSquare } from "@/lib/imageWatermark";
 
 interface ImageGeneratorDialogProps {
   open: boolean;
