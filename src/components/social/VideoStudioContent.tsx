@@ -806,7 +806,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           </div>
 
           {/* Prompt Bar — pinned at bottom in full page, inline otherwise */}
-          {(status === "idle" || status === "transforming" || (mediaType !== "video" && !isGenerating)) && (
+          {(status === "idle" || status === "transforming" || status === "completed" || status === "failed" || (mediaType !== "video" && !isGenerating)) && (
             <div className={fullPage ? "shrink-0 pt-2" : "mt-4"}>
               <VideoStudioPromptBar
                 rawPrompt={rawPrompt}
