@@ -733,6 +733,11 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                       <button className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors w-full">
                         <Wand2 className="w-3.5 h-3.5" />
                         <span>Engineered Prompt</span>
+                        {transformResult.intent && transformResult.intent !== "cinematic_broll" && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-violet-500/10 text-violet-600 border-violet-500/20">
+                            {transformResult.intent.replace(/_/g, " ")}
+                          </Badge>
+                        )}
                         {transformResult.isConstructionRelated && (
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-amber-500/10 text-amber-600 border-amber-500/20">
                             Construction Enhanced
