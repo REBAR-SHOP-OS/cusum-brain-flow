@@ -68,12 +68,6 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
 
   const handleModelChange = (modelId: string) => {
     setSelectedModel(modelId);
-    const model = modelOptions.find((m) => m.id === modelId);
-    if (model) {
-      // Reset to first landscape size
-      const landscape = model.sizes.find((s) => s.label.includes("Landscape")) || model.sizes[0];
-      setSize(landscape.value);
-    }
   };
 
   const handleGenerate = async () => {
