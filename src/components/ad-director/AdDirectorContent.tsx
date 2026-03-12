@@ -727,6 +727,7 @@ export function AdDirectorContent() {
               onModelOverridesChange={setModelOverrides}
               onSaveBrandKit={() => saveBrandKit.mutate(brand)}
               savingBrandKit={saveBrandKit.isPending}
+              onLoadProject={handleLoadProject}
             />
           </div>
         )}
