@@ -340,6 +340,12 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     if (mediaType === "image") { handleGenerateImage(); return; }
     if (mediaType === "audio") { handleGenerateStandaloneAudio(); return; }
 
+    // I2V requires a reference image
+    if (isI2vModel && !referenceImage) {
+      toast({ title: "Reference image required", description: "Wan I2V models need a reference image to animate.", variant: "destructive" });
+      return;
+    }
+
     // Video generation (existing flow)
     const durationSecs = parseInt(duration);
     const creditCost = getCost(durationSecs, mode);
