@@ -15,6 +15,7 @@ interface ScriptInputProps {
   onBrandChange: (b: BrandProfile) => void;
   onAnalyze: () => void;
   analyzing: boolean;
+  analysisStatus?: string;
   assets: File[];
   onAssetsChange: (files: File[]) => void;
 }
