@@ -995,21 +995,29 @@ export function ProVideoEditor({
             </Button>
           </div>
 
-          {/* Video */}
+          {/* Video / Static Card */}
           <div className="flex-1 flex items-center justify-center relative overflow-hidden">
             {videoSrc ? (
               <>
-                <video
-                  ref={videoRef}
-                  src={videoSrc}
-                  className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                  muted={isMuted}
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoaded}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onEnded={handleVideoEnded}
-                />
+                {isStaticCard ? (
+                  <img
+                    src={videoSrc}
+                    alt="End Card"
+                    className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
+                  />
+                ) : (
+                  <video
+                    ref={videoRef}
+                    src={videoSrc}
+                    className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
+                    muted={isMuted}
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoaded}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={handleVideoEnded}
+                  />
+                )
                 {brand.logoUrl && (
                   <img
                     src={brand.logoUrl}
