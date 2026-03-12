@@ -60,9 +60,14 @@ export function FinalPreview({
           />
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
             <Badge variant="secondary" className="text-[10px]">
-              ✅ Final ad assembled — {completedClips.length} scenes
+              ✅ Final ad assembled — {completedForExport.length} scenes{endCardEnabled ? " + end card" : ""}
             </Badge>
-            <span>Expected: ~{Math.round(segments.reduce((sum, s) => sum + (s.endTime - s.startTime), 0))}s</span>
+            <span>Expected: ~{Math.round(
+              effectiveScenes.reduce((sum, scene) => {
+                const seg = segments.find(s => s.id === scene.segmentId);
+                return sum + (seg ? seg.endTime - seg.startTime : 0);
+              }, 0) + (endCardEnabled ? 4 : 0)
+            )}s</span>
           </div>
         </div>
       ) : (() => {
