@@ -11,6 +11,7 @@ export interface TimeClockEntry {
   clock_out: string | null;
   break_minutes: number;
   notes: string | null;
+  source: string | null;
   created_at: string;
 }
 
