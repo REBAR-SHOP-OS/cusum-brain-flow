@@ -89,8 +89,12 @@ async function callAI(
   const body: any = {
     model,
     messages,
-    max_completion_tokens: route.maxTokens,
+    max_tokens: route.maxTokens,
   };
+  // Cap reasoning tokens for Gemini Pro to prevent thinking from exhausting the budget
+  if (model.includes("gemini-2.5-pro")) {
+    body.thinking = { thinking_budget: 4096 };
+  }
   // Only send temperature for models that support it (not OpenAI)
   if (!model.startsWith("openai/")) {
     body.temperature = route.temperature;
