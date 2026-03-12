@@ -658,11 +658,11 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
 
                 {/* Prompt Box */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Describe your video idea</Label>
+                  <Label className="text-sm font-medium">What do you want to create?</Label>
                   <Textarea
                     value={rawPrompt}
                     onChange={(e) => setRawPrompt(e.target.value)}
-                    placeholder="Describe your video idea — we'll turn it into a cinematic prompt."
+                    placeholder="Say it naturally — we'll turn it into a production-ready video prompt."
                     className={`resize-none ${fullPage ? "min-h-[140px]" : "min-h-[100px]"}`}
                     disabled={isTransforming}
                   />
