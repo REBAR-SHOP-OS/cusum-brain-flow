@@ -192,9 +192,9 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
                 <Video className="w-5 h-5" />
               </div>
               <div className="flex-1">
-                <p className="font-medium">Generate AI Video</p>
+                <p className="font-medium">AI Video Studio</p>
                 <p className="text-sm text-muted-foreground">
-                  Create stunning videos from text prompts using Google Veo 3.
+                  Type anything — we'll engineer a cinematic prompt and generate your video.
                 </p>
               </div>
               <ChevronLeft className="w-5 h-5 rotate-180 text-muted-foreground" />

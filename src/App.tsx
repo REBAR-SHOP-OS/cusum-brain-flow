@@ -81,6 +81,7 @@ import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 import Estimation from "./pages/Estimation";
 import QuoteEngine from "./pages/QuoteEngine";
 import AutomationsHub from "./pages/AutomationsHub";
+import VideoStudio from "./pages/VideoStudio";
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
 
@@ -187,6 +188,7 @@ const App = () => (
 
                     {/* Social / Comms */}
                     <Route path="/social-media-manager" element={<P><AdminRoute allowedEmails={["zahra@rebar.shop"]}><SocialMediaManager /></AdminRoute></P>} />
+                    <Route path="/video-studio" element={<P><AdminRoute allowedEmails={["zahra@rebar.shop"]}><VideoStudio /></AdminRoute></P>} />
                     <Route path="/email-marketing" element={<P><AdminRoute><EmailMarketing /></AdminRoute></P>} />
                     <Route path="/daily-summarizer" element={<P><DailySummarizer /></P>} />
                     <Route path="/facebook-commenter" element={<P><AdminRoute><FacebookCommenter /></AdminRoute></P>} />
