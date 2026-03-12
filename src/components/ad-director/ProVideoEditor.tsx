@@ -1017,7 +1017,7 @@ export function ProVideoEditor({
                     onPause={() => setIsPlaying(false)}
                     onEnded={handleVideoEnded}
                   />
-                )
+                )}
                 {brand.logoUrl && (
                   <img
                     src={brand.logoUrl}
