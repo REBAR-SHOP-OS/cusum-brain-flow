@@ -37,7 +37,7 @@ export function FinalPreview({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-4">
+    <div className="rounded-2xl border border-border/50 bg-card/50 p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Film className="w-4 h-4 text-primary" />
@@ -124,7 +124,7 @@ export function FinalPreview({
       <Button
         onClick={onExport}
         disabled={!allCompleted || exporting}
-        className="w-full h-10 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-sm font-semibold"
+        className="w-full h-10 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-sm font-semibold"
       >
         {exporting ? (
           <>Stitching Final Video…</>

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Video, Image as ImageIcon, Link2, FileText, Layers,
-  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock
+  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight
 } from "lucide-react";
 import { type StoryboardScene, type ClipOutput, type GenerationMode } from "@/types/adDirector";
 import { PromptQualityBadge } from "./PromptQualityBadge";
@@ -67,6 +67,7 @@ export function SceneCard({
 }: SceneCardProps) {
   const [editing, setEditing] = useState(false);
   const [editPrompt, setEditPrompt] = useState(scene.prompt);
+  const [promptExpanded, setPromptExpanded] = useState(false);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -123,8 +124,9 @@ export function SceneCard({
 
         {/* Collapsible Scene Details */}
         <Collapsible>
-          <CollapsibleTrigger className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-            <span>Scene details ▸</span>
+          <CollapsibleTrigger className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 group">
+            <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
+            <span>Scene details</span>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-2 pt-2">
             <p className="text-xs text-muted-foreground leading-relaxed">{scene.objective}</p>
@@ -168,9 +170,19 @@ export function SceneCard({
               </div>
             </div>
           ) : (
-            <p className="text-[11px] text-foreground/80 leading-relaxed bg-background/30 rounded-lg p-2 line-clamp-3">
-              {scene.prompt}
-            </p>
+            <div>
+              <p className={cn("text-[11px] text-foreground/80 leading-relaxed bg-background/30 rounded-lg p-2", !promptExpanded && "line-clamp-3")}>
+                {scene.prompt}
+              </p>
+              {scene.prompt.length > 150 && (
+                <button
+                  onClick={() => setPromptExpanded(!promptExpanded)}
+                  className="text-[10px] text-primary hover:text-primary/80 mt-1 ml-2"
+                >
+                  {promptExpanded ? "Show less" : "Show more"}
+                </button>
+              )}
+            </div>
           )}
         </div>
 

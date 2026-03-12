@@ -71,14 +71,24 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               <Label className="text-base font-semibold">Creative Brief</Label>
             </div>
             {script.trim() && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onScriptChange(DEMO_SCRIPT)}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Load Demo
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onScriptChange("")}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onScriptChange(DEMO_SCRIPT)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Load Demo
+                </Button>
+              </div>
             )}
           </div>
 
@@ -88,7 +98,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               value={script}
               onChange={(e) => onScriptChange(e.target.value)}
               placeholder="Paste your ad script here, or load the demo above to get started..."
-              className="min-h-[280px] bg-card/50 border-border/50 font-mono text-sm leading-relaxed pr-4 pb-10"
+              className="min-h-[280px] bg-card/50 border-border/50 font-sans text-sm leading-relaxed pr-4 pb-10"
             />
             {script.trim() && (
               <div className="absolute bottom-3 left-3 flex items-center gap-3">
@@ -156,6 +166,9 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               />
             </div>
 
+            {/* Divider */}
+            <div className="border-t border-border/20" />
+
             {/* Colors inline */}
             <div className="flex items-center gap-4 pt-1">
               <div className="flex items-center gap-2">
@@ -181,7 +194,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
             {/* Brand Color Preview Strip */}
             {brand.name && (
               <div
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-center truncate"
+                className="rounded-xl px-3 py-1.5 text-xs font-semibold text-center truncate"
                 style={{ backgroundColor: brand.primaryColor, color: brand.secondaryColor }}
               >
                 {brand.name} {brand.tagline ? `· ${brand.tagline}` : ""}

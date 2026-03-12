@@ -7,7 +7,7 @@ import { StoryboardTimeline } from "./StoryboardTimeline";
 import { ContinuityInspector } from "./ContinuityInspector";
 import { FinalPreview } from "./FinalPreview";
 import { Progress } from "@/components/ui/progress";
-import { FileText, Layers, Film, Loader2 } from "lucide-react";
+import { FileText, Layers, Film, Loader2, ArrowLeft } from "lucide-react";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
   type ContinuityProfile, type ClipOutput, type ModelOverrides,
@@ -588,7 +588,7 @@ export function AdDirectorContent() {
               >
                 <div className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all shrink-0",
-                  isCompleted && "bg-accent/20 text-accent-foreground ring-1 ring-accent/30",
+                  isCompleted && "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30",
                   isActive && "bg-primary text-primary-foreground shadow-md shadow-primary/30",
                   !isActive && !isCompleted && "bg-card/50 text-muted-foreground ring-1 ring-border/30"
                 )}>
@@ -601,8 +601,8 @@ export function AdDirectorContent() {
               </button>
               {idx < steps.length - 1 && (
                 <div className={cn(
-                  "w-8 h-px mx-1 hidden sm:block",
-                  isCompleted ? "bg-primary/40" : "bg-border/30"
+                  "w-12 h-[2px] mx-1 hidden sm:block rounded-full",
+                  isCompleted ? "bg-emerald-500/40" : "bg-border/30"
                 )} />
               )}
             </div>
@@ -667,7 +667,11 @@ export function AdDirectorContent() {
         )}
 
         {step === "preview" && (
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 space-y-4">
+            <Button variant="ghost" size="sm" onClick={() => setStep("storyboard")} className="gap-1 text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back to Storyboard
+            </Button>
             <FinalPreview
               clips={clips}
               storyboard={storyboard}

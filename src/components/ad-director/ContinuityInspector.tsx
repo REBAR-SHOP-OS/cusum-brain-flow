@@ -24,7 +24,7 @@ export function ContinuityInspector({ profile }: ContinuityInspectorProps) {
   if (!profile) return null;
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-3">
+    <div className="rounded-2xl border border-border/50 bg-card/50 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Link2 className="w-4 h-4 text-emerald-400" />
         <h3 className="text-sm font-semibold">Continuity Profile</h3>
