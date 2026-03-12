@@ -352,9 +352,10 @@ Also produce a ContinuityProfile object with: subjectDescriptions, wardrobe, env
 For clips after the first, always include in the prompt: "Continue seamlessly from the previous clip, preserving location, subject continuity, camera language, lighting, pacing, and cinematic tone."
 
 ## QUALITY STANDARDS
-- Every prompt must be 80-150 words with specific camera specs (lens, f-stop), lighting details, and material descriptions
+- Every prompt must be 80-150 words with specific camera specs (lens focal length, f-stop), lighting details, and material descriptions
 - Avoid generic phrases: "professional", "high quality", "cinematic look" — be SPECIFIC
-- Include camera specs: "shot on ARRI Alexa, 50mm anamorphic lens, f/2.8, shallow depth of field"
+- CRITICAL: Do NOT mention camera brand names (e.g., "ARRI Alexa", "RED", "Sony", "Canon", "Blackmagic") in prompts. Video models render these as on-screen text. Instead describe the visual characteristics: "shot on 50mm anamorphic lens, f/2.8, shallow depth of field, 4K cinematic grade"
+- Do NOT include any text, titles, watermarks, or brand names that should appear visually in the video — the overlay system handles all text
 - Specify lighting: "golden hour backlight with tungsten fill from 45° left, volumetric haze"
 - Describe materials: "weathered steel rebar bundles with rust patina, fresh concrete with moisture sheen"
 - Include motion: "slow dolly forward at 2ft/s, slight crane up revealing construction scale"
