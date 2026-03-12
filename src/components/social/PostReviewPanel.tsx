@@ -356,11 +356,19 @@ export function PostReviewPanel({
                 {/* ── Visual Section ── */}
                 <div className="p-4 space-y-3">
                   {post.image_url ? (
-                    <div className="rounded-lg overflow-hidden bg-muted">
+                    <div className="rounded-lg overflow-hidden bg-muted relative group">
                       {isVideo ? (
                         <video src={post.image_url} controls className="w-full rounded-lg" style={{ maxHeight: '400px' }} />
                       ) : (
-                        <img src={post.image_url} alt="Post preview" className="w-full object-contain rounded-lg" />
+                        <>
+                          <img src={post.image_url} alt="Post preview" className="w-full object-contain rounded-lg" />
+                          <button
+                            onClick={() => setImageZoomOpen(true)}
+                            className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <ZoomIn className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   ) : uploading ? (
