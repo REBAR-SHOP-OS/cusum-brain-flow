@@ -191,7 +191,7 @@ export function PostReviewPanel({
     if (groupPages && groupPages.length > 0) {
       setLocalPages(groupPages);
     } else {
-      setLocalPages(post.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
+      setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
     }
     setLocalContentType(post.content_type || "post");
   }, [post?.id, groupPages]);
@@ -288,11 +288,13 @@ export function PostReviewPanel({
 
   const handleContentTypeSave = (value: string) => {
     setLocalContentType(value);
+    updatePost.mutate({ id: post.id, content_type: value });
     setSubPanel(null);
   };
 
   const handlePagesSaveMulti = (values: string[]) => {
     setLocalPages(values);
+    updatePost.mutate({ id: post.id, page_name: values.join(", ") });
     setSubPanel(null);
   };
 
