@@ -1,53 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Enforce Style & Product Selections for Free-Text Pixel Messages
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-When the user selects a Style + Product and types **free text** (not a slot number 1-5), the message bypasses the deterministic image generation path and goes to the LLM. The LLM's system prompt (in `marketing.ts`) has a hardcoded "ALL images MUST be PHOTOREALISTIC" rule and doesn't dynamically adapt to user-selected styles/products. The style/product data IS passed in the context object, but the LLM may ignore it.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-The deterministic path (slot numbers) already handles this correctly — the fix from the previous session added conditional realism rules there. But the LLM path has no equivalent logic.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Changes
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 1. `supabase/functions/ai-agent/index.ts` (~line 908-928)
-Before sending messages to the LLM for the `social` agent, inject a **high-priority dynamic system directive** based on user-selected styles/products from context:
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-```typescript
-// After line ~915 (dynamicContext building), before messages array
-let socialStyleOverride = "";
-if (agent === "social") {
-  const uStyles = (mergedContext.imageStyles as string[]) || [];
-  const uProducts = (mergedContext.selectedProducts as string[]) || [];
-  
-  if (uStyles.length || uProducts.length) {
-    const IMAGE_STYLE_MAP = { /* same map as line 755 */ };
-    const PRODUCT_MAP = { /* same map as line 774 */ };
-    const styleDesc = uStyles.map(k => IMAGE_STYLE_MAP[k] || k).join(". ");
-    const productDesc = uProducts.map(k => PRODUCT_MAP[k] || k).join("; ");
-    const NON_REALISTIC = ["cartoon","animation","painting","ai_modern"];
-    const isNonRealistic = uStyles.some(s => NON_REALISTIC.includes(s));
-    
-    socialStyleOverride = `\n\n## ⚠️ MANDATORY USER SELECTIONS — OVERRIDE ALL DEFAULTS\n`;
-    if (uProducts.length) socialStyleOverride += `PRODUCT: ${productDesc}\n`;
-    if (uStyles.length) socialStyleOverride += `STYLE: ${styleDesc}\n`;
-    if (isNonRealistic) {
-      socialStyleOverride += `CRITICAL: The user selected a NON-PHOTOREALISTIC style. You MUST follow "${styleDesc}" EXACTLY. IGNORE the photorealism rule. Do NOT make images look like real photographs.\n`;
-    }
-    socialStyleOverride += `When calling generate_image, your prompt MUST feature these products in this style. This overrides ALL default rules.\n`;
-  }
-}
-```
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-Then append `socialStyleOverride` to the dynamic context that goes into the second system message.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 2. `supabase/functions/_shared/agents/marketing.ts` (line ~54)
-Add a clause to the IMAGE RULES section acknowledging user overrides:
-
-```
-- **STYLE OVERRIDE**: If the user context includes `imageStyles` or `selectedProducts`, those MUST take absolute priority. Use the specified style even if it contradicts the photorealism rule above. The user's explicit selection always wins.
-```
-
-### Files
-- `supabase/functions/ai-agent/index.ts` — inject dynamic style/product override into LLM system prompt
-- `supabase/functions/_shared/agents/marketing.ts` — add style override clause to Pixel prompt
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

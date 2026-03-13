@@ -910,9 +910,51 @@ Deno.serve(async (req) => {
       `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
 
     // Dynamic content goes in a separate system message to preserve cache boundary
+    // Inject mandatory style/product override for social agent free-text messages
+    let socialStyleOverride = "";
+    if (agent === "social") {
+      const uStyles = (mergedContext.imageStyles as string[]) || [];
+      const uProducts = (mergedContext.selectedProducts as string[]) || [];
+      if (uStyles.length || uProducts.length) {
+        const IMAGE_STYLE_MAP: Record<string, string> = {
+          realism: "Ultra-photorealistic, shot on professional DSLR, natural lighting, real textures, shallow depth of field",
+          urban: "Urban cityscape setting, modern architecture, street-level industrial aesthetics, city life atmosphere",
+          construction: "Active construction site, heavy machinery, steel structures, workers in safety gear, raw industrial energy",
+          ai_modern: "Futuristic tech-forward aesthetic, clean geometric lines, digital integration with physical world, neon accents",
+          nature: "Natural outdoor setting, lush greenery, calm atmosphere, sustainable construction, blue sky and trees",
+          advertising: "Commercial product photography, polished studio lighting, bold text overlays, brand-forward composition",
+          inspirational: "Dramatic lighting, hero shot, empowering composition, golden hour, motivational atmosphere",
+          cartoon: "Cartoon style illustration, bold outlines, vibrant flat colors, exaggerated proportions, comic book aesthetic, clean vector-like rendering",
+          animation: "3D animated render, Pixar/Disney-quality, smooth surfaces, dramatic lighting, cinematic depth of field, stylized realism",
+          painting: "Oil painting style, visible brush strokes, rich color palette, artistic composition, impressionist or classical fine art aesthetic",
+        };
+        const PRODUCT_PROMPT_MAP: Record<string, string> = {
+          fiberglass: "Rebar Fiberglass Straight — fiberglass reinforcement bars, lightweight, corrosion-resistant",
+          stirrups: "Rebar Stirrups — bent steel reinforcement loops for columns and beams",
+          cages: "Rebar Cages — pre-assembled steel reinforcement cages for foundations and piles",
+          hooks: "Rebar Hooks — bent steel bars with hooked ends for anchoring in concrete",
+          dowels: "Rebar Dowels — straight steel bars for connecting concrete slabs and joints",
+          wire_mesh: "Wire Mesh — welded steel wire mesh sheets for slab reinforcement",
+          straight: "Rebar Straight — standard straight steel reinforcement bars in various sizes",
+        };
+        const styleDesc = uStyles.map(k => IMAGE_STYLE_MAP[k] || k).join(". ");
+        const productDesc = uProducts.map(k => PRODUCT_PROMPT_MAP[k] || k).join("; ");
+        const NON_REALISTIC = ["cartoon", "animation", "painting", "ai_modern"];
+        const isNonRealistic = uStyles.some(s => NON_REALISTIC.includes(s));
+
+        socialStyleOverride = `\n\n## ⚠️ MANDATORY USER SELECTIONS — OVERRIDE ALL DEFAULTS\n`;
+        if (uProducts.length) socialStyleOverride += `PRODUCT: ${productDesc}\n`;
+        if (uStyles.length) socialStyleOverride += `STYLE: ${styleDesc}\n`;
+        if (isNonRealistic) {
+          socialStyleOverride += `CRITICAL: The user selected a NON-PHOTOREALISTIC style. You MUST follow "${styleDesc}" EXACTLY. IGNORE the photorealism rule. Do NOT make images look like real photographs.\n`;
+        }
+        socialStyleOverride += `When calling generate_image, your prompt MUST feature these products in this style. This overrides ALL default rules.\n`;
+      }
+    }
+
     const dynamicContext = (mergedContext.brainKnowledgeBlock as string || "") +
       (mergedContext.roleAccessBlock as string || "") +
-      ragBlock + contextStr;
+      ragBlock + contextStr + socialStyleOverride;
 
     // Document analysis summary injection
     let docSummary = "";
