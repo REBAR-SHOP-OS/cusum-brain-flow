@@ -330,6 +330,25 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
           <span className="text-sm text-muted-foreground">
             {checkedItems.size} of {selectedBundle.items.length} selected
           </span>
+          {existingDelivery ? (
+            <Badge variant="outline" className="text-success border-success/40 gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Packing Slip Created
+            </Badge>
+          ) : (
+            <Button
+              size="sm"
+              disabled={checkedItems.size === 0 || createPackingSlip.isPending}
+              onClick={() => createPackingSlip.mutate()}
+            >
+              {createPackingSlip.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : (
+                <FileText className="w-4 h-4 mr-1" />
+              )}
+              Generate Packing Slip
+            </Button>
+          )}
         </div>
       </div>
     );
