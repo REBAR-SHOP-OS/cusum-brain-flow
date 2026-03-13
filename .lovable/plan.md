@@ -1,46 +1,46 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# افزودن آیکون‌های محصولات به نوار ورودی Pixel
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## خلاصه
+ردیف دوم آیکون‌های رنگی و درشت‌تر برای ۷ محصول اضافه می‌شود. وقتی کاربر محصولی را انتخاب کند، تصاویر تولیدشده آن محصول را تبلیغ می‌کنند. همچنین عکس‌های واقعی محصولات از Brain خوانده شده و به عنوان reference به مدل تصویرساز ارسال می‌شوند.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## محصولات و آیکون‌ها
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+| محصول | آیکون | رنگ | کلید |
+|---|---|---|---|
+| Rebar Fiberglass Straight | 🟢 Cylinder | سبز | `fiberglass` |
+| Rebar Stirrups | 🟠 Square | نارنجی | `stirrups` |
+| Rebar Cages | 🔵 Box | آبی | `cages` |
+| Rebar Hooks | 🟡 Anchor | زرد | `hooks` |
+| Rebar Dowels | 🔴 ArrowDownUp | قرمز | `dowels` |
+| Wire Mesh | 🟣 Grid3x3 | بنفش | `wire_mesh` |
+| Rebar Straight | ⚪ Minus | خاکستری | `straight` |
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## تغییرات
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 1. `src/components/chat/ChatInput.tsx`
+- آرایه `PRODUCT_ICONS` با ۷ محصول و آیکون‌های Lucide رنگی
+- Props جدید: `selectedProducts?: string[]` و `onSelectedProductsChange?`
+- ردیف دوم آیکون‌ها زیر style icons (فقط در `minimalToolbar`) با آیکون‌های بزرگ‌تر (`w-5 h-5`) و رنگی
+- هر آیکون toggleable با رنگ مخصوص خودش
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 2. `src/pages/AgentWorkspace.tsx`
+- State: `selectedProducts: string[]`
+- پاس به ChatInput + ارسال در `extraContext.selectedProducts`
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 3. `supabase/functions/ai-agent/index.ts`
+- خواندن `context.selectedProducts`
+- `PRODUCT_PROMPT_MAP` برای ترجمه کلید به توضیح دقیق محصول برای prompt
+- وقتی محصولات انتخاب شده: slot product را override می‌کند و تمرکز تصویر روی آن‌ها می‌گذارد
+- جستجوی عکس‌های واقعی محصولات از knowledge table و ارسال به عنوان reference
+
+### 4. `supabase/functions/regenerate-post/index.ts`
+- همسان‌سازی: اگر `selectedProducts` در context بود، در imagePrompt تزریق شود
+
+### فایل‌ها
+- `src/components/chat/ChatInput.tsx`
+- `src/pages/AgentWorkspace.tsx`
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/regenerate-post/index.ts`
+
