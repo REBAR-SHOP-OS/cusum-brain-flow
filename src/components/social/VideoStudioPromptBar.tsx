@@ -626,9 +626,9 @@ export function VideoStudioPromptBar({
           )}
 
           {/* I2V hint badge */}
-          {mediaType === "video" && isI2vModel && !referenceImage && (
+          {mediaType === "video" && isI2vModel && !referenceImage && !firstFrameImage && (
             <Badge variant="outline" className="text-[10px] h-5 px-2 bg-warning/10 text-warning border-warning/20 rounded-full">
-              ⚠ Upload ref image
+              ⚠ Upload first frame
             </Badge>
           )}
 
