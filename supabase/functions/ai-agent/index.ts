@@ -742,9 +742,10 @@ Deno.serve(async (req) => {
             inspirational: "Dramatic lighting, hero shot, empowering composition, golden hour, motivational atmosphere",
           };
           const userImageStyles = (userContext as any)?.imageStyles as string[] | undefined;
-          const userStyleBlock = userImageStyles?.length
-            ? `\n\n## USER-SELECTED IMAGE STYLES (MUST incorporate these aesthetics):\n${userImageStyles.map(k => IMAGE_STYLE_MAP[k] || k).join("\n")}\n\n`
-            : "";
+          // When user explicitly selected styles, override the random pool style
+          const effectiveStyle = userImageStyles?.length
+            ? userImageStyles.map(k => IMAGE_STYLE_MAP[k] || k).join(". ")
+            : selectedStyle;
 
           // Product selection override from UI
           const PRODUCT_PROMPT_MAP: Record<string, string> = {
