@@ -1,46 +1,45 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
+تشخیص از لاگ‌ها (ریشه مشکل):
+1) مشکل فعلی «Machine busy» واقعی است: ماشین `CUTTER-01` الان `running` است و `current_run_id` دارد، ولی `active_job_id` روی آیتمی است که الان `cut_done` و کامل شده (`B1503`، 4/4).  
+2) UI در `CutterStationView` فقط وقتی run را active می‌داند که `active_job_id === currentItem.id` باشد؛ پس دکمه `LOCK & START` دیده می‌شود، ولی با کلیک، backend درستاً خطای busy می‌دهد.  
+3) یک run orphan هم در دیتابیس دیده می‌شود (running ولی به ماشین لینک نشده) که نشان‌دهنده race در start-run است.  
+4) خطای قبلی `Over-consumption` با همین race/تکرار مصرف هم‌جهت است.
 
-## Completed: Add All Wan 2.6 Capabilities
+برنامه اصلاح (برای پیاده‌سازی):
+1) `src/components/shopfloor/CutterStationView.tsx`
+- تفکیک stateها:
+  - `machineHasActiveRun` (هر run فعال روی ماشین)
+  - `runMatchesCurrentItem` (run مربوط به آیتم جاری)
+  - `machineIsRunning` فقط برای آیتم جاری
+- اگر run فعال برای آیتم دیگری/آیتم مخفی است:
+  - دکمه Start غیرفعال شود
+  - بنر واضح با «ماشین روی Mark X قفل است» نمایش داده شود
+  - اکشن «Clear stale lock» (complete-run با output=0) برای خروج امن
+- در نوار lock، مارک واقعیِ active job نمایش داده شود (نه `currentItem`).
+- در restore اولیه، اگر active job دیگر actionable نیست (مثلاً `cut_done` یا کامل)، auto-clear اجرا شود.
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+2) `supabase/functions/manage-machine/index.ts`
+- سخت‌گیری backend برای start:
+  - قبل از شروع، runهای running orphan برای همان ماشین را پیدا و cancel کند.
+  - اگر run فعلی به آیتم complete/cut_done وصل است، auto-recover کند (بدون انتظار 60 دقیقه).
+- ضد-race در start-run:
+  - claim اتمیک ماشین هنگام set کردن `current_run_id` (شرط `current_run_id is null`)
+  - اگر claim شکست خورد، run تازه cancel شود و run موجود برگردد.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+3) `supabase/functions/manage-inventory/index.ts`
+- idempotency واقعی برای `consume-on-start` بر اساس `(machineRunId, sourceId, sourceType)` تا مصرف تکراری نشود.
+- کاهش موجودی با شرط اتمیک (`qty_on_hand >= qty`) تا race باعث over-consumption نشود.
+- اگر تکراری بود، پاسخ success + deduplicated بدهد (نه error).
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+جزئیات فنی (DB/Migration):
+- migration پاکسازی: runهای running اضافی/orphan ماشین را به `canceled` ببرد.
+- سپس unique partial index:
+  `UNIQUE(machine_id) WHERE status='running'`
+  تا هم‌زمان بیش از یک run فعال برای یک ماشین غیرممکن شود.
+- برای idempotency مصرف، یک ledger table کوچک با unique key اضافه شود (RLS روشن، بدون policy عمومی).
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
-
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
-
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
-
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+پلن تست پس از اصلاح:
+1) سناریوی فعلی را تکرار کنید: اگر run روی آیتم نامعتبر بود، باید بنر lock mismatch ببینید (نه toast مبهم).  
+2) با Clear lock، ماشین idle شود و start بعدی موفق شود.  
+3) کلیک سریع/دو‌بار start → فقط یک run فعال و فقط یک مصرف موجودی ثبت شود.  
+4) کوئری نهایی: برای هر ماشین حداکثر یک `machine_runs.status='running'` وجود داشته باشد.
