@@ -611,6 +611,8 @@ export default function AgentWorkspace() {
                 minimalToolbar={agentId === "social"}
                 selectedModel={aiModel}
                 onModelChange={setAiModel}
+                imageStyles={imageStyles}
+                onImageStylesChange={setImageStyles}
               />
             </div>
 
