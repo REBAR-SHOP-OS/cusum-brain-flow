@@ -41,6 +41,7 @@ export function DockChatBar() {
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
+  const { unreadSenderIds } = useUnreadSenders();
   const [launcherOpen, setLauncherOpen] = useState(false);
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
