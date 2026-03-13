@@ -100,6 +100,12 @@ export default function TimeClock() {
     try {
       document.documentElement.requestFullscreen?.();
     } catch {}
+    // Auto-scan after camera is ready (for ai@rebar.shop kiosk)
+    setTimeout(() => {
+      if (!scanningRef.current) {
+        handleScan();
+      }
+    }, 2000);
   };
 
   const exitKioskMode = () => {
