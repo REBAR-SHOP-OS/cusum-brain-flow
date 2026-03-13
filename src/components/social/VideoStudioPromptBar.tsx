@@ -259,8 +259,41 @@ export function VideoStudioPromptBar({
                 }
               }}
             />
-            {/* Reference image preview */}
-            {referenceImage && (mediaType === "video" || mediaType === "image") && (
+            {/* First & Last frame image previews — video mode */}
+            {mediaType === "video" && (firstFrameImage || lastFrameImage) && (
+              <div className="flex items-center gap-3 mt-1">
+                {firstFrameImage && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50">
+                      <img src={firstFrameImage} alt="First frame" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => onFirstFrameImageChange?.(null)}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">First frame</span>
+                  </div>
+                )}
+                {lastFrameImage && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50">
+                      <img src={lastFrameImage} alt="Last frame" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => onLastFrameImageChange?.(null)}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">Last frame</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Reference image preview — image mode only */}
+            {referenceImage && mediaType === "image" && (
               <div className="flex items-center gap-2 mt-1">
                 <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50">
                   <img src={referenceImage} alt="Reference" className="w-full h-full object-cover" />
