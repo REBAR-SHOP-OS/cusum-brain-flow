@@ -10,6 +10,7 @@ import { useTeamChannels, useMyProfile } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useOpenDM } from "@/hooks/useChannelManagement";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useUnreadSenders } from "@/hooks/useUnreadSenders";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
