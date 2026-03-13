@@ -174,6 +174,9 @@ export default function TimeClock() {
       toast.error("Punch failed");
     }
 
+    // Remember this person for the session so next scan skips confirmation
+    confirmedProfilesRef.current.add(profileId);
+
     face.reset();
     setAutoPunchCountdown(0);
 

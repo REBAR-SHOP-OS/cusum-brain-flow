@@ -130,11 +130,12 @@ For each employee, I'm providing their reference photos followed by the captured
 
 STRICT RULES:
 - You must be CERTAIN it is the same person before returning a match. If in doubt, return NO match.
-- Pay close attention to UNIQUE facial features: nose shape, eye spacing, jawline, facial hair, eyebrow shape, face proportions.
+- Pay close attention to UNIQUE facial features: nose shape, eye spacing, jawline, facial hair, eyebrow shape, face proportions, ear shape.
+- Carefully compare: glasses (present/absent, frame style), facial hair (beard, mustache, stubble vs clean-shaven), face shape (round, oval, square), hairline and forehead size.
 - Account for variations in lighting, angles, glasses on/off, and minor appearance changes (e.g. shaved vs unshaved).
 - Do NOT assume a match just because of similar hair color, skin tone, or general build.
-- If MULTIPLE faces are visible in the captured photo, focus ONLY on the most prominent/centered face closest to the camera.
-- Return confidence 85+ ONLY if you are highly certain it's the same person.
+- If MULTIPLE faces are visible in the captured photo, focus ONLY on the face closest to the camera center. Ignore people in the background.
+- Return confidence 85+ ONLY if you are highly certain it's the same person across multiple distinguishing features.
 - Return confidence 60-84 if there is a reasonable resemblance but you are not fully certain.
 - Return confidence below 50 and matched_profile_id="null" if you cannot confidently identify the person.
 - Watch for obvious spoofing (e.g. a photo of a photo held up to the camera).
