@@ -211,6 +211,11 @@ export function ScreenshotFeedbackButton() {
       });
       toast.error(`Failed to capture screen on ${window.location.pathname}`);
     } finally {
+      // ── UNFREEZE ──
+      freezeOverlay.remove();
+      freezeStyle.remove();
+      document.body.style.pointerEvents = prevPointerEvents;
+
       expandedEls.forEach(({ el, orig }) => { el.style.cssText = orig; });
       setCapturing(false);
     }
