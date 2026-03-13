@@ -150,8 +150,8 @@ async function generatePixelImage(
     try {
       const contentParts: any[] = [{ type: "text", text: fullPrompt }];
 
-      // Attach resource/reference images from brain (product photos, etc.)
-      if (options?.resourceImageUrls?.length) {
+      // Attach resource/reference images from brain (only if attempt allows)
+      if (attempt.useRefs && options?.resourceImageUrls?.length) {
         for (const refUrl of options.resourceImageUrls.slice(0, 3)) {
           contentParts.push({ type: "image_url", image_url: { url: refUrl } });
         }
