@@ -34,6 +34,16 @@ const IMAGE_STYLES = [
   { key: "inspirational", label: "الهام‌بخش", labelEn: "Inspirational", icon: Flame },
 ] as const;
 
+const PRODUCT_ICONS = [
+  { key: "fiberglass", label: "Fiberglass", labelFa: "فایبرگلاس", icon: Cylinder, color: "#22c55e" },
+  { key: "stirrups", label: "Stirrups", labelFa: "خاموت", icon: Square, color: "#f97316" },
+  { key: "cages", label: "Cages", labelFa: "قفسه", icon: Box, color: "#3b82f6" },
+  { key: "hooks", label: "Hooks", labelFa: "هوک", icon: Anchor, color: "#eab308" },
+  { key: "dowels", label: "Dowels", labelFa: "دوبل", icon: ArrowDownUp, color: "#ef4444" },
+  { key: "wire_mesh", label: "Wire Mesh", labelFa: "مش", icon: Grid3X3, color: "#a855f7" },
+  { key: "straight", label: "Rebar Straight", labelFa: "میلگرد مستقیم", icon: Minus, color: "#6b7280" },
+] as const;
+
 interface ChatInputProps {
   onSend: (message: string, files?: UploadedFile[]) => void;
   placeholder?: string;
@@ -45,6 +55,8 @@ interface ChatInputProps {
   onModelChange?: (model: string) => void;
   imageStyles?: string[];
   onImageStylesChange?: (styles: string[]) => void;
+  selectedProducts?: string[];
+  onSelectedProductsChange?: (products: string[]) => void;
 }
 
 export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({
