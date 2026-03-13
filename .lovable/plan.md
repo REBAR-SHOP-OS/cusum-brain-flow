@@ -1,46 +1,56 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Add AI Image Editor with Drawing Mask
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Concept
+A new dialog (`ImageEditDialog`) that lets users:
+1. See the current post image on a canvas
+2. Draw/paint over areas they want to change (red semi-transparent brush strokes)
+3. Type a prompt describing the desired edit
+4. Send the annotated image (with drawn marks visible) + prompt to Gemini image editing API
+5. Receive back the edited image with the rest preserved
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Approach
+Since Gemini's image editing works by sending an image + text instruction (not traditional inpainting masks), we'll render the user's brush strokes as visible red highlights on the image, then send that composite image to Gemini with the instruction: "Edit ONLY the areas marked in red according to the user's prompt. Preserve everything else exactly."
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Files
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. New: `src/components/social/ImageEditDialog.tsx`
+- Full-screen dialog with:
+  - Canvas overlay on top of the post image for drawing
+  - Brush size slider (small/medium/large)
+  - Clear drawing button
+  - Undo last stroke
+  - Text prompt input
+  - "Apply Edit" button
+- Drawing: HTML Canvas with mouse/touch event handlers, red semi-transparent strokes
+- On submit:
+  - Composite the drawing onto the image using a temp canvas
+  - Convert to base64
+  - Call `generate-image` edge function with the image + edit prompt using Gemini's image editing capability (multimodal input)
+  - Return edited image via `onImageReady` callback
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 2. Edit: `src/components/social/PostReviewPanel.tsx`
+- Add `showImageEdit` state
+- Add "Edit Image" button (with `Pencil` icon) in the button grid row
+- Import and render `ImageEditDialog`, passing `post.image_url` and `handleMediaReady`
+- Button only visible when image exists (not video)
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 3. Edit: `supabase/functions/generate-image/index.ts`
+- Add support for an `editImage` parameter (base64 data URL)
+- When `editImage` is provided, send it as multimodal content to Gemini along with the prompt, using the image editing pattern (text + image_url in messages)
+- The prompt will instruct: "Edit only the areas marked with red highlights. Keep everything else identical."
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+## Technical Detail
+
+```text
+User flow:
+  Click "Edit Image" → Dialog opens with canvas over image
+  → Draw red marks on areas to edit → Type prompt → Click "Apply"
+  → Canvas composites marks onto image → base64 sent to edge function
+  → Gemini receives annotated image + instruction → Returns edited image
+  → Image saved to post via handleMediaReady
+```
+
+Canvas drawing uses standard HTML5 Canvas API with `mousedown/mousemove/mouseup` and `touchstart/touchmove/touchend` for mobile support. Strokes stored as arrays of points for undo capability.
+
