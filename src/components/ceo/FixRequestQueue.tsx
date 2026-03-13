@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Bug, Copy, Check, ExternalLink, Trash2, RefreshCw, AlertTriangle, AlertCircle, Info } from "lucide-react";
+import { Bug, Copy, Check, ExternalLink, Trash2, RefreshCw, AlertTriangle, AlertCircle, Info, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface FixRequest {
@@ -43,6 +43,7 @@ export function FixRequestQueue() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lastChecked, setLastChecked] = useState<Date>(new Date());
   const [refreshing, setRefreshing] = useState(false);
+  const [fixingAll, setFixingAll] = useState(false);
   const prevCountRef = useRef(0);
 
   const loadRequests = useCallback(async () => {
@@ -113,6 +114,20 @@ export function FixRequestQueue() {
     setRefreshing(false);
   };
 
+  const handleFixAll = async () => {
+    if (requests.length === 0) return;
+    setFixingAll(true);
+    const ids = requests.map((r) => r.id);
+    await supabase
+      .from("vizzy_fix_requests" as any)
+      .update({ status: "resolved", resolved_at: new Date().toISOString() } as any)
+      .in("id", ids);
+    setRequests([]);
+    prevCountRef.current = 0;
+    setFixingAll(false);
+    toast.success(`Resolved all ${ids.length} fix requests`);
+  };
+
   const copyToClipboard = (req: FixRequest) => {
     const text = `🐛 Fix Request from Vizzy:\n- Issue: ${req.description}\n- Area: ${req.affected_area || "Not specified"}\n- Logged: ${new Date(req.created_at).toLocaleString()}${req.photo_url ? `\n- Photo: ${req.photo_url}` : ""}`;
     navigator.clipboard.writeText(text);
@@ -137,6 +152,16 @@ export function FixRequestQueue() {
         <h3 className="font-semibold text-sm">Vizzy Fix Requests</h3>
         {requests.length > 0 && (
           <span className="ml-auto text-xs text-muted-foreground">{requests.length} open</span>
+        )}
+        {requests.length > 0 && (
+          <button
+            onClick={handleFixAll}
+            disabled={fixingAll}
+            className="p-1.5 rounded-md hover:bg-muted transition-colors text-primary hover:text-primary/80 disabled:opacity-50"
+            title="Resolve all fix requests"
+          >
+            <Wand2 className={`w-3.5 h-3.5 ${fixingAll ? "animate-spin" : ""}`} />
+          </button>
         )}
         <button
           onClick={handleRefresh}
