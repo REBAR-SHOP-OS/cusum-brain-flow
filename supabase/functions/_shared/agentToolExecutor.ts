@@ -524,8 +524,54 @@ export async function executeToolCall(
         result.result = { error: "LOVABLE_API_KEY not configured" };
       } else {
         try {
-          const imagePrompt = args.prompt || "A professional rebar construction image";
+          let imagePrompt = args.prompt || "A professional rebar construction image";
           const slot = args.slot || "";
+
+          // Inject mandatory style/product overrides from user selections
+          if (agent === "social" && context) {
+            const IMAGE_STYLE_MAP: Record<string, string> = {
+              realism: "Hyper-realistic industrial photography with dramatic natural lighting",
+              urban: "Gritty urban construction site with city skyline backdrop",
+              cartoon: "Bold cartoon / comic-book illustration style with thick outlines",
+              cinematic: "Cinematic wide-angle shot with dramatic depth of field and movie-grade color grading",
+              dark: "Dark moody atmosphere with high contrast shadows and dramatic rim lighting",
+              golden: "Warm golden-hour lighting with lens flare and rich amber tones",
+              minimal: "Clean minimalist composition with negative space and simple geometry",
+              animation: "3D Pixar-style animated render with vibrant colors",
+              painting: "Oil painting style with visible brush strokes and rich texture",
+              ai_modern: "Futuristic AI-generated aesthetic with neon accents and digital glitch elements",
+            };
+            const PRODUCT_PROMPT_MAP: Record<string, string> = {
+              fiberglass_straight: "Fiberglass straight rebar bars — translucent composite material, lighter than steel",
+              stirrups: "Steel rebar stirrups — rectangular/square bent shapes used for column and beam reinforcement",
+              cages: "Assembled rebar cages — cylindrical or rectangular tied reinforcement structures",
+              hooks: "Rebar hooks — steel bars with 90° or 180° bends at the ends",
+              dowels: "Steel dowel bars — short straight smooth bars used for slab connections",
+              wire_mesh: "Welded wire mesh / steel fabric — grid pattern of welded steel wires for slab reinforcement",
+              rebar_straight: "Straight steel rebar bars — standard deformed reinforcing steel bars",
+            };
+            const NON_REALISTIC = ["cartoon", "animation", "painting", "ai_modern"];
+
+            const uStyles = (context.imageStyles as string[]) || [];
+            const uProducts = (context.selectedProducts as string[]) || [];
+            let prefix = "";
+
+            if (uStyles.length) {
+              const desc = uStyles.map((k: string) => IMAGE_STYLE_MAP[k] || k).join(". ");
+              const isNonRealistic = uStyles.some((s: string) => NON_REALISTIC.includes(s));
+              prefix += `MANDATORY STYLE: ${desc}. `;
+              if (isNonRealistic) {
+                prefix += `This is a NON-PHOTOREALISTIC style — do NOT make photorealistic. `;
+              }
+            }
+            if (uProducts.length) {
+              const desc = uProducts.map((k: string) => PRODUCT_PROMPT_MAP[k] || k).join("; ");
+              prefix += `MANDATORY PRODUCT FOCUS: ${desc}. The product MUST be the central subject. `;
+            }
+            if (prefix) {
+              imagePrompt = prefix + imagePrompt;
+            }
+          }
 
           // Resolve logo for social agent (broader search: logo OR favicon)
           let logoUrl: string | undefined;

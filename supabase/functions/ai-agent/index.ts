@@ -836,10 +836,11 @@ Deno.serve(async (req) => {
             (hasImageText ? `🖼️ متن روی عکس: ${dynContent.imageTextFa}\n` : "") +
             `📝 ترجمه کپشن: ${dynContent.captionFa}`;
 
+          const displayProduct = effectiveSlotProduct || slot.product;
           if (imgResult.imageUrl) {
             results.push(
-              `### Slot ${slot.slot} — ${slot.product}\n\n` +
-              `![${slot.product}](${imgResult.imageUrl})\n\n` +
+              `### Slot ${slot.slot} — ${displayProduct}\n\n` +
+              `![${displayProduct}](${imgResult.imageUrl})\n\n` +
               `**Caption:**\n${dynContent.caption}` +
               PIXEL_CONTACT_INFO +
               `\n\n${dynContent.hashtags}` +
@@ -847,7 +848,7 @@ Deno.serve(async (req) => {
             );
           } else {
             results.push(
-              `### Slot ${slot.slot} — ${slot.product}\n\n` +
+              `### Slot ${slot.slot} — ${displayProduct}\n\n` +
               `⚠️ Image generation failed: ${imgResult.error || "Unknown error"}\n\n` +
               `**Caption:**\n${dynContent.caption}` +
               PIXEL_CONTACT_INFO +
