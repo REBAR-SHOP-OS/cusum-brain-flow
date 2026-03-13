@@ -193,7 +193,7 @@ async function generatePixelImage(
         }),
       });
 
-      if (!aiRes.ok) { lastError = `${attempt.model} returned ${aiRes.status}`; console.warn(`  ✗ ${lastError}`); continue; }
+      if (!aiRes.ok) { const errSnippet = await aiRes.text().catch(() => ""); lastError = `${attempt.model} returned ${aiRes.status}`; console.warn(`  ✗ ${lastError}: ${errSnippet.slice(0, 200)}`); continue; }
 
       const aiData = await aiRes.json();
       const imageDataUrl = extractImageFromAIResponse(aiData);
