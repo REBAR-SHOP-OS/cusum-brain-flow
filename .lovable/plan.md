@@ -1,45 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# First & Last Frame Image Upload for Veo 3.1
+## Completed: Add All Wan 2.6 Capabilities
 
-## Overview
-Add two separate image upload slots — "First Frame" and "Last Frame" — to the Video Studio prompt bar. When provided, these images are sent to the Veo 3.1 API as `image` and `lastFrame` parameters, enabling image-to-video generation where the video starts from one image and ends at another.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Changes
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. `src/components/social/VideoStudioPromptBar.tsx`
-- Add two new props: `firstFrameImage`, `lastFrameImage`, `onFirstFrameChange`, `onLastFrameChange`
-- Replace the single "Ref image" button with two distinct upload buttons:
-  - **📷 First Frame** — thumbnail preview when uploaded, click to change/remove
-  - **📷 Last Frame** — same UX
-- Add two hidden file inputs with separate refs
-- Show small thumbnail previews (32x32 rounded) inline when images are uploaded
-- Both visible when `mediaType === "video"` (not limited to I2V models — works with Veo too)
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 2. `src/components/social/VideoStudioContent.tsx`
-- Add two new state variables: `firstFrameImage` and `lastFrameImage` (base64 or blob URLs)
-- Pass them to `VideoStudioPromptBar`
-- In `handleGenerate`:
-  - Upload both images to storage (like existing `referenceImage` logic)
-  - For Veo provider: fetch each image as base64 and pass `firstFrameImageBase64` and `lastFrameImageBase64` to the edge function
-  - For Wan I2V: use `firstFrameImage` as the existing `imageUrl` parameter
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 3. `supabase/functions/generate-video/index.ts`
-- Accept new parameters: `firstFrameBase64`, `lastFrameBase64`, `firstFrameMimeType`, `lastFrameMimeType`
-- Update `veoGenerate()` to accept optional first/last frame data
-- When provided, add to the `instances[0]` object:
-  ```json
-  {
-    "prompt": "...",
-    "image": { "bytesBase64Encoded": "...", "mimeType": "image/jpeg" },
-    "lastFrame": { "bytesBase64Encoded": "...", "mimeType": "image/jpeg" }
-  }
-  ```
-- Note: `lastFrame` has NO nested `image` wrapper (Gemini API requirement)
-- Update the Zod schema to accept these optional string fields
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### Files
-- `src/components/social/VideoStudioPromptBar.tsx`
-- `src/components/social/VideoStudioContent.tsx`
-- `supabase/functions/generate-video/index.ts`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

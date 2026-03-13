@@ -60,10 +60,32 @@ function isProviderCapacityError(message: string): boolean {
 
 // ─── Veo helpers ────────────────────────────────────────────
 
-async function veoGenerate(apiKey: string, prompt: string, duration: number) {
+async function veoGenerate(
+  apiKey: string, prompt: string, duration: number,
+  firstFrameBase64?: string, firstFrameMimeType?: string,
+  lastFrameBase64?: string, lastFrameMimeType?: string,
+) {
   const model = "veo-3.1-generate-preview";
   const url = `${GEMINI_BASE}/models/${model}:predictLongRunning`;
   const veoDuration = snapDuration(duration, VEO_CLIP_DURATIONS);
+
+  const instance: Record<string, unknown> = { prompt };
+
+  // First frame image (image-to-video start)
+  if (firstFrameBase64) {
+    instance.image = {
+      bytesBase64Encoded: firstFrameBase64,
+      mimeType: firstFrameMimeType || "image/jpeg",
+    };
+  }
+
+  // Last frame image (image-to-video end) — NO nested `image` wrapper per Gemini API
+  if (lastFrameBase64) {
+    instance.lastFrame = {
+      bytesBase64Encoded: lastFrameBase64,
+      mimeType: lastFrameMimeType || "image/jpeg",
+    };
+  }
 
   const resp = await fetch(url, {
     method: "POST",
@@ -72,7 +94,7 @@ async function veoGenerate(apiKey: string, prompt: string, duration: number) {
       "x-goog-api-key": apiKey,
     },
     body: JSON.stringify({
-      instances: [{ prompt }],
+      instances: [instance],
       parameters: {
         sampleCount: 1,
         durationSeconds: veoDuration,
@@ -545,6 +567,10 @@ serve(async (req) => {
       audioUrl: z.string().max(2000).optional(),
       negativePrompt: z.string().max(2000).optional(),
       aspectRatio: z.string().max(10).optional(),
+      firstFrameBase64: z.string().optional(),
+      firstFrameMimeType: z.string().max(50).optional(),
+      lastFrameBase64: z.string().optional(),
+      lastFrameMimeType: z.string().max(50).optional(),
     });
     const parsed = videoSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -553,7 +579,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt, aspectRatio } = parsed.data;
+    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt, aspectRatio, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType } = parsed.data;
 
     const isVeo = provider === "veo";
     const isWan = provider === "wan";
@@ -668,7 +694,7 @@ serve(async (req) => {
               result = await wanGenerate(dashscopeKey, prompt, duration || 8, aspectRatio, negativePrompt, inputAudioUrl);
             } else if (isProviderCapacityError(message) && geminiKey) {
               console.warn("Sora capacity reached, falling back to Veo");
-              result = await veoGenerate(geminiKey, prompt, duration || 8);
+              result = await veoGenerate(geminiKey, prompt, duration || 8, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType);
             } else {
               throw e;
             }
@@ -676,7 +702,7 @@ serve(async (req) => {
         } else {
           // Veo selected — fallback: Veo → Wan → Sora
           try {
-            result = await veoGenerate(apiKey, prompt, duration || 8);
+            result = await veoGenerate(apiKey, prompt, duration || 8, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType);
           } catch (e) {
             const message = getErrorMessage(e);
             if (isProviderCapacityError(message) && dashscopeKey) {
@@ -800,6 +826,14 @@ serve(async (req) => {
 
       await Promise.all(
         scenePrompts.map(async (scenePrompt, i) => {
+          // For multi-scene: first frame on scene 0, last frame on final scene
+          const isFirstScene = i === 0;
+          const isLastScene = i === scenePrompts.length - 1;
+          const sceneFirstFrame = isFirstScene ? firstFrameBase64 : undefined;
+          const sceneFirstMime = isFirstScene ? firstFrameMimeType : undefined;
+          const sceneLastFrame = isLastScene ? lastFrameBase64 : undefined;
+          const sceneLastMime = isLastScene ? lastFrameMimeType : undefined;
+
           try {
             let result: { jobId: string; provider: string };
             if (isWan) {
@@ -815,7 +849,7 @@ serve(async (req) => {
                   result = await wanGenerate(dashscopeKey, scenePrompt, clipDuration, aspectRatio, negativePrompt, inputAudioUrl);
                 } else if (isProviderCapacityError(message) && geminiKey) {
                   console.warn(`Sora capacity reached on scene ${i + 1}, falling back to Veo`);
-                  result = await veoGenerate(geminiKey, scenePrompt, clipDuration);
+                  result = await veoGenerate(geminiKey, scenePrompt, clipDuration, sceneFirstFrame, sceneFirstMime, sceneLastFrame, sceneLastMime);
                 } else {
                   throw e;
                 }
@@ -823,7 +857,7 @@ serve(async (req) => {
             } else {
               // Veo — fallback: Veo → Wan → Sora
               try {
-                result = await veoGenerate(apiKey, scenePrompt, clipDuration);
+                result = await veoGenerate(apiKey, scenePrompt, clipDuration, sceneFirstFrame, sceneFirstMime, sceneLastFrame, sceneLastMime);
               } catch (e) {
                 const message = getErrorMessage(e);
                 if (isProviderCapacityError(message) && dashscopeKey) {

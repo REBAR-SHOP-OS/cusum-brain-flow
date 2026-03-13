@@ -121,6 +121,10 @@ interface VideoStudioPromptBarProps {
   onNegativePromptChange?: (val: string) => void;
   customAudioFile?: File | null;
   onCustomAudioFileChange?: (file: File | null) => void;
+  firstFrameImage?: string | null;
+  onFirstFrameImageChange?: (url: string | null) => void;
+  lastFrameImage?: string | null;
+  onLastFrameImageChange?: (url: string | null) => void;
 }
 
 export function VideoStudioPromptBar({
@@ -133,6 +137,8 @@ export function VideoStudioPromptBar({
   selectedModel, onModelChange,
   negativePrompt = "", onNegativePromptChange,
   customAudioFile, onCustomAudioFileChange,
+  firstFrameImage, onFirstFrameImageChange,
+  lastFrameImage, onLastFrameImageChange,
 }: VideoStudioPromptBarProps) {
   const [modeOpen, setModeOpen] = useState(false);
   const [durationOpen, setDurationOpen] = useState(false);
@@ -141,6 +147,8 @@ export function VideoStudioPromptBar({
   const [showNegativePrompt, setShowNegativePrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const firstFrameInputRef = useRef<HTMLInputElement>(null);
+  const lastFrameInputRef = useRef<HTMLInputElement>(null);
 
   const modelOptions = mediaType === "image" ? IMAGE_MODELS : mediaType === "audio" ? AUDIO_MODELS : VIDEO_MODELS;
   const currentModelOption = modelOptions.find(m => m.id === selectedModel) || modelOptions[0];
@@ -251,8 +259,41 @@ export function VideoStudioPromptBar({
                 }
               }}
             />
-            {/* Reference image preview */}
-            {referenceImage && (mediaType === "video" || mediaType === "image") && (
+            {/* First & Last frame image previews — video mode */}
+            {mediaType === "video" && (firstFrameImage || lastFrameImage) && (
+              <div className="flex items-center gap-3 mt-1">
+                {firstFrameImage && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50">
+                      <img src={firstFrameImage} alt="First frame" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => onFirstFrameImageChange?.(null)}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">First frame</span>
+                  </div>
+                )}
+                {lastFrameImage && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50">
+                      <img src={lastFrameImage} alt="Last frame" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => onLastFrameImageChange?.(null)}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">Last frame</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Reference image preview — image mode only */}
+            {referenceImage && mediaType === "image" && (
               <div className="flex items-center gap-2 mt-1">
                 <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50">
                   <img src={referenceImage} alt="Reference" className="w-full h-full object-cover" />
@@ -458,8 +499,66 @@ export function VideoStudioPromptBar({
             </div>
           )}
 
-          {/* Reference image upload — video & image only */}
-          {(mediaType === "video" || mediaType === "image") && (
+          {/* First frame upload — video only */}
+          {mediaType === "video" && (
+            <>
+              <button
+                onClick={() => firstFrameInputRef.current?.click()}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border/30 transition-colors",
+                  firstFrameImage
+                    ? "bg-primary/10 text-primary border-primary/20"
+                    : "bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground"
+                )}
+              >
+                <ImagePlus className="w-3 h-3" />
+                {firstFrameImage ? "Frame 1 ✓" : "First Frame"}
+              </button>
+              <input
+                ref={firstFrameInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onFirstFrameImageChange?.(URL.createObjectURL(file));
+                  if (firstFrameInputRef.current) firstFrameInputRef.current.value = "";
+                }}
+                className="hidden"
+              />
+            </>
+          )}
+
+          {/* Last frame upload — video only */}
+          {mediaType === "video" && (
+            <>
+              <button
+                onClick={() => lastFrameInputRef.current?.click()}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border/30 transition-colors",
+                  lastFrameImage
+                    ? "bg-primary/10 text-primary border-primary/20"
+                    : "bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground"
+                )}
+              >
+                <ImagePlus className="w-3 h-3" />
+                {lastFrameImage ? "Frame 2 ✓" : "Last Frame"}
+              </button>
+              <input
+                ref={lastFrameInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onLastFrameImageChange?.(URL.createObjectURL(file));
+                  if (lastFrameInputRef.current) lastFrameInputRef.current.value = "";
+                }}
+                className="hidden"
+              />
+            </>
+          )}
+
+          {/* Reference image upload — image mode only */}
+          {mediaType === "image" && (
             <>
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -527,9 +626,9 @@ export function VideoStudioPromptBar({
           )}
 
           {/* I2V hint badge */}
-          {mediaType === "video" && isI2vModel && !referenceImage && (
+          {mediaType === "video" && isI2vModel && !referenceImage && !firstFrameImage && (
             <Badge variant="outline" className="text-[10px] h-5 px-2 bg-warning/10 text-warning border-warning/20 rounded-full">
-              ⚠ Upload ref image
+              ⚠ Upload first frame
             </Badge>
           )}
 
