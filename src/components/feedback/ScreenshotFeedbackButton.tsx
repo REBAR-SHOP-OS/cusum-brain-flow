@@ -35,6 +35,19 @@ export function ScreenshotFeedbackButton() {
     setCapturing(true);
     setTimeout(() => { cooldown.current = false; }, THROTTLE_MS);
 
+    // ── FREEZE: lock the visual state immediately (sync) ──
+    const freezeOverlay = document.createElement("div");
+    freezeOverlay.setAttribute("data-feedback-btn", "true"); // exclude from screenshot
+    freezeOverlay.style.cssText = "position:fixed;inset:0;z-index:9998;background:transparent;pointer-events:all;";
+    document.body.appendChild(freezeOverlay);
+
+    const freezeStyle = document.createElement("style");
+    freezeStyle.textContent = "* { animation-play-state: paused !important; transition: none !important; }";
+    document.head.appendChild(freezeStyle);
+
+    const prevPointerEvents = document.body.style.pointerEvents;
+    document.body.style.pointerEvents = "none";
+
     const hasOverlay = document.querySelector(
       '[data-radix-dialog-overlay], [role="dialog"], [data-state="open"][data-radix-dialog-content], [vaul-drawer]'
     );
@@ -198,6 +211,11 @@ export function ScreenshotFeedbackButton() {
       });
       toast.error(`Failed to capture screen on ${window.location.pathname}`);
     } finally {
+      // ── UNFREEZE ──
+      freezeOverlay.remove();
+      freezeStyle.remove();
+      document.body.style.pointerEvents = prevPointerEvents;
+
       expandedEls.forEach(({ el, orig }) => { el.style.cssText = orig; });
       setCapturing(false);
     }
