@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef } from "react";
+import { useState, useEffect, useRef, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePickupOrders, usePickupOrderItems } from "@/hooks/usePickupOrders";
 import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedBundles";
@@ -7,9 +7,10 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PickupVerification } from "@/components/shopfloor/PickupVerification";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
+import { PackingSlipPreview } from "@/components/delivery/PackingSlipPreview";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,9 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [photoUrls, setPhotoUrls] = useState<Map<string, string>>(new Map());
+  const [showSlipPreview, setShowSlipPreview] = useState(false);
+  const slipMetaRef = useRef<any>(null);
+  const queryClient = useQueryClient();
 
   const { checklistMap } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
 
@@ -214,6 +218,21 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
             invoice_date: invoiceDate,
           });
         if (slipErr) throw slipErr;
+
+        // Store resolved metadata for preview
+        slipMetaRef.current = {
+          slipMeta: {
+            slipNumber,
+            invoiceNumber: invoiceNumber || undefined,
+            invoiceDate: invoiceDate || undefined,
+            shipTo: shipTo || undefined,
+            scope: scope || undefined,
+            deliveryDate,
+          },
+          customerName: selectedBundle.customerName || selectedBundle.projectName || "",
+          siteAddress: siteAddress || "",
+          items: itemsJson,
+        };
       } catch (innerErr) {
         await supabase.from("delivery_stops").delete().eq("delivery_id", delivery.id);
         await supabase.from("deliveries").update({ status: "pending" }).eq("id", delivery.id);
@@ -225,6 +244,10 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
     },
     onSuccess: () => {
       toast.success("Packing slip created");
+      queryClient.invalidateQueries({ queryKey: ["pickup-delivery-for-plan", selectedBundle?.cutPlanId] });
+      if (slipMetaRef.current) {
+        setShowSlipPreview(true);
+      }
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to create packing slip");
@@ -331,7 +354,36 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
             {checkedItems.size} of {selectedBundle.items.length} selected
           </span>
           {existingDelivery ? (
-            <Badge variant="outline" className="text-success border-success/40 gap-1">
+            <Badge
+              variant="outline"
+              className="text-success border-success/40 gap-1 cursor-pointer hover:bg-success/10 transition-colors"
+              onClick={async () => {
+                // Load existing packing slip data for preview
+                const slipId = (existingDelivery as any)?.packing_slips?.[0]?.id;
+                if (!slipId) return;
+                const { data: slip } = await supabase
+                  .from("packing_slips")
+                  .select("*")
+                  .eq("id", slipId)
+                  .single();
+                if (slip) {
+                  slipMetaRef.current = {
+                    slipMeta: {
+                      slipNumber: slip.slip_number || undefined,
+                      invoiceNumber: slip.invoice_number || undefined,
+                      invoiceDate: slip.invoice_date || undefined,
+                      shipTo: slip.ship_to || undefined,
+                      scope: slip.scope || undefined,
+                      deliveryDate: slip.delivery_date || undefined,
+                    },
+                    customerName: slip.customer_name || "",
+                    siteAddress: slip.site_address || "",
+                    items: (slip.items_json as any[]) || [],
+                  };
+                  setShowSlipPreview(true);
+                }
+              }}
+            >
               <CheckCircle2 className="w-3.5 h-3.5" />
               Packing Slip Created
             </Badge>
@@ -350,6 +402,18 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
             </Button>
           )}
         </div>
+
+        {/* Packing Slip Preview overlay */}
+        {showSlipPreview && slipMetaRef.current && (
+          <PackingSlipPreview
+            slipMeta={slipMetaRef.current.slipMeta}
+            customerName={slipMetaRef.current.customerName}
+            siteAddress={slipMetaRef.current.siteAddress}
+            items={slipMetaRef.current.items}
+            signatureData={null}
+            onClose={() => setShowSlipPreview(false)}
+          />
+        )}
       </div>
     );
   }
