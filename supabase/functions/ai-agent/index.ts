@@ -625,8 +625,26 @@ Deno.serve(async (req) => {
 
         const results: string[] = [];
 
+        // Extract user-selected products BEFORE the loop so we can override slot.product
+        const userSelectedProductsForSlots = (userContext as any)?.selectedProducts as string[] | undefined;
+        const PRODUCT_PROMPT_MAP_EARLY: Record<string, string> = {
+          fiberglass: "Rebar Fiberglass Straight — fiberglass reinforcement bars, lightweight, corrosion-resistant, used in marine and chemical environments",
+          stirrups: "Rebar Stirrups — bent steel reinforcement loops used to hold vertical rebar in columns and beams",
+          cages: "Rebar Cages — pre-assembled cylindrical or rectangular steel reinforcement cages for foundations and piles",
+          hooks: "Rebar Hooks — bent steel bars with hooked ends for anchoring in concrete structures",
+          dowels: "Rebar Dowels — straight steel bars used to connect concrete slabs and structural joints",
+          wire_mesh: "Wire Mesh — welded steel wire mesh sheets for slab reinforcement and concrete crack control",
+          straight: "Rebar Straight — standard straight steel reinforcement bars in various sizes",
+        };
+
         for (const slot of slotsToGenerate) {
-          console.log(`🎨 Pixel: Generating DYNAMIC content for slot ${slot.slot} (${slot.product})...`);
+          // Override slot product with user selection so caption/slogan match user's choice
+          const effectiveSlotProduct = userSelectedProductsForSlots?.length
+            ? userSelectedProductsForSlots.map(k => PRODUCT_PROMPT_MAP_EARLY[k] || k).join(" & ")
+            : slot.product;
+          const effectiveSlot = { ...slot, product: effectiveSlotProduct };
+
+          console.log(`🎨 Pixel: Generating DYNAMIC content for slot ${slot.slot} (${effectiveSlotProduct})...`);
 
           // Step A: Generate unique, non-repeating caption + slogan + hashtags via LLM
           // Inject brain knowledge block into content generation
@@ -634,7 +652,7 @@ Deno.serve(async (req) => {
           // Generate a session-unique seed to ensure every chat produces distinct creative output
           const sessionSeed = `${(mergedContext.sessionId as string) || "anon"}-${crypto.randomUUID()}`;
 
-          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel, sessionSeed);
+          const dynContent = await generateDynamicContent(effectiveSlot, isRegenerate, brainKnowledge, preferredModel, sessionSeed);
 
           // Step B: Build image prompt with MANDATORY advertising text on image
           // Extract custom instructions from brain knowledge to inject into image prompt
