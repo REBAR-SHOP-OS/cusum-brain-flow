@@ -121,6 +121,10 @@ interface VideoStudioPromptBarProps {
   onNegativePromptChange?: (val: string) => void;
   customAudioFile?: File | null;
   onCustomAudioFileChange?: (file: File | null) => void;
+  firstFrameImage?: string | null;
+  onFirstFrameImageChange?: (url: string | null) => void;
+  lastFrameImage?: string | null;
+  onLastFrameImageChange?: (url: string | null) => void;
 }
 
 export function VideoStudioPromptBar({
