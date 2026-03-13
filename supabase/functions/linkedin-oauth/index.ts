@@ -113,10 +113,10 @@ async function handleCallback(
 
   if (error) {
     console.error("LinkedIn OAuth error:", error);
-    return new Response(
-      `<html><body><script>window.opener?.postMessage({type:'oauth-error',error:'${error}'},'*');window.close();</script></body></html>`,
-      { headers: { "Content-Type": "text/html" } }
-    );
+    const errUrl = new URL("/integrations/callback", "https://erp.rebar.shop");
+    errUrl.searchParams.set("status", "error");
+    errUrl.searchParams.set("message", `Authorization denied: ${error}`);
+    return Response.redirect(errUrl.toString(), 302);
   }
 
   if (!code) throw new Error("Missing code in callback");
