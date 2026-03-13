@@ -31,6 +31,8 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
+  const { companyId } = useCompanyId();
+
   const { bundles } = useCompletedBundles({ pickupOnly: true });
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
@@ -38,6 +40,196 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const [photoUrls, setPhotoUrls] = useState<Map<string, string>>(new Map());
 
   const { checklistMap } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
+
+  // Guard: check if packing slip already exists for this bundle's cut plan
+  const { data: existingDelivery } = useQuery({
+    queryKey: ["pickup-delivery-for-plan", selectedBundle?.cutPlanId],
+    enabled: !!selectedBundle?.cutPlanId && !!companyId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("deliveries")
+        .select("id, packing_slips!inner(id)")
+        .eq("cut_plan_id", selectedBundle!.cutPlanId)
+        .eq("company_id", companyId!)
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  // Create packing slip mutation (same pattern as LoadingStation)
+  const createPackingSlip = useMutation({
+    mutationFn: async () => {
+      if (!companyId || !selectedBundle) throw new Error("Missing context");
+
+      const deliveryNumber = `DEL-${Date.now()}`;
+      const slipNumber = `PS-${Date.now()}`;
+
+      // 1. Insert delivery
+      const { data: delivery, error: delErr } = await supabase
+        .from("deliveries")
+        .insert({
+          delivery_number: deliveryNumber,
+          status: "staged",
+          company_id: companyId,
+          cut_plan_id: selectedBundle.cutPlanId,
+        })
+        .select("id")
+        .single();
+      if (delErr) throw delErr;
+
+      try {
+        // 2. Insert delivery stop
+        const { error: stopErr } = await supabase
+          .from("delivery_stops")
+          .insert({
+            delivery_id: delivery.id,
+            company_id: companyId,
+            stop_sequence: 1,
+          });
+        if (stopErr) throw stopErr;
+
+        // 3. Query project + customer data
+        const { data: planData } = await supabase
+          .from("cut_plans")
+          .select("project_name, project_id, projects(name, site_address, customers(shipping_street1, shipping_city, shipping_province, shipping_postal_code))")
+          .eq("id", selectedBundle.cutPlanId)
+          .single();
+
+        const project = (planData as any)?.projects;
+        const customer = project?.customers;
+        const shipTo = [
+          customer?.shipping_street1,
+          customer?.shipping_city,
+          customer?.shipping_province,
+          customer?.shipping_postal_code,
+        ].filter(Boolean).join(", ") || null;
+        const scope = project?.name || null;
+        const siteAddress = project?.site_address || null;
+        const deliveryDate = new Date().toISOString().slice(0, 10);
+
+        // 4. Build items_json from checked items only
+        const selectedItems = selectedBundle.items.filter((i) => checkedItems.has(i.id));
+        const itemsJson = selectedItems.map((item) => ({
+          id: item.id,
+          mark_number: item.mark_number,
+          drawing_ref: item.drawing_ref,
+          bar_code: item.bar_code,
+          cut_length_mm: item.cut_length_mm,
+          total_pieces: item.total_pieces,
+          asa_shape_code: item.asa_shape_code,
+        }));
+
+        // 5. Invoice resolution chain
+        let invoiceNumber: string | null = null;
+        let invoiceDate: string | null = null;
+        {
+          const { data: cpiRow } = await supabase
+            .from("cut_plan_items")
+            .select("work_order_id")
+            .eq("cut_plan_id", selectedBundle.cutPlanId)
+            .not("work_order_id", "is", null)
+            .limit(1)
+            .maybeSingle();
+
+          if (cpiRow?.work_order_id) {
+            const { data: woRow } = await supabase
+              .from("work_orders")
+              .select("barlist_id, order_id")
+              .eq("id", cpiRow.work_order_id)
+              .single();
+
+            if (woRow?.barlist_id) {
+              const { data: blRow } = await supabase
+                .from("barlists")
+                .select("extract_session_id")
+                .eq("id", woRow.barlist_id)
+                .single();
+
+              if (blRow?.extract_session_id) {
+                const { data: esRow } = await supabase
+                  .from("extract_sessions")
+                  .select("invoice_number, invoice_date")
+                  .eq("id", blRow.extract_session_id)
+                  .single();
+
+                if (esRow) {
+                  invoiceNumber = esRow.invoice_number || null;
+                  invoiceDate = esRow.invoice_date
+                    ? new Date(esRow.invoice_date).toISOString().slice(0, 10)
+                    : null;
+                }
+              }
+            }
+
+            if ((!invoiceNumber || !invoiceDate) && woRow?.order_id) {
+              const { data: orderRow } = await supabase
+                .from("orders")
+                .select("order_number, order_date")
+                .eq("id", woRow.order_id)
+                .single();
+              if (orderRow) {
+                if (!invoiceNumber) invoiceNumber = orderRow.order_number || null;
+                if (!invoiceDate) invoiceDate = orderRow.order_date
+                  ? new Date(orderRow.order_date).toISOString().slice(0, 10)
+                  : null;
+              }
+            }
+          }
+
+          if ((!invoiceNumber || !invoiceDate) && (planData as any)?.project_id) {
+            // @ts-ignore
+            const { data: orderRow } = await supabase
+              .from("orders")
+              .select("order_number, order_date")
+              .eq("project_id", (planData as any).project_id)
+              .order("created_at", { ascending: false } as any)
+              .limit(1)
+              .maybeSingle();
+            if (orderRow) {
+              if (!invoiceNumber) invoiceNumber = orderRow.order_number || null;
+              if (!invoiceDate) invoiceDate = orderRow.order_date
+                ? new Date(orderRow.order_date).toISOString().slice(0, 10)
+                : null;
+            }
+          }
+        }
+
+        // 6. Insert packing slip
+        const { error: slipErr } = await supabase
+          .from("packing_slips")
+          .insert({
+            delivery_id: delivery.id,
+            company_id: companyId,
+            cut_plan_id: selectedBundle.cutPlanId,
+            customer_name: selectedBundle.customerName || selectedBundle.projectName,
+            items_json: itemsJson as any,
+            slip_number: slipNumber,
+            status: "draft",
+            ship_to: shipTo,
+            scope: scope,
+            site_address: siteAddress,
+            delivery_date: deliveryDate,
+            invoice_number: invoiceNumber,
+            invoice_date: invoiceDate,
+          });
+        if (slipErr) throw slipErr;
+      } catch (innerErr) {
+        await supabase.from("delivery_stops").delete().eq("delivery_id", delivery.id);
+        await supabase.from("deliveries").update({ status: "pending" }).eq("id", delivery.id);
+        await supabase.from("deliveries").delete().eq("id", delivery.id);
+        throw innerErr;
+      }
+
+      return delivery.id;
+    },
+    onSuccess: () => {
+      toast.success("Packing slip created");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to create packing slip");
+    },
+  });
 
   // Resolve signed URLs for loading photos
   useEffect(() => {
