@@ -141,6 +141,22 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
   if (!validProcesses.includes(process)) {
     return { response: json({ error: `Invalid process: ${process}` }, 400) };
   }
+  // ── Cancel any orphaned running runs for this machine (not linked as current_run_id) ──
+  {
+    const { data: orphanRuns } = await supabaseService
+      .from("machine_runs").select("id")
+      .eq("machine_id", machineId).eq("status", "running")
+      .neq("id", machine.current_run_id || "00000000-0000-0000-0000-000000000000");
+    if (orphanRuns?.length) {
+      for (const orphan of orphanRuns) {
+        await supabaseService.from("machine_runs")
+          .update({ status: "canceled", ended_at: now, notes: "Auto-canceled: orphan run on start-run" })
+          .eq("id", orphan.id);
+        console.warn(`[startRun] Canceled orphan run ${orphan.id} on ${machine.name}`);
+      }
+    }
+  }
+
   if (machine.current_run_id) {
     const { data: existingRun } = await supabaseService
       .from("machine_runs").select("id, status, started_at")
@@ -150,7 +166,6 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
     const isStale = existingRun?.started_at &&
       (Date.now() - new Date(existingRun.started_at).getTime()) > STALE_THRESHOLD_MS;
     const isOrphan = !existingRun;
-    // A run that is paused, completed, or canceled is no longer truly active
     const isInactive = existingRun && ["paused", "completed", "canceled", "rejected"].includes(existingRun.status);
 
     // Idempotency: if existing run is <5s old and still running, treat as double-tap and return it
@@ -160,8 +175,20 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
       return { machineRunId: existingRun.id };
     }
 
-    if (isStale || isOrphan || isInactive) {
-      const reason = isOrphan ? "orphan" : isInactive ? `inactive (${existingRun!.status})` : "stale";
+    // ── Auto-recover if active_job_id points to a completed/cut_done item ──
+    let activeJobDone = false;
+    if (machine.active_job_id && existingRun?.status === "running") {
+      const { data: activeItem } = await supabaseService
+        .from("cut_plan_items").select("id, phase, completed_pieces, total_pieces")
+        .eq("id", machine.active_job_id).maybeSingle();
+      if (activeItem && (activeItem.phase === "cut_done" || activeItem.completed_pieces >= activeItem.total_pieces)) {
+        console.warn(`[startRun] Active job ${machine.active_job_id} is ${activeItem.phase} (${activeItem.completed_pieces}/${activeItem.total_pieces}), auto-recovering`);
+        activeJobDone = true;
+      }
+    }
+
+    if (isStale || isOrphan || isInactive || activeJobDone) {
+      const reason = isOrphan ? "orphan" : isInactive ? `inactive (${existingRun!.status})` : activeJobDone ? "active_job_done" : "stale";
       console.warn(`[startRun] Auto-recovering ${reason} run ${machine.current_run_id} on ${machine.name}`);
       if (existingRun && !["completed", "canceled", "rejected"].includes(existingRun.status)) {
         await supabaseService.from("machine_runs")
@@ -175,7 +202,7 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
       }).eq("id", machineId);
 
       await logProductionEvent(supabaseService, machine.company_id, "stale_run_auto_recovered", {
-        machineId, machineName: machine.name, staleRunId: machine.current_run_id, isOrphan, isStale, isInactive, reason,
+        machineId, machineName: machine.name, staleRunId: machine.current_run_id, isOrphan, isStale, isInactive, activeJobDone, reason,
       }, `Auto-recovered ${reason} run on ${machine.name}`, machineId, userId);
 
       machine.current_run_id = null;
