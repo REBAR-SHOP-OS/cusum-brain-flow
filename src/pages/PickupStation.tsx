@@ -39,6 +39,9 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [photoUrls, setPhotoUrls] = useState<Map<string, string>>(new Map());
+  const [showSlipPreview, setShowSlipPreview] = useState(false);
+  const slipMetaRef = useRef<any>(null);
+  const queryClient = useQueryClient();
 
   const { checklistMap } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
 
