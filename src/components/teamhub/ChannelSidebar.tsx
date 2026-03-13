@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { TeamChannel } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
+import { useUnreadSenders } from "@/hooks/useUnreadSenders";
 
 interface ChannelSidebarProps {
   channels: TeamChannel[];
