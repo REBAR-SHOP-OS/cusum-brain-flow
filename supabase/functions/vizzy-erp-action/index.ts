@@ -359,6 +359,64 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "bulk_fix_requests": {
+        const { fix_requests } = params;
+        if (!Array.isArray(fix_requests) || fix_requests.length === 0) {
+          result = { success: false, error: "No fix requests provided" };
+          break;
+        }
+
+        const { data: profile } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        const companyId = profile?.company_id;
+        const actions: { id: string; action_taken: string }[] = [];
+
+        for (const fr of fix_requests) {
+          const area = (fr.affected_area || "").toLowerCase();
+          try {
+            if (area.includes("machine") || area.includes("cutter") || area.includes("bender")) {
+              // Try to reset any errored machines to idle
+              await supabaseAdmin.from("machines")
+                .update({ status: "idle" })
+                .eq("company_id", companyId)
+                .eq("status", "error");
+              actions.push({ id: fr.id, action_taken: "machine_reset" });
+            } else if (area.includes("order") || area.includes("lead") || area.includes("delivery")) {
+              // Log as human task for manual review
+              await supabaseAdmin.from("human_tasks").insert({
+                company_id: companyId,
+                title: `Fix request: ${fr.description?.slice(0, 100)}`,
+                description: `Auto-created from fix request. Area: ${fr.affected_area}. Original: ${fr.description}`,
+                status: "open",
+                priority: "high",
+                created_by: userId,
+              }).catch(() => {});
+              actions.push({ id: fr.id, action_taken: "human_task_created" });
+            } else {
+              // Unknown area — create human task
+              await supabaseAdmin.from("human_tasks").insert({
+                company_id: companyId,
+                title: `Unresolved fix request: ${fr.description?.slice(0, 80)}`,
+                description: `Area: ${fr.affected_area || "unknown"}. Description: ${fr.description}`,
+                status: "open",
+                priority: "medium",
+                created_by: userId,
+              }).catch(() => {});
+              actions.push({ id: fr.id, action_taken: "human_task_created" });
+            }
+
+            // Mark fix request as resolved
+            await supabaseAdmin.from("vizzy_fix_requests")
+              .update({ status: "resolved", resolved_at: new Date().toISOString() })
+              .eq("id", fr.id);
+          } catch (e) {
+            actions.push({ id: fr.id, action_taken: `error: ${e.message}` });
+          }
+        }
+
+        result = { success: true, processed: actions.length, actions };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: corsHeaders });
     }

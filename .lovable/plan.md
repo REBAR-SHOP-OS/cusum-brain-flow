@@ -1,53 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# FIX ALL: از "علامت‌زدن" به "حل واقعی"
+## Completed: Add All Wan 2.6 Capabilities
 
-## مشکل فعلی
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-دکمه FIX ALL الان فقط وضعیت درخواست‌ها را به `resolved` تغییر می‌دهد — یعنی مشکلات را **پنهان** می‌کند، نه حل.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## واقعیت فنی
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-بیشتر fix request‌ها از دو منبع می‌آیند:
-1. **خطاهای خودکار** (`🤖 Auto-detected:`) — از SmartErrorBoundary وقتی خطایی بعد از چند بار تلاش حل نشود
-2. **گزارش‌های دستی** — از Vizzy یا کاربران
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-یک دکمه فرانت‌اند نمی‌تواند باگ کد را برطرف کند. اما می‌تواند:
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-## راه‌حل پیشنهادی — FIX ALL هوشمند
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### تغییرات در `src/components/ceo/FixRequestQueue.tsx`
-
-وقتی FIX ALL زده شود، به جای فقط `status: resolved`:
-
-1. **خطاهای قدیمی/تکراری (stale)**: اگر خطای auto-detected بیش از ۳۰ دقیقه پیش ثبت شده و دیگر تکرار نشده → resolve (این‌ها واقعاً حل شده‌اند)
-
-2. **خطاهای auth/session**: خودکار `supabase.auth.refreshSession()` را صدا بزند و sessionStorage خطاهای مرتبط را پاک کند
-
-3. **خطاهای cache/storage**: `sessionStorage` مربوط به vizzy_report‌ها را پاک کند تا مانیتورینگ تازه شود
-
-4. **خطاهای کد (code bugs)**: اینها را به Vizzy AI (edge function `ai-agent`) ارسال کند تا بررسی و اقدام عملیاتی انجام دهد — مثل reset ماشین، update وضعیت، یا ثبت task
-
-5. **نتیجه**: یک toast خلاصه نشان دهد: "۳ خطای قدیمی پاک شد، ۱ session رفرش شد, ۲ مورد به Vizzy ارسال شد"
-
-### تغییرات در `supabase/functions/vizzy-erp-action/index.ts`
-
-- اضافه کردن action جدید `bulk_fix_requests` که لیست fix request‌ها را بگیرد و برای هر کدام بر اساس `affected_area` اقدام مناسب انجام دهد:
-  - مشکلات ماشین → `update_machine_status` (reset to idle)
-  - مشکلات سفارش → بررسی و update وضعیت
-  - مشکلات auth → فقط resolve (سمت کلاینت handle شده)
-  - باقی → ثبت به عنوان `human_tasks` برای پیگیری
-
-### خلاصه جریان
-
-```text
-FIX ALL clicked
-  ├── Stale auto-detected (>30min, no repeat) → resolve directly
-  ├── Auth/session errors → refresh session + resolve
-  ├── Cache errors → clear sessionStorage + resolve  
-  └── Remaining (code/operational) → call bulk_fix_requests edge function
-       ├── Machine issues → reset machine
-       ├── Order issues → update status
-       └── Unknown → create human_task + resolve fix request
-```
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
