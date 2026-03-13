@@ -22,6 +22,15 @@ export interface Notification {
   createdAt: string;
 }
 
+// Module-level dedup guard: prevents duplicate side effects across multiple hook instances
+const processedIds = new Set<string>();
+function shouldProcess(id: string): boolean {
+  if (processedIds.has(id)) return false;
+  processedIds.add(id);
+  setTimeout(() => processedIds.delete(id), 5000);
+  return true;
+}
+
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,14 +204,21 @@ export function useNotifications() {
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            playMockingjayWhistle();
             const newRow = payload.new as any;
-            // Always use English title/description
+            // All instances update state (dedup by id to avoid duplicates)
+            setNotifications((prev) => {
+              if (prev.some(n => n.id === newRow.id)) return prev;
+              return [mapRow(newRow), ...prev];
+            });
+
+            // Only the first hook instance triggers side effects
+            if (!shouldProcess(newRow.id)) return;
+
+            playMockingjayWhistle();
             const toastTitle = newRow.title;
             const toastDesc = newRow.description;
             showBrowserNotification(toastTitle, toastDesc, newRow.link_to);
 
-            // Team chat messages: dispatch custom event for ChatPanelContext
             const metadata = newRow.metadata as Record<string, unknown> | null;
             if (metadata?.channel_id) {
               window.dispatchEvent(new CustomEvent("team-chat-incoming", {
@@ -216,7 +232,7 @@ export function useNotifications() {
               toast(toastTitle, {
                 description: toastDesc || undefined,
                 duration: 8000,
-            action: newRow.link_to ? {
+                action: newRow.link_to ? {
                   label: "View",
                   onClick: () => {
                     const dest = normalizeNotificationRoute(newRow.link_to, newRow.type);
@@ -225,7 +241,6 @@ export function useNotifications() {
                 } : undefined,
               });
             }
-            setNotifications((prev) => [mapRow(newRow), ...prev]);
           } else if (payload.eventType === "UPDATE") {
             const updated = mapRow(payload.new);
             if (updated.status === "dismissed") {
