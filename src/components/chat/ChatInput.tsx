@@ -70,6 +70,8 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   onModelChange,
   imageStyles = [],
   onImageStylesChange,
+  selectedProducts = [],
+  onSelectedProductsChange,
 }, ref) {
   const [value, setValue] = useState("");
   const [smartMode, setSmartMode] = useState(false);
