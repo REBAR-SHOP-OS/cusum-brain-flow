@@ -90,6 +90,7 @@ export default function AgentWorkspace() {
   const [aiModel, setAiModel] = useState<string>("gemini");
   const [imageStyles, setImageStyles] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [imageAspectRatio, setImageAspectRatio] = useState<string>("1:1");
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle } = useChatSessions();
   const hasConversation = messages.length > 0;
