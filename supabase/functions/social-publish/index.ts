@@ -74,6 +74,7 @@ serve(async (req) => {
       image_url: z.string().url().max(2000).optional(),
       post_id: z.string().uuid().optional(),
       page_name: z.string().optional(),
+      force_publish: z.boolean().optional(),
     });
     const parsed = publishSchema.safeParse(await req.json());
     if (!parsed.success) {
