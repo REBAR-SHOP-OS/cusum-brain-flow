@@ -132,14 +132,27 @@ serve(async (req) => {
 
     // Get user token for the platform
     const tokenPlatform = platform === "instagram" ? "instagram" : "facebook";
-    const { data: tokenData, error: tokenError } = await supabaseAdmin
+    // First try current user's token
+    let { data: tokenData } = await supabaseAdmin
       .from("user_meta_tokens")
       .select("access_token, pages, instagram_accounts")
       .eq("user_id", userId)
       .eq("platform", tokenPlatform)
       .maybeSingle();
 
-    if (tokenError || !tokenData) {
+    // Fallback: any user's token for this platform
+    if (!tokenData) {
+      const { data: fallback } = await supabaseAdmin
+        .from("user_meta_tokens")
+        .select("access_token, pages, instagram_accounts")
+        .eq("platform", tokenPlatform)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      tokenData = fallback;
+    }
+
+    if (!tokenData) {
       return new Response(
         JSON.stringify({ error: `${platform} not connected. Please connect it first from Integrations.` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
