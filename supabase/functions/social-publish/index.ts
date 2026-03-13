@@ -83,7 +83,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { platform, message: rawMessage, image_url, post_id, page_name } = parsed.data;
+    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish } = parsed.data;
 
     // Strip Persian translation block — server-side safety net
     let message = rawMessage;
