@@ -304,7 +304,7 @@ RULES:
 - Write a short, punchy, promotional English caption. Maximum 2 sentences.
 - Write 8-12 relevant hashtags as a single string separated by spaces.
 - Write a short catchy title (max 10 words).
-- Translate the caption to Farsi (Persian).
+- Translate the caption to Farsi (Persian). This MUST be a beautiful, fluent, native-quality Persian translation — NOT a word-by-word translation. Rewrite the meaning in elegant, professional Persian that sounds like it was originally written by a native Persian advertising copywriter.
 - ABSOLUTELY FORBIDDEN WORDS: guarantee, guaranteed, ensures, promise, best, greatest, number one, unmatched, unparalleled, revolutionary, superior, finest, ensure, assured, unbeatable, top-notch
 - Do NOT mention ANY time of day, hour, clock time, AM/PM
 - Be bold, specific, and direct. Use relevant emojis.
