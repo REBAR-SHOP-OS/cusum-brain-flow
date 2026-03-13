@@ -373,8 +373,8 @@ YOUR TASK — Generate COMPLETELY NEW and DIFFERENT advertising content. Follow 
 1. Write a compelling, UNIQUE English caption (2-4 sentences) for this product/topic. Use relevant emojis.
 2. Write a SHORT English advertising slogan (MAXIMUM 8 words) that will be printed directly ON the image. It must be catchy and specific.
 3. Write 8-12 relevant hashtags as a single string separated by spaces.
-4. Translate the caption to Farsi (Persian).
-5. Translate the image slogan to Farsi (Persian).
+4. Translate the caption to Farsi (Persian) — this MUST be a premium-quality, natural-sounding Persian translation. Do NOT translate word-by-word. Instead, rewrite the meaning in beautiful, fluent Persian that sounds like it was originally written by a native Persian copywriter. Use elegant vocabulary, proper Persian grammar, and a professional advertising tone.
+5. Translate the image slogan to Farsi (Persian) — same quality standard: fluent, catchy, natural Persian. Not a literal translation.
 6. Write a short catchy title (max 10 words).
 
 CRITICAL RULES:

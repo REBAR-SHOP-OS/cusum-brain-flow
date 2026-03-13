@@ -252,7 +252,7 @@ Return an array of 5 objects:
     "product": "Rebar Stirrups",
     "title": "Short engaging title",
     "content": "Full caption with hook + promo text + contact info (📍📞🌐) + CTA",
-    "farsi_translation": "---PERSIAN---\\n🖼️ متن روی عکس: [Farsi of image text]\\n📝 ترجمه کپشن: [Farsi of caption]",
+    "farsi_translation": "---PERSIAN---\\n🖼️ متن روی عکس: [Premium-quality fluent Farsi of image text — NOT literal translation, must sound like native Persian copywriting]\\n📝 ترجمه کپشن: [Premium-quality fluent Farsi of caption — elegant, professional Persian that reads as if originally written by a native Persian advertising copywriter]",
     "hashtags": ["#RebarShop", "#ConstructionToronto", "..."],
     "image_prompt": "PHOTOREALISTIC: [detailed scene with specific visual style, product, REBAR.SHOP logo, English text overlay]"
   }
