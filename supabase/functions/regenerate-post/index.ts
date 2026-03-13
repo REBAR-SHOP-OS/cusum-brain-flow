@@ -380,10 +380,12 @@ YOUR TASK — Generate COMPLETELY NEW and DIFFERENT advertising content. Follow 
 6. Write a short catchy title (max 10 words).
 
 CRITICAL RULES:
+- CAPTION TONE: PURELY PROMOTIONAL & ADVERTISING — catchy, bold, emotional appeal. Do NOT explain how the product works. Focus on WHY the customer should buy.
+- ABSOLUTELY FORBIDDEN CONTENT: scientific explanations, technical specifications, engineering terminology, material properties, structural analysis claims.
 - Content MUST be COMPLETELY DIFFERENT from the current post
 - NEVER use generic phrases like "Building strong" or "Engineering excellence"
 - ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM
-- FORBIDDEN WORDS: guarantee, guaranteed, ensures, promise, best, greatest, number one, unmatched, unparalleled, revolutionary, superior, finest
+- FORBIDDEN WORDS: guarantee, guaranteed, ensures, ensure, promise, warranty, certified, certify, unparalleled, revolutionary, superior, structural integrity, load-bearing, tensile strength, AI-driven, precision-engineered, interlocks, unmatched, finest, unbeatable, top-notch, scientifically, assured
 - Be creative, bold, and specific
 - The image slogan must be short enough to be readable on an image
 - SESSION CREATIVE SEED: ${sessionSeed} — use this to drive a UNIQUE creative direction
