@@ -221,7 +221,7 @@ async function generatePixelImage(
   prompt: string,
   svcClient: ReturnType<typeof createClient>,
   logoUrl?: string,
-  options?: { styleIndex?: number | string; preferredModel?: string },
+  options?: { styleIndex?: number | string; preferredModel?: string; resourceImageUrls?: string[] },
 ): Promise<{ imageUrl: string | null; error?: string }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -310,6 +310,17 @@ async function generatePixelImage(
   for (const attempt of attempts) {
     try {
       const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+
+      // Attach resource/reference images from brain (product photos, etc.)
+      if (options?.resourceImageUrls?.length) {
+        for (const refUrl of options.resourceImageUrls.slice(0, 3)) {
+          contentParts.push({ type: "image_url", image_url: { url: refUrl } });
+        }
+        contentParts.push({
+          type: "text",
+          text: "The images above are REFERENCE product/brand images. Use them as visual inspiration for style, colors, and product appearance. Do NOT copy them exactly — create something NEW inspired by them.",
+        });
+      }
 
       // Optionally attach logo
       if (attempt.useLogo && logoUrl) {
@@ -618,7 +629,14 @@ Deno.serve(async (req) => {
           const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel, sessionSeed);
 
           // Step B: Build image prompt with MANDATORY advertising text on image
-          // If brain has image references, append them to inspire generation
+          // Extract custom instructions from brain knowledge to inject into image prompt
+          const customInstructionsMatch = brainKnowledge.match(/## Custom Instructions:\n([\s\S]*?)(?=\n## |\n\n## |$)/);
+          const customInstructions = customInstructionsMatch?.[1]?.trim() || "";
+          const customInstructionsBlock = customInstructions
+            ? `\n\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${customInstructions}\n\n`
+            : "";
+
+          // If brain has image references, extract URLs for both prompt hint and as reference images
           const brainImageRefs = brainKnowledge
             ? brainKnowledge.match(/https?:\/\/\S+\.(jpg|jpeg|png|webp|svg)/gi) || []
             : [];
@@ -654,7 +672,8 @@ Deno.serve(async (req) => {
             ? `\nFORBIDDEN STYLES (already used recently, DO NOT use): ${forbiddenStyles.join("; ")}`
             : "";
 
-          const imagePrompt = `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
+          const imagePrompt = customInstructionsBlock +
+            `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
             `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
             `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
             `VISUAL STYLE: ${selectedStyle}. ` +
@@ -672,7 +691,7 @@ Deno.serve(async (req) => {
             `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot} with style #${selectedStyleIndex}: ${selectedStyle}...`);
-          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex, preferredModel });
+          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex, preferredModel, resourceImageUrls: brainImageRefs.slice(0, 3) });
 
           // Only show imageTextFa line if it has actual content
           const hasImageText = dynContent.imageTextFa && dynContent.imageTextFa.trim() !== "" && dynContent.imageTextFa.trim() !== "-";
