@@ -1,46 +1,45 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# تزریق Custom Instructions و فایل‌های Brain به تولید تصویر
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## مشکل فعلی
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+Custom Instructions و فایل‌های آپلود‌شده در Pixel Brain فقط در **تولید متن/کپشن** استفاده می‌شوند. در ساخت پرامپت تصویر (`imagePrompt` در خط 657) هیچ اثری از آن‌ها نیست. یعنی وقتی کاربر می‌نویسد «همیشه تصاویر واقع‌گرایانه و غیرتکراری بساز»، این دستور فقط روی متن تاثیر دارد، نه روی عکس.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## تغییرات
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. `supabase/functions/ai-agent/index.ts` — تزریق brain context به image prompt
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+در بخش ساخت `imagePrompt` (خطوط 657-672):
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+- **Custom Instructions**: متن instructions را از `brainKnowledge` استخراج و به ابتدای image prompt اضافه می‌کنم تا مستقیماً رفتار تولید تصویر را کنترل کند.
+- **Resource Images**: URLهای فایل‌های آپلودشده (عکس محصولات و غیره) را به عنوان reference images به content parts ارسال می‌کنم تا مدل تصویرساز بتواند از آن‌ها الهام بگیرد.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+```text
+imagePrompt (before):
+  "MANDATORY REALISM RULE... VISUAL STYLE: X. PRODUCT: Y..."
+
+imagePrompt (after):
+  "## USER IMAGE INSTRUCTIONS (MUST FOLLOW):
+   همیشه تصاویر واقع گرایانه و غیرتکراری بساز
+   
+   MANDATORY REALISM RULE... VISUAL STYLE: X. PRODUCT: Y..."
+```
+
+- همچنین `generatePixelImage` را آپدیت می‌کنم تا resource image URLها را به عنوان reference تصاویر به مدل ارسال کند (به عنوان `image_url` parts در Gemini path و prompt text در OpenAI path).
+
+### 2. `supabase/functions/regenerate-post/index.ts` — همسان‌سازی
+
+همان منطق تزریق custom instructions به image prompt در regenerate هم اعمال شود.
+
+### جزئیات فنی
+
+- از `brainKnowledge` که قبلاً fetch شده، بخش `USER CUSTOM INSTRUCTIONS` را extract و به `imagePrompt` prepend می‌کنم
+- URL فایل‌های resource (عکس محصولات) را به `generatePixelImage` پاس می‌دهم تا به عنوان visual reference اضافه شوند
+- برای OpenAI path (gpt-image-1) instructions به prompt text اضافه می‌شود
+- برای Gemini path، هم text و هم image references به content parts اضافه می‌شوند
+
+### فایل‌های ویرایشی
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/regenerate-post/index.ts`
+
