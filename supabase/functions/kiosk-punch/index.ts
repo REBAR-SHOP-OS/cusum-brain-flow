@@ -92,15 +92,13 @@ Deno.serve(async (req) => {
       await svc.from("profiles").update({ is_active: false }).eq("id", profileId);
       action = "clock_out";
     } else {
-      // Enforce 8 AM ET restriction for @rebar.shop users
-      if (isRebarUser) {
-        const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-        if (nowET.getHours() < 6) {
-          return new Response(JSON.stringify({ error: "Clock-in is available from 6:00 AM" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+      // Enforce 6 AM ET restriction for all users
+      const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+      if (nowET.getHours() < 6) {
+        return new Response(JSON.stringify({ error: "Clock-in is only available from 6:00 AM ET" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       // Clock in
