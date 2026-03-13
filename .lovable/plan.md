@@ -1,46 +1,35 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Strengthen Advertising-Only Tone & Ban Scientific/Technical Claims in Captions
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+Captions sometimes include scientific explanations, technical claims, or guarantee-like language (e.g., "unparalleled structural integrity," "AI-driven fabrication ensures every component interlocks perfectly"). The user wants purely promotional, advertising-style captions — no scientific facts, no guarantees, no technical jargon.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Current State
+Some forbidden words are already listed (guarantee, ensures, promise, etc.) but the prompts still allow scientific/technical language. The marketing agent prompt even says "Scientific and promotional style."
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Changes
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. `supabase/functions/ai-agent/index.ts` — `generateDynamicContent` (~line 94-101)
+Add explicit ban on scientific/technical language in the CRITICAL RULES section:
+```
+- CAPTION TONE: Must be PURELY PROMOTIONAL & ADVERTISING. Write like a creative ad agency — catchy, bold, emotional appeal. 
+- ABSOLUTELY FORBIDDEN: scientific explanations, technical specifications, engineering terminology, material properties, structural analysis claims. Do NOT explain HOW the product works — focus on WHY the customer should buy it.
+- FORBIDDEN WORDS (expanded): guarantee, guaranteed, ensures, ensure, promise, warranty, certified, certify, unparalleled, revolutionary, superior, structural integrity, load-bearing capacity, tensile strength, AI-driven, precision-engineered, interlocks
+```
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 2. `supabase/functions/regenerate-post/index.ts` — caption-only prompt (~line 296-310) and full regen prompt (~line 371-385)
+Same expanded forbidden list and advertising-only tone instruction.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 3. `supabase/functions/auto-generate-post/index.ts` (~line 228-244)
+Replace "Scientific and promotional style" with "Purely promotional advertising style" and add the same forbidden scientific language rules.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 4. `supabase/functions/_shared/agents/marketing.ts` (~line 57-78)
+Update the social/Pixel agent system prompt: replace "Scientific and promotional style" with pure advertising tone, expand forbidden words list.
+
+### Files
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/regenerate-post/index.ts`
+- `supabase/functions/auto-generate-post/index.ts`
+- `supabase/functions/_shared/agents/marketing.ts`
+
