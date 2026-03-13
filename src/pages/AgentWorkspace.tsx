@@ -330,7 +330,9 @@ export default function AgentWorkspace() {
 
         const { error } = await supabase.from("social_posts").insert({
           platform: lastPixelPost.platform || "instagram",
-          status: "draft",
+          status: "pending_approval",
+          qa_status: "needs_review",
+          neel_approved: false,
           title: lastPixelPost.theme || lastPixelPost.product || "Pixel Post",
           content: lastPixelPost.caption,
           image_url: lastPixelPost.imageUrl || null,
