@@ -448,6 +448,13 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       ? `\nReference brand images for style inspiration: ${brainImageRefs.slice(0, 3).join(", ")}`
       : "";
 
+    // Extract custom instructions from brain knowledge for image prompt
+    const customInstructionsMatch = brainKnowledge.match(/## Custom Instructions:\n([\s\S]*?)(?=\n## |\n\n## |$)/);
+    const customInstructions = customInstructionsMatch?.[1]?.trim() || "";
+    const customInstructionsBlock = customInstructions
+      ? `\n\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${customInstructions}\n\n`
+      : "";
+
     const imagePrompt = `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
       `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
       `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
