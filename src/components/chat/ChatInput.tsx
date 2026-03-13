@@ -516,7 +516,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Image Style Icons (Pixel agent only) */}
             {minimalToolbar && onImageStylesChange && (
-              <div className="flex items-center gap-0.5 ml-1">
+              <div className="flex items-center gap-1 ml-1">
                 {IMAGE_STYLES.map((style) => {
                   const active = imageStyles.includes(style.key);
                   const Icon = style.icon;
@@ -532,17 +532,21 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             onImageStylesChange(next);
                           }}
                           className={cn(
-                            "p-1.5 rounded-md transition-colors",
+                            "p-2 rounded-lg transition-all border-2",
                             active
-                              ? "text-primary bg-primary/15"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              ? "border-current shadow-md scale-110"
+                              : "border-transparent hover:scale-105"
                           )}
+                          style={{
+                            color: style.color,
+                            backgroundColor: active ? `${style.color}25` : `${style.color}10`,
+                          }}
                         >
-                          <Icon className="w-4 h-4" />
+                          <Icon className="w-5 h-5" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
-                        {style.label} / {style.labelEn}
+                        {style.label}
                       </TooltipContent>
                     </Tooltip>
                   );
@@ -552,7 +556,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Product Icons (Pixel agent only) */}
             {minimalToolbar && onSelectedProductsChange && (
-              <div className="flex items-center gap-0.5 ml-1 border-l border-border/50 pl-1.5">
+              <div className="flex items-center gap-1 ml-1 border-l border-border/50 pl-2">
                 {PRODUCT_ICONS.map((prod) => {
                   const active = selectedProducts.includes(prod.key);
                   const ProdIcon = prod.icon;
@@ -568,18 +572,22 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             onSelectedProductsChange(next);
                           }}
                           className={cn(
-                            "p-1.5 rounded-md transition-all",
+                            "p-2 transition-all border-2",
+                            prod.shape,
                             active
-                              ? "ring-2 ring-offset-1 ring-offset-background"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              ? "border-current shadow-lg scale-110"
+                              : "border-transparent hover:scale-105"
                           )}
-                          style={active ? { color: prod.color, backgroundColor: `${prod.color}20`, boxShadow: `0 0 0 2px ${prod.color}` } : undefined}
+                          style={{
+                            color: prod.color,
+                            backgroundColor: active ? `${prod.color}25` : `${prod.color}10`,
+                          }}
                         >
-                          <ProdIcon className="w-5 h-5" style={active ? { color: prod.color } : undefined} />
+                          <ProdIcon className="w-6 h-6" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
-                        {prod.labelFa} / {prod.label}
+                        {prod.label}
                       </TooltipContent>
                     </Tooltip>
                   );
