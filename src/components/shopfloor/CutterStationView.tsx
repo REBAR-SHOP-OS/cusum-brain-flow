@@ -737,8 +737,46 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         showBedsSuffix={false}
       />
 
+      {/* ── MISMATCHED RUN BANNER (machine locked to different item) ── */}
+      {machineHasMismatchedRun && (
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-border bg-destructive/15">
+          <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+          <div className="flex-1">
+            <p className="text-xs font-bold text-destructive uppercase tracking-wider">
+              MACHINE LOCKED TO ANOTHER ITEM
+            </p>
+            <p className="text-xs text-destructive/80">
+              Active job: <span className="font-mono font-bold">{machine.active_job_id?.slice(0, 8)}</span> — Complete or clear that run before starting a new one.
+            </p>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="shrink-0"
+            onClick={async () => {
+              try {
+                await manageMachine({
+                  action: "complete-run",
+                  machineId: machine.id,
+                  outputQty: 0,
+                  scrapQty: 0,
+                  notes: "Cleared stale lock — mismatched active job",
+                });
+                setCompletedLocally(true);
+                queryClient.invalidateQueries({ queryKey: ["live-machines"] });
+                toast({ title: "Lock cleared", description: "Machine is now idle. You can start a new run." });
+              } catch (err: any) {
+                toast({ title: "Clear failed", description: err.message, variant: "destructive" });
+              }
+            }}
+          >
+            Clear Lock
+          </Button>
+        </div>
+      )}
+
       {/* ── MACHINE LOCK STATUS BAR ── */}
-      {machine.machine_lock && (
+      {machine.machine_lock && !machineHasMismatchedRun && (
         <div className="flex items-center gap-3 px-6 py-2 border-b border-border bg-destructive/10">
           <Lock className="w-4 h-4 text-destructive" />
           <span className="text-xs font-bold text-destructive uppercase tracking-wider">
