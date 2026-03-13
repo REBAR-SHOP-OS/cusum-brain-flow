@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Bug, Copy, Check, ExternalLink, Trash2, RefreshCw, AlertTriangle, AlertCircle, Info } from "lucide-react";
+import { Bug, Copy, Check, ExternalLink, Trash2, RefreshCw, AlertTriangle, AlertCircle, Info, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface FixRequest {
