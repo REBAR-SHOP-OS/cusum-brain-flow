@@ -694,7 +694,7 @@ serve(async (req) => {
               result = await wanGenerate(dashscopeKey, prompt, duration || 8, aspectRatio, negativePrompt, inputAudioUrl);
             } else if (isProviderCapacityError(message) && geminiKey) {
               console.warn("Sora capacity reached, falling back to Veo");
-              result = await veoGenerate(geminiKey, prompt, duration || 8);
+              result = await veoGenerate(geminiKey, prompt, duration || 8, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType);
             } else {
               throw e;
             }
