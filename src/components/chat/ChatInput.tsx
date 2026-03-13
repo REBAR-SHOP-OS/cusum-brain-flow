@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +24,16 @@ export interface UploadedFile {
   path: string;
 }
 
+const IMAGE_STYLES = [
+  { key: "realism", label: "واقع‌گرایی", labelEn: "Realism", icon: Camera },
+  { key: "urban", label: "شهر", labelEn: "Urban", icon: Building2 },
+  { key: "construction", label: "ساخت و ساز", labelEn: "Construction", icon: HardHat },
+  { key: "ai_modern", label: "هوش مصنوعی", labelEn: "AI & Modern", icon: Cpu },
+  { key: "nature", label: "طبیعت", labelEn: "Nature", icon: TreePine },
+  { key: "advertising", label: "تبلیغاتی", labelEn: "Advertising", icon: Megaphone },
+  { key: "inspirational", label: "الهام‌بخش", labelEn: "Inspirational", icon: Flame },
+] as const;
+
 interface ChatInputProps {
   onSend: (message: string, files?: UploadedFile[]) => void;
   placeholder?: string;
@@ -33,6 +43,8 @@ interface ChatInputProps {
   minimalToolbar?: boolean;
   selectedModel?: string;
   onModelChange?: (model: string) => void;
+  imageStyles?: string[];
+  onImageStylesChange?: (styles: string[]) => void;
 }
 
 export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({
@@ -44,6 +56,8 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   minimalToolbar = false,
   selectedModel = "gemini",
   onModelChange,
+  imageStyles = [],
+  onImageStylesChange,
 }, ref) {
   const [value, setValue] = useState("");
   const [smartMode, setSmartMode] = useState(false);
@@ -483,7 +497,43 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                     ChatGPT
                   </button>
                 </PopoverContent>
-              </Popover>
+            </Popover>
+            )}
+
+            {/* Image Style Icons (Pixel agent only) */}
+            {minimalToolbar && onImageStylesChange && (
+              <div className="flex items-center gap-0.5 ml-1">
+                {IMAGE_STYLES.map((style) => {
+                  const active = imageStyles.includes(style.key);
+                  const Icon = style.icon;
+                  return (
+                    <Tooltip key={style.key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = active
+                              ? imageStyles.filter((s) => s !== style.key)
+                              : [...imageStyles, style.key];
+                            onImageStylesChange(next);
+                          }}
+                          className={cn(
+                            "p-1.5 rounded-md transition-colors",
+                            active
+                              ? "text-primary bg-primary/15"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {style.label} / {style.labelEn}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
             )}
 
             {/* Spacer */}

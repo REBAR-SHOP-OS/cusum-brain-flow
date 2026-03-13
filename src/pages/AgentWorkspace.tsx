@@ -88,6 +88,7 @@ export default function AgentWorkspace() {
   const [pixelDateMessage, setPixelDateMessage] = useState<string>("");
   const [lastPixelPost, setLastPixelPost] = useState<PixelPost | null>(null);
   const [aiModel, setAiModel] = useState<string>("gemini");
+  const [imageStyles, setImageStyles] = useState<string[]>([]);
 
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle } = useChatSessions();
@@ -191,6 +192,7 @@ export default function AgentWorkspace() {
     const extraContext: Record<string, unknown> = {};
     if (agentId === "social") {
       extraContext.selectedDate = format(selectedDate, "yyyy-MM-dd");
+      if (imageStyles.length > 0) extraContext.imageStyles = imageStyles;
     }
     if (mapping) {
       extraContext.userRole = mapping.userRole;
@@ -609,6 +611,8 @@ export default function AgentWorkspace() {
                 minimalToolbar={agentId === "social"}
                 selectedModel={aiModel}
                 onModelChange={setAiModel}
+                imageStyles={imageStyles}
+                onImageStylesChange={setImageStyles}
               />
             </div>
 
@@ -644,6 +648,8 @@ export default function AgentWorkspace() {
               minimalToolbar={agentId === "social"}
               selectedModel={aiModel}
               onModelChange={setAiModel}
+              imageStyles={imageStyles}
+              onImageStylesChange={setImageStyles}
             />
           </>
         )}

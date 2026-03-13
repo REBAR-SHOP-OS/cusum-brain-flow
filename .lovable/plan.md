@@ -1,54 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# افزودن آیکون‌های سبک تصویر به نوار ورودی چت Pixel
+## Completed: Add All Wan 2.6 Capabilities
 
-## خلاصه
-در نوار ورودی چت (جایی که کاربر پیام تایپ می‌کند)، یک ردیف آیکون‌های قابل انتخاب اضافه می‌شود. کاربر می‌تواند یک یا چند سبک را انتخاب کند و سبک‌های انتخاب‌شده به عنوان context به edge function ارسال و در image prompt تزریق می‌شوند.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## سبک‌ها و آیکون‌ها
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-| سبک | آیکون Lucide | کلید |
-|---|---|---|
-| واقع‌گرایی (Realism) | `Camera` | `realism` |
-| شهر (Urban) | `Building2` | `urban` |
-| ساخت و ساز (Construction) | `HardHat` | `construction` |
-| هوش مصنوعی و مدرنیته (AI & Modern) | `Cpu` | `ai_modern` |
-| طبیعت و آرامش (Nature) | `TreePine` | `nature` |
-| تبلیغاتی (Advertising) | `Megaphone` | `advertising` |
-| الهام‌بخش (Inspirational) | `Flame` | `inspirational` |
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## تغییرات
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 1. `src/components/chat/ChatInput.tsx`
-- اضافه کردن prop جدید: `imageStyles?: string[]` و `onImageStylesChange?: (styles: string[]) => void`
-- در حالت `minimalToolbar` (فقط Pixel agent)، یک ردیف آیکون‌های chip-style بین model selector و spacer قرار می‌گیرد
-- هر آیکون toggle-able است و با کلیک فعال/غیرفعال می‌شود (رنگ primary برای فعال)
-- Tooltip فارسی/انگلیسی روی هر آیکون
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### 2. `src/pages/AgentWorkspace.tsx`
-- State جدید: `const [imageStyles, setImageStyles] = useState<string[]>([])`
-- پاس دادن `imageStyles` و `onImageStylesChange` به هر دو `ChatInput`
-- اضافه کردن `extraContext.imageStyles = imageStyles` در `handleSendInternal`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 3. `supabase/functions/ai-agent/index.ts`
-- خواندن `context.imageStyles` از body
-- ساخت بلوک style directive از سبک‌های انتخاب‌شده و تزریق به `imagePrompt` (بعد از customInstructionsBlock و قبل از MANDATORY REALISM RULE)
-- نگاشت هر کلید به یک توصیف دقیق تصویری:
-  - `realism` → "Ultra-photorealistic, shot on professional DSLR, natural lighting, real textures"
-  - `urban` → "Urban cityscape setting, modern architecture, street-level industrial aesthetics"
-  - `construction` → "Active construction site, heavy machinery, steel structures, workers"
-  - `ai_modern` → "Futuristic, tech-forward, clean geometric lines, digital integration with physical world"
-  - `nature` → "Natural outdoor setting, greenery, calm atmosphere, sustainable construction"
-  - `advertising` → "Commercial product photography, polished, bold text overlays, brand-forward"
-  - `inspirational` → "Dramatic lighting, hero shot, empowering composition, golden hour"
-- تقویت anti-duplicate: اضافه کردن `ABSOLUTELY NO DUPLICATES` به prompt همراه با timestamp seed
-
-### 4. `supabase/functions/regenerate-post/index.ts`
-- همسان‌سازی: خواندن `imageStyles` از context و تزریق به image prompt
-
-### فایل‌های ویرایشی
-- `src/components/chat/ChatInput.tsx`
-- `src/pages/AgentWorkspace.tsx`
-- `supabase/functions/ai-agent/index.ts`
-- `supabase/functions/regenerate-post/index.ts`
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

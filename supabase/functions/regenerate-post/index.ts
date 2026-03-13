@@ -459,6 +459,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
       `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
       `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
+      `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n\n` +
       `VISUAL STYLE: ${selected.style}. ` +
       `PRODUCT/TOPIC FOCUS: ${newContent.title || post.title} for REBAR.SHOP. THEME: ${newContent.caption?.slice(0, 100)}. ` +
       `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${newContent.imageText}"` +
