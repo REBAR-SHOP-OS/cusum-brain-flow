@@ -217,13 +217,16 @@ ${TIME_SLOTS.map((slot, i) => `Post ${i + 1}: ${String(slot.hour).padStart(2, "0
 - Language: English only. The caption MUST be purely promotional.
 - Strong CTAs (e.g. "Call now at 647-260-9403", "Visit rebar.shop", "Send us your barlist")
 - Content must be DATA-DRIVEN — reference real business insights provided above
-- Scientific, promotional, beautiful language
+- PURELY PROMOTIONAL & ADVERTISING style — catchy, bold, emotional appeal. Do NOT explain how the product works scientifically. Focus on WHY the customer should buy.
+
+### ABSOLUTELY FORBIDDEN CONTENT:
+Scientific explanations, technical specifications, engineering terminology, material properties, structural analysis claims. Do NOT describe tensile strength, load-bearing capacity, or any technical process.
 
 ### FORBIDDEN WORDS/PHRASES (NEVER USE):
-"guaranteed", "we guarantee", "100% guaranteed", "ensure", "we ensure", "promise", "we promise", "100% safe", "zero defects", "never fails"
+"guaranteed", "we guarantee", "100% guaranteed", "ensure", "we ensure", "promise", "we promise", "100% safe", "zero defects", "never fails", "unparalleled", "revolutionary", "superior", "structural integrity", "load-bearing", "tensile strength", "AI-driven", "precision-engineered", "interlocks", "scientifically", "unmatched", "finest", "unbeatable"
 
 ### ALLOWED ALTERNATIVES:
-"designed for", "built for", "engineered for", "precision-crafted", "trusted by", "relied upon by", "crafted for performance"
+"designed for", "built for", "crafted for", "trusted by", "relied upon by", "crafted for performance", "your go-to choice"
 
 ### MANDATORY CONTENT STRUCTURE (for each post's "content" field):
 1. Compelling hook (question, stat, or bold statement)
