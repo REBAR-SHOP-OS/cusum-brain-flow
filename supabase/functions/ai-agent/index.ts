@@ -672,7 +672,7 @@ Deno.serve(async (req) => {
             `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot} with style #${selectedStyleIndex}: ${selectedStyle}...`);
-          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex });
+          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex, preferredModel });
 
           // Only show imageTextFa line if it has actual content
           const hasImageText = dynContent.imageTextFa && dynContent.imageTextFa.trim() !== "" && dynContent.imageTextFa.trim() !== "-";
