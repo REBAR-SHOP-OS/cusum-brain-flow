@@ -835,7 +835,8 @@ Deno.serve(async (req) => {
             qualitySuffix;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot} with style #${selectedStyleIndex}: ${selectedStyle}...`);
-          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex, preferredModel, resourceImageUrls: brainImageRefs.slice(0, 3) });
+          const userAspectRatio = (userContext as any)?.imageAspectRatio as string | undefined;
+          const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex, preferredModel, resourceImageUrls: brainImageRefs.slice(0, 3), imageAspectRatio: userAspectRatio });
 
           // Only show imageTextFa line if it has actual content
           const hasImageText = dynContent.imageTextFa && dynContent.imageTextFa.trim() !== "" && dynContent.imageTextFa.trim() !== "-";
