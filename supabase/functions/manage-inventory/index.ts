@@ -317,6 +317,7 @@ serve(async (req) => {
             actor_type: "user",
             description: `Consumed ${qty}× ${barCode} from lot on cut start`,
             metadata: { machineRunId, barCode, qty, sourceType, sourceId },
+            dedupe_key: `consume:${machineRunId}:${sourceId}:${sourceType}`,
           });
         } else if (sourceType === "floor") {
           const { data: fs } = await svc

@@ -66,31 +66,49 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // ── REFRESH-SAFE STATE RESTORATION ──
   // On mount, if machine has an active locked job, restore state from backend
   // Validates the actual run status before blindly restoring to avoid stale "ABORT" state
+  // Also auto-clears if the active job is already completed (cut_done)
   useEffect(() => {
     if (restoredFromBackend) return;
-    // Don't finalize restoration until items have loaded
     if (items.length === 0) return;
     if (
       machine.cut_session_status === "running" &&
       machine.active_job_id &&
       machine.machine_lock
     ) {
-      // Find the item matching the locked job
       const lockedIndex = items.findIndex(i => i.id === machine.active_job_id);
+
+      // ── Check if the active job is already completed (cut_done) ──
+      const lockedItem = lockedIndex >= 0 ? items[lockedIndex] : null;
+      const isJobDone = lockedItem && (lockedItem.phase === "cut_done" || lockedItem.completed_pieces >= lockedItem.total_pieces);
+
+      if (isJobDone && machine.current_run_id) {
+        // Active job is done — auto-clear stale lock
+        console.warn("[CutterStation] Active job is cut_done, auto-clearing lock");
+        manageMachine({
+          action: "complete-run",
+          machineId: machine.id,
+          runId: machine.current_run_id,
+          outputQty: 0,
+          scrapQty: 0,
+          notes: "Auto-cleared: active job already cut_done",
+        }).catch(e => console.warn("[CutterStation] Auto-clear cut_done failed:", e));
+        setCompletedLocally(true);
+        queryClient.invalidateQueries({ queryKey: ["live-machines"] });
+        setRestoredFromBackend(true);
+        return;
+      }
+
       if (lockedIndex >= 0 && machine.current_run_id) {
-        // Verify the actual run is still running before restoring
         supabase
           .from("machine_runs")
           .select("id, status, started_at, output_qty")
           .eq("id", machine.current_run_id)
           .single()
           .then(async ({ data: runRow, error: runErr }) => {
-            // Check if run is stale: running but started >60 min ago with no output
             const isStale = runRow?.status === "running" && runRow.started_at &&
               (Date.now() - new Date(runRow.started_at).getTime() > 60 * 60 * 1000) &&
               (!runRow.output_qty || runRow.output_qty === 0);
             if (runErr || !runRow || runRow.status !== "running" || isStale) {
-              // Stale run — auto-clear instead of forcing abort
               console.warn("[CutterStation] Stale run detected (status:", runRow?.status, "), auto-clearing");
               try {
                 await manageMachine({
@@ -107,13 +125,11 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               setCompletedLocally(true);
               queryClient.invalidateQueries({ queryKey: ["live-machines"] });
             } else {
-              // Run is genuinely active — restore as before
               setCurrentIndex(lockedIndex);
               setTrackedItemId(machine.active_job_id!);
               setIsRunning(true);
               setActiveRunId(machine.current_run_id);
               setCompletedAtRunStart(0);
-              // Fetch fresh completed count for snapshot
               supabase
                 .from("cut_plan_items")
                 .select("completed_pieces")
@@ -130,6 +146,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               console.log("[CutterStation] Restored active job from backend:", machine.active_job_id);
             }
           });
+      } else if (lockedIndex < 0 && machine.current_run_id) {
+        // ── Active job not in current items list (mismatch) — show banner, don't auto-clear ──
+        console.warn("[CutterStation] Active job", machine.active_job_id, "not found in items list (mismatch)");
+        // We'll handle this in the render via machineHasMismatchedRun
       }
     }
     setRestoredFromBackend(true);
