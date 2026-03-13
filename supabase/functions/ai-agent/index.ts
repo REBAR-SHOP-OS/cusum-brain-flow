@@ -625,8 +625,26 @@ Deno.serve(async (req) => {
 
         const results: string[] = [];
 
+        // Extract user-selected products BEFORE the loop so we can override slot.product
+        const userSelectedProductsForSlots = (userContext as any)?.selectedProducts as string[] | undefined;
+        const PRODUCT_PROMPT_MAP_EARLY: Record<string, string> = {
+          fiberglass: "Rebar Fiberglass Straight — fiberglass reinforcement bars, lightweight, corrosion-resistant, used in marine and chemical environments",
+          stirrups: "Rebar Stirrups — bent steel reinforcement loops used to hold vertical rebar in columns and beams",
+          cages: "Rebar Cages — pre-assembled cylindrical or rectangular steel reinforcement cages for foundations and piles",
+          hooks: "Rebar Hooks — bent steel bars with hooked ends for anchoring in concrete structures",
+          dowels: "Rebar Dowels — straight steel bars used to connect concrete slabs and structural joints",
+          wire_mesh: "Wire Mesh — welded steel wire mesh sheets for slab reinforcement and concrete crack control",
+          straight: "Rebar Straight — standard straight steel reinforcement bars in various sizes",
+        };
+
         for (const slot of slotsToGenerate) {
-          console.log(`🎨 Pixel: Generating DYNAMIC content for slot ${slot.slot} (${slot.product})...`);
+          // Override slot product with user selection so caption/slogan match user's choice
+          const effectiveSlotProduct = userSelectedProductsForSlots?.length
+            ? userSelectedProductsForSlots.map(k => PRODUCT_PROMPT_MAP_EARLY[k] || k).join(" & ")
+            : slot.product;
+          const effectiveSlot = { ...slot, product: effectiveSlotProduct };
+
+          console.log(`🎨 Pixel: Generating DYNAMIC content for slot ${slot.slot} (${effectiveSlotProduct})...`);
 
           // Step A: Generate unique, non-repeating caption + slogan + hashtags via LLM
           // Inject brain knowledge block into content generation
@@ -634,7 +652,7 @@ Deno.serve(async (req) => {
           // Generate a session-unique seed to ensure every chat produces distinct creative output
           const sessionSeed = `${(mergedContext.sessionId as string) || "anon"}-${crypto.randomUUID()}`;
 
-          const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel, sessionSeed);
+          const dynContent = await generateDynamicContent(effectiveSlot, isRegenerate, brainKnowledge, preferredModel, sessionSeed);
 
           // Step B: Build image prompt with MANDATORY advertising text on image
           // Extract custom instructions from brain knowledge to inject into image prompt
@@ -765,13 +783,21 @@ Deno.serve(async (req) => {
             ? `\n\n## USER-SELECTED PRODUCTS (image MUST prominently feature these products):\n${productFocusOverride}\nThe image must clearly show these specific products in a realistic industrial/construction setting.\n\n`
             : "";
 
-          const imagePrompt = customInstructionsBlock + productFocusBlock +
+          // Build image prompt — user-selected product/style at HIGHEST PRIORITY at the top
+          const userPriorityBlock = (productFocusOverride || userImageStyles?.length)
+            ? `## ⚠️ HIGHEST PRIORITY — USER EXPLICITLY REQUESTED:\n` +
+              (productFocusOverride ? `PRODUCT: ${productFocusOverride}\n` : "") +
+              (userImageStyles?.length ? `STYLE: ${effectiveStyle}\n` : "") +
+              `The image MUST show exactly these products in this style. This overrides ALL other defaults below.\n\n`
+            : "";
+
+          const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
             `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
             `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
             `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
             `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n\n` +
             `VISUAL STYLE: ${effectiveStyle}. ` +
-            `PRODUCT FOCUS: ${productFocusOverride || slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
+            `PRODUCT FOCUS: ${productFocusOverride || effectiveSlotProduct} for REBAR.SHOP. THEME: ${slot.theme}. ` +
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
             dedupHint +
