@@ -492,12 +492,7 @@ export default function TimeClock() {
                   const todayStart = new Date();
                   todayStart.setHours(0, 0, 0, 0);
                   const todayEntries = allEntries.filter((e: any) => new Date(e.clock_in) >= todayStart);
-                  const kioskProfileIds = new Set(
-                    allEntries
-                      .filter((e: any) => e.source === "kiosk")
-                      .map((e: any) => e.profile_id)
-                  );
-                  const kioskProfiles = activeProfiles.filter(p => kioskProfileIds.has(p.id));
+                  const kioskProfiles = activeProfiles;
                   const presentCount = kioskProfiles.filter(p => statusMap.get(p.id)?.clocked_in).length;
 
                   return (
