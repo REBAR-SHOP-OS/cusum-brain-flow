@@ -153,6 +153,16 @@ export function FixRequestQueue() {
         {requests.length > 0 && (
           <span className="ml-auto text-xs text-muted-foreground">{requests.length} open</span>
         )}
+        {requests.length > 0 && (
+          <button
+            onClick={handleFixAll}
+            disabled={fixingAll}
+            className="p-1.5 rounded-md hover:bg-muted transition-colors text-primary hover:text-primary/80 disabled:opacity-50"
+            title="Resolve all fix requests"
+          >
+            <Wand2 className={`w-3.5 h-3.5 ${fixingAll ? "animate-spin" : ""}`} />
+          </button>
+        )}
         <button
           onClick={handleRefresh}
           disabled={refreshing}
