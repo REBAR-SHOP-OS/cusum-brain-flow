@@ -5,14 +5,17 @@ import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedB
 import { useLoadingChecklist } from "@/hooks/useLoadingChecklist";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { PickupVerification } from "@/components/shopfloor/PickupVerification";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Package, MapPin, ArrowLeft, AlertTriangle, FileText } from "lucide-react";
+import { Loader2, Package, MapPin, ArrowLeft, AlertTriangle, FileText, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 
 const statusColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
