@@ -943,19 +943,23 @@ Deno.serve(async (req) => {
         const NON_REALISTIC = ["cartoon", "animation", "painting", "ai_modern"];
         const isNonRealistic = uStyles.some(s => NON_REALISTIC.includes(s));
 
-        socialStyleOverride = `\n\n## ⚠️ MANDATORY USER SELECTIONS — OVERRIDE ALL DEFAULTS\n`;
-        if (uProducts.length) socialStyleOverride += `PRODUCT: ${productDesc}\n`;
-        if (uStyles.length) socialStyleOverride += `STYLE: ${styleDesc}\n`;
+        socialStyleOverride = `\n\n## 🚨 MANDATORY USER SELECTIONS — HIGHEST PRIORITY — OVERRIDE ALL DEFAULTS 🚨\n`;
+        if (uProducts.length) socialStyleOverride += `REQUIRED PRODUCT(S): ${productDesc}\n`;
+        if (uStyles.length) socialStyleOverride += `REQUIRED STYLE: ${styleDesc}\n`;
         if (isNonRealistic) {
-          socialStyleOverride += `CRITICAL: The user selected a NON-PHOTOREALISTIC style. You MUST follow "${styleDesc}" EXACTLY. IGNORE the photorealism rule. Do NOT make images look like real photographs.\n`;
+          socialStyleOverride += `CRITICAL: The user selected a NON-PHOTOREALISTIC style. You MUST follow "${styleDesc}" EXACTLY. IGNORE the photorealism rule completely. Do NOT make images look like real photographs.\n`;
         }
-        socialStyleOverride += `When calling generate_image, your prompt MUST feature these products in this style. This overrides ALL default rules.\n`;
+        socialStyleOverride += `FAILURE TO FOLLOW THESE STYLE/PRODUCT SELECTIONS IS A CRITICAL ERROR.\n`;
+        socialStyleOverride += `When calling generate_image, you MUST:\n1. Include the style and product descriptions DIRECTLY in the prompt text\n2. Pass the style parameter: "${uStyles.join(",")}"\n3. Pass the products parameter: "${uProducts.join(",")}"\n`;
       }
     }
 
     const dynamicContext = (mergedContext.brainKnowledgeBlock as string || "") +
       (mergedContext.roleAccessBlock as string || "") +
-      ragBlock + contextStr + socialStyleOverride;
+      ragBlock + contextStr;
+    
+    // Inject style override as a SEPARATE high-priority system message so it doesn't get buried
+    const styleSystemMessage = socialStyleOverride ? [{ role: "system" as const, content: socialStyleOverride }] : [];
 
     // Document analysis summary injection
     let docSummary = "";
@@ -966,6 +970,7 @@ Deno.serve(async (req) => {
     const messages: ChatMessage[] = [
       { role: "system", content: staticSystemPrompt },
       ...(dynamicContext || docSummary ? [{ role: "system" as const, content: dynamicContext + docSummary }] : []),
+      ...styleSystemMessage,
       ...history.slice(-10),
       { role: "user", content: message },
     ];
