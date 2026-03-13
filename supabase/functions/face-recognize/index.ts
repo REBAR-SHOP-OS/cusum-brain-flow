@@ -65,7 +65,7 @@ serve(async (req) => {
       // Track total count
       profileEnrollmentCounts.set(e.profile_id, (profileEnrollmentCounts.get(e.profile_id) || 0) + 1);
       const urls = profileEnrollments.get(e.profile_id) || [];
-      if (urls.length < 4) {
+      if (urls.length < 5) {
         urls.push(e.photo_url);
         profileEnrollments.set(e.profile_id, urls);
       }
