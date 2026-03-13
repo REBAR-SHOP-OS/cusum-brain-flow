@@ -516,7 +516,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Image Style Icons (Pixel agent only) */}
             {minimalToolbar && onImageStylesChange && (
-              <div className="flex items-center gap-1 ml-1">
+              <div className="flex flex-wrap items-center gap-0.5 ml-1">
                 {IMAGE_STYLES.map((style) => {
                   const active = imageStyles.includes(style.key);
                   const Icon = style.icon;
