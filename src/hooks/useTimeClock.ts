@@ -113,7 +113,7 @@ export function useTimeClock() {
     if (punching) return;
 
     // Enforce 8 AM ET clock-in restriction for @rebar.shop users
-    const CLOCK_EXEMPT = ["kourosh@rebar.shop", "saurabh@rebar.shop", "anderson@rebar.shop"];
+    const CLOCK_EXEMPT = ["kourosh@rebar.shop", "saurabh@rebar.shop", "anderson@rebar.shop", "radin@rebar.shop"];
     const isRebarUser = myProfile.email?.toLowerCase().endsWith("@rebar.shop") && !CLOCK_EXEMPT.includes(myProfile.email?.toLowerCase() || "");
     if (isRebarUser) {
       const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
@@ -137,32 +137,23 @@ export function useTimeClock() {
         console.error("[TimeClock] clockIn close stale error:", closeErr);
       }
 
-      const { error, data } = await supabase
+      console.log("[TimeClock] clockIn attempt", { profileId: myProfile.id, userId: user?.id });
+
+      const { error } = await supabase
         .from("time_clock_entries")
-        .insert({ profile_id: myProfile.id } as any)
-        .select()
-        .single();
+        .insert({ profile_id: myProfile.id } as any);
 
       if (error) {
         console.error("[TimeClock] clockIn insert error:", error);
-        toast.error("Failed to clock in");
+        toast.error("Failed to clock in: " + error.message);
       } else {
-        // Set profile active
         await supabase.from("profiles").update({ is_active: true } as any).eq("id", myProfile.id);
-        // Optimistic: immediately add the new entry
-        if (data) {
-          const newEntry = data as unknown as TimeClockEntry;
-          setEntries(prev => [newEntry, ...prev.map(e => 
-            e.clock_out ? e : { ...e, clock_out: new Date().toISOString() }
-          )]);
-        }
         toast.success("Clocked in!");
       }
-      // Confirm from DB
       await fetchEntries();
-    } catch (err) {
+    } catch (err: any) {
       console.error("[TimeClock] clockIn exception:", err);
-      toast.error("Failed to clock in");
+      toast.error("Failed to clock in: " + (err?.message || "unknown error"));
     } finally {
       setPunching(false);
     }

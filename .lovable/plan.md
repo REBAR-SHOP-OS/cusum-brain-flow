@@ -1,30 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Clock-In Failing with "Failed to clock in" Error
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-The user (Radin Lachini, radin@rebar.shop) gets "Failed to clock in" at 7:57 AM. The 6 AM time restriction in `useTimeClock.ts` (line 120: `getHours() < 6`) is already correct — it would NOT block at 7:57 AM. The toast "Failed to clock in" comes from lines 148 or 165, meaning the actual database INSERT is failing.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-The most likely cause: the `.insert().select().single()` chain fails because Supabase RLS evaluates the SELECT step separately. Although the admin ALL policy exists with a `qual` condition, the `select().single()` after insert requires the row to be visible — and if there's an RLS evaluation hiccup (e.g., `get_user_company_id` fails, stale session), the entire operation errors out.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Fix Plan
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 1. Make clock-in INSERT more resilient (`src/hooks/useTimeClock.ts`)
-- Remove `.select().single()` from the INSERT call — just do `.insert()` without chaining select
-- After successful insert, call `fetchEntries()` to get the entry via the SELECT policy (which is separate and more lenient)
-- Add detailed error logging with the actual error message/code to the toast so we can diagnose any future issues
-- Add a console.log of `myProfile.id` and auth state before the insert for debugging
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### 2. Add radin@rebar.shop to CLOCK_EXEMPT list
-- The user is admin and should not be subject to time restrictions
-- Add to both `useTimeClock.ts` (line 116) and `kiosk-punch/index.ts` (line 64)
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 3. Improve error messages
-- Change generic "Failed to clock in" to include the actual error: `"Failed to clock in: " + error.message`
-- This ensures future failures are immediately diagnosable
-
-### Files to Edit
-- `src/hooks/useTimeClock.ts` — resilient insert, exempt list, better error messages
-- `supabase/functions/kiosk-punch/index.ts` — exempt list sync
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
