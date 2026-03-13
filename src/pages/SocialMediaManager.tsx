@@ -444,20 +444,22 @@ export default function SocialMediaManager() {
           </div>
         )}
 
-        {/* Date Navigation */}
-        <div className="flex items-center gap-4 mb-4">
-          <Button variant="ghost" size="icon" onClick={handlePrevWeek}>
-            <ChevronLeft className="w-5 h-5" />
-          </Button>
-          <span className="font-medium">
-            {format(weekStart, "MMM d")} - {format(weekEnd, "MMM d")}
-          </span>
-          <Button variant="ghost" size="icon" onClick={handleNextWeek}>
-            <ChevronRight className="w-5 h-5" />
-          </Button>
-        </div>
+        {/* Date Navigation — hidden when viewing pending approval list */}
+        {statusFilter !== "pending_approval" && (
+          <div className="flex items-center gap-4 mb-4">
+            <Button variant="ghost" size="icon" onClick={handlePrevWeek}>
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+            <span className="font-medium">
+              {format(weekStart, "MMM d")} - {format(weekEnd, "MMM d")}
+            </span>
+            <Button variant="ghost" size="icon" onClick={handleNextWeek}>
+              <ChevronRight className="w-5 h-5" />
+            </Button>
+          </div>
+        )}
 
-        {/* Calendar Grid or Loading */}
+        {/* Calendar Grid, Pending List, or Loading */}
         {isLoading ? (
           <div className="grid grid-cols-7 gap-2">
             {Array.from({ length: 7 }).map((_, i) => (
@@ -470,6 +472,59 @@ export default function SocialMediaManager() {
               </div>
             ))}
           </div>
+        ) : statusFilter === "pending_approval" ? (
+          /* ── Pending Approval Card List ── */
+          filteredPosts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <ShieldCheck className="w-10 h-10 text-muted-foreground mb-3" />
+              <p className="text-muted-foreground text-sm">No posts pending approval</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm text-muted-foreground mb-3">{filteredPosts.length} post(s) pending approval</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filteredPosts.map((post) => (
+                  <button
+                    key={post.id}
+                    onClick={() => {
+                      const siblingPages = [...new Set(
+                        posts
+                          .filter(s => s.title === post.title && s.platform === post.platform && s.scheduled_date === post.scheduled_date)
+                          .map(s => s.page_name)
+                          .filter(Boolean)
+                      )] as string[];
+                      setGroupPages(siblingPages.length > 0 ? siblingPages : []);
+                      setSelectedPost(post);
+                    }}
+                    className="flex gap-3 p-3 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors text-left"
+                  >
+                    {post.image_url && (
+                      <img
+                        src={post.image_url}
+                        alt=""
+                        className="w-16 h-16 rounded-lg object-cover shrink-0"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[10px] font-semibold uppercase text-muted-foreground">{post.platform}</span>
+                        {post.page_name && (
+                          <span className="text-[10px] text-muted-foreground/70 truncate">· {post.page_name}</span>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium truncate">{post.title || "Untitled"}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{post.content}</p>
+                      {post.scheduled_date && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          📅 {format(parseISO(post.scheduled_date), "MMM d, yyyy")}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
         ) : filteredPosts.length === 0 && !searchQuery && platformFilter === "all" && statusFilter === "all" ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
