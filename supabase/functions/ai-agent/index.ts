@@ -629,7 +629,14 @@ Deno.serve(async (req) => {
           const dynContent = await generateDynamicContent(slot, isRegenerate, brainKnowledge, preferredModel, sessionSeed);
 
           // Step B: Build image prompt with MANDATORY advertising text on image
-          // If brain has image references, append them to inspire generation
+          // Extract custom instructions from brain knowledge to inject into image prompt
+          const customInstructionsMatch = brainKnowledge.match(/## Custom Instructions:\n([\s\S]*?)(?=\n## |\n\n## |$)/);
+          const customInstructions = customInstructionsMatch?.[1]?.trim() || "";
+          const customInstructionsBlock = customInstructions
+            ? `\n\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${customInstructions}\n\n`
+            : "";
+
+          // If brain has image references, extract URLs for both prompt hint and as reference images
           const brainImageRefs = brainKnowledge
             ? brainKnowledge.match(/https?:\/\/\S+\.(jpg|jpeg|png|webp|svg)/gi) || []
             : [];
