@@ -86,7 +86,7 @@ ${brainBlock}
 YOUR TASK — Generate UNIQUE advertising content. Follow these rules STRICTLY:
 
 1. Write a compelling, UNIQUE English caption (2-4 sentences) for this product with the given theme. Use relevant emojis. The caption must be fresh, creative, and NEVER repeat any generic or template-like phrasing.
-2. Write a SHORT English advertising slogan (MAXIMUM 8 words) that will be printed directly ON the image. It must be catchy, memorable, and specific to the product.
+2. Write a SHORT English advertising slogan (MAXIMUM 6 words) that will be printed ON the image. It MUST be: simple, catchy, beautiful, and grammatically perfect English. It should be a pure advertising tagline — NO guarantees, NO technical terms, NO scientific claims. Think of it like a billboard slogan: short, emotional, memorable. Examples of GOOD slogans: "Steel That Builds Dreams", "Your Project, Our Pride", "Strength Meets Style". Examples of BAD slogans: "Unparalleled Structural Integrity", "AI-Driven Precision Engineering", "Guaranteed Quality Framework".
 3. Write 8-12 relevant hashtags as a single string separated by spaces.
 4. Translate the caption to Farsi (Persian) — this MUST be a premium-quality, natural-sounding Persian translation. Do NOT translate word-by-word. Instead, rewrite the meaning in beautiful, fluent Persian that sounds like it was originally written by a native Persian copywriter. Use elegant vocabulary, proper Persian grammar, and a professional advertising tone. The translation should feel natural and compelling to a Persian-speaking audience.
 5. Translate the image slogan to Farsi (Persian) — same quality standard: fluent, catchy, natural Persian. Not a literal translation. It should sound like a professional Persian advertising slogan.
