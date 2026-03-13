@@ -1,48 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Redesign Pixel Chat Input — Horizontal Professional Layout
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The Pixel agent's chat input toolbar (Style icons, Product icons, Size selector) is arranged vertically/wrapped, creating a tall cluttered box that looks unprofessional.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Solution
-Restructure the bottom toolbar into a clean **single horizontal row** with collapsible popover panels instead of inline icon grids.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### `src/components/chat/ChatInput.tsx`
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-**1. Replace inline Style/Products/Size grids with compact popover buttons:**
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-Instead of rendering all 10 style icons + 7 product icons + 3 size buttons directly in the toolbar row, show three compact pill buttons:
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-```text
-[ 📎 Attach ] [ 🧠 Gemini ▾ ] [ 🎨 Style (3) ▾ ] [ 📦 Products (2) ▾ ] [ ⬜ 1:1 ▾ ] ──── [ ➤ Send ]
-```
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-Each pill opens a `Popover` with the icon grid inside. The pill shows a count badge when items are selected.
-
-**2. Specific changes (lines 525-653):**
-
-- **Style section** (lines 525-573): Wrap the existing icon grid in a `Popover`. The trigger is a compact pill button showing `🎨 Style` with selection count. The `PopoverContent` contains the 2×5 icon grid.
-
-- **Products section** (lines 575-617): Same pattern — pill trigger `📦 Products` with count, popover contains the 7 product icons.
-
-- **Size section** (lines 619-653): Convert to a single pill button showing the current ratio (e.g., `⬜ 1:1`). Click opens popover with the 3 ratio options.
-
-- Remove the vertical dividers (`w-px h-8 bg-border`) between sections.
-
-**3. Toolbar layout stays as a single `flex items-center gap-1` row:**
-
-```text
-Before: [attach] [model] [── 10 style icons ──] [── 7 product icons ──] [── 3 size buttons ──] [send]
-After:  [attach] [model] [style pill] [products pill] [size pill]                    [spacer] [send]
-```
-
-**4. Popover content styling:**
-- Dark background matching the theme (`bg-popover`)
-- Grid layout: styles in 5×2, products in 4×2
-- Same icon buttons as current, just inside the popover
-- Smooth open/close animation
-
-### Files Changed
-- `src/components/chat/ChatInput.tsx` — Refactor lines 525-653 (Style/Products/Size sections) into popover-based pills. ~80 lines replaced.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

@@ -522,12 +522,31 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
             </Popover>
             )}
 
-            {/* Image Style Icons (Pixel agent only) */}
+            {/* Style Popover (Pixel agent only) */}
             {minimalToolbar && onImageStylesChange && (
-              <div className="flex items-center gap-1 ml-1">
-                <div className="flex flex-col items-center gap-0.5 bg-muted/30 rounded-lg px-1.5 py-0.5">
-                  <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Style</span>
-                  <div className="flex flex-wrap items-center gap-0.5">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                      imageStyles.length > 0
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    Style
+                    {imageStyles.length > 0 && (
+                      <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold">
+                        {imageStyles.length}
+                      </span>
+                    )}
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-auto p-2">
+                  <div className="grid grid-cols-5 gap-1">
                     {IMAGE_STYLES.map((style) => {
                       const active = imageStyles.includes(style.key);
                       const Icon = style.icon;
@@ -543,7 +562,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                                 onImageStylesChange(next);
                               }}
                               className={cn(
-                                "p-1.5 rounded-lg transition-all border-2",
+                                "p-2 rounded-lg transition-all border-2",
                                 active
                                   ? "border-current shadow-md scale-110"
                                   : "border-transparent hover:scale-105"
@@ -556,100 +575,116 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                               <Icon className="w-4 h-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs">
-                            {style.label}
-                          </TooltipContent>
+                          <TooltipContent side="top" className="text-xs">{style.label}</TooltipContent>
                         </Tooltip>
                       );
                     })}
                   </div>
-                </div>
-
-                {/* Divider between Style and Products */}
-                {onSelectedProductsChange && (
-                  <div className="w-px h-8 bg-border mx-0.5" />
-                )}
-              </div>
+                </PopoverContent>
+              </Popover>
             )}
 
-            {/* Product Icons (Pixel agent only) */}
+            {/* Products Popover (Pixel agent only) */}
             {minimalToolbar && onSelectedProductsChange && (
-              <div className="flex flex-col items-center gap-0.5 bg-primary/5 rounded-lg px-1.5 py-0.5 ml-0.5">
-                <span className="text-[9px] font-medium text-primary/60 uppercase tracking-wider">Products</span>
-                <div className="flex flex-wrap items-center gap-0.5">
-                  {PRODUCT_ICONS.map((prod) => {
-                    const active = selectedProducts.includes(prod.key);
-                    const ProdIcon = prod.icon;
-                    return (
-                      <Tooltip key={prod.key}>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const next = active
-                                ? selectedProducts.filter((p) => p !== prod.key)
-                                : [...selectedProducts, prod.key];
-                              onSelectedProductsChange(next);
-                            }}
-                            className={cn(
-                              "p-1.5 transition-all border-2",
-                              prod.shape,
-                              active
-                                ? "border-current shadow-lg scale-110"
-                                : "border-transparent hover:scale-105"
-                            )}
-                            style={{
-                              color: prod.color,
-                              backgroundColor: active ? `${prod.color}25` : `${prod.color}10`,
-                            }}
-                          >
-                            <ProdIcon className="w-5 h-5" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
-                          {prod.label}
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                      selectedProducts.length > 0
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    <Hash className="w-3.5 h-3.5" />
+                    Products
+                    {selectedProducts.length > 0 && (
+                      <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold">
+                        {selectedProducts.length}
+                      </span>
+                    )}
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-auto p-2">
+                  <div className="grid grid-cols-4 gap-1">
+                    {PRODUCT_ICONS.map((prod) => {
+                      const active = selectedProducts.includes(prod.key);
+                      const ProdIcon = prod.icon;
+                      return (
+                        <Tooltip key={prod.key}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = active
+                                  ? selectedProducts.filter((p) => p !== prod.key)
+                                  : [...selectedProducts, prod.key];
+                                onSelectedProductsChange(next);
+                              }}
+                              className={cn(
+                                "p-2 transition-all border-2",
+                                prod.shape,
+                                active
+                                  ? "border-current shadow-lg scale-110"
+                                  : "border-transparent hover:scale-105"
+                              )}
+                              style={{
+                                color: prod.color,
+                                backgroundColor: active ? `${prod.color}25` : `${prod.color}10`,
+                              }}
+                            >
+                              <ProdIcon className="w-5 h-5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">{prod.label}</TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
 
-            {/* Image Aspect Ratio (Pixel agent only) */}
+            {/* Size Popover (Pixel agent only) */}
             {minimalToolbar && onImageAspectRatioChange && (
-              <>
-                <div className="w-px h-8 bg-border mx-0.5" />
-                <div className="flex flex-col items-center gap-0.5 bg-muted/30 rounded-lg px-1.5 py-0.5">
-                  <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Size</span>
-                  <div className="flex items-center gap-1">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                  >
+                    {imageAspectRatio === "16:9" ? <RectangleHorizontal className="w-3.5 h-3.5" /> : imageAspectRatio === "9:16" ? <RectangleVertical className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                    {imageAspectRatio}
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-auto p-1.5">
+                  <div className="flex flex-col gap-0.5">
                     {([
-                      { value: "16:9", label: "16:9", icon: RectangleHorizontal, tip: "Landscape" },
-                      { value: "1:1", label: "1:1", icon: Square, tip: "Square" },
-                      { value: "9:16", label: "9:16", icon: RectangleVertical, tip: "Portrait" },
+                      { value: "16:9", label: "Landscape", icon: RectangleHorizontal },
+                      { value: "1:1", label: "Square", icon: Square },
+                      { value: "9:16", label: "Portrait", icon: RectangleVertical },
                     ] as const).map((opt) => (
-                      <Tooltip key={opt.value}>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => onImageAspectRatioChange(opt.value)}
-                            className={cn(
-                              "flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all",
-                              imageAspectRatio === opt.value
-                                ? "bg-primary text-primary-foreground shadow-sm"
-                                : "bg-muted/40 text-muted-foreground hover:bg-muted"
-                            )}
-                          >
-                            <opt.icon className="w-3.5 h-3.5" />
-                            {opt.label}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">{opt.tip} ({opt.value})</TooltipContent>
-                      </Tooltip>
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => onImageAspectRatioChange(opt.value)}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 text-xs rounded-md transition-colors",
+                          imageAspectRatio === opt.value
+                            ? "bg-primary/10 text-primary font-medium"
+                            : "hover:bg-muted text-foreground"
+                        )}
+                      >
+                        <opt.icon className="w-3.5 h-3.5" />
+                        {opt.label} ({opt.value})
+                      </button>
                     ))}
                   </div>
-                </div>
-              </>
+                </PopoverContent>
+              </Popover>
             )}
 
             {/* Spacer */}
