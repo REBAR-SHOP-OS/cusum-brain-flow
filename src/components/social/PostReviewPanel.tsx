@@ -144,6 +144,7 @@ export function PostReviewPanel({
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [showStoryGen, setShowStoryGen] = useState(false); // rebuild-trigger-v1
+  const [showImageEdit, setShowImageEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imageZoomOpen, setImageZoomOpen] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
