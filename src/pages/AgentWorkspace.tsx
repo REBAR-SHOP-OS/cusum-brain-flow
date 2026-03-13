@@ -614,6 +614,8 @@ export default function AgentWorkspace() {
                 onModelChange={setAiModel}
                 imageStyles={imageStyles}
                 onImageStylesChange={setImageStyles}
+                selectedProducts={selectedProducts}
+                onSelectedProductsChange={setSelectedProducts}
               />
             </div>
 
