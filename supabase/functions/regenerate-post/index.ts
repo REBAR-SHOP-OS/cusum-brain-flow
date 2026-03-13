@@ -155,7 +155,7 @@ async function generatePixelImage(
 
   for (const attempt of attempts) {
     try {
-      const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+      const contentParts: any[] = [{ type: "text", text: finalPrompt }];
 
       // Attach resource/reference images from brain (only if attempt allows)
       if (attempt.useRefs && options?.resourceImageUrls?.length) {
