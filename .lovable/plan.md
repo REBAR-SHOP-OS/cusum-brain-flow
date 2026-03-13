@@ -1,46 +1,27 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Add Image Aspect Ratio Selector to Pixel Chat
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Overview
+Add two aspect ratio toggle buttons (Landscape 16:9 and Square 1:1) next to the Products section in the Pixel agent's chat input. The selected ratio flows through the pipeline to control generated image dimensions.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Changes
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. `src/components/chat/ChatInput.tsx`
+- Add `imageAspectRatio` and `onImageAspectRatioChange` props to `ChatInputProps`
+- Add two toggle buttons after the Products section: a landscape icon (RectangleHorizontal) for "16:9" and a square icon (Square) for "1:1" (default)
+- Style them similarly to the existing Style/Products groups with a "SIZE" label
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 2. `src/pages/AgentWorkspace.tsx`
+- Add `imageAspectRatio` state (default `"1:1"`)
+- Pass it to both `ChatInput` instances as prop
+- Include `imageAspectRatio` in `extraContext` when agent is "social"
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 3. `supabase/functions/ai-agent/index.ts`
+- Read `imageAspectRatio` from `userContext`
+- When generating images via Gemini, inject aspect ratio instruction into the image prompt
+- When using OpenAI gpt-image-1, map "16:9" → `"1536x1024"` and "1:1" → `"1024x1024"` for the `size` parameter
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 4. `supabase/functions/regenerate-post/index.ts`
+- Same aspect ratio handling as ai-agent for regeneration path
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
