@@ -91,6 +91,14 @@ serve(async (req) => {
     }
   } catch (error) {
     console.error("LinkedIn OAuth error:", error);
+    // If this is a callback request, redirect to app with error instead of returning JSON
+    const reqUrl = new URL(req.url);
+    if (reqUrl.pathname.endsWith("/callback")) {
+      const errUrl = new URL("/integrations/callback", "https://erp.rebar.shop");
+      errUrl.searchParams.set("status", "error");
+      errUrl.searchParams.set("message", error instanceof Error ? error.message : "Unknown error");
+      return Response.redirect(errUrl.toString(), 302);
+    }
     return jsonRes(
       { error: error instanceof Error ? error.message : "Unknown error" },
       500
@@ -113,10 +121,10 @@ async function handleCallback(
 
   if (error) {
     console.error("LinkedIn OAuth error:", error);
-    return new Response(
-      `<html><body><script>window.opener?.postMessage({type:'oauth-error',error:'${error}'},'*');window.close();</script></body></html>`,
-      { headers: { "Content-Type": "text/html" } }
-    );
+    const errUrl = new URL("/integrations/callback", "https://erp.rebar.shop");
+    errUrl.searchParams.set("status", "error");
+    errUrl.searchParams.set("message", `Authorization denied: ${error}`);
+    return Response.redirect(errUrl.toString(), 302);
   }
 
   if (!code) throw new Error("Missing code in callback");
@@ -189,11 +197,13 @@ async function handleCallback(
     throw new Error("Failed to store tokens");
   }
 
-  // Close popup and signal success
-  return new Response(
-    `<html><body><script>window.opener?.postMessage({type:'oauth-success',integration:'linkedin'},'*');window.close();</script><p>LinkedIn connected! You can close this window.</p></body></html>`,
-    { headers: { "Content-Type": "text/html" } }
-  );
+  // Redirect back to app's own callback page (same origin → popup closes reliably)
+  const appBase = returnUrl || "https://erp.rebar.shop";
+  const successUrl = new URL("/integrations/callback", appBase);
+  successUrl.searchParams.set("status", "success");
+  successUrl.searchParams.set("integration", "linkedin");
+  successUrl.searchParams.set("email", profileName);
+  return Response.redirect(successUrl.toString(), 302);
 }
 
 // ─── Auth URL ──────────────────────────────────────────────────────

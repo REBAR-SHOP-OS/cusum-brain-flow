@@ -1,44 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix LinkedIn OAuth Popup Not Closing
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The LinkedIn OAuth callback returns inline HTML with `<script>window.opener?.postMessage(...)` directly from the edge function. During the OAuth redirect chain (app → LinkedIn → Supabase edge function), browsers can lose the `window.opener` reference. This causes:
-1. `window.close()` fails — popup stays open showing raw HTML
-2. `postMessage` never reaches the parent — main page doesn't refresh status
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Root Cause
-The callback HTML is served from the **Supabase domain** (`uavzziigfnqpfdkczbdo.supabase.co`), which is a different origin than the app (`erp.rebar.shop`). After multiple redirects, `window.opener` is often `null`, so the script silently fails.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Solution
-Instead of returning inline HTML, **redirect the popup back to the app's own callback page** (`/integrations/callback`) which already handles this correctly — it's on the same origin as the opener, so `window.opener.postMessage()` and `window.close()` both work reliably.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-The `IntegrationCallback.tsx` page already supports `?status=success&integration=...&email=...` query params.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-## Changes
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### `supabase/functions/linkedin-oauth/index.ts`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-**Success case (line 192-196):** Replace inline HTML response with a redirect:
-```typescript
-const appBase = returnUrl || "https://erp.rebar.shop";
-const callbackUrl = new URL("/integrations/callback", appBase);
-callbackUrl.searchParams.set("status", "success");
-callbackUrl.searchParams.set("integration", "linkedin");
-callbackUrl.searchParams.set("email", profileName);
-return Response.redirect(callbackUrl.toString(), 302);
-```
-
-**Error case (line 116-119):** Same pattern — redirect instead of inline HTML:
-```typescript
-const callbackUrl = new URL("/integrations/callback", "https://erp.rebar.shop");
-callbackUrl.searchParams.set("status", "error");
-callbackUrl.searchParams.set("message", `Authorization denied: ${error}`);
-return Response.redirect(callbackUrl.toString(), 302);
-```
-
-**Error thrown case:** Wrap the `handleCallback` catch to also redirect on error instead of returning JSON.
-
-### Single file change
-- `supabase/functions/linkedin-oauth/index.ts` — replace inline HTML responses with redirects to `/integrations/callback`
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
