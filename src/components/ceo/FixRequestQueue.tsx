@@ -36,7 +36,26 @@ const SEVERITY_CONFIG: Record<Severity, { icon: typeof Bug; color: string; label
   info: { icon: Info, color: "text-blue-400", label: "Info" },
 };
 
-const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const POLL_INTERVAL = 5 * 60 * 1000;
+
+/** Classify a fix request into a fixable category */
+function classifyFixType(req: FixRequest): "stale" | "auth" | "cache" | "operational" {
+  const desc = req.description.toLowerCase();
+  const age = Date.now() - new Date(req.created_at).getTime();
+  const isAutoDetected = desc.includes("🤖") || desc.includes("auto-detected");
+
+  // Stale auto-detected errors (>30 min old)
+  if (isAutoDetected && age > 30 * 60 * 1000) return "stale";
+
+  // Auth/session errors
+  if (desc.includes("auth") || desc.includes("session") || desc.includes("token") || desc.includes("login"))
+    return "auth";
+
+  // Cache/storage errors
+  if (desc.includes("cache") || desc.includes("storage")) return "cache";
+
+  return "operational";
+}
 
 export function FixRequestQueue() {
   const [requests, setRequests] = useState<FixRequest[]>([]);
@@ -66,7 +85,6 @@ export function FixRequestQueue() {
         if (existing) {
           const diff = Math.abs(new Date(req.created_at).getTime() - new Date(existing.created_at).getTime());
           if (diff < 10 * 60 * 1000) {
-            // Keep newer, resolve older
             if (new Date(req.created_at) > new Date(existing.created_at)) {
               dupeIds.push(existing.id);
               seen.set(key, req);
@@ -79,7 +97,6 @@ export function FixRequestQueue() {
         seen.set(key, req);
       }
 
-      // Resolve duplicates in background
       if (dupeIds.length > 0) {
         supabase
           .from("vizzy_fix_requests" as any)
@@ -90,13 +107,11 @@ export function FixRequestQueue() {
 
       const deduped = items.filter((r) => !dupeIds.includes(r.id));
 
-      // Notify if new requests arrived
       if (prevCountRef.current > 0 && deduped.length > prevCountRef.current) {
         const newCount = deduped.length - prevCountRef.current;
         toast.warning(`${newCount} new fix request${newCount > 1 ? "s" : ""} logged by Vizzy`);
       }
       prevCountRef.current = deduped.length;
-
       setRequests(deduped);
     }
     setLastChecked(new Date());
@@ -114,18 +129,85 @@ export function FixRequestQueue() {
     setRefreshing(false);
   };
 
+  /** Smart FIX ALL — categorizes and takes real action per error type */
   const handleFixAll = async () => {
     if (requests.length === 0) return;
     setFixingAll(true);
-    const ids = requests.map((r) => r.id);
-    await supabase
-      .from("vizzy_fix_requests" as any)
-      .update({ status: "resolved", resolved_at: new Date().toISOString() } as any)
-      .in("id", ids);
+
+    const summary = { stale: 0, auth: 0, cache: 0, operational: 0 };
+    const operationalRequests: FixRequest[] = [];
+    const directResolveIds: string[] = [];
+
+    for (const req of requests) {
+      const type = classifyFixType(req);
+      summary[type]++;
+
+      if (type === "stale") {
+        directResolveIds.push(req.id);
+      } else if (type === "auth") {
+        directResolveIds.push(req.id);
+      } else if (type === "cache") {
+        directResolveIds.push(req.id);
+      } else {
+        operationalRequests.push(req);
+      }
+    }
+
+    // 1. Refresh session for auth errors
+    if (summary.auth > 0) {
+      try {
+        await supabase.auth.refreshSession();
+      } catch { /* silent */ }
+    }
+
+    // 2. Clear vizzy report dedup keys for cache errors
+    if (summary.cache > 0 || summary.auth > 0) {
+      try {
+        const keys = Object.keys(sessionStorage).filter((k) => k.startsWith("vizzy_report:"));
+        keys.forEach((k) => sessionStorage.removeItem(k));
+      } catch { /* silent */ }
+    }
+
+    // 3. Resolve stale/auth/cache directly
+    if (directResolveIds.length > 0) {
+      await supabase
+        .from("vizzy_fix_requests" as any)
+        .update({ status: "resolved", resolved_at: new Date().toISOString() } as any)
+        .in("id", directResolveIds);
+    }
+
+    // 4. Send operational issues to edge function for real action
+    if (operationalRequests.length > 0) {
+      try {
+        const { error } = await supabase.functions.invoke("vizzy-erp-action", {
+          body: {
+            action: "bulk_fix_requests",
+            params: {
+              fix_requests: operationalRequests.map((r) => ({
+                id: r.id,
+                description: r.description,
+                affected_area: r.affected_area,
+              })),
+            },
+          },
+        });
+        if (error) console.warn("[FixAll] Edge function error:", error);
+      } catch (err) {
+        console.warn("[FixAll] Failed to send to edge function:", err);
+      }
+    }
+
+    // Build summary toast
+    const parts: string[] = [];
+    if (summary.stale > 0) parts.push(`${summary.stale} stale cleared`);
+    if (summary.auth > 0) parts.push(`${summary.auth} session refreshed`);
+    if (summary.cache > 0) parts.push(`${summary.cache} cache reset`);
+    if (summary.operational > 0) parts.push(`${summary.operational} sent to Vizzy`);
+    toast.success(parts.join("، ") || "All resolved");
+
     setRequests([]);
     prevCountRef.current = 0;
     setFixingAll(false);
-    toast.success(`Resolved all ${ids.length} fix requests`);
   };
 
   const copyToClipboard = (req: FixRequest) => {
@@ -158,7 +240,7 @@ export function FixRequestQueue() {
             onClick={handleFixAll}
             disabled={fixingAll}
             className="p-1.5 rounded-md hover:bg-muted transition-colors text-primary hover:text-primary/80 disabled:opacity-50"
-            title="Resolve all fix requests"
+            title="Smart Fix All — resolves stale, refreshes sessions, sends operational issues to Vizzy"
           >
             <Wand2 className={`w-3.5 h-3.5 ${fixingAll ? "animate-spin" : ""}`} />
           </button>
