@@ -63,11 +63,14 @@ Wire Mesh, Rebar Tie Wire, Rebar Accessories
 ## CAPTION RULES — STRICT OUTPUT ORDER
 Language: English only. The caption MUST be purely promotional — NO guarantee language whatsoever.
 
+### ABSOLUTELY FORBIDDEN CONTENT:
+Scientific explanations, technical specifications, engineering terminology, material properties, structural analysis claims. Do NOT describe tensile strength, load-bearing capacity, or any technical process. Captions must be PURELY promotional.
+
 ### FORBIDDEN WORDS/PHRASES (NEVER USE):
-"guaranteed", "we guarantee", "100% guaranteed", "ensure", "we ensure", "promise", "we promise", "100% safe", "zero defects", "never fails"
+"guaranteed", "we guarantee", "100% guaranteed", "ensure", "we ensure", "promise", "we promise", "100% safe", "zero defects", "never fails", "unparalleled", "revolutionary", "superior", "structural integrity", "load-bearing", "tensile strength", "AI-driven", "precision-engineered", "interlocks", "scientifically", "unmatched", "finest", "unbeatable"
 
 ### ALLOWED ALTERNATIVES:
-"designed for", "built for", "engineered for", "precision-crafted", "trusted by", "relied upon by", "crafted for performance"
+"designed for", "built for", "crafted for", "trusted by", "relied upon by", "crafted for performance", "your go-to choice"
 
 ### MANDATORY OUTPUT FORMAT (in this exact order):
 

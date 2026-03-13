@@ -305,7 +305,9 @@ RULES:
 - Write 8-12 relevant hashtags as a single string separated by spaces.
 - Write a short catchy title (max 10 words).
 - Translate the caption to Farsi (Persian). This MUST be a beautiful, fluent, native-quality Persian translation — NOT a word-by-word translation. Rewrite the meaning in elegant, professional Persian that sounds like it was originally written by a native Persian advertising copywriter.
-- ABSOLUTELY FORBIDDEN WORDS: guarantee, guaranteed, ensures, promise, best, greatest, number one, unmatched, unparalleled, revolutionary, superior, finest, ensure, assured, unbeatable, top-notch
+- CAPTION TONE: PURELY PROMOTIONAL & ADVERTISING — catchy, bold, emotional. Do NOT explain how the product works. Focus on why the customer should buy.
+- ABSOLUTELY FORBIDDEN: scientific explanations, technical specs, engineering terminology, material properties, structural analysis claims.
+- FORBIDDEN WORDS: guarantee, guaranteed, ensures, ensure, promise, warranty, certified, certify, unparalleled, revolutionary, superior, structural integrity, load-bearing, tensile strength, AI-driven, precision-engineered, interlocks, unmatched, finest, unbeatable, top-notch, scientifically, assured
 - Do NOT mention ANY time of day, hour, clock time, AM/PM
 - Be bold, specific, and direct. Use relevant emojis.
 - SESSION SEED: ${sessionSeed}
