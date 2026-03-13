@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
+import { ImageEditDialog } from "./ImageEditDialog";
 
 import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
 import { SelectionSubPanel, type SelectionOption } from "./SelectionSubPanel";
