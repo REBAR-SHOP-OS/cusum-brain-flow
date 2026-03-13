@@ -25,23 +25,23 @@ export interface UploadedFile {
 }
 
 const IMAGE_STYLES = [
-  { key: "realism", label: "واقع‌گرایی", labelEn: "Realism", icon: Camera },
-  { key: "urban", label: "شهر", labelEn: "Urban", icon: Building2 },
-  { key: "construction", label: "ساخت و ساز", labelEn: "Construction", icon: HardHat },
-  { key: "ai_modern", label: "هوش مصنوعی", labelEn: "AI & Modern", icon: Cpu },
-  { key: "nature", label: "طبیعت", labelEn: "Nature", icon: TreePine },
-  { key: "advertising", label: "تبلیغاتی", labelEn: "Advertising", icon: Megaphone },
-  { key: "inspirational", label: "الهام‌بخش", labelEn: "Inspirational", icon: Flame },
+  { key: "realism", label: "Realism", icon: Camera, color: "#10b981" },
+  { key: "urban", label: "Urban", icon: Building2, color: "#6366f1" },
+  { key: "construction", label: "Construction", icon: HardHat, color: "#f59e0b" },
+  { key: "ai_modern", label: "AI & Modern", icon: Cpu, color: "#06b6d4" },
+  { key: "nature", label: "Nature", icon: TreePine, color: "#22c55e" },
+  { key: "advertising", label: "Advertising", icon: Megaphone, color: "#ec4899" },
+  { key: "inspirational", label: "Inspirational", icon: Flame, color: "#f97316" },
 ] as const;
 
 const PRODUCT_ICONS = [
-  { key: "fiberglass", label: "Fiberglass", labelFa: "فایبرگلاس", icon: Cylinder, color: "#22c55e" },
-  { key: "stirrups", label: "Stirrups", labelFa: "خاموت", icon: Square, color: "#f97316" },
-  { key: "cages", label: "Cages", labelFa: "قفسه", icon: Box, color: "#3b82f6" },
-  { key: "hooks", label: "Hooks", labelFa: "هوک", icon: Anchor, color: "#eab308" },
-  { key: "dowels", label: "Dowels", labelFa: "دوبل", icon: ArrowDownUp, color: "#ef4444" },
-  { key: "wire_mesh", label: "Wire Mesh", labelFa: "مش", icon: Grid3X3, color: "#a855f7" },
-  { key: "straight", label: "Rebar Straight", labelFa: "میلگرد مستقیم", icon: Minus, color: "#6b7280" },
+  { key: "fiberglass", label: "Fiberglass", icon: Cylinder, color: "#22c55e", shape: "rounded-full" },
+  { key: "stirrups", label: "Stirrups", icon: Square, color: "#f97316", shape: "rounded-none" },
+  { key: "cages", label: "Cages", icon: Box, color: "#3b82f6", shape: "rounded-lg" },
+  { key: "hooks", label: "Hooks", icon: Anchor, color: "#eab308", shape: "rounded-full" },
+  { key: "dowels", label: "Dowels", icon: ArrowDownUp, color: "#ef4444", shape: "rounded-md" },
+  { key: "wire_mesh", label: "Wire Mesh", icon: Grid3X3, color: "#a855f7", shape: "rounded-none" },
+  { key: "straight", label: "Rebar Straight", icon: Minus, color: "#6b7280", shape: "rounded-xl" },
 ] as const;
 
 interface ChatInputProps {
@@ -516,7 +516,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Image Style Icons (Pixel agent only) */}
             {minimalToolbar && onImageStylesChange && (
-              <div className="flex items-center gap-0.5 ml-1">
+              <div className="flex items-center gap-1 ml-1">
                 {IMAGE_STYLES.map((style) => {
                   const active = imageStyles.includes(style.key);
                   const Icon = style.icon;
@@ -532,17 +532,21 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             onImageStylesChange(next);
                           }}
                           className={cn(
-                            "p-1.5 rounded-md transition-colors",
+                            "p-2 rounded-lg transition-all border-2",
                             active
-                              ? "text-primary bg-primary/15"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              ? "border-current shadow-md scale-110"
+                              : "border-transparent hover:scale-105"
                           )}
+                          style={{
+                            color: style.color,
+                            backgroundColor: active ? `${style.color}25` : `${style.color}10`,
+                          }}
                         >
-                          <Icon className="w-4 h-4" />
+                          <Icon className="w-5 h-5" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
-                        {style.label} / {style.labelEn}
+                        {style.label}
                       </TooltipContent>
                     </Tooltip>
                   );
@@ -552,7 +556,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Product Icons (Pixel agent only) */}
             {minimalToolbar && onSelectedProductsChange && (
-              <div className="flex items-center gap-0.5 ml-1 border-l border-border/50 pl-1.5">
+              <div className="flex items-center gap-1 ml-1 border-l border-border/50 pl-2">
                 {PRODUCT_ICONS.map((prod) => {
                   const active = selectedProducts.includes(prod.key);
                   const ProdIcon = prod.icon;
@@ -568,18 +572,22 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             onSelectedProductsChange(next);
                           }}
                           className={cn(
-                            "p-1.5 rounded-md transition-all",
+                            "p-2 transition-all border-2",
+                            prod.shape,
                             active
-                              ? "ring-2 ring-offset-1 ring-offset-background"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              ? "border-current shadow-lg scale-110"
+                              : "border-transparent hover:scale-105"
                           )}
-                          style={active ? { color: prod.color, backgroundColor: `${prod.color}20`, boxShadow: `0 0 0 2px ${prod.color}` } : undefined}
+                          style={{
+                            color: prod.color,
+                            backgroundColor: active ? `${prod.color}25` : `${prod.color}10`,
+                          }}
                         >
-                          <ProdIcon className="w-5 h-5" style={active ? { color: prod.color } : undefined} />
+                          <ProdIcon className="w-6 h-6" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
-                        {prod.labelFa} / {prod.label}
+                        {prod.label}
                       </TooltipContent>
                     </Tooltip>
                   );
