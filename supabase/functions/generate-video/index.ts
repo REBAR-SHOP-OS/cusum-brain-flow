@@ -702,7 +702,7 @@ serve(async (req) => {
         } else {
           // Veo selected — fallback: Veo → Wan → Sora
           try {
-            result = await veoGenerate(apiKey, prompt, duration || 8);
+            result = await veoGenerate(apiKey, prompt, duration || 8, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType);
           } catch (e) {
             const message = getErrorMessage(e);
             if (isProviderCapacityError(message) && dashscopeKey) {
