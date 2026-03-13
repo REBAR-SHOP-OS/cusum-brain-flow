@@ -112,15 +112,11 @@ export function useTimeClock() {
     if (!myProfile) { toast.error("No profile found"); return; }
     if (punching) return;
 
-    // Enforce 8 AM ET clock-in restriction for @rebar.shop users
-    const CLOCK_EXEMPT = ["kourosh@rebar.shop", "saurabh@rebar.shop", "anderson@rebar.shop", "radin@rebar.shop"];
-    const isRebarUser = myProfile.email?.toLowerCase().endsWith("@rebar.shop") && !CLOCK_EXEMPT.includes(myProfile.email?.toLowerCase() || "");
-    if (isRebarUser) {
-      const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-      if (nowET.getHours() < 6) {
-        toast.error("Clock-in is available from 6:00 AM");
-        return;
-      }
+    // Frontend guard: 6 AM ET for all users (backend trigger is the real enforcer)
+    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    if (nowET.getHours() < 6) {
+      toast.error("Clock-in is only available from 6:00 AM ET");
+      return;
     }
 
     setPunching(true);
