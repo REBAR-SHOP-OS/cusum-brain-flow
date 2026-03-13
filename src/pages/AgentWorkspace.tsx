@@ -622,6 +622,8 @@ export default function AgentWorkspace() {
                 onImageStylesChange={setImageStyles}
                 selectedProducts={selectedProducts}
                 onSelectedProductsChange={setSelectedProducts}
+                imageAspectRatio={imageAspectRatio}
+                onImageAspectRatioChange={setImageAspectRatio}
               />
             </div>
 
