@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Undo2, Trash2, Send, Check, RotateCcw } from "lucide-react";
+import { Loader2, Undo2, Trash2, Send, Check, RotateCcw, ImagePlus, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
@@ -29,6 +29,8 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
   const [loading, setLoading] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const refFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   // Load image when dialog opens
@@ -37,6 +39,7 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
     setStrokes([]);
     setPrompt("");
     setPreviewUrl(null);
+    setReferenceImage(null);
     setImgLoaded(false);
 
     const img = new Image();
@@ -134,6 +137,7 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
         prompt: prompt.trim(),
         editImage: compositeBase64,
         model: "google/gemini-3.1-flash-image-preview",
+        ...(referenceImage ? { referenceImage } : {}),
       }, { timeoutMs: 60000 });
 
       if (data.imageUrl) {
@@ -197,15 +201,42 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
                 <Button variant="ghost" size="icon" onClick={handleUndo} disabled={strokes.length === 0}><Undo2 className="w-4 h-4" /></Button>
                 <Button variant="ghost" size="icon" onClick={handleClear} disabled={strokes.length === 0}><Trash2 className="w-4 h-4" /></Button>
               </div>
+              {/* Reference image thumbnail */}
+              {referenceImage && (
+                <div className="flex items-center gap-2">
+                  <img src={referenceImage} alt="Reference" className="w-12 h-12 rounded border border-border object-cover" />
+                  <span className="text-xs text-muted-foreground">Reference image</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setReferenceImage(null)}>
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
               {/* Prompt + Apply */}
               <div className="flex gap-2">
+                <input
+                  ref={refFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => setReferenceImage(reader.result as string);
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button variant="ghost" size="icon" onClick={() => refFileInputRef.current?.click()} title="Upload reference image">
+                  <ImagePlus className="w-4 h-4" />
+                </Button>
                 <Input placeholder="Describe the edit..." value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !loading && handleApply()} className="flex-1" />
                 <Button onClick={handleApply} disabled={loading || !prompt.trim()}>
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   {loading ? "Editing..." : "Apply"}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Draw red marks on the areas you want to change, then describe the edit.</p>
+              <p className="text-xs text-muted-foreground">Draw red marks on the areas you want to change, then describe the edit. Optionally upload a reference image.</p>
             </>
           )}
         </div>
