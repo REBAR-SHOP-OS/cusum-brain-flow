@@ -49,14 +49,15 @@ async function handleTeamMessage(
 ) {
   const { channel_id, sender_profile_id, original_text } = record;
 
-  // Get channel name
+  // Get channel name and type
   const { data: channel } = await svc
     .from("team_channels")
-    .select("name")
+    .select("name, channel_type")
     .eq("id", channel_id)
     .single();
 
   const channelName = channel?.name || "a channel";
+  const channelType = channel?.channel_type;
 
   // Get sender name
   const { data: senderProfile } = await svc
@@ -76,7 +77,7 @@ async function handleTeamMessage(
 
   if (!members || members.length === 0) return;
 
-  // Map profile_ids to user_ids + preferred_language
+  // Map profile_ids to user_ids
   const profileIds = members.map((m: any) => m.profile_id);
   const { data: profiles } = await svc
     .from("profiles")
@@ -86,11 +87,10 @@ async function handleTeamMessage(
   if (!profiles || profiles.length === 0) return;
 
   const preview = (original_text || "").slice(0, 120);
-  const titleEn = `${senderName} in #${channelName}`;
+  // For DMs, show just the sender name; for group channels, show "Sender in #Channel"
+  const titleEn = channelType === "dm" ? senderName : `${senderName} in #${channelName}`;
 
-  // Always use English for team chat notifications — no translation
   const notifRows: any[] = [];
-  const pushPromises: Promise<any>[] = [];
 
   for (const p of profiles) {
     notifRows.push({
@@ -103,20 +103,6 @@ async function handleTeamMessage(
       priority: "normal",
       metadata: { channel_id, sender_profile_id },
     });
-
-    pushPromises.push(
-      fetch(sendPushUrl, {
-        method: "POST",
-        headers: pushHeaders,
-        body: JSON.stringify({
-          user_id: p.user_id,
-          title: titleEn,
-          body: preview,
-          linkTo: "/team-hub",
-          tag: `team-${channel_id}`,
-        }),
-      }).catch(() => {})
-    );
   }
 
   if (notifRows.length > 0) {
@@ -126,8 +112,7 @@ async function handleTeamMessage(
       console.error("Failed to insert team notifications:", err);
     }
   }
-
-  await Promise.allSettled(pushPromises);
+  // Push notifications are handled automatically by the push-on-notify DB trigger
 }
 
 async function handleSupportMessage(
@@ -175,9 +160,7 @@ async function handleSupportMessage(
 
   if (!companyProfiles || companyProfiles.length === 0) return;
 
-  // All notifications in English — no translation
   const notifRows: any[] = [];
-  const pushPromises: Promise<any>[] = [];
 
   for (const p of companyProfiles) {
     notifRows.push({
@@ -190,20 +173,6 @@ async function handleSupportMessage(
       priority: "high",
       metadata: { conversation_id },
     });
-
-    pushPromises.push(
-      fetch(sendPushUrl, {
-        method: "POST",
-        headers: pushHeaders,
-        body: JSON.stringify({
-          user_id: p.user_id,
-          title: titleEn,
-          body: preview,
-          linkTo: "/support-inbox",
-          tag: `support-${conversation_id}`,
-        }),
-      }).catch(() => {})
-    );
   }
 
   if (notifRows.length > 0) {
@@ -213,6 +182,5 @@ async function handleSupportMessage(
       console.error("Failed to insert support notifications:", err);
     }
   }
-
-  await Promise.allSettled(pushPromises);
+  // Push notifications are handled automatically by the push-on-notify DB trigger
 }

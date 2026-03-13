@@ -1,29 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix DM Notification — Remove Duplicate Push & Clean Up Title
+## Completed: Add All Wan 2.6 Capabilities
 
-## Investigation Results
-- DM channels correctly have only 2 members in `team_channel_members`
-- `handleTeamMessage` correctly queries only channel members minus sender
-- All 20 recent DM notifications verified: every recipient IS a member of the DM channel
-- **BUG FOUND**: Each team message sends **2 push notifications** per recipient:
-  1. Direct `send-push` call in `notify-on-message` (lines 107-119)
-  2. `push_on_notification_insert` DB trigger → `push-on-notify` → `send-push` (fires when notification row is inserted)
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Changes
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. `supabase/functions/notify-on-message/index.ts` — Remove duplicate push
-Remove the direct `send-push` calls in both `handleTeamMessage` and `handleSupportMessage`. The `push-on-notify` trigger already handles push delivery when a notification row is inserted — the direct calls are redundant and cause double notifications.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-- **handleTeamMessage**: Remove lines 107-119 (pushPromises) and line 130 (Promise.allSettled)
-- **handleSupportMessage**: Remove lines 194-206 (pushPromises) and line 217 (Promise.allSettled)
-- Keep only the notification row inserts — push will fire automatically via trigger
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 2. Cleaner DM notification title
-For DM channels, change title from `"Sender in #Sender & Recipient"` to just `"Sender"` — the channel name is redundant and cluttered for DMs.
-- Fetch `channel_type` alongside `name` from `team_channels`
-- If `channel_type === 'dm'`, use title: `senderName` instead of `"${senderName} in #${channelName}"`
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### Files
-- `supabase/functions/notify-on-message/index.ts`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
