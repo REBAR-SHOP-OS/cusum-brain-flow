@@ -137,6 +137,8 @@ export function VideoStudioPromptBar({
   selectedModel, onModelChange,
   negativePrompt = "", onNegativePromptChange,
   customAudioFile, onCustomAudioFileChange,
+  firstFrameImage, onFirstFrameImageChange,
+  lastFrameImage, onLastFrameImageChange,
 }: VideoStudioPromptBarProps) {
   const [modeOpen, setModeOpen] = useState(false);
   const [durationOpen, setDurationOpen] = useState(false);
@@ -145,6 +147,8 @@ export function VideoStudioPromptBar({
   const [showNegativePrompt, setShowNegativePrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const firstFrameInputRef = useRef<HTMLInputElement>(null);
+  const lastFrameInputRef = useRef<HTMLInputElement>(null);
 
   const modelOptions = mediaType === "image" ? IMAGE_MODELS : mediaType === "audio" ? AUDIO_MODELS : VIDEO_MODELS;
   const currentModelOption = modelOptions.find(m => m.id === selectedModel) || modelOptions[0];
