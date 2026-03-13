@@ -452,7 +452,7 @@ export function PostReviewPanel({
                         </Button>
                       </label>
                      </div>
-                     <div className="flex gap-2">
+                     <div className="flex gap-2 flex-wrap">
                        <label>
                          <input
                            type="file"
@@ -479,6 +479,8 @@ export function PostReviewPanel({
                            Edit Image
                          </Button>
                        )}
+                     </div>
+                     <div>
                        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowStoryGen(true)}>
                          <Smartphone className="w-3.5 h-3.5" />
                          Auto Generate Story
