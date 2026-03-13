@@ -144,6 +144,17 @@ async function generatePixelImage(
     try {
       const contentParts: any[] = [{ type: "text", text: fullPrompt }];
 
+      // Attach resource/reference images from brain (product photos, etc.)
+      if (options?.resourceImageUrls?.length) {
+        for (const refUrl of options.resourceImageUrls.slice(0, 3)) {
+          contentParts.push({ type: "image_url", image_url: { url: refUrl } });
+        }
+        contentParts.push({
+          type: "text",
+          text: "The images above are REFERENCE product/brand images. Use them as visual inspiration for style, colors, and product appearance. Do NOT copy them exactly — create something NEW inspired by them.",
+        });
+      }
+
       // Pass previous image as negative reference to prevent duplicates
       if (options?.previousImageUrl) {
         contentParts.push({ type: "image_url", image_url: { url: options.previousImageUrl } });
