@@ -43,6 +43,7 @@ export function FixRequestQueue() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lastChecked, setLastChecked] = useState<Date>(new Date());
   const [refreshing, setRefreshing] = useState(false);
+  const [fixingAll, setFixingAll] = useState(false);
   const prevCountRef = useRef(0);
 
   const loadRequests = useCallback(async () => {
