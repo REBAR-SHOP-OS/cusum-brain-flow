@@ -499,8 +499,66 @@ export function VideoStudioPromptBar({
             </div>
           )}
 
-          {/* Reference image upload — video & image only */}
-          {(mediaType === "video" || mediaType === "image") && (
+          {/* First frame upload — video only */}
+          {mediaType === "video" && (
+            <>
+              <button
+                onClick={() => firstFrameInputRef.current?.click()}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border/30 transition-colors",
+                  firstFrameImage
+                    ? "bg-primary/10 text-primary border-primary/20"
+                    : "bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground"
+                )}
+              >
+                <ImagePlus className="w-3 h-3" />
+                {firstFrameImage ? "Frame 1 ✓" : "First Frame"}
+              </button>
+              <input
+                ref={firstFrameInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onFirstFrameImageChange?.(URL.createObjectURL(file));
+                  if (firstFrameInputRef.current) firstFrameInputRef.current.value = "";
+                }}
+                className="hidden"
+              />
+            </>
+          )}
+
+          {/* Last frame upload — video only */}
+          {mediaType === "video" && (
+            <>
+              <button
+                onClick={() => lastFrameInputRef.current?.click()}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border/30 transition-colors",
+                  lastFrameImage
+                    ? "bg-primary/10 text-primary border-primary/20"
+                    : "bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground"
+                )}
+              >
+                <ImagePlus className="w-3 h-3" />
+                {lastFrameImage ? "Frame 2 ✓" : "Last Frame"}
+              </button>
+              <input
+                ref={lastFrameInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onLastFrameImageChange?.(URL.createObjectURL(file));
+                  if (lastFrameInputRef.current) lastFrameInputRef.current.value = "";
+                }}
+                className="hidden"
+              />
+            </>
+          )}
+
+          {/* Reference image upload — image mode only */}
+          {mediaType === "image" && (
             <>
               <button
                 onClick={() => fileInputRef.current?.click()}
