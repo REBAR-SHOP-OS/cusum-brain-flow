@@ -108,13 +108,24 @@ export default function TimeClock() {
     } catch {}
   };
 
+  // Prevent double-scan
+  const scanningRef = useRef(false);
+
   // Handle scan
   const handleScan = async () => {
+    if (scanningRef.current) return;
+    scanningRef.current = true;
     setShowRegistration(false);
-    const result = await face.recognize();
-    // Only auto-punch for high-confidence AND well-enrolled profiles (3+ photos)
-    if (result && result.confidence >= 75 && (result.enrollment_count ?? 0) >= 3) {
-      setAutoPunchCountdown(2);
+    try {
+      const result = await face.recognize();
+      // Fast auto-punch for very high confidence + well-enrolled
+      if (result && result.confidence >= 85 && (result.enrollment_count ?? 0) >= 3) {
+        setAutoPunchCountdown(1);
+      } else if (result && result.confidence >= 75 && (result.enrollment_count ?? 0) >= 3) {
+        setAutoPunchCountdown(2);
+      }
+    } finally {
+      scanningRef.current = false;
     }
   };
 
