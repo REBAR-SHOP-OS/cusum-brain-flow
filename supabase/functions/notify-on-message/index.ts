@@ -160,9 +160,7 @@ async function handleSupportMessage(
 
   if (!companyProfiles || companyProfiles.length === 0) return;
 
-  // All notifications in English — no translation
   const notifRows: any[] = [];
-  const pushPromises: Promise<any>[] = [];
 
   for (const p of companyProfiles) {
     notifRows.push({
@@ -175,20 +173,6 @@ async function handleSupportMessage(
       priority: "high",
       metadata: { conversation_id },
     });
-
-    pushPromises.push(
-      fetch(sendPushUrl, {
-        method: "POST",
-        headers: pushHeaders,
-        body: JSON.stringify({
-          user_id: p.user_id,
-          title: titleEn,
-          body: preview,
-          linkTo: "/support-inbox",
-          tag: `support-${conversation_id}`,
-        }),
-      }).catch(() => {})
-    );
   }
 
   if (notifRows.length > 0) {
@@ -198,6 +182,5 @@ async function handleSupportMessage(
       console.error("Failed to insert support notifications:", err);
     }
   }
-
-  await Promise.allSettled(pushPromises);
+  // Push notifications are handled automatically by the push-on-notify DB trigger
 }
