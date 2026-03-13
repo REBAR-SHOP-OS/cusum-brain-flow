@@ -746,13 +746,31 @@ Deno.serve(async (req) => {
             ? `\n\n## USER-SELECTED IMAGE STYLES (MUST incorporate these aesthetics):\n${userImageStyles.map(k => IMAGE_STYLE_MAP[k] || k).join("\n")}\n\n`
             : "";
 
-          const imagePrompt = customInstructionsBlock + userStyleBlock +
+          // Product selection override from UI
+          const PRODUCT_PROMPT_MAP: Record<string, string> = {
+            fiberglass: "Rebar Fiberglass Straight — fiberglass reinforcement bars, lightweight, corrosion-resistant, used in marine and chemical environments",
+            stirrups: "Rebar Stirrups — bent steel reinforcement loops used to hold vertical rebar in columns and beams",
+            cages: "Rebar Cages — pre-assembled cylindrical or rectangular steel reinforcement cages for foundations and piles",
+            hooks: "Rebar Hooks — bent steel bars with hooked ends for anchoring in concrete structures",
+            dowels: "Rebar Dowels — straight steel bars used to connect concrete slabs and structural joints",
+            wire_mesh: "Wire Mesh — welded steel wire mesh sheets for slab reinforcement and concrete crack control",
+            straight: "Rebar Straight — standard straight steel reinforcement bars in various sizes",
+          };
+          const userSelectedProducts = (userContext as any)?.selectedProducts as string[] | undefined;
+          const productFocusOverride = userSelectedProducts?.length
+            ? userSelectedProducts.map(k => PRODUCT_PROMPT_MAP[k] || k).join("; ")
+            : null;
+          const productFocusBlock = productFocusOverride
+            ? `\n\n## USER-SELECTED PRODUCTS (image MUST prominently feature these products):\n${productFocusOverride}\nThe image must clearly show these specific products in a realistic industrial/construction setting.\n\n`
+            : "";
+
+          const imagePrompt = customInstructionsBlock + userStyleBlock + productFocusBlock +
             `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
             `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
             `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
             `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n\n` +
             `VISUAL STYLE: ${selectedStyle}. ` +
-            `PRODUCT FOCUS: ${slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
+            `PRODUCT FOCUS: ${productFocusOverride || slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
             dedupHint +

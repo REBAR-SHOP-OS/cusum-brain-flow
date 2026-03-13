@@ -89,7 +89,7 @@ export default function AgentWorkspace() {
   const [lastPixelPost, setLastPixelPost] = useState<PixelPost | null>(null);
   const [aiModel, setAiModel] = useState<string>("gemini");
   const [imageStyles, setImageStyles] = useState<string[]>([]);
-
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle } = useChatSessions();
   const hasConversation = messages.length > 0;
@@ -193,6 +193,7 @@ export default function AgentWorkspace() {
     if (agentId === "social") {
       extraContext.selectedDate = format(selectedDate, "yyyy-MM-dd");
       if (imageStyles.length > 0) extraContext.imageStyles = imageStyles;
+      if (selectedProducts.length > 0) extraContext.selectedProducts = selectedProducts;
     }
     if (mapping) {
       extraContext.userRole = mapping.userRole;
@@ -613,6 +614,8 @@ export default function AgentWorkspace() {
                 onModelChange={setAiModel}
                 imageStyles={imageStyles}
                 onImageStylesChange={setImageStyles}
+                selectedProducts={selectedProducts}
+                onSelectedProductsChange={setSelectedProducts}
               />
             </div>
 
@@ -650,6 +653,8 @@ export default function AgentWorkspace() {
               onModelChange={setAiModel}
               imageStyles={imageStyles}
               onImageStylesChange={setImageStyles}
+              selectedProducts={selectedProducts}
+              onSelectedProductsChange={setSelectedProducts}
             />
           </>
         )}

@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Cylinder, Square, Box, Anchor, ArrowDownUp, Grid3X3, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +34,16 @@ const IMAGE_STYLES = [
   { key: "inspirational", label: "الهام‌بخش", labelEn: "Inspirational", icon: Flame },
 ] as const;
 
+const PRODUCT_ICONS = [
+  { key: "fiberglass", label: "Fiberglass", labelFa: "فایبرگلاس", icon: Cylinder, color: "#22c55e" },
+  { key: "stirrups", label: "Stirrups", labelFa: "خاموت", icon: Square, color: "#f97316" },
+  { key: "cages", label: "Cages", labelFa: "قفسه", icon: Box, color: "#3b82f6" },
+  { key: "hooks", label: "Hooks", labelFa: "هوک", icon: Anchor, color: "#eab308" },
+  { key: "dowels", label: "Dowels", labelFa: "دوبل", icon: ArrowDownUp, color: "#ef4444" },
+  { key: "wire_mesh", label: "Wire Mesh", labelFa: "مش", icon: Grid3X3, color: "#a855f7" },
+  { key: "straight", label: "Rebar Straight", labelFa: "میلگرد مستقیم", icon: Minus, color: "#6b7280" },
+] as const;
+
 interface ChatInputProps {
   onSend: (message: string, files?: UploadedFile[]) => void;
   placeholder?: string;
@@ -45,6 +55,8 @@ interface ChatInputProps {
   onModelChange?: (model: string) => void;
   imageStyles?: string[];
   onImageStylesChange?: (styles: string[]) => void;
+  selectedProducts?: string[];
+  onSelectedProductsChange?: (products: string[]) => void;
 }
 
 export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({
@@ -58,6 +70,8 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   onModelChange,
   imageStyles = [],
   onImageStylesChange,
+  selectedProducts = [],
+  onSelectedProductsChange,
 }, ref) {
   const [value, setValue] = useState("");
   const [smartMode, setSmartMode] = useState(false);
@@ -529,6 +543,43 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
                         {style.label} / {style.labelEn}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Product Icons (Pixel agent only) */}
+            {minimalToolbar && onSelectedProductsChange && (
+              <div className="flex items-center gap-0.5 ml-1 border-l border-border/50 pl-1.5">
+                {PRODUCT_ICONS.map((prod) => {
+                  const active = selectedProducts.includes(prod.key);
+                  const ProdIcon = prod.icon;
+                  return (
+                    <Tooltip key={prod.key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = active
+                              ? selectedProducts.filter((p) => p !== prod.key)
+                              : [...selectedProducts, prod.key];
+                            onSelectedProductsChange(next);
+                          }}
+                          className={cn(
+                            "p-1.5 rounded-md transition-all",
+                            active
+                              ? "ring-2 ring-offset-1 ring-offset-background"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                          style={active ? { color: prod.color, backgroundColor: `${prod.color}20`, boxShadow: `0 0 0 2px ${prod.color}` } : undefined}
+                        >
+                          <ProdIcon className="w-5 h-5" style={active ? { color: prod.color } : undefined} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {prod.labelFa} / {prod.label}
                       </TooltipContent>
                     </Tooltip>
                   );
