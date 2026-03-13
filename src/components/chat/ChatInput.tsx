@@ -556,7 +556,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Product Icons (Pixel agent only) */}
             {minimalToolbar && onSelectedProductsChange && (
-              <div className="flex items-center gap-1 ml-1 border-l border-border/50 pl-2">
+              <div className="flex flex-wrap items-center gap-0.5 ml-1 border-l border-border/50 pl-1">
                 {PRODUCT_ICONS.map((prod) => {
                   const active = selectedProducts.includes(prod.key);
                   const ProdIcon = prod.icon;
