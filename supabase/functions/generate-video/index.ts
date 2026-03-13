@@ -60,10 +60,32 @@ function isProviderCapacityError(message: string): boolean {
 
 // ─── Veo helpers ────────────────────────────────────────────
 
-async function veoGenerate(apiKey: string, prompt: string, duration: number) {
+async function veoGenerate(
+  apiKey: string, prompt: string, duration: number,
+  firstFrameBase64?: string, firstFrameMimeType?: string,
+  lastFrameBase64?: string, lastFrameMimeType?: string,
+) {
   const model = "veo-3.1-generate-preview";
   const url = `${GEMINI_BASE}/models/${model}:predictLongRunning`;
   const veoDuration = snapDuration(duration, VEO_CLIP_DURATIONS);
+
+  const instance: Record<string, unknown> = { prompt };
+
+  // First frame image (image-to-video start)
+  if (firstFrameBase64) {
+    instance.image = {
+      bytesBase64Encoded: firstFrameBase64,
+      mimeType: firstFrameMimeType || "image/jpeg",
+    };
+  }
+
+  // Last frame image (image-to-video end) — NO nested `image` wrapper per Gemini API
+  if (lastFrameBase64) {
+    instance.lastFrame = {
+      bytesBase64Encoded: lastFrameBase64,
+      mimeType: lastFrameMimeType || "image/jpeg",
+    };
+  }
 
   const resp = await fetch(url, {
     method: "POST",
@@ -72,7 +94,7 @@ async function veoGenerate(apiKey: string, prompt: string, duration: number) {
       "x-goog-api-key": apiKey,
     },
     body: JSON.stringify({
-      instances: [{ prompt }],
+      instances: [instance],
       parameters: {
         sampleCount: 1,
         durationSeconds: veoDuration,
