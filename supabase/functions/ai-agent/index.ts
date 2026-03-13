@@ -796,10 +796,23 @@ Deno.serve(async (req) => {
               `The image MUST show exactly these products in this style. This overrides ALL other defaults below.\n\n`
             : "";
 
+          const NON_REALISTIC_STYLES = ["cartoon", "animation", "painting", "ai_modern"];
+          const userWantsNonRealistic = userImageStyles?.some((s: string) => NON_REALISTIC_STYLES.includes(s));
+
+          const realismRule = userWantsNonRealistic
+            ? `STYLE OVERRIDE: The user explicitly selected a non-photorealistic style. You MUST follow "${effectiveStyle}" EXACTLY. Do NOT make it photorealistic. Do NOT add real-camera or photograph qualities.\n\n`
+            : `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
+              `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
+              `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n`;
+
+          const qualitySuffix = userWantsNonRealistic
+            ? `- Ultra high resolution, 1:1 square aspect ratio, perfect for Instagram\n` +
+              `- Follow the "${effectiveStyle}" style with professional quality`
+            : `- Ultra high resolution, PHOTOREALISTIC ONLY, 1:1 square aspect ratio, perfect for Instagram\n` +
+              `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
+
           const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
-            `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
-            `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
-            `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
+            realismRule +
             `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n\n` +
             `VISUAL STYLE: ${effectiveStyle}. ` +
             `PRODUCT FOCUS: ${productFocusOverride || effectiveSlotProduct} for REBAR.SHOP. THEME: ${slot.theme}. ` +
@@ -812,8 +825,7 @@ Deno.serve(async (req) => {
             `- Use the specified visual style EXACTLY as described above\n` +
             `- FORBIDDEN: Do not repeat any composition, camera angle, color palette, or scene layout from recent images\n` +
             `- Each image must feel like it belongs to a completely different photo series\n` +
-            `- Ultra high resolution, PHOTOREALISTIC ONLY, 1:1 square aspect ratio, perfect for Instagram\n` +
-            `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
+            qualitySuffix;
 
           console.log(`🎨 Pixel: Generating image for slot ${slot.slot} with style #${selectedStyleIndex}: ${selectedStyle}...`);
           const imgResult = await generatePixelImage(imagePrompt, svcClient, logoUrl, { styleIndex: selectedStyleIndex, preferredModel, resourceImageUrls: brainImageRefs.slice(0, 3) });
