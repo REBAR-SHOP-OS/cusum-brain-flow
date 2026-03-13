@@ -133,13 +133,11 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
       const data = await invokeEdgeFunction<{ imageUrl: string }>("generate-image", {
         prompt: prompt.trim(),
         editImage: compositeBase64,
-        model: "google/gemini-3-pro-image-preview",
+        model: "google/gemini-3.1-flash-image-preview",
       }, { timeoutMs: 60000 });
 
       if (data.imageUrl) {
-        onImageReady(data.imageUrl);
-        onOpenChange(false);
-        toast({ title: "Image edited successfully" });
+        setPreviewUrl(data.imageUrl);
       } else {
         throw new Error("No image returned");
       }
