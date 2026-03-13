@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Clapperboard, Smile, Palette } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Clapperboard, Smile, Palette, RectangleHorizontal, Square } from "lucide-react";
 import { FiberglassIcon, StirrupIcon, CageIcon, HookIcon, DowelIcon, WireMeshIcon, StraightRebarIcon } from "./ProductIcons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
