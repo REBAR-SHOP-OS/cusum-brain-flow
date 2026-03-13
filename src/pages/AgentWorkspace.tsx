@@ -89,7 +89,7 @@ export default function AgentWorkspace() {
   const [lastPixelPost, setLastPixelPost] = useState<PixelPost | null>(null);
   const [aiModel, setAiModel] = useState<string>("gemini");
   const [imageStyles, setImageStyles] = useState<string[]>([]);
-
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle } = useChatSessions();
   const hasConversation = messages.length > 0;
