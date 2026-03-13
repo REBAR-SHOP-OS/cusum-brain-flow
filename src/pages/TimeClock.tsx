@@ -54,6 +54,9 @@ export default function TimeClock() {
   const [autoPunchCountdown, setAutoPunchCountdown] = useState(0);
   const [showRegistration, setShowRegistration] = useState(false);
 
+  // Cache of profile IDs confirmed during this kiosk session
+  const confirmedProfilesRef = useRef<Set<string>>(new Set());
+
   const now = new Date();
 
   // Fetch enrollment count
@@ -118,11 +121,15 @@ export default function TimeClock() {
     setShowRegistration(false);
     try {
       const result = await face.recognize();
-      // Fast auto-punch for very high confidence + well-enrolled
-      if (result && result.confidence >= 85 && (result.enrollment_count ?? 0) >= 3) {
-        setAutoPunchCountdown(1);
-      } else if (result && result.confidence >= 75 && (result.enrollment_count ?? 0) >= 3) {
-        setAutoPunchCountdown(2);
+      if (result && result.confidence >= 75) {
+        // If this person was already confirmed in this session, auto-punch immediately
+        if (confirmedProfilesRef.current.has(result.profile_id)) {
+          setAutoPunchCountdown(1);
+        } else if (result.confidence >= 85 && (result.enrollment_count ?? 0) >= 3) {
+          setAutoPunchCountdown(1);
+        } else if ((result.enrollment_count ?? 0) >= 3) {
+          setAutoPunchCountdown(2);
+        }
       }
     } finally {
       scanningRef.current = false;
@@ -166,6 +173,9 @@ export default function TimeClock() {
       console.error("[TimeClock] kiosk-punch exception:", err);
       toast.error("Punch failed");
     }
+
+    // Remember this person for the session so next scan skips confirmation
+    confirmedProfilesRef.current.add(profileId);
 
     face.reset();
     setAutoPunchCountdown(0);
