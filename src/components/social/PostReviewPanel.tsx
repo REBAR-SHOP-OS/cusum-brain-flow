@@ -748,11 +748,6 @@ export function PostReviewPanel({
                     className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
                     disabled={publishing}
                     onClick={async () => {
-                      // Neel approval guard
-                      if (!post.neel_approved) {
-                        toast({ title: "Neel Approval Required", description: "This post must be approved by Neel before publishing.", variant: "destructive" });
-                        return;
-                      }
                       if (localPages.length === 0) {
                         toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
                         return;

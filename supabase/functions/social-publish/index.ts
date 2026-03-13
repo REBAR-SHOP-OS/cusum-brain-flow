@@ -74,6 +74,7 @@ serve(async (req) => {
       image_url: z.string().url().max(2000).optional(),
       post_id: z.string().uuid().optional(),
       page_name: z.string().optional(),
+      force_publish: z.boolean().optional(),
     });
     const parsed = publishSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -82,7 +83,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { platform, message: rawMessage, image_url, post_id, page_name } = parsed.data;
+    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish } = parsed.data;
 
     // Strip Persian translation block — server-side safety net
     let message = rawMessage;
@@ -114,8 +115,8 @@ serve(async (req) => {
       }
     }
 
-    // Server-side Neel approval guard
-    if (post_id) {
+    // Server-side Neel approval guard (skipped for manual "Publish Now" via force_publish)
+    if (post_id && !force_publish) {
       const { data: postCheck } = await supabaseAdmin
         .from("social_posts")
         .select("neel_approved")
