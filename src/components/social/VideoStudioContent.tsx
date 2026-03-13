@@ -95,6 +95,8 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const [negativePrompt, setNegativePrompt] = useState("");
   const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
   const [customAudioStorageUrl, setCustomAudioStorageUrl] = useState<string | null>(null);
+  const [firstFrameImage, setFirstFrameImage] = useState<string | null>(null);
+  const [lastFrameImage, setLastFrameImage] = useState<string | null>(null);
 
   // Image generation state
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
