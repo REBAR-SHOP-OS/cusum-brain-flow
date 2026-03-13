@@ -218,6 +218,21 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
             invoice_date: invoiceDate,
           });
         if (slipErr) throw slipErr;
+
+        // Store resolved metadata for preview
+        slipMetaRef.current = {
+          slipMeta: {
+            slipNumber,
+            invoiceNumber: invoiceNumber || undefined,
+            invoiceDate: invoiceDate || undefined,
+            shipTo: shipTo || undefined,
+            scope: scope || undefined,
+            deliveryDate,
+          },
+          customerName: selectedBundle.customerName || selectedBundle.projectName || "",
+          siteAddress: siteAddress || "",
+          items: itemsJson,
+        };
       } catch (innerErr) {
         await supabase.from("delivery_stops").delete().eq("delivery_id", delivery.id);
         await supabase.from("deliveries").update({ status: "pending" }).eq("id", delivery.id);
@@ -229,6 +244,10 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
     },
     onSuccess: () => {
       toast.success("Packing slip created");
+      queryClient.invalidateQueries({ queryKey: ["pickup-delivery-for-plan", selectedBundle?.cutPlanId] });
+      if (slipMetaRef.current) {
+        setShowSlipPreview(true);
+      }
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to create packing slip");
