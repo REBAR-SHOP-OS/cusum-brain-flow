@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Clapperboard, Smile, Palette } from "lucide-react";
 import { FiberglassIcon, StirrupIcon, CageIcon, HookIcon, DowelIcon, WireMeshIcon, StraightRebarIcon } from "./ProductIcons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,9 @@ const IMAGE_STYLES = [
   { key: "nature", label: "Nature", icon: TreePine, color: "#22c55e" },
   { key: "advertising", label: "Advertising", icon: Megaphone, color: "#ec4899" },
   { key: "inspirational", label: "Inspirational", icon: Flame, color: "#f97316" },
+  { key: "cartoon", label: "Cartoon", icon: Smile, color: "#a855f7" },
+  { key: "animation", label: "Animation", icon: Clapperboard, color: "#8b5cf6" },
+  { key: "painting", label: "Painting", icon: Palette, color: "#e11d48" },
 ] as const;
 
 const PRODUCT_ICONS = [

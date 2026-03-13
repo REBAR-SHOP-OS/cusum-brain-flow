@@ -758,6 +758,9 @@ Deno.serve(async (req) => {
             nature: "Natural outdoor setting, lush greenery, calm atmosphere, sustainable construction, blue sky and trees",
             advertising: "Commercial product photography, polished studio lighting, bold text overlays, brand-forward composition",
             inspirational: "Dramatic lighting, hero shot, empowering composition, golden hour, motivational atmosphere",
+            cartoon: "Cartoon style illustration, bold outlines, vibrant flat colors, exaggerated proportions, comic book aesthetic, clean vector-like rendering",
+            animation: "3D animated render, Pixar/Disney-quality, smooth surfaces, dramatic lighting, cinematic depth of field, stylized realism",
+            painting: "Oil painting style, visible brush strokes, rich color palette, artistic composition, impressionist or classical fine art aesthetic",
           };
           const userImageStyles = (userContext as any)?.imageStyles as string[] | undefined;
           // When user explicitly selected styles, override the random pool style
