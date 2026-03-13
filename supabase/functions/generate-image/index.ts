@@ -174,7 +174,7 @@ serve(async (req) => {
       if (editImage) {
         const hasRef = referenceImage && typeof referenceImage === "string";
         const editPrompt = hasRef
-          ? `You are an image editor. The user has marked areas in RED on the first image. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". Use the second image as a visual reference/inspiration for the edit. Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`
+          ? `You are an image editor. The user has marked areas in RED on the first image. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". The second image is a reference asset provided by the user. You MUST incorporate/place this exact image into the red-marked area as instructed. Reproduce the reference image as faithfully as possible in the designated area. Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`
           : `You are an image editor. The user has marked areas in RED on the image below. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`;
 
         const contentParts: any[] = [
