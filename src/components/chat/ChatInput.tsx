@@ -516,7 +516,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Image Style Icons (Pixel agent only) */}
             {minimalToolbar && onImageStylesChange && (
-              <div className="flex items-center gap-1 ml-1">
+              <div className="flex flex-wrap items-center gap-0.5 ml-1">
                 {IMAGE_STYLES.map((style) => {
                   const active = imageStyles.includes(style.key);
                   const Icon = style.icon;
@@ -532,7 +532,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             onImageStylesChange(next);
                           }}
                           className={cn(
-                            "p-2 rounded-lg transition-all border-2",
+                            "p-1.5 rounded-lg transition-all border-2",
                             active
                               ? "border-current shadow-md scale-110"
                               : "border-transparent hover:scale-105"
@@ -542,7 +542,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             backgroundColor: active ? `${style.color}25` : `${style.color}10`,
                           }}
                         >
-                          <Icon className="w-5 h-5" />
+                          <Icon className="w-4 h-4" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
@@ -556,7 +556,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Product Icons (Pixel agent only) */}
             {minimalToolbar && onSelectedProductsChange && (
-              <div className="flex items-center gap-1 ml-1 border-l border-border/50 pl-2">
+              <div className="flex flex-wrap items-center gap-0.5 ml-1 border-l border-border/50 pl-1">
                 {PRODUCT_ICONS.map((prod) => {
                   const active = selectedProducts.includes(prod.key);
                   const ProdIcon = prod.icon;
@@ -572,7 +572,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             onSelectedProductsChange(next);
                           }}
                           className={cn(
-                            "p-2 transition-all border-2",
+                            "p-1.5 transition-all border-2",
                             prod.shape,
                             active
                               ? "border-current shadow-lg scale-110"
@@ -583,7 +583,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             backgroundColor: active ? `${prod.color}25` : `${prod.color}10`,
                           }}
                         >
-                          <ProdIcon className="w-6 h-6" />
+                          <ProdIcon className="w-5 h-5" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
