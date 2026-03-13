@@ -473,6 +473,12 @@ export function PostReviewPanel({
                       </label>
                     </div>
                     <div className="flex gap-2">
+                      {post?.image_url && !isVideo && (
+                        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowImageEdit(true)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit Image
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowStoryGen(true)}>
                         <Smartphone className="w-3.5 h-3.5" />
                         Auto Generate Story
