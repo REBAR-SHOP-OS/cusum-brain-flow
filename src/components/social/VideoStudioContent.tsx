@@ -442,6 +442,70 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     if (negativePrompt.trim()) wanExtras.negativePrompt = negativePrompt.trim();
     wanExtras.aspectRatio = "16:9";
 
+    // Upload first/last frame images for Veo I2V and convert to base64
+    let firstFrameBase64: string | undefined;
+    let firstFrameMimeType: string | undefined;
+    let lastFrameBase64: string | undefined;
+    let lastFrameMimeType: string | undefined;
+
+    if (effectiveVideoProvider === "veo" && (firstFrameImage || lastFrameImage)) {
+      try {
+        setProgressLabel("Uploading frame images...");
+        if (firstFrameImage) {
+          const resp = await fetch(firstFrameImage);
+          const blob = await resp.blob();
+          firstFrameMimeType = blob.type || "image/jpeg";
+          const arrayBuf = await blob.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuf);
+          let binary = "";
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          firstFrameBase64 = btoa(binary);
+        }
+        if (lastFrameImage) {
+          const resp = await fetch(lastFrameImage);
+          const blob = await resp.blob();
+          lastFrameMimeType = blob.type || "image/jpeg";
+          const arrayBuf = await blob.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuf);
+          let binary = "";
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          lastFrameBase64 = btoa(binary);
+        }
+      } catch (err: any) {
+        console.error("Frame image processing failed:", err);
+        toast({ title: "Frame image error", description: err.message, variant: "destructive" });
+        setStatus("idle"); return;
+      }
+    }
+
+    // For Wan I2V, use firstFrameImage as reference image
+    if (effectiveVideoProvider === "wan" && isI2vModel && firstFrameImage && !refImageStorageUrl) {
+      try {
+        setProgressLabel("Uploading first frame as reference...");
+        const resp = await fetch(firstFrameImage);
+        const blob = await resp.blob();
+        const { data: { user } } = await supabase.auth.getUser();
+        const fileName = `ref-images/${user?.id}/${crypto.randomUUID()}.${blob.type.includes("png") ? "png" : "jpg"}`;
+        const { error: upErr } = await supabase.storage.from("social-media-assets").upload(fileName, blob, { contentType: blob.type, upsert: false });
+        if (upErr) throw upErr;
+        const { data: pubData } = supabase.storage.from("social-media-assets").getPublicUrl(fileName);
+        wanExtras.imageUrl = pubData.publicUrl;
+      } catch (err: any) {
+        console.error("First frame upload for Wan failed:", err);
+      }
+    }
+
+    // Add Veo frame parameters
+    const veoFrameExtras: Record<string, unknown> = {};
+    if (firstFrameBase64) {
+      veoFrameExtras.firstFrameBase64 = firstFrameBase64;
+      veoFrameExtras.firstFrameMimeType = firstFrameMimeType;
+    }
+    if (lastFrameBase64) {
+      veoFrameExtras.lastFrameBase64 = lastFrameBase64;
+      veoFrameExtras.lastFrameMimeType = lastFrameMimeType;
+    }
+
     try {
       if (isMultiScene) {
         const sceneCount = Math.ceil(requestedDuration / effectiveMaxClip);
