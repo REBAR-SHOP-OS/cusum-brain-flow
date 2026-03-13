@@ -86,7 +86,7 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
       }
       ctx.stroke();
     }
-  }, [imgLoaded, strokes, currentStroke]);
+  }, [imgLoaded, strokes, currentStroke, previewUrl]);
 
   const getCanvasPos = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
