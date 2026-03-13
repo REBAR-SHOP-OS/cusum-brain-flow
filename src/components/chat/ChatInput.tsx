@@ -520,82 +520,95 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
             {/* Image Style Icons (Pixel agent only) */}
             {minimalToolbar && onImageStylesChange && (
-              <div className="flex flex-wrap items-center gap-0.5 ml-1">
-                {IMAGE_STYLES.map((style) => {
-                  const active = imageStyles.includes(style.key);
-                  const Icon = style.icon;
-                  return (
-                    <Tooltip key={style.key}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = active
-                              ? imageStyles.filter((s) => s !== style.key)
-                              : [...imageStyles, style.key];
-                            onImageStylesChange(next);
-                          }}
-                          className={cn(
-                            "p-1.5 rounded-lg transition-all border-2",
-                            active
-                              ? "border-current shadow-md scale-110"
-                              : "border-transparent hover:scale-105"
-                          )}
-                          style={{
-                            color: style.color,
-                            backgroundColor: active ? `${style.color}25` : `${style.color}10`,
-                          }}
-                        >
-                          <Icon className="w-4 h-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">
-                        {style.label}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
+              <div className="flex items-center gap-1 ml-1">
+                <div className="flex flex-col items-center gap-0.5 bg-muted/30 rounded-lg px-1.5 py-0.5">
+                  <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Style</span>
+                  <div className="flex flex-wrap items-center gap-0.5">
+                    {IMAGE_STYLES.map((style) => {
+                      const active = imageStyles.includes(style.key);
+                      const Icon = style.icon;
+                      return (
+                        <Tooltip key={style.key}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = active
+                                  ? imageStyles.filter((s) => s !== style.key)
+                                  : [...imageStyles, style.key];
+                                onImageStylesChange(next);
+                              }}
+                              className={cn(
+                                "p-1.5 rounded-lg transition-all border-2",
+                                active
+                                  ? "border-current shadow-md scale-110"
+                                  : "border-transparent hover:scale-105"
+                              )}
+                              style={{
+                                color: style.color,
+                                backgroundColor: active ? `${style.color}25` : `${style.color}10`,
+                              }}
+                            >
+                              <Icon className="w-4 h-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            {style.label}
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Divider between Style and Products */}
+                {onSelectedProductsChange && (
+                  <div className="w-px h-8 bg-border mx-0.5" />
+                )}
               </div>
             )}
 
             {/* Product Icons (Pixel agent only) */}
             {minimalToolbar && onSelectedProductsChange && (
-              <div className="flex flex-wrap items-center gap-0.5 ml-1 border-l border-border/50 pl-1">
-                {PRODUCT_ICONS.map((prod) => {
-                  const active = selectedProducts.includes(prod.key);
-                  const ProdIcon = prod.icon;
-                  return (
-                    <Tooltip key={prod.key}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = active
-                              ? selectedProducts.filter((p) => p !== prod.key)
-                              : [...selectedProducts, prod.key];
-                            onSelectedProductsChange(next);
-                          }}
-                          className={cn(
-                            "p-1.5 transition-all border-2",
-                            prod.shape,
-                            active
-                              ? "border-current shadow-lg scale-110"
-                              : "border-transparent hover:scale-105"
-                          )}
-                          style={{
-                            color: prod.color,
-                            backgroundColor: active ? `${prod.color}25` : `${prod.color}10`,
-                          }}
-                        >
-                          <ProdIcon className="w-5 h-5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">
-                        {prod.label}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
+              <div className="flex flex-col items-center gap-0.5 bg-primary/5 rounded-lg px-1.5 py-0.5 ml-0.5">
+                <span className="text-[9px] font-medium text-primary/60 uppercase tracking-wider">Products</span>
+                <div className="flex flex-wrap items-center gap-0.5">
+                  {PRODUCT_ICONS.map((prod) => {
+                    const active = selectedProducts.includes(prod.key);
+                    const ProdIcon = prod.icon;
+                    return (
+                      <Tooltip key={prod.key}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = active
+                                ? selectedProducts.filter((p) => p !== prod.key)
+                                : [...selectedProducts, prod.key];
+                              onSelectedProductsChange(next);
+                            }}
+                            className={cn(
+                              "p-1.5 transition-all border-2",
+                              prod.shape,
+                              active
+                                ? "border-current shadow-lg scale-110"
+                                : "border-transparent hover:scale-105"
+                            )}
+                            style={{
+                              color: prod.color,
+                              backgroundColor: active ? `${prod.color}25` : `${prod.color}10`,
+                            }}
+                          >
+                            <ProdIcon className="w-5 h-5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          {prod.label}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
