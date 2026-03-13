@@ -10,6 +10,7 @@ import { useTeamChannels, useMyProfile } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useOpenDM } from "@/hooks/useChannelManagement";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useUnreadSenders } from "@/hooks/useUnreadSenders";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
@@ -40,6 +41,7 @@ export function DockChatBar() {
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
+  const { unreadSenderIds } = useUnreadSenders();
   const [launcherOpen, setLauncherOpen] = useState(false);
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
@@ -165,7 +167,10 @@ export function DockChatBar() {
                           {getInitials(p.full_name)}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-sm text-foreground truncate">{p.full_name}</span>
+                      <span className="text-sm text-foreground truncate flex-1">{p.full_name}</span>
+                      {unreadSenderIds.has(p.id) && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                      )}
                     </button>
                   ))}
               </div>

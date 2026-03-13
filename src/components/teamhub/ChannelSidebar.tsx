@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { TeamChannel } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
+import { useUnreadSenders } from "@/hooks/useUnreadSenders";
 
 interface ChannelSidebarProps {
   channels: TeamChannel[];
@@ -50,6 +51,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [dmsOpen, setDmsOpen] = useState(true);
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const { unreadSenderIds } = useUnreadSenders();
 
   const groupChannels = channels.filter((c) => c.channel_type === "group");
   const dmChannels = channels.filter((c) => c.channel_type === "dm");
@@ -221,6 +223,9 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
                     <div className="flex-1 min-w-0">
                       <span className="text-xs text-foreground truncate block">{p.full_name}</span>
                     </div>
+                    {unreadSenderIds.has(p.id) && (
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                    )}
                     {p.preferred_language && p.preferred_language !== "en" && (
                       <span className="text-[9px] text-muted-foreground/60">{p.preferred_language.toUpperCase()}</span>
                     )}
