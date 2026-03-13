@@ -193,6 +193,7 @@ export default function AgentWorkspace() {
     if (agentId === "social") {
       extraContext.selectedDate = format(selectedDate, "yyyy-MM-dd");
       if (imageStyles.length > 0) extraContext.imageStyles = imageStyles;
+      if (selectedProducts.length > 0) extraContext.selectedProducts = selectedProducts;
     }
     if (mapping) {
       extraContext.userRole = mapping.userRole;
