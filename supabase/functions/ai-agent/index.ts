@@ -970,6 +970,7 @@ Deno.serve(async (req) => {
     const messages: ChatMessage[] = [
       { role: "system", content: staticSystemPrompt },
       ...(dynamicContext || docSummary ? [{ role: "system" as const, content: dynamicContext + docSummary }] : []),
+      ...styleSystemMessage,
       ...history.slice(-10),
       { role: "user", content: message },
     ];
