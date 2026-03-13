@@ -354,7 +354,36 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
             {checkedItems.size} of {selectedBundle.items.length} selected
           </span>
           {existingDelivery ? (
-            <Badge variant="outline" className="text-success border-success/40 gap-1">
+            <Badge
+              variant="outline"
+              className="text-success border-success/40 gap-1 cursor-pointer hover:bg-success/10 transition-colors"
+              onClick={async () => {
+                // Load existing packing slip data for preview
+                const slipId = (existingDelivery as any)?.packing_slips?.[0]?.id;
+                if (!slipId) return;
+                const { data: slip } = await supabase
+                  .from("packing_slips")
+                  .select("*")
+                  .eq("id", slipId)
+                  .single();
+                if (slip) {
+                  slipMetaRef.current = {
+                    slipMeta: {
+                      slipNumber: slip.slip_number || undefined,
+                      invoiceNumber: slip.invoice_number || undefined,
+                      invoiceDate: slip.invoice_date || undefined,
+                      shipTo: slip.ship_to || undefined,
+                      scope: slip.scope || undefined,
+                      deliveryDate: slip.delivery_date || undefined,
+                    },
+                    customerName: slip.customer_name || "",
+                    siteAddress: slip.site_address || "",
+                    items: (slip.items_json as any[]) || [],
+                  };
+                  setShowSlipPreview(true);
+                }
+              }}
+            >
               <CheckCircle2 className="w-3.5 h-3.5" />
               Packing Slip Created
             </Badge>
@@ -373,6 +402,18 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
             </Button>
           )}
         </div>
+
+        {/* Packing Slip Preview overlay */}
+        {showSlipPreview && slipMetaRef.current && (
+          <PackingSlipPreview
+            slipMeta={slipMetaRef.current.slipMeta}
+            customerName={slipMetaRef.current.customerName}
+            siteAddress={slipMetaRef.current.siteAddress}
+            items={slipMetaRef.current.items}
+            signatureData={null}
+            onClose={() => setShowSlipPreview(false)}
+          />
+        )}
       </div>
     );
   }
