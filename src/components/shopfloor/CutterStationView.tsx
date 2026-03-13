@@ -81,11 +81,15 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         // Verify the actual run is still running before restoring
         supabase
           .from("machine_runs")
-          .select("id, status")
+          .select("id, status, started_at, output_qty")
           .eq("id", machine.current_run_id)
           .single()
           .then(async ({ data: runRow, error: runErr }) => {
-            if (runErr || !runRow || runRow.status !== "running") {
+            // Check if run is stale: running but started >60 min ago with no output
+            const isStale = runRow?.status === "running" && runRow.started_at &&
+              (Date.now() - new Date(runRow.started_at).getTime() > 60 * 60 * 1000) &&
+              (!runRow.output_qty || runRow.output_qty === 0);
+            if (runErr || !runRow || runRow.status !== "running" || isStale) {
               // Stale run — auto-clear instead of forcing abort
               console.warn("[CutterStation] Stale run detected (status:", runRow?.status, "), auto-clearing");
               try {
