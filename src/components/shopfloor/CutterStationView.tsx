@@ -261,9 +261,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   // Determine if machine is actively running (local start or DB status)
   // Only treat DB "running" as active if the locked job matches the current item
-  const dbRunMatchesCurrent = !completedLocally && machine.status === "running" && machine.current_run_id != null
-    && (!machine.active_job_id || machine.active_job_id === currentItem?.id);
-  const machineIsRunning = isRunning || dbRunMatchesCurrent;
+  const machineHasActiveRun = !completedLocally && machine.status === "running" && machine.current_run_id != null;
+  const runMatchesCurrentItem = machineHasActiveRun && (!machine.active_job_id || machine.active_job_id === currentItem?.id);
+  const machineHasMismatchedRun = machineHasActiveRun && machine.active_job_id != null && machine.active_job_id !== currentItem?.id;
+  const machineIsRunning = isRunning || runMatchesCurrentItem;
 
   // Clear completedLocally flag once DB catches up
   useEffect(() => {
