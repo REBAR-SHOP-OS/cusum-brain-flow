@@ -1,62 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix Style & Product Enforcement in Image Generation
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-There are two image generation paths, and both have issues:
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-1. **LLM free-text path** (when user types anything other than 1-5): The `generate_image` tool handler in `agentToolExecutor.ts` receives the LLM's prompt but does NOT inject the user's style/product selections. It relies entirely on the LLM including them — which often fails. The `socialStyleOverride` in the system prompt is a hint, but the LLM frequently ignores it.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-2. **Deterministic slot path** (when user types 1-5): The style/product ARE in the image prompt, but the output title still shows default slot product (`slot.product`) instead of the overridden one (`effectiveSlotProduct`).
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Changes
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 1. `supabase/functions/_shared/agentToolExecutor.ts` — `generate_image` handler (~line 521-568)
-Inject style/product overrides directly into the image prompt when `context.imageStyles` or `context.selectedProducts` exist:
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-```typescript
-// After line 527 (const imagePrompt = args.prompt || ...)
-// Build mandatory style/product prefix from user selections
-let styleProductPrefix = "";
-if (agent === "social" && context) {
-  const IMAGE_STYLE_MAP = { /* same 10 styles */ };
-  const PRODUCT_PROMPT_MAP = { /* same 7 products */ };
-  const NON_REALISTIC = ["cartoon","animation","painting","ai_modern"];
-  
-  const uStyles = (context.imageStyles as string[]) || [];
-  const uProducts = (context.selectedProducts as string[]) || [];
-  
-  if (uStyles.length) {
-    const desc = uStyles.map(k => IMAGE_STYLE_MAP[k] || k).join(". ");
-    const isNonRealistic = uStyles.some(s => NON_REALISTIC.includes(s));
-    styleProductPrefix += `MANDATORY STYLE: ${desc}. `;
-    if (isNonRealistic) {
-      styleProductPrefix += `This is a NON-PHOTOREALISTIC style — do NOT make photorealistic. `;
-    }
-  }
-  if (uProducts.length) {
-    const desc = uProducts.map(k => PRODUCT_PROMPT_MAP[k] || k).join("; ");
-    styleProductPrefix += `MANDATORY PRODUCT FOCUS: ${desc}. `;
-  }
-}
-const finalPrompt = styleProductPrefix + imagePrompt + "\n\nIMPORTANT: Place the text ...";
-```
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-This ensures that even when the LLM generates a generic prompt, the style/product are prepended as mandatory instructions to the image model.
-
-### 2. `supabase/functions/ai-agent/index.ts` — Slot title fix (~line 840-841)
-Change `slot.product` to `effectiveSlotProduct` in the output markdown so the title reflects the user's selection:
-
-```typescript
-// Before:
-`### Slot ${slot.slot} — ${slot.product}\n\n`
-// After:
-`### Slot ${slot.slot} — ${effectiveSlotProduct}\n\n`
-```
-
-Same fix on line 849 for the error case.
-
-### Files
-- `supabase/functions/_shared/agentToolExecutor.ts` — inject style/product into image generation prompt
-- `supabase/functions/ai-agent/index.ts` — fix slot title to show user-selected product
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
