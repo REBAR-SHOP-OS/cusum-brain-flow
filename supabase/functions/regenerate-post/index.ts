@@ -387,7 +387,7 @@ CRITICAL RULES:
 - ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM
 - FORBIDDEN WORDS: guarantee, guaranteed, ensures, ensure, promise, warranty, certified, certify, unparalleled, revolutionary, superior, structural integrity, load-bearing, tensile strength, AI-driven, precision-engineered, interlocks, unmatched, finest, unbeatable, top-notch, scientifically, assured
 - Be creative, bold, and specific
-- The image slogan must be short enough to be readable on an image
+- IMAGE SLOGAN RULES: Must be a simple, beautiful advertising phrase. Maximum 6 words. No technical jargon. No guarantees. No scientific claims. Must be grammatically perfect English. Think billboard advertising.
 - SESSION CREATIVE SEED: ${sessionSeed} — use this to drive a UNIQUE creative direction
 ${brainKnowledge ? "- You MUST follow any brand guidelines from the Brain Context above" : ""}
 
