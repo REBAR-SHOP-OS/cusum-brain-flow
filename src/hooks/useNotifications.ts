@@ -22,6 +22,15 @@ export interface Notification {
   createdAt: string;
 }
 
+// Module-level dedup guard: prevents duplicate side effects across multiple hook instances
+const processedIds = new Set<string>();
+function shouldProcess(id: string): boolean {
+  if (processedIds.has(id)) return false;
+  processedIds.add(id);
+  setTimeout(() => processedIds.delete(id), 5000);
+  return true;
+}
+
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
