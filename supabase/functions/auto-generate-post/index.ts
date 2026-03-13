@@ -3,6 +3,79 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { buildEventPromptBlock } from "../_shared/eventCalendar.ts";
 
+/** Resolve company logo URL from storage (same as Pixel agent) */
+async function resolveLogoUrl(): Promise<string | null> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  if (!supabaseUrl) return null;
+  const logoUrl = `${supabaseUrl}/storage/v1/object/public/social-images/brand/company-logo.png`;
+  try {
+    const check = await fetch(logoUrl, { method: "HEAD" });
+    if (!check.ok) { console.warn(`⚠️ Logo not found (HTTP ${check.status})`); return null; }
+  } catch { return null; }
+  return logoUrl;
+}
+
+/** Fetch brain knowledge: custom instructions + resource image URLs */
+async function fetchBrainContext(supabase: ReturnType<typeof createClient>): Promise<{
+  customInstructions: string;
+  resourceImageUrls: string[];
+}> {
+  let customInstructions = "";
+  const resourceImageUrls: string[] = [];
+  try {
+    // Fetch text knowledge
+    const { data: brainItems } = await supabase
+      .from("knowledge")
+      .select("title, content, category, metadata, source_url")
+      .order("created_at", { ascending: false });
+
+    if (brainItems) {
+      const socialItems = brainItems.filter(
+        (item: any) => (item.metadata as any)?.agent === "social"
+      );
+      const instructions = socialItems.find(
+        (item: any) => (item.metadata as any)?.type === "instructions"
+      );
+      if (instructions?.content) {
+        customInstructions = instructions.content;
+      }
+    }
+
+    // Fetch image resources
+    const { data: imgKnowledge } = await supabase
+      .from("knowledge")
+      .select("source_url, metadata")
+      .eq("category", "image")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (imgKnowledge) {
+      const socialImages = imgKnowledge.filter((k: any) => (k.metadata as any)?.agent === "social");
+      for (const item of socialImages.slice(0, 5)) {
+        if (!item.source_url) continue;
+        const meta = item.metadata as Record<string, any> | null;
+        const storagePath = meta?.storage_path;
+        const storageBucket = meta?.storage_bucket || "estimation-files";
+        if (storagePath) {
+          const { data: signedData } = await supabase.storage
+            .from(storageBucket)
+            .createSignedUrl(storagePath, 3600);
+          if (signedData?.signedUrl) { resourceImageUrls.push(signedData.signedUrl); continue; }
+        }
+        if (item.source_url.includes("/object/public/")) {
+          try { const h = await fetch(item.source_url, { method: "HEAD" }); if (h.ok) resourceImageUrls.push(item.source_url); } catch {}
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not fetch brain context:", e);
+  }
+  // Filter out SVGs
+  const filtered = resourceImageUrls.filter(u => !/\.svg(\?|$)/i.test(u));
+  console.log(`Brain: instructions=${customInstructions.length > 0 ? "yes" : "no"}, images=${filtered.length}`);
+  return { customInstructions, resourceImageUrls: filtered };
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
