@@ -757,8 +757,14 @@ export function PostReviewPanel({
                         return;
                       }
 
+                      const publishablePlatforms = localPlatforms.filter(p => p !== "unassigned");
+                      if (publishablePlatforms.length === 0) {
+                        toast({ title: "No publishable platform", description: "Please select a valid platform (not 'unassigned').", variant: "destructive" });
+                        return;
+                      }
+
                       const combos: { platform: string; page: string }[] = [];
-                      for (const plat of localPlatforms) {
+                      for (const plat of publishablePlatforms) {
                         const dbPlat = platformMap[plat] || plat;
                         for (const page of localPages) {
                           combos.push({ platform: dbPlat, page });
