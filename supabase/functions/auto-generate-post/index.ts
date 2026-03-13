@@ -402,7 +402,34 @@ Return an array of 5 objects:
           if (!LOVABLE_API_KEY || !post.image_prompt) return null;
           try {
             console.log(`Generating image for post ${idx + 1}/${generatedPosts.length}...`);
-            const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+
+            // Build multimodal content with logo + brain refs
+            const fullPrompt = brainInstructionsText + post.image_prompt;
+            const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+
+            if (logoUrl) {
+              contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+              contentParts.push({
+                type: "text",
+                text: "CRITICAL: Place this EXACT logo image as-is in the generated image, in a visible corner as a watermark. " +
+                  "Do NOT modify, distort, recreate, or redraw the logo. Use ONLY the provided logo image. " +
+                  "Do NOT add text-based watermarks.",
+              });
+            }
+
+            // Attach up to 3 brain resource images as visual references
+            for (const refUrl of brainCtx.resourceImageUrls.slice(0, 3)) {
+              contentParts.push({ type: "image_url", image_url: { url: refUrl } });
+            }
+            if (brainCtx.resourceImageUrls.length > 0) {
+              contentParts.push({
+                type: "text",
+                text: "The above reference images show REAL products and brand style. Use them as visual inspiration for composition, product appearance, and brand identity.",
+              });
+            }
+
+            // Try with logo/refs first, fallback to text-only on failure
+            let imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -410,10 +437,27 @@ Return an array of 5 objects:
               },
               body: JSON.stringify({
                 model: "google/gemini-2.5-flash-image",
-                messages: [{ role: "user", content: post.image_prompt }],
+                messages: [{ role: "user", content: contentParts }],
                 modalities: ["image", "text"],
               }),
             });
+
+            // Fallback: if multimodal fails and we had attachments, retry text-only
+            if (!imgResp.ok && (logoUrl || brainCtx.resourceImageUrls.length > 0)) {
+              console.warn(`Multimodal image gen failed (${imgResp.status}), retrying text-only...`);
+              imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-2.5-flash-image",
+                  messages: [{ role: "user", content: fullPrompt }],
+                  modalities: ["image", "text"],
+                }),
+              });
+            }
 
             if (!imgResp.ok) {
               console.error("Image generation failed:", imgResp.status, await imgResp.text());
