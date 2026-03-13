@@ -167,7 +167,10 @@ export function DockChatBar() {
                           {getInitials(p.full_name)}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-sm text-foreground truncate">{p.full_name}</span>
+                      <span className="text-sm text-foreground truncate flex-1">{p.full_name}</span>
+                      {unreadSenderIds.has(p.id) && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                      )}
                     </button>
                   ))}
               </div>
