@@ -373,7 +373,7 @@ ${brainBlock}
 YOUR TASK — Generate COMPLETELY NEW and DIFFERENT advertising content. Follow these rules STRICTLY:
 
 1. Write a compelling, UNIQUE English caption (2-4 sentences) for this product/topic. Use relevant emojis.
-2. Write a SHORT English advertising slogan (MAXIMUM 8 words) that will be printed directly ON the image. It must be catchy and specific.
+2. Write a SHORT English advertising slogan (MAXIMUM 6 words) that will be printed ON the image. It MUST be: simple, catchy, beautiful, and grammatically perfect English. Pure advertising tagline — NO guarantees, NO technical terms, NO scientific claims. Think billboard: short, emotional, memorable. GOOD: "Steel That Builds Dreams", "Your Project, Our Pride". BAD: "Unparalleled Structural Integrity", "Guaranteed Quality Framework".
 3. Write 8-12 relevant hashtags as a single string separated by spaces.
 4. Translate the caption to Farsi (Persian) — this MUST be a premium-quality, natural-sounding Persian translation. Do NOT translate word-by-word. Instead, rewrite the meaning in beautiful, fluent Persian that sounds like it was originally written by a native Persian copywriter. Use elegant vocabulary, proper Persian grammar, and a professional advertising tone.
 5. Translate the image slogan to Farsi (Persian) — same quality standard: fluent, catchy, natural Persian. Not a literal translation.
@@ -387,7 +387,7 @@ CRITICAL RULES:
 - ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM
 - FORBIDDEN WORDS: guarantee, guaranteed, ensures, ensure, promise, warranty, certified, certify, unparalleled, revolutionary, superior, structural integrity, load-bearing, tensile strength, AI-driven, precision-engineered, interlocks, unmatched, finest, unbeatable, top-notch, scientifically, assured
 - Be creative, bold, and specific
-- The image slogan must be short enough to be readable on an image
+- IMAGE SLOGAN RULES: Must be a simple, beautiful advertising phrase. Maximum 6 words. No technical jargon. No guarantees. No scientific claims. Must be grammatically perfect English. Think billboard advertising.
 - SESSION CREATIVE SEED: ${sessionSeed} — use this to drive a UNIQUE creative direction
 ${brainKnowledge ? "- You MUST follow any brand guidelines from the Brain Context above" : ""}
 

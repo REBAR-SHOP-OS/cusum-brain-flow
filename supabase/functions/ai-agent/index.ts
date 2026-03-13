@@ -86,7 +86,7 @@ ${brainBlock}
 YOUR TASK — Generate UNIQUE advertising content. Follow these rules STRICTLY:
 
 1. Write a compelling, UNIQUE English caption (2-4 sentences) for this product with the given theme. Use relevant emojis. The caption must be fresh, creative, and NEVER repeat any generic or template-like phrasing.
-2. Write a SHORT English advertising slogan (MAXIMUM 8 words) that will be printed directly ON the image. It must be catchy, memorable, and specific to the product.
+2. Write a SHORT English advertising slogan (MAXIMUM 6 words) that will be printed ON the image. It MUST be: simple, catchy, beautiful, and grammatically perfect English. It should be a pure advertising tagline — NO guarantees, NO technical terms, NO scientific claims. Think of it like a billboard slogan: short, emotional, memorable. Examples of GOOD slogans: "Steel That Builds Dreams", "Your Project, Our Pride", "Strength Meets Style". Examples of BAD slogans: "Unparalleled Structural Integrity", "AI-Driven Precision Engineering", "Guaranteed Quality Framework".
 3. Write 8-12 relevant hashtags as a single string separated by spaces.
 4. Translate the caption to Farsi (Persian) — this MUST be a premium-quality, natural-sounding Persian translation. Do NOT translate word-by-word. Instead, rewrite the meaning in beautiful, fluent Persian that sounds like it was originally written by a native Persian copywriter. Use elegant vocabulary, proper Persian grammar, and a professional advertising tone. The translation should feel natural and compelling to a Persian-speaking audience.
 5. Translate the image slogan to Farsi (Persian) — same quality standard: fluent, catchy, natural Persian. Not a literal translation. It should sound like a professional Persian advertising slogan.
@@ -98,7 +98,7 @@ CRITICAL RULES:
 - Every single call MUST produce COMPLETELY NEW and ORIGINAL content
 - NEVER use generic phrases like "Building strong" or "Engineering excellence"
 - Be creative, bold, and specific to the product
-- The image slogan must be short enough to be readable when printed on an image
+- IMAGE SLOGAN RULES: Must be a simple, beautiful advertising phrase. Maximum 6 words. No technical jargon. No guarantees. No scientific claims. Must be grammatically perfect English. Think billboard advertising.
 - ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM, morning, afternoon, evening, dawn, sunrise, sunset, or any time-related phrases in the caption, slogan, or translations. This is a STRICT RULE with ZERO exceptions.
 - Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
 - SESSION CREATIVE SEED: ${sessionSeed || crypto.randomUUID()} — You MUST use this seed to drive a COMPLETELY UNIQUE creative direction. No two sessions should ever produce similar styles, angles, metaphors, or visual concepts. Treat this seed as your creative DNA for this specific session.
