@@ -182,7 +182,7 @@ async function generatePixelImage(
         });
       }
 
-      console.log(`  → Attempt: ${attempt.model}, logo=${attempt.useLogo && !!logoUrl}`);
+      console.log(`  → Attempt: ${attempt.model}, logo=${attempt.useLogo && !!logoUrl}, refs=${attempt.useRefs}`);
       const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
