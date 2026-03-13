@@ -672,10 +672,26 @@ Deno.serve(async (req) => {
             ? `\nFORBIDDEN STYLES (already used recently, DO NOT use): ${forbiddenStyles.join("; ")}`
             : "";
 
-          const imagePrompt = customInstructionsBlock +
+          // Build user-selected style directives from context.imageStyles
+          const IMAGE_STYLE_MAP: Record<string, string> = {
+            realism: "Ultra-photorealistic, shot on professional DSLR, natural lighting, real textures, shallow depth of field",
+            urban: "Urban cityscape setting, modern architecture, street-level industrial aesthetics, city life atmosphere",
+            construction: "Active construction site, heavy machinery, steel structures, workers in safety gear, raw industrial energy",
+            ai_modern: "Futuristic tech-forward aesthetic, clean geometric lines, digital integration with physical world, neon accents",
+            nature: "Natural outdoor setting, lush greenery, calm atmosphere, sustainable construction, blue sky and trees",
+            advertising: "Commercial product photography, polished studio lighting, bold text overlays, brand-forward composition",
+            inspirational: "Dramatic lighting, hero shot, empowering composition, golden hour, motivational atmosphere",
+          };
+          const userImageStyles = (userContext as any)?.imageStyles as string[] | undefined;
+          const userStyleBlock = userImageStyles?.length
+            ? `\n\n## USER-SELECTED IMAGE STYLES (MUST incorporate these aesthetics):\n${userImageStyles.map(k => IMAGE_STYLE_MAP[k] || k).join("\n")}\n\n`
+            : "";
+
+          const imagePrompt = customInstructionsBlock + userStyleBlock +
             `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
             `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
             `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
+            `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n\n` +
             `VISUAL STYLE: ${selectedStyle}. ` +
             `PRODUCT FOCUS: ${slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
