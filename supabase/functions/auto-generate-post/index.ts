@@ -3,6 +3,79 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { buildEventPromptBlock } from "../_shared/eventCalendar.ts";
 
+/** Resolve company logo URL from storage (same as Pixel agent) */
+async function resolveLogoUrl(): Promise<string | null> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  if (!supabaseUrl) return null;
+  const logoUrl = `${supabaseUrl}/storage/v1/object/public/social-images/brand/company-logo.png`;
+  try {
+    const check = await fetch(logoUrl, { method: "HEAD" });
+    if (!check.ok) { console.warn(`⚠️ Logo not found (HTTP ${check.status})`); return null; }
+  } catch { return null; }
+  return logoUrl;
+}
+
+/** Fetch brain knowledge: custom instructions + resource image URLs */
+async function fetchBrainContext(supabase: ReturnType<typeof createClient>): Promise<{
+  customInstructions: string;
+  resourceImageUrls: string[];
+}> {
+  let customInstructions = "";
+  const resourceImageUrls: string[] = [];
+  try {
+    // Fetch text knowledge
+    const { data: brainItems } = await supabase
+      .from("knowledge")
+      .select("title, content, category, metadata, source_url")
+      .order("created_at", { ascending: false });
+
+    if (brainItems) {
+      const socialItems = brainItems.filter(
+        (item: any) => (item.metadata as any)?.agent === "social"
+      );
+      const instructions = socialItems.find(
+        (item: any) => (item.metadata as any)?.type === "instructions"
+      );
+      if (instructions?.content) {
+        customInstructions = instructions.content;
+      }
+    }
+
+    // Fetch image resources
+    const { data: imgKnowledge } = await supabase
+      .from("knowledge")
+      .select("source_url, metadata")
+      .eq("category", "image")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (imgKnowledge) {
+      const socialImages = imgKnowledge.filter((k: any) => (k.metadata as any)?.agent === "social");
+      for (const item of socialImages.slice(0, 5)) {
+        if (!item.source_url) continue;
+        const meta = item.metadata as Record<string, any> | null;
+        const storagePath = meta?.storage_path;
+        const storageBucket = meta?.storage_bucket || "estimation-files";
+        if (storagePath) {
+          const { data: signedData } = await supabase.storage
+            .from(storageBucket)
+            .createSignedUrl(storagePath, 3600);
+          if (signedData?.signedUrl) { resourceImageUrls.push(signedData.signedUrl); continue; }
+        }
+        if (item.source_url.includes("/object/public/")) {
+          try { const h = await fetch(item.source_url, { method: "HEAD" }); if (h.ok) resourceImageUrls.push(item.source_url); } catch {}
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not fetch brain context:", e);
+  }
+  // Filter out SVGs
+  const filtered = resourceImageUrls.filter(u => !/\.svg(\?|$)/i.test(u));
+  console.log(`Brain: instructions=${customInstructions.length > 0 ? "yes" : "no"}, images=${filtered.length}`);
+  return { customInstructions, resourceImageUrls: filtered };
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -159,13 +232,18 @@ serve(async (req) => {
       weekday: "long", month: "long", day: "numeric", year: "numeric",
     });
 
-    // Fetch business intelligence + brand kit in parallel
-    const [intelligence, brandKit] = await Promise.all([
+    // Fetch business intelligence + brand kit + logo + brain in parallel
+    const [intelligence, brandKit, logoUrl, brainCtx] = await Promise.all([
       fetchBusinessIntelligence(authHeader),
       fetchBrandKit(supabaseAdmin, userId),
+      resolveLogoUrl(),
+      fetchBrainContext(supabaseAdmin),
     ]);
 
     const products = pickUniqueProducts(TIME_SLOTS.length);
+    const brainInstructionsText = brainCtx.customInstructions
+      ? `\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${brainCtx.customInstructions}\n`
+      : "";
     const instructionsText = customInstructions ? `\nCustom instructions: ${customInstructions}` : "";
 
     // Generate for EACH platform
@@ -245,7 +323,7 @@ Scientific explanations, technical specifications, engineering terminology, mate
 - Purely promotional advertising style — NOT fantasy, cartoon, or scientific/technical
 - Clean, professional, visually striking — like professional documentary/commercial photography
 - Use Brain files (logo & content reference) when available
-${instructionsText}
+${brainInstructionsText}${instructionsText}
 
 Return valid JSON only. No markdown, no code blocks.
 Return an array of 5 objects:
@@ -324,7 +402,34 @@ Return an array of 5 objects:
           if (!LOVABLE_API_KEY || !post.image_prompt) return null;
           try {
             console.log(`Generating image for post ${idx + 1}/${generatedPosts.length}...`);
-            const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+
+            // Build multimodal content with logo + brain refs
+            const fullPrompt = brainInstructionsText + post.image_prompt;
+            const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+
+            if (logoUrl) {
+              contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+              contentParts.push({
+                type: "text",
+                text: "CRITICAL: Place this EXACT logo image as-is in the generated image, in a visible corner as a watermark. " +
+                  "Do NOT modify, distort, recreate, or redraw the logo. Use ONLY the provided logo image. " +
+                  "Do NOT add text-based watermarks.",
+              });
+            }
+
+            // Attach up to 3 brain resource images as visual references
+            for (const refUrl of brainCtx.resourceImageUrls.slice(0, 3)) {
+              contentParts.push({ type: "image_url", image_url: { url: refUrl } });
+            }
+            if (brainCtx.resourceImageUrls.length > 0) {
+              contentParts.push({
+                type: "text",
+                text: "The above reference images show REAL products and brand style. Use them as visual inspiration for composition, product appearance, and brand identity.",
+              });
+            }
+
+            // Try with logo/refs first, fallback to text-only on failure
+            let imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -332,10 +437,27 @@ Return an array of 5 objects:
               },
               body: JSON.stringify({
                 model: "google/gemini-2.5-flash-image",
-                messages: [{ role: "user", content: post.image_prompt }],
+                messages: [{ role: "user", content: contentParts }],
                 modalities: ["image", "text"],
               }),
             });
+
+            // Fallback: if multimodal fails and we had attachments, retry text-only
+            if (!imgResp.ok && (logoUrl || brainCtx.resourceImageUrls.length > 0)) {
+              console.warn(`Multimodal image gen failed (${imgResp.status}), retrying text-only...`);
+              imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-2.5-flash-image",
+                  messages: [{ role: "user", content: fullPrompt }],
+                  modalities: ["image", "text"],
+                }),
+              });
+            }
 
             if (!imgResp.ok) {
               console.error("Image generation failed:", imgResp.status, await imgResp.text());

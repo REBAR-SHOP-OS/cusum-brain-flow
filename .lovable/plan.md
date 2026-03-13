@@ -1,44 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Auto-Generate Must Include Company Logo (Like Pixel Agent)
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The `auto-generate-post` edge function generates images by sending a plain text prompt to the AI (line 335):
-```
-messages: [{ role: "user", content: post.image_prompt }]
-```
-No logo image is attached. The Pixel agent, by contrast, uses `resolveLogoUrl()` to fetch the logo from storage (`social-images/brand/company-logo.png`), attaches it as a multimodal image, and includes strict instructions to place it exactly as-is.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Solution
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### `supabase/functions/auto-generate-post/index.ts`
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-1. **Add `resolveLogoUrl()` function** — same as in `ai-agent/index.ts`: constructs the storage URL, does a HEAD check, returns URL or null.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-2. **Fetch brain knowledge** (custom instructions + resource images) — same pattern as `regenerate-post/index.ts`: query `knowledge` table for social agent items, extract custom instructions and resource image URLs.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-3. **Modify `generateAndUploadImage()`** to use multimodal content:
-   - Attach logo image via `image_url` with strict placement instructions
-   - Attach up to 3 brain resource images as visual references
-   - Prepend custom instructions to the image prompt
-   - Use the same retry pipeline pattern (try with logo → retry without if it fails)
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-4. **Call `resolveLogoUrl()` and fetch brain once** before the platform loop (not per-image), pass results into `generateAndUploadImage()`.
-
-### Key code change in `generateAndUploadImage()`:
-```typescript
-// Before: simple text prompt
-messages: [{ role: "user", content: post.image_prompt }]
-
-// After: multimodal with logo + refs
-const contentParts = [{ type: "text", text: fullPrompt }];
-if (logoUrl) {
-  contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
-  contentParts.push({ type: "text", text: "CRITICAL: Place this logo EXACTLY as-is..." });
-}
-messages: [{ role: "user", content: contentParts }]
-```
-
-### Files
-- `supabase/functions/auto-generate-post/index.ts` — add logo resolution, brain fetch, multimodal image generation
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
