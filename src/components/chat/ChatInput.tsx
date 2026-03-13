@@ -550,6 +550,43 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
               </div>
             )}
 
+            {/* Product Icons (Pixel agent only) */}
+            {minimalToolbar && onSelectedProductsChange && (
+              <div className="flex items-center gap-0.5 ml-1 border-l border-border/50 pl-1.5">
+                {PRODUCT_ICONS.map((prod) => {
+                  const active = selectedProducts.includes(prod.key);
+                  const ProdIcon = prod.icon;
+                  return (
+                    <Tooltip key={prod.key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = active
+                              ? selectedProducts.filter((p) => p !== prod.key)
+                              : [...selectedProducts, prod.key];
+                            onSelectedProductsChange(next);
+                          }}
+                          className={cn(
+                            "p-1.5 rounded-md transition-all",
+                            active
+                              ? "ring-2 ring-offset-1 ring-offset-background"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                          style={active ? { color: prod.color, backgroundColor: `${prod.color}20`, ringColor: prod.color } : undefined}
+                        >
+                          <ProdIcon className="w-5 h-5" style={active ? { color: prod.color } : undefined} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {prod.labelFa} / {prod.label}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Spacer */}
             <div className="flex-1" />
 
