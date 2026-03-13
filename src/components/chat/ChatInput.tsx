@@ -542,7 +542,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             backgroundColor: active ? `${style.color}25` : `${style.color}10`,
                           }}
                         >
-                          <Icon className="w-5 h-5" />
+                          <Icon className="w-4 h-4" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
