@@ -1,46 +1,27 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Image Edit: Preview Before Apply
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+Currently, when the user clicks "Apply", the edited image is immediately sent to the parent via `onImageReady` and the dialog closes. The user has no chance to see the result and accept/reject it.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Solution
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### `src/components/social/ImageEditDialog.tsx`
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+1. **Add `previewUrl` state** — stores the base64/URL of the AI-edited image returned from the edge function.
+2. **Change `handleApply` flow**:
+   - Call the edge function as before (already uses Nano Banana / Gemini image model via `generate-image`).
+   - Instead of calling `onImageReady` immediately, set `previewUrl` with the result.
+3. **Add preview UI**:
+   - When `previewUrl` is set, show the edited image preview with two buttons: **"Confirm"** (✓) and **"Retry"** (↻).
+   - **Confirm**: calls `onImageReady(previewUrl)`, closes dialog.
+   - **Retry**: clears `previewUrl`, returns to the canvas/prompt editing state so user can try again.
+4. **Hide canvas and controls** when preview is showing — show only the preview image and confirm/retry buttons.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### Model
+The edge function already uses `google/gemini-3-pro-image-preview` for edit mode — no backend changes needed. Optionally switch to `google/gemini-3.1-flash-image-preview` (Nano Banana 2) for faster edits.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### Files
+- `src/components/social/ImageEditDialog.tsx` — add preview state and confirm/retry UI
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
