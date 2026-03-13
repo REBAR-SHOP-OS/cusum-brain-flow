@@ -572,6 +572,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     setAnalysisResults(null); setShowInsights(false); setAnalyzing(false);
     setSuggestedHashtags([]); setModerationStatus("safe");
     setNegativePrompt(""); setCustomAudioFile(null); setCustomAudioStorageUrl(null);
+    setFirstFrameImage(null); setLastFrameImage(null);
   };
 
   const handleAnalyzeVideo = async () => {
