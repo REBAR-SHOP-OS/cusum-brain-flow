@@ -105,7 +105,9 @@ export default function SocialMediaManager() {
     if (platformFilter !== "all") {
       items = items.filter((p) => p.platform === platformFilter);
     }
-    if (statusFilter !== "all") {
+    if (statusFilter === "approved_by_neel") {
+      items = items.filter((p) => p.neel_approved);
+    } else if (statusFilter !== "all") {
       items = items.filter((p) => p.status === statusFilter);
     }
     if (searchQuery.trim()) {
