@@ -449,6 +449,26 @@ export function PostReviewPanel({
                           </span>
                         </Button>
                       </label>
+                      <label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const blobUrl = URL.createObjectURL(file);
+                            handleMediaReady(blobUrl, "image");
+                            e.target.value = "";
+                          }}
+                        />
+                        <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                          <span>
+                            <Upload className="w-3.5 h-3.5" />
+                            Upload Image
+                          </span>
+                        </Button>
+                      </label>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowStoryGen(true)}>
