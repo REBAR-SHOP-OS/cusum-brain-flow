@@ -143,6 +143,8 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
             ...(defaultMetadata || {}),
             file_name: f.name,
             file_type: f.name.split(".").pop(),
+            storage_bucket: "estimation-files",
+            storage_path: f.path,
           },
           company_id: companyId,
         }));
