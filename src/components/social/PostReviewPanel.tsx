@@ -288,11 +288,13 @@ export function PostReviewPanel({
 
   const handleContentTypeSave = (value: string) => {
     setLocalContentType(value);
+    updatePost.mutate({ id: post.id, content_type: value });
     setSubPanel(null);
   };
 
   const handlePagesSaveMulti = (values: string[]) => {
     setLocalPages(values);
+    updatePost.mutate({ id: post.id, page_name: values.join(", ") });
     setSubPanel(null);
   };
 
