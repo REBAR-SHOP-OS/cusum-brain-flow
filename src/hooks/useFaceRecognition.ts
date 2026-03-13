@@ -23,7 +23,7 @@ export function useFaceRecognition() {
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
       });
       setCameraStream(stream);
       if (videoRef.current) {
@@ -49,13 +49,13 @@ export function useFaceRecognition() {
     const canvas = canvasRef.current;
     if (!video || !canvas) return null;
 
-    canvas.width = 640;
-    canvas.height = 480;
+    canvas.width = 1280;
+    canvas.height = 960;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    ctx.drawImage(video, 0, 0, 640, 480);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+    ctx.drawImage(video, 0, 0, 1280, 960);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     return dataUrl.split(",")[1];
   }, []);
 
