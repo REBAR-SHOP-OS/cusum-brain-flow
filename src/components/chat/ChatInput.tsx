@@ -573,7 +573,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                               ? "ring-2 ring-offset-1 ring-offset-background"
                               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                           )}
-                          style={active ? { color: prod.color, backgroundColor: `${prod.color}20`, ringColor: prod.color } : undefined}
+                          style={active ? { color: prod.color, backgroundColor: `${prod.color}20`, boxShadow: `0 0 0 2px ${prod.color}` } : undefined}
                         >
                           <ProdIcon className="w-5 h-5" style={active ? { color: prod.color } : undefined} />
                         </button>
