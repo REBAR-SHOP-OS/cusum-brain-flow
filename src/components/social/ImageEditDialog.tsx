@@ -137,6 +137,7 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
         prompt: prompt.trim(),
         editImage: compositeBase64,
         model: "google/gemini-3.1-flash-image-preview",
+        ...(referenceImage ? { referenceImage } : {}),
       }, { timeoutMs: 60000 });
 
       if (data.imageUrl) {
