@@ -532,7 +532,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             onImageStylesChange(next);
                           }}
                           className={cn(
-                            "p-2 rounded-lg transition-all border-2",
+                            "p-1.5 rounded-lg transition-all border-2",
                             active
                               ? "border-current shadow-md scale-110"
                               : "border-transparent hover:scale-105"
