@@ -594,7 +594,7 @@ Deno.serve(async (req) => {
       const regenMatch = msgLower.match(/regenerate\s*(?:slot\s*)?([1-5])/i);
       const isRegenerate = !!regenMatch;
 
-      const timeSlotNum: number | undefined = undefined; // time-based input removed
+      const timeSlotNum: number | undefined = (pixelSlot && typeof pixelSlot === "number" && pixelSlot >= 1 && pixelSlot <= 5) ? pixelSlot : undefined;
 
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
