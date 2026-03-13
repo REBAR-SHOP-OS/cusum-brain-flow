@@ -119,6 +119,13 @@ export default function SocialMediaManager() {
           p.hashtags.some((h) => h.toLowerCase().includes(q))
       );
     }
+    if (statusFilter === "pending_approval") {
+      items = [...items].sort((a, b) => {
+        const da = a.scheduled_date ? new Date(a.scheduled_date).getTime() : Infinity;
+        const db = b.scheduled_date ? new Date(b.scheduled_date).getTime() : Infinity;
+        return da - db;
+      });
+    }
     return items;
   }, [posts, platformFilter, statusFilter, searchQuery]);
 
@@ -486,46 +493,57 @@ export default function SocialMediaManager() {
           ) : (
             <div>
               <p className="text-sm text-muted-foreground mb-3">{filteredPosts.length} post(s) pending approval</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filteredPosts.map((post) => (
-                  <button
-                    key={post.id}
-                    onClick={() => {
-                      const siblingPages = [...new Set(
-                        posts
-                          .filter(s => s.title === post.title && s.platform === post.platform && s.scheduled_date === post.scheduled_date)
-                          .map(s => s.page_name)
-                          .filter(Boolean)
-                      )] as string[];
-                      setGroupPages(siblingPages.length > 0 ? siblingPages : []);
-                      setSelectedPost(post);
-                    }}
-                    className="flex gap-3 p-3 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors text-left"
-                  >
-                    {post.image_url && (
-                      <img
-                        src={post.image_url}
-                        alt=""
-                        className="w-16 h-16 rounded-lg object-cover shrink-0"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-[10px] font-semibold uppercase text-muted-foreground">{post.platform}</span>
-                        {post.page_name && (
-                          <span className="text-[10px] text-muted-foreground/70 truncate">· {post.page_name}</span>
+              <div className="flex flex-col gap-2">
+                {(() => {
+                  let lastDateLabel = "";
+                  return filteredPosts.map((post) => {
+                    const dateLabel = post.scheduled_date
+                      ? format(parseISO(post.scheduled_date), "MMM d, yyyy")
+                      : "No date";
+                    const showHeader = dateLabel !== lastDateLabel;
+                    lastDateLabel = dateLabel;
+                    return (
+                      <div key={post.id}>
+                        {showHeader && (
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-3 mb-1.5">
+                            📅 {dateLabel}
+                          </p>
                         )}
+                        <button
+                          onClick={() => {
+                            const siblingPages = [...new Set(
+                              posts
+                                .filter(s => s.title === post.title && s.platform === post.platform && s.scheduled_date === post.scheduled_date)
+                                .map(s => s.page_name)
+                                .filter(Boolean)
+                            )] as string[];
+                            setGroupPages(siblingPages.length > 0 ? siblingPages : []);
+                            setSelectedPost(post);
+                          }}
+                          className="flex gap-3 p-3 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors text-left w-full"
+                        >
+                          {post.image_url && (
+                            <img
+                              src={post.image_url}
+                              alt=""
+                              className="w-16 h-16 rounded-lg object-cover shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-[10px] font-semibold uppercase text-muted-foreground">{post.platform}</span>
+                              {post.page_name && (
+                                <span className="text-[10px] text-muted-foreground/70 truncate">· {post.page_name}</span>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium truncate">{post.title || "Untitled"}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{post.content}</p>
+                          </div>
+                        </button>
                       </div>
-                      <p className="text-sm font-medium truncate">{post.title || "Untitled"}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{post.content}</p>
-                      {post.scheduled_date && (
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          📅 {format(parseISO(post.scheduled_date), "MMM d, yyyy")}
-                        </p>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                    );
+                  });
+                })()}
               </div>
             </div>
           )
