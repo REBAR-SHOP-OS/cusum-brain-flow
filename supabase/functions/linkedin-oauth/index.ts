@@ -189,11 +189,13 @@ async function handleCallback(
     throw new Error("Failed to store tokens");
   }
 
-  // Close popup and signal success
-  return new Response(
-    `<html><body><script>window.opener?.postMessage({type:'oauth-success',integration:'linkedin'},'*');window.close();</script><p>LinkedIn connected! You can close this window.</p></body></html>`,
-    { headers: { "Content-Type": "text/html" } }
-  );
+  // Redirect back to app's own callback page (same origin → popup closes reliably)
+  const appBase = returnUrl || "https://erp.rebar.shop";
+  const successUrl = new URL("/integrations/callback", appBase);
+  successUrl.searchParams.set("status", "success");
+  successUrl.searchParams.set("integration", "linkedin");
+  successUrl.searchParams.set("email", profileName);
+  return Response.redirect(successUrl.toString(), 302);
 }
 
 // ─── Auth URL ──────────────────────────────────────────────────────
