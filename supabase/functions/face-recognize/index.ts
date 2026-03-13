@@ -215,7 +215,7 @@ You MUST call the face_match_result function with your answer.`,
             },
           },
         ],
-        toolChoice: "auto",
+        toolChoice: { type: "function", function: { name: "face_match_result" } },
       });
       console.log(`[face-recognize] AI response: toolCalls=${aiResult.toolCalls?.length}, content=${aiResult.content?.slice(0, 200)}`);
     } catch (aiErr) {
