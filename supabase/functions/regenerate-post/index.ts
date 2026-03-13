@@ -422,7 +422,38 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       if (recentFiles) recentImageNames = recentFiles.map((f: any) => f.name);
     } catch (e) { console.warn("Could not fetch recent images for dedup:", e); }
 
-    // Style selection with dedup
+    // Style & product maps for user overrides
+    const IMAGE_STYLE_MAP: Record<string, string> = {
+      realism: "Ultra-photorealistic, shot on professional DSLR, natural lighting, real textures, shallow depth of field",
+      urban: "Urban cityscape setting, modern architecture, street-level industrial aesthetics, city life atmosphere",
+      construction: "Active construction site, heavy machinery, steel structures, workers in safety gear, raw industrial energy",
+      ai_modern: "Futuristic tech-forward aesthetic, clean geometric lines, digital integration with physical world, neon accents",
+      nature: "Natural outdoor setting, lush greenery, calm atmosphere, sustainable construction, blue sky and trees",
+      advertising: "Commercial product photography, polished studio lighting, bold text overlays, brand-forward composition",
+      inspirational: "Dramatic lighting, hero shot, empowering composition, golden hour, motivational atmosphere",
+    };
+    const PRODUCT_PROMPT_MAP: Record<string, string> = {
+      fiberglass: "Rebar Fiberglass Straight — fiberglass reinforcement bars, lightweight, corrosion-resistant",
+      stirrups: "Rebar Stirrups — bent steel reinforcement loops used to hold vertical rebar in columns and beams",
+      cages: "Rebar Cages — pre-assembled cylindrical or rectangular steel reinforcement cages for foundations and piles",
+      hooks: "Rebar Hooks — bent steel bars with hooked ends for anchoring in concrete structures",
+      dowels: "Rebar Dowels — straight steel bars used to connect concrete slabs and structural joints",
+      wire_mesh: "Wire Mesh — welded steel wire mesh sheets for slab reinforcement and concrete crack control",
+      straight: "Rebar Straight — standard straight steel reinforcement bars in various sizes",
+    };
+
+    // User overrides from request
+    const userEffectiveStyle = imageStyles?.length
+      ? imageStyles.map((k: string) => IMAGE_STYLE_MAP[k] || k).join(". ")
+      : null;
+    const userProductFocus = selectedProducts?.length
+      ? selectedProducts.map((k: string) => PRODUCT_PROMPT_MAP[k] || k).join("; ")
+      : null;
+    const productFocusBlock = userProductFocus
+      ? `\n\n## USER-SELECTED PRODUCTS (image MUST prominently feature these products):\n${userProductFocus}\nThe image must clearly show these specific products in a realistic industrial/construction setting.\n\n`
+      : "";
+
+    // Style selection with dedup (user override takes priority)
     const usedStyleIndices = new Set<number>();
     for (const name of recentImageNames) {
       const match = name.match(/-s(\d+)-/);
@@ -433,6 +464,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       .filter(({ idx }) => !usedStyleIndices.has(idx));
     const stylePool = availableStyles.length > 0 ? availableStyles : VISUAL_STYLES_POOL.map((s, idx) => ({ style: s, idx }));
     const selected = stylePool[Math.floor(Math.random() * stylePool.length)];
+    const effectiveStyle = userEffectiveStyle || selected.style;
 
     const dedupHint = recentImageNames.length > 0
       ? `\n\nPREVIOUSLY GENERATED (MUST NOT resemble any of these): ${recentImageNames.slice(0, 15).join(", ")}`
