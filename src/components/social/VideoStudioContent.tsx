@@ -538,6 +538,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
           duration: requestedDuration,
           model: selectedModel,
           ...wanExtras,
+          ...veoFrameExtras,
         });
         if (data?.status === "failed") { setError(data.error || "Failed to start generation."); setStatus("failed"); return; }
         if (data?.mode === "slideshow" && Array.isArray(data.imageUrls)) {
