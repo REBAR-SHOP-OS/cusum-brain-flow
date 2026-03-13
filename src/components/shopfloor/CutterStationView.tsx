@@ -66,31 +66,49 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // ── REFRESH-SAFE STATE RESTORATION ──
   // On mount, if machine has an active locked job, restore state from backend
   // Validates the actual run status before blindly restoring to avoid stale "ABORT" state
+  // Also auto-clears if the active job is already completed (cut_done)
   useEffect(() => {
     if (restoredFromBackend) return;
-    // Don't finalize restoration until items have loaded
     if (items.length === 0) return;
     if (
       machine.cut_session_status === "running" &&
       machine.active_job_id &&
       machine.machine_lock
     ) {
-      // Find the item matching the locked job
       const lockedIndex = items.findIndex(i => i.id === machine.active_job_id);
+
+      // ── Check if the active job is already completed (cut_done) ──
+      const lockedItem = lockedIndex >= 0 ? items[lockedIndex] : null;
+      const isJobDone = lockedItem && (lockedItem.phase === "cut_done" || lockedItem.completed_pieces >= lockedItem.total_pieces);
+
+      if (isJobDone && machine.current_run_id) {
+        // Active job is done — auto-clear stale lock
+        console.warn("[CutterStation] Active job is cut_done, auto-clearing lock");
+        manageMachine({
+          action: "complete-run",
+          machineId: machine.id,
+          runId: machine.current_run_id,
+          outputQty: 0,
+          scrapQty: 0,
+          notes: "Auto-cleared: active job already cut_done",
+        }).catch(e => console.warn("[CutterStation] Auto-clear cut_done failed:", e));
+        setCompletedLocally(true);
+        queryClient.invalidateQueries({ queryKey: ["live-machines"] });
+        setRestoredFromBackend(true);
+        return;
+      }
+
       if (lockedIndex >= 0 && machine.current_run_id) {
-        // Verify the actual run is still running before restoring
         supabase
           .from("machine_runs")
           .select("id, status, started_at, output_qty")
           .eq("id", machine.current_run_id)
           .single()
           .then(async ({ data: runRow, error: runErr }) => {
-            // Check if run is stale: running but started >60 min ago with no output
             const isStale = runRow?.status === "running" && runRow.started_at &&
               (Date.now() - new Date(runRow.started_at).getTime() > 60 * 60 * 1000) &&
               (!runRow.output_qty || runRow.output_qty === 0);
             if (runErr || !runRow || runRow.status !== "running" || isStale) {
-              // Stale run — auto-clear instead of forcing abort
               console.warn("[CutterStation] Stale run detected (status:", runRow?.status, "), auto-clearing");
               try {
                 await manageMachine({
@@ -107,13 +125,11 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               setCompletedLocally(true);
               queryClient.invalidateQueries({ queryKey: ["live-machines"] });
             } else {
-              // Run is genuinely active — restore as before
               setCurrentIndex(lockedIndex);
               setTrackedItemId(machine.active_job_id!);
               setIsRunning(true);
               setActiveRunId(machine.current_run_id);
               setCompletedAtRunStart(0);
-              // Fetch fresh completed count for snapshot
               supabase
                 .from("cut_plan_items")
                 .select("completed_pieces")
@@ -130,6 +146,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               console.log("[CutterStation] Restored active job from backend:", machine.active_job_id);
             }
           });
+      } else if (lockedIndex < 0 && machine.current_run_id) {
+        // ── Active job not in current items list (mismatch) — show banner, don't auto-clear ──
+        console.warn("[CutterStation] Active job", machine.active_job_id, "not found in items list (mismatch)");
+        // We'll handle this in the render via machineHasMismatchedRun
       }
     }
     setRestoredFromBackend(true);
@@ -241,9 +261,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
 
   // Determine if machine is actively running (local start or DB status)
   // Only treat DB "running" as active if the locked job matches the current item
-  const dbRunMatchesCurrent = !completedLocally && machine.status === "running" && machine.current_run_id != null
-    && (!machine.active_job_id || machine.active_job_id === currentItem?.id);
-  const machineIsRunning = isRunning || dbRunMatchesCurrent;
+  const machineHasActiveRun = !completedLocally && machine.status === "running" && machine.current_run_id != null;
+  const runMatchesCurrentItem = machineHasActiveRun && (!machine.active_job_id || machine.active_job_id === currentItem?.id);
+  const machineHasMismatchedRun = machineHasActiveRun && machine.active_job_id != null && machine.active_job_id !== currentItem?.id;
+  const machineIsRunning = isRunning || runMatchesCurrentItem;
 
   // Clear completedLocally flag once DB catches up
   useEffect(() => {
@@ -716,8 +737,46 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         showBedsSuffix={false}
       />
 
+      {/* ── MISMATCHED RUN BANNER (machine locked to different item) ── */}
+      {machineHasMismatchedRun && (
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-border bg-destructive/15">
+          <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+          <div className="flex-1">
+            <p className="text-xs font-bold text-destructive uppercase tracking-wider">
+              MACHINE LOCKED TO ANOTHER ITEM
+            </p>
+            <p className="text-xs text-destructive/80">
+              Active job: <span className="font-mono font-bold">{machine.active_job_id?.slice(0, 8)}</span> — Complete or clear that run before starting a new one.
+            </p>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="shrink-0"
+            onClick={async () => {
+              try {
+                await manageMachine({
+                  action: "complete-run",
+                  machineId: machine.id,
+                  outputQty: 0,
+                  scrapQty: 0,
+                  notes: "Cleared stale lock — mismatched active job",
+                });
+                setCompletedLocally(true);
+                queryClient.invalidateQueries({ queryKey: ["live-machines"] });
+                toast({ title: "Lock cleared", description: "Machine is now idle. You can start a new run." });
+              } catch (err: any) {
+                toast({ title: "Clear failed", description: err.message, variant: "destructive" });
+              }
+            }}
+          >
+            Clear Lock
+          </Button>
+        </div>
+      )}
+
       {/* ── MACHINE LOCK STATUS BAR ── */}
-      {machine.machine_lock && (
+      {machine.machine_lock && !machineHasMismatchedRun && (
         <div className="flex items-center gap-3 px-6 py-2 border-b border-border bg-destructive/10">
           <Lock className="w-4 h-4 text-destructive" />
           <span className="text-xs font-bold text-destructive uppercase tracking-wider">

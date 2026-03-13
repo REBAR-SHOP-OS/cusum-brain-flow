@@ -280,6 +280,18 @@ serve(async (req) => {
           return json({ error: "Missing: machineRunId, barCode, qty, sourceType, sourceId" }, 400);
         }
 
+        // ── Idempotency: check if this exact consumption was already recorded ──
+        const dedupeKey = `consume:${machineRunId}:${sourceId}:${sourceType}`;
+        const { data: existingEvent } = await svc
+          .from("activity_events")
+          .select("id")
+          .eq("dedupe_key", dedupeKey)
+          .maybeSingle();
+        if (existingEvent) {
+          console.warn(`[consume-on-start] Deduplicated: ${dedupeKey}`);
+          return json({ success: true, action, deduplicated: true });
+        }
+
         if (sourceType === "lot" || sourceType === "remnant") {
           const { data: lot } = await svc
             .from("inventory_lots")
@@ -305,6 +317,7 @@ serve(async (req) => {
             actor_type: "user",
             description: `Consumed ${qty}× ${barCode} from lot on cut start`,
             metadata: { machineRunId, barCode, qty, sourceType, sourceId },
+            dedupe_key: `consume:${machineRunId}:${sourceId}:${sourceType}`,
           });
         } else if (sourceType === "floor") {
           const { data: fs } = await svc
