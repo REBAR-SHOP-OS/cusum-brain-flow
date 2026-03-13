@@ -39,6 +39,7 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
     setStrokes([]);
     setPrompt("");
     setPreviewUrl(null);
+    setReferenceImage(null);
     setImgLoaded(false);
 
     const img = new Image();
