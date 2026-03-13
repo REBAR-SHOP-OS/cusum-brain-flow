@@ -578,6 +578,27 @@ export async function executeToolCall(
                 mandatoryBlock += `PRIMARY SUBJECT: ${desc}. The product MUST be the central focus of the image.\n`;
               }
               mandatoryBlock += "=== END MANDATORY REQUIREMENTS ===\n\n";
+
+              // Strip conflicting product names from LLM-generated prompt
+              if (uProducts.length) {
+                const ALL_PRODUCT_VARIANTS: Record<string, string[]> = {
+                  stirrups: ["rebar cage", "rebar cages", "assembled cage", "cylindrical cage", "fiberglass bar", "fiberglass rebar", "dowel bar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
+                  cages: ["rebar stirrup", "rebar stirrups", "rectangular stirrup", "fiberglass bar", "fiberglass rebar", "dowel bar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
+                  fiberglass_straight: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "dowel bar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
+                  hooks: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "fiberglass bar", "fiberglass rebar", "dowel bar", "wire mesh", "welded mesh", "steel fabric"],
+                  dowels: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "fiberglass bar", "fiberglass rebar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
+                  wire_mesh: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "fiberglass bar", "fiberglass rebar", "dowel bar", "rebar hook"],
+                  rebar_straight: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "fiberglass bar", "fiberglass rebar", "dowel bar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
+                };
+                const selectedKey = uProducts[0];
+                const selectedLabel = PRODUCT_PROMPT_MAP[selectedKey]?.split("—")[0]?.trim() || selectedKey;
+                const conflicting = ALL_PRODUCT_VARIANTS[selectedKey] || [];
+                for (const wrong of conflicting) {
+                  const regex = new RegExp(wrong, "gi");
+                  imagePrompt = imagePrompt.replace(regex, selectedLabel);
+                }
+              }
+
               imagePrompt = mandatoryBlock + imagePrompt;
             }
           }

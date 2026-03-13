@@ -594,7 +594,7 @@ Deno.serve(async (req) => {
       const regenMatch = msgLower.match(/regenerate\s*(?:slot\s*)?([1-5])/i);
       const isRegenerate = !!regenMatch;
 
-      const timeSlotNum: number | undefined = undefined; // time-based input removed
+      const timeSlotNum: number | undefined = (pixelSlot && typeof pixelSlot === "number" && pixelSlot >= 1 && pixelSlot <= 5) ? pixelSlot : undefined;
 
       if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
@@ -950,7 +950,7 @@ Deno.serve(async (req) => {
           socialStyleOverride += `CRITICAL: The user selected a NON-PHOTOREALISTIC style. You MUST follow "${styleDesc}" EXACTLY. IGNORE the photorealism rule completely. Do NOT make images look like real photographs.\n`;
         }
         socialStyleOverride += `FAILURE TO FOLLOW THESE STYLE/PRODUCT SELECTIONS IS A CRITICAL ERROR.\n`;
-        socialStyleOverride += `When calling generate_image, you MUST:\n1. Include the style and product descriptions DIRECTLY in the prompt text\n2. Pass the style parameter: "${uStyles.join(",")}"\n3. Pass the products parameter: "${uProducts.join(",")}"\n`;
+        socialStyleOverride += `When calling generate_image, you MUST:\n1. Include the style and product descriptions DIRECTLY in the prompt text\n2. Pass the style parameter: "${uStyles.join(",")}"\n3. Pass the products parameter: "${uProducts.join(",")}"\n4. The prompt text itself MUST describe ONLY the selected product(s). Do NOT mention or describe ANY other product in the prompt text. If the user selected "stirrups", the prompt MUST be about stirrups — NEVER about cages, dowels, hooks, mesh, or any other product.\n`;
       }
     }
 
