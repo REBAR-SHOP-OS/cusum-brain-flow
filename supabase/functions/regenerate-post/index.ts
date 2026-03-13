@@ -455,7 +455,8 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       ? `\n\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${customInstructions}\n\n`
       : "";
 
-    const imagePrompt = `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
+    const imagePrompt = customInstructionsBlock +
+      `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
       `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
       `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
       `VISUAL STYLE: ${selected.style}. ` +
