@@ -527,7 +527,15 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       ? `\n\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${customInstructions}\n\n`
       : "";
 
-    const imagePrompt = customInstructionsBlock + productFocusBlock +
+    // Build image prompt — user-selected product/style at HIGHEST PRIORITY at the top
+    const userPriorityBlock = (userProductFocus || userEffectiveStyle)
+      ? `## ⚠️ HIGHEST PRIORITY — USER EXPLICITLY REQUESTED:\n` +
+        (userProductFocus ? `PRODUCT: ${userProductFocus}\n` : "") +
+        (userEffectiveStyle ? `STYLE: ${userEffectiveStyle}\n` : "") +
+        `The image MUST show exactly these products in this style. This overrides ALL other defaults below.\n\n`
+      : "";
+
+    const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
       `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
       `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
       `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +

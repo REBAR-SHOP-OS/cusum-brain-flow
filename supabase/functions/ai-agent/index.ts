@@ -783,13 +783,21 @@ Deno.serve(async (req) => {
             ? `\n\n## USER-SELECTED PRODUCTS (image MUST prominently feature these products):\n${productFocusOverride}\nThe image must clearly show these specific products in a realistic industrial/construction setting.\n\n`
             : "";
 
-          const imagePrompt = customInstructionsBlock + productFocusBlock +
+          // Build image prompt — user-selected product/style at HIGHEST PRIORITY at the top
+          const userPriorityBlock = (productFocusOverride || userImageStyles?.length)
+            ? `## ⚠️ HIGHEST PRIORITY — USER EXPLICITLY REQUESTED:\n` +
+              (productFocusOverride ? `PRODUCT: ${productFocusOverride}\n` : "") +
+              (userImageStyles?.length ? `STYLE: ${effectiveStyle}\n` : "") +
+              `The image MUST show exactly these products in this style. This overrides ALL other defaults below.\n\n`
+            : "";
+
+          const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
             `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC — real-world photography style ONLY. ` +
             `ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract art, AI-looking art, stock photo feel. ` +
             `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n` +
             `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n\n` +
             `VISUAL STYLE: ${effectiveStyle}. ` +
-            `PRODUCT FOCUS: ${productFocusOverride || slot.product} for REBAR.SHOP. THEME: ${slot.theme}. ` +
+            `PRODUCT FOCUS: ${productFocusOverride || effectiveSlotProduct} for REBAR.SHOP. THEME: ${slot.theme}. ` +
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
             brainImageHint +
             dedupHint +
