@@ -258,8 +258,48 @@ You MUST call the face_match_result function with your answer.`,
       }
     }
 
+    // Retry once if no structured result
     if (!resultData) {
-      console.error("[face-recognize] No structured result from AI. Raw content:", aiResult.content?.slice(0, 500));
+      console.warn("[face-recognize] No structured result, retrying once...");
+      try {
+        const retryResult = await callAI({
+          provider: "gemini",
+          model: "gemini-2.5-pro",
+          messages: [{ role: "user", content: contentParts }],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "face_match_result",
+                description: "Return the result of facial recognition matching.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    matched_profile_id: { type: "string", description: "The profile_id of the matched person, or 'null' if no match." },
+                    matched_name: { type: "string", description: "The name of the matched person, or 'Unknown'." },
+                    confidence: { type: "number", description: "Confidence score from 0-100." },
+                    reason: { type: "string", description: "Brief explanation of the match or non-match." },
+                  },
+                  required: ["matched_profile_id", "matched_name", "confidence", "reason"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          ],
+          toolChoice: { type: "function", function: { name: "face_match_result" } },
+        });
+        const retryTc = retryResult.toolCalls?.[0];
+        if (retryTc?.function?.arguments) {
+          resultData = JSON.parse(retryTc.function.arguments);
+          console.log("[face-recognize] Retry succeeded:", resultData);
+        }
+      } catch (retryErr) {
+        console.error("[face-recognize] Retry failed:", retryErr);
+      }
+    }
+
+    if (!resultData) {
+      console.error("[face-recognize] No structured result after retry. Raw:", aiResult.content?.slice(0, 500));
       return new Response(
         JSON.stringify({ matched: false, reason: "AI returned no structured result" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
