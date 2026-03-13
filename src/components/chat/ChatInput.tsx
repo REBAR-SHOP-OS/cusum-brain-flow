@@ -56,6 +56,8 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   minimalToolbar = false,
   selectedModel = "gemini",
   onModelChange,
+  imageStyles = [],
+  onImageStylesChange,
 }, ref) {
   const [value, setValue] = useState("");
   const [smartMode, setSmartMode] = useState(false);
