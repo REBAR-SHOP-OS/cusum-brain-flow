@@ -826,6 +826,14 @@ serve(async (req) => {
 
       await Promise.all(
         scenePrompts.map(async (scenePrompt, i) => {
+          // For multi-scene: first frame on scene 0, last frame on final scene
+          const isFirstScene = i === 0;
+          const isLastScene = i === scenePrompts.length - 1;
+          const sceneFirstFrame = isFirstScene ? firstFrameBase64 : undefined;
+          const sceneFirstMime = isFirstScene ? firstFrameMimeType : undefined;
+          const sceneLastFrame = isLastScene ? lastFrameBase64 : undefined;
+          const sceneLastMime = isLastScene ? lastFrameMimeType : undefined;
+
           try {
             let result: { jobId: string; provider: string };
             if (isWan) {
@@ -841,7 +849,7 @@ serve(async (req) => {
                   result = await wanGenerate(dashscopeKey, scenePrompt, clipDuration, aspectRatio, negativePrompt, inputAudioUrl);
                 } else if (isProviderCapacityError(message) && geminiKey) {
                   console.warn(`Sora capacity reached on scene ${i + 1}, falling back to Veo`);
-                  result = await veoGenerate(geminiKey, scenePrompt, clipDuration);
+                  result = await veoGenerate(geminiKey, scenePrompt, clipDuration, sceneFirstFrame, sceneFirstMime, sceneLastFrame, sceneLastMime);
                 } else {
                   throw e;
                 }
@@ -849,7 +857,7 @@ serve(async (req) => {
             } else {
               // Veo — fallback: Veo → Wan → Sora
               try {
-                result = await veoGenerate(apiKey, scenePrompt, clipDuration);
+                result = await veoGenerate(apiKey, scenePrompt, clipDuration, sceneFirstFrame, sceneFirstMime, sceneLastFrame, sceneLastMime);
               } catch (e) {
                 const message = getErrorMessage(e);
                 if (isProviderCapacityError(message) && dashscopeKey) {
