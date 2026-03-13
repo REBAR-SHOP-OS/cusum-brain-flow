@@ -92,12 +92,14 @@ YOUR TASK — Generate UNIQUE advertising content. Follow these rules STRICTLY:
 5. Translate the image slogan to Farsi (Persian) — same quality standard: fluent, catchy, natural Persian. Not a literal translation. It should sound like a professional Persian advertising slogan.
 
 CRITICAL RULES:
+- CAPTION TONE: Must be PURELY PROMOTIONAL & ADVERTISING. Write like a creative ad agency — catchy, bold, emotional appeal. Focus on WHY the customer should buy, NOT how the product works.
+- ABSOLUTELY FORBIDDEN CONTENT: scientific explanations, technical specifications, engineering terminology, material properties, structural analysis claims, tensile strength, load-bearing capacity. Do NOT explain HOW the product works.
+- FORBIDDEN WORDS: guarantee, guaranteed, ensures, ensure, promise, warranty, certified, certify, unparalleled, revolutionary, superior, structural integrity, load-bearing, tensile strength, AI-driven, precision-engineered, interlocks, unmatched, finest, unbeatable, top-notch, ensures every, scientifically
 - Every single call MUST produce COMPLETELY NEW and ORIGINAL content
 - NEVER use generic phrases like "Building strong" or "Engineering excellence"
 - Be creative, bold, and specific to the product
 - The image slogan must be short enough to be readable when printed on an image
 - ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM, morning, afternoon, evening, dawn, sunrise, sunset, or any time-related phrases in the caption, slogan, or translations. This is a STRICT RULE with ZERO exceptions.
-- NEVER use words like "guarantee", "guaranteed", "warranty", "certified", "certify", or any legally binding claims in captions, slogans, or translations. This is a STRICT RULE.
 - Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
 - SESSION CREATIVE SEED: ${sessionSeed || crypto.randomUUID()} — You MUST use this seed to drive a COMPLETELY UNIQUE creative direction. No two sessions should ever produce similar styles, angles, metaphors, or visual concepts. Treat this seed as your creative DNA for this specific session.
 ${brainContext ? "- You MUST follow any brand guidelines, tone, or language preferences from the Brain Context above" : ""}

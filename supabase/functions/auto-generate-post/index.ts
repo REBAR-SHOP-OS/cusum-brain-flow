@@ -217,13 +217,16 @@ ${TIME_SLOTS.map((slot, i) => `Post ${i + 1}: ${String(slot.hour).padStart(2, "0
 - Language: English only. The caption MUST be purely promotional.
 - Strong CTAs (e.g. "Call now at 647-260-9403", "Visit rebar.shop", "Send us your barlist")
 - Content must be DATA-DRIVEN — reference real business insights provided above
-- Scientific, promotional, beautiful language
+- PURELY PROMOTIONAL & ADVERTISING style — catchy, bold, emotional appeal. Do NOT explain how the product works scientifically. Focus on WHY the customer should buy.
+
+### ABSOLUTELY FORBIDDEN CONTENT:
+Scientific explanations, technical specifications, engineering terminology, material properties, structural analysis claims. Do NOT describe tensile strength, load-bearing capacity, or any technical process.
 
 ### FORBIDDEN WORDS/PHRASES (NEVER USE):
-"guaranteed", "we guarantee", "100% guaranteed", "ensure", "we ensure", "promise", "we promise", "100% safe", "zero defects", "never fails"
+"guaranteed", "we guarantee", "100% guaranteed", "ensure", "we ensure", "promise", "we promise", "100% safe", "zero defects", "never fails", "unparalleled", "revolutionary", "superior", "structural integrity", "load-bearing", "tensile strength", "AI-driven", "precision-engineered", "interlocks", "scientifically", "unmatched", "finest", "unbeatable"
 
 ### ALLOWED ALTERNATIVES:
-"designed for", "built for", "engineered for", "precision-crafted", "trusted by", "relied upon by", "crafted for performance"
+"designed for", "built for", "crafted for", "trusted by", "relied upon by", "crafted for performance", "your go-to choice"
 
 ### MANDATORY CONTENT STRUCTURE (for each post's "content" field):
 1. Compelling hook (question, stat, or bold statement)
@@ -239,7 +242,7 @@ ${TIME_SLOTS.map((slot, i) => `Post ${i + 1}: ${String(slot.hour).padStart(2, "0
 - **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations. NEVER produce a similar-looking image. Each generation must feel like a completely fresh creative direction.
 - **USE DIVERSE VISUAL STYLES** — Rotate between these styles and NEVER use the same style twice in a row: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes with buildings under construction, city landmarks & bridges & infrastructure, aerial drone views of large projects, real product photography in actual warehouse settings, macro close-up detail shots, dramatic sunrise/sunset lighting, logistics & delivery scenes, engineering blueprints overlaid with real products, night construction scenes, foundation-level perspectives. Each image must look like it came from a COMPLETELY DIFFERENT photo shoot. Each post's image_prompt MUST explicitly reference the assigned visual_style for that time slot.
 - English text overlays on the image (product name, tagline)
-- Scientific and promotional style — NOT fantasy or cartoon
+- Purely promotional advertising style — NOT fantasy, cartoon, or scientific/technical
 - Clean, professional, visually striking — like professional documentary/commercial photography
 - Use Brain files (logo & content reference) when available
 ${instructionsText}
