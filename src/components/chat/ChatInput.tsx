@@ -622,41 +622,31 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                 <div className="w-px h-8 bg-border mx-0.5" />
                 <div className="flex flex-col items-center gap-0.5 bg-muted/30 rounded-lg px-1.5 py-0.5">
                   <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Size</span>
-                  <div className="flex items-center gap-0.5">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => onImageAspectRatioChange("16:9")}
-                          className={cn(
-                            "p-1.5 rounded-lg transition-all border-2",
-                            imageAspectRatio === "16:9"
-                              ? "border-primary shadow-md scale-110 bg-primary/15 text-primary"
-                              : "border-transparent hover:scale-105 text-muted-foreground bg-muted/20"
-                          )}
-                        >
-                          <RectangleHorizontal className="w-4 h-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">Landscape (16:9)</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => onImageAspectRatioChange("1:1")}
-                          className={cn(
-                            "p-1.5 rounded-lg transition-all border-2",
-                            imageAspectRatio === "1:1"
-                              ? "border-primary shadow-md scale-110 bg-primary/15 text-primary"
-                              : "border-transparent hover:scale-105 text-muted-foreground bg-muted/20"
-                          )}
-                        >
-                          <Square className="w-4 h-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">Square (1:1)</TooltipContent>
-                    </Tooltip>
+                  <div className="flex items-center gap-1">
+                    {([
+                      { value: "16:9", label: "16:9", icon: RectangleHorizontal, tip: "Landscape" },
+                      { value: "1:1", label: "1:1", icon: Square, tip: "Square" },
+                      { value: "9:16", label: "9:16", icon: RectangleVertical, tip: "Portrait" },
+                    ] as const).map((opt) => (
+                      <Tooltip key={opt.value}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => onImageAspectRatioChange(opt.value)}
+                            className={cn(
+                              "flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all",
+                              imageAspectRatio === opt.value
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "bg-muted/40 text-muted-foreground hover:bg-muted"
+                            )}
+                          >
+                            <opt.icon className="w-3.5 h-3.5" />
+                            {opt.label}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">{opt.tip} ({opt.value})</TooltipContent>
+                      </Tooltip>
+                    ))}
                   </div>
                 </div>
               </>
