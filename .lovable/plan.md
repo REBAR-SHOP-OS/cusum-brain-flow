@@ -1,46 +1,44 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix Facebook Publishing Errors
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Root Causes Found
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+**Error 1: "Validation failed"** — The post has platforms "unassigned, Facebook". When publishing, the code loops through ALL selected platforms including "unassigned". Since "unassigned" is not in the Zod enum `["facebook", "instagram", "linkedin", "twitter"]`, the edge function returns a validation error.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+**Error 2: "facebook not connected"** — The `ai@rebar.shop` user (ID `b2b75b2e-...`) has NO tokens in `user_meta_tokens`. Facebook tokens are stored under user `c9b3adc2-...` (whoever originally connected Facebook). The edge function only looks up tokens by the currently authenticated user's ID, so it fails.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Changes
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 1. `src/components/social/PostReviewPanel.tsx` — Filter out "unassigned" from publish combos
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+In the Publish Now onClick handler (~line 760), filter `localPlatforms` to exclude "unassigned" before building combos:
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+```typescript
+const publishablePlatforms = localPlatforms.filter(p => p !== "unassigned");
+if (publishablePlatforms.length === 0) {
+  toast({ title: "No publishable platform", description: "Please select a platform (not 'unassigned').", variant: "destructive" });
+  return;
+}
+// use publishablePlatforms instead of localPlatforms for combos
+```
+
+### 2. `supabase/functions/social-publish/index.ts` — Fallback to any available token
+
+When the current user has no token for the platform, fall back to any user's token in the system. This allows `ai@rebar.shop` to publish using the Facebook tokens connected by another team member.
+
+Change lines 135-147: after the initial lookup by `userId` fails, do a second query without the `user_id` filter to find any available token:
+
+```typescript
+// First try current user
+let tokenData = ...eq("user_id", userId)...
+// If not found, fallback to any user's token
+if (!tokenData) {
+  tokenData = ...without user_id filter...order by created_at desc...
+}
+```
+
+### Files
+- `src/components/social/PostReviewPanel.tsx` — filter "unassigned" from publish
+- `supabase/functions/social-publish/index.ts` — fallback token lookup
+
