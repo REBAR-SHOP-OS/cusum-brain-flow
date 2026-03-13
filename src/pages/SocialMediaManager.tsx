@@ -119,6 +119,13 @@ export default function SocialMediaManager() {
           p.hashtags.some((h) => h.toLowerCase().includes(q))
       );
     }
+    if (statusFilter === "pending_approval") {
+      items = [...items].sort((a, b) => {
+        const da = a.scheduled_date ? new Date(a.scheduled_date).getTime() : Infinity;
+        const db = b.scheduled_date ? new Date(b.scheduled_date).getTime() : Infinity;
+        return da - db;
+      });
+    }
     return items;
   }, [posts, platformFilter, statusFilter, searchQuery]);
 
