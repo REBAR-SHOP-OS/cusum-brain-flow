@@ -344,7 +344,7 @@ export default function AgentWorkspace() {
           console.error("Failed to save pixel post:", error);
           toast.error("Failed to save post to calendar");
         } else {
-          toast.success("Post saved to calendar as draft ✅");
+          toast.success("Post saved to calendar for approval ✅");
         }
       } catch (err) {
         console.error("Error saving pixel post:", err);
