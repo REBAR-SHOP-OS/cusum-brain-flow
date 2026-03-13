@@ -1,46 +1,37 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
+مشکل دقیق پیدا شد: دلیل خطای «Failed to clock in» برای ساعت 7:57 این است که محدودیت واقعی در دیتابیس هنوز روی **8:00 AM ET** است، نه 6:00.  
+تابع `public.validate_clockin_time()` در بک‌اند هنوز این شرط را دارد:
+- فقط `kourosh@rebar.shop` را مستثنا می‌کند
+- برای بقیه کاربران قبل از 8 صبح خطا می‌دهد
 
-## Completed: Add All Wan 2.6 Capabilities
+در نتیجه حتی اگر فرانت‌اند روی 6 صبح تنظیم شده باشد، `INSERT` در `time_clock_entries` توسط تریگر دیتابیس رد می‌شود.
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+اقداماتی که انجام می‌دهم:
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+1) یک migration جدید برای یکپارچه‌سازی قانون اصلی
+- فایل: `supabase/migrations/...sql`
+- `CREATE OR REPLACE FUNCTION public.validate_clockin_time()` را به‌روزرسانی می‌کنم تا:
+  - قانون برای **همه کاربران یکسان** باشد
+  - فقط اگر ساعت ET کمتر از 6 بود خطا بدهد
+  - پیام خطا: `Clock-in is only available from 6:00 AM ET`
+- شرط‌های ایمیل/استثنا حذف می‌شود تا «همه یوزرها به یک شکل» اجرا شود.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+2) همسان‌سازی فرانت‌اند Clock In
+- فایل: `src/hooks/useTimeClock.ts`
+- منطق `CLOCK_EXEMPT` و شرط `@rebar.shop` حذف می‌شود.
+- فقط یک گارد ساده سراسری نگه می‌ماند: قبل از 6 صبح ET کلاینت پیام مناسب بدهد.
+- این کار UX را بهتر می‌کند، ولی قانون نهایی همچنان از دیتابیس enforce می‌شود.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+3) همسان‌سازی Kiosk
+- فایل: `supabase/functions/kiosk-punch/index.ts`
+- منطق استثنا/دامنه حذف می‌شود.
+- همان قانون سراسری 6 صبح ET اعمال می‌شود تا رفتار Kiosk و Clock دستی 100٪ یکسان باشد.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+4) استانداردسازی پیام خطا
+- در مسیرهای clock-in، پیام خطای واقعی بک‌اند به کاربر نمایش داده می‌شود تا خطای مبهم تکرار نشود.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
-
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+تایید نهایی (پس از اعمال):
+- تست Clock In دستی با چند کاربر مختلف بعد از 6 صبح ET (باید موفق شود)
+- تست Kiosk بعد از 6 صبح ET (باید موفق شود)
+- تست قبل از 6 صبح ET (باید پیام «available from 6:00 AM ET» بدهد)
+- بررسی درج رکورد در `time_clock_entries` برای کاربران مختلف
