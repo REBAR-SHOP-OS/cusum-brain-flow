@@ -497,7 +497,43 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                     ChatGPT
                   </button>
                 </PopoverContent>
-              </Popover>
+            </Popover>
+            )}
+
+            {/* Image Style Icons (Pixel agent only) */}
+            {minimalToolbar && onImageStylesChange && (
+              <div className="flex items-center gap-0.5 ml-1">
+                {IMAGE_STYLES.map((style) => {
+                  const active = imageStyles.includes(style.key);
+                  const Icon = style.icon;
+                  return (
+                    <Tooltip key={style.key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = active
+                              ? imageStyles.filter((s) => s !== style.key)
+                              : [...imageStyles, style.key];
+                            onImageStylesChange(next);
+                          }}
+                          className={cn(
+                            "p-1.5 rounded-md transition-colors",
+                            active
+                              ? "text-primary bg-primary/15"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {style.label} / {style.labelEn}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
             )}
 
             {/* Spacer */}
