@@ -61,6 +61,8 @@ interface ChatInputProps {
   onImageStylesChange?: (styles: string[]) => void;
   selectedProducts?: string[];
   onSelectedProductsChange?: (products: string[]) => void;
+  imageAspectRatio?: string;
+  onImageAspectRatioChange?: (ratio: string) => void;
 }
 
 export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({
