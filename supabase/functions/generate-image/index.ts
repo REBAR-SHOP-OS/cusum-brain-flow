@@ -172,7 +172,18 @@ serve(async (req) => {
 
       // ── EDIT MODE: inpainting via annotated image ──
       if (editImage) {
-        const editPrompt = `You are an image editor. The user has marked areas in RED on the image below. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`;
+        const hasRef = referenceImage && typeof referenceImage === "string";
+        const editPrompt = hasRef
+          ? `You are an image editor. The user has marked areas in RED on the first image. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". Use the second image as a visual reference/inspiration for the edit. Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`
+          : `You are an image editor. The user has marked areas in RED on the image below. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`;
+
+        const contentParts: any[] = [
+          { type: "text", text: editPrompt },
+          { type: "image_url", image_url: { url: editImage } },
+        ];
+        if (hasRef) {
+          contentParts.push({ type: "image_url", image_url: { url: referenceImage } });
+        }
 
         const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
@@ -184,10 +195,7 @@ serve(async (req) => {
             model: selectedModel,
             messages: [{
               role: "user",
-              content: [
-                { type: "text", text: editPrompt },
-                { type: "image_url", image_url: { url: editImage } },
-              ],
+              content: contentParts,
             }],
             modalities: ["image", "text"],
           }),
