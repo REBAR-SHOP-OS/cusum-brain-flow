@@ -170,6 +170,12 @@ export default function TimeClock() {
     face.reset();
     setAutoPunchCountdown(0);
 
+    // Auto-reset kiosk for next person
+    if (kioskMode) {
+      setTimeout(() => {
+        handleScan();
+      }, 4000);
+    }
   };
 
   // Build status map
