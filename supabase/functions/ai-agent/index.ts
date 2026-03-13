@@ -221,7 +221,7 @@ async function generatePixelImage(
   prompt: string,
   svcClient: ReturnType<typeof createClient>,
   logoUrl?: string,
-  options?: { styleIndex?: number | string; preferredModel?: string },
+  options?: { styleIndex?: number | string; preferredModel?: string; resourceImageUrls?: string[] },
 ): Promise<{ imageUrl: string | null; error?: string }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
