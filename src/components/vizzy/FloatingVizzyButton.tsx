@@ -78,7 +78,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
           <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
         )}
         <div
-          className="fixed z-50 group"
+          className="fixed z-[9999] group"
           style={{ left: pos.x, top: pos.y, touchAction: "none" }}
           onMouseEnter={() => !isMobile && setShowActions(true)}
           onMouseLeave={() => !isMobile && setShowActions(false)}
