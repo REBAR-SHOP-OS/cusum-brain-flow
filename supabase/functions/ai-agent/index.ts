@@ -259,11 +259,11 @@ async function generatePixelImage(
         const openaiRes = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${GPT_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
+           body: JSON.stringify({
             model: "gpt-image-1",
-            prompt: fullPrompt,
+            prompt: finalPrompt,
             n: 1,
-            size: "1024x1024",
+            size: aspectRatio === "16:9" ? "1536x1024" : "1024x1024",
             quality: "high",
           }),
         });
