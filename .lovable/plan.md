@@ -1,38 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Face ID Kiosk: حافظه و Clock In/Out خودکار (فقط ai@rebar.shop)
+## Completed: Add All Wan 2.6 Capabilities
 
-## وضعیت فعلی
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-سیستم **از قبل** دارای حافظه (جدول `face_enrollments`) و تغییر وضعیت Clock In/Out (تابع `kiosk-punch`) است. اما چند مشکل وجود دارد:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-1. **اسکن خودکار اول**: وقتی کیوسک باز می‌شود، کاربر باید دکمه "Scan Face" را بزند — اتوماتیک شروع نمی‌شود
-2. **ذخیره عکس محدود**: فقط تا ۳ عکس ذخیره می‌کند — باید بیشتر باشد برای دقت بالاتر
-3. **نیاز به تایید دستی**: حتی با اطمینان بالا، بعضی وقت‌ها تایید دستی می‌خواهد
-4. **بعد از punch**: ۴ ثانیه صبر می‌کند و بعد دوباره اسکن می‌کند — خوب است اما اسکن اول خودکار نیست
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## تغییرات پیشنهادی
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 1. `src/pages/TimeClock.tsx`
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-- **اسکن خودکار هنگام ورود کیوسک**: وقتی کیوسک باز می‌شود و دوربین آماده است، بعد از ۲ ثانیه خودکار `handleScan()` صدا زده شود (فقط برای ai@rebar.shop)
-- **حذف نیاز به تایید دستی**: برای confidence >= 75% و enrollment >= 2، مستقیم auto-punch بدون نیاز به کلیک (فقط ai@rebar.shop)
-- **Auto-punch سریع‌تر**: countdown از ۱ ثانیه برای همه match‌های بالای ۷۵%
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 2. `supabase/functions/kiosk-punch/index.ts`
-
-- **افزایش سقف auto-enroll از ۳ به ۵**: هر بار punch، اگر کمتر از ۵ عکس ذخیره شده، عکس جدید اضافه شود تا دقت تشخیص بالاتر رود
-
-### خلاصه جریان
-
-```text
-ai@rebar.shop کیوسک باز می‌کند
-  → دوربین روشن + اسکن خودکار (بدون کلیک)
-  → صورت شناسایی شد (≥75%)
-    → خودکار punch (بدون تایید)
-    → عکس جدید ذخیره (اگر <5)
-    → ۴ ثانیه صبر → اسکن بعدی خودکار
-  → صورت ناشناس
-    → فرم ثبت‌نام نمایش داده شود
-```
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

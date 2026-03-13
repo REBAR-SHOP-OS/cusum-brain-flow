@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
           .select("*", { count: "exact", head: true })
           .eq("profile_id", profileId);
 
-        if ((count || 0) < 3) {
+        if ((count || 0) < 5) {
           const filePath = `${profileId}/auto-${Date.now()}.jpg`;
           const byteArray = Uint8Array.from(atob(faceBase64), (c) => c.charCodeAt(0));
 
