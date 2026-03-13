@@ -114,6 +114,20 @@ export function FixRequestQueue() {
     setRefreshing(false);
   };
 
+  const handleFixAll = async () => {
+    if (requests.length === 0) return;
+    setFixingAll(true);
+    const ids = requests.map((r) => r.id);
+    await supabase
+      .from("vizzy_fix_requests" as any)
+      .update({ status: "resolved", resolved_at: new Date().toISOString() } as any)
+      .in("id", ids);
+    setRequests([]);
+    prevCountRef.current = 0;
+    setFixingAll(false);
+    toast.success(`Resolved all ${ids.length} fix requests`);
+  };
+
   const copyToClipboard = (req: FixRequest) => {
     const text = `🐛 Fix Request from Vizzy:\n- Issue: ${req.description}\n- Area: ${req.affected_area || "Not specified"}\n- Logged: ${new Date(req.created_at).toLocaleString()}${req.photo_url ? `\n- Photo: ${req.photo_url}` : ""}`;
     navigator.clipboard.writeText(text);
