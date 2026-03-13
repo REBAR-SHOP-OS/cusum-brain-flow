@@ -416,7 +416,9 @@ export default function AgentWorkspace() {
       // Create a single unassigned card — platform/page chosen later in Social Media Manager
       const { error } = await supabase.from("social_posts").insert({
         platform: "unassigned",
-        status: "draft",
+        status: "pending_approval",
+        qa_status: "needs_review",
+        neel_approved: false,
         title,
         content,
         image_url: post.imageUrl || null,
