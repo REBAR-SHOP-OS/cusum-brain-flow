@@ -311,6 +311,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const startingRef = useRef(false);
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem || startingRef.current) return;
+    startingRef.current = true;
     if (!completedLocally && machine.current_run_id && machine.status === "running") {
       // Check if the existing run is stale (>60 min, no output) — auto-clear it
       try {
