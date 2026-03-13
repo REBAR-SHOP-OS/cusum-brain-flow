@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef } from "react";
+import { useState, useEffect, useRef, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePickupOrders, usePickupOrderItems } from "@/hooks/usePickupOrders";
 import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedBundles";
@@ -7,9 +7,10 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PickupVerification } from "@/components/shopfloor/PickupVerification";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
+import { PackingSlipPreview } from "@/components/delivery/PackingSlipPreview";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
