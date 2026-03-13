@@ -1,46 +1,53 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Persist Platform & Pages Changes to Database for All Users
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+When any user (radin, zahra, neel) changes the **platforms**, **pages**, or **content type** on a post card, those changes are stored only in React local state (`useState`). They are **never saved to the database**. So:
+- Other users don't see the changes
+- Refreshing the page loses the changes
+- Only the platform's first value is partially saved via `updatePost.mutate`
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Root Cause
+- `handlePagesSaveMulti` → only calls `setLocalPages(values)`, never writes to DB
+- `handleContentTypeSave` → only calls `setLocalContentType(value)`, never writes to DB  
+- `handlePlatformsSaveMulti` → saves only the first platform to DB, ignores the rest
+- The `page_name` DB column is a single string, but the UI allows multi-select pages
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Solution
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. `src/components/social/PostReviewPanel.tsx` — Persist all field changes to DB
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+**Pages**: In `handlePagesSaveMulti`, after setting local state, call `updatePost.mutate` to save the joined page names:
+```typescript
+const handlePagesSaveMulti = (values: string[]) => {
+  setLocalPages(values);
+  updatePost.mutate({ id: post.id, page_name: values.join(", ") });
+  setSubPanel(null);
+};
+```
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+**Content type**: In `handleContentTypeSave`, persist to DB:
+```typescript
+const handleContentTypeSave = (value: string) => {
+  setLocalContentType(value);
+  updatePost.mutate({ id: post.id, content_type: value });
+  setSubPanel(null);
+};
+```
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+**Platforms**: In `handlePlatformsSaveMulti`, also save all selected platforms as a comma-separated string in `page_name` context (platforms are already saved, but ensure the full list is persisted properly).
+
+### 2. Sync `localPages` from DB value on load
+
+Update the `useEffect` sync block (~line 188) to properly parse `page_name` when it contains comma-separated values:
+```typescript
+setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
+```
+
+### 3. Realtime already configured
+The `useSocialPosts` hook already has a realtime subscription on `social_posts` table, so when one user saves changes, other users' views will auto-refresh via query invalidation.
+
+## Files
+- `src/components/social/PostReviewPanel.tsx` — persist pages, content_type, and platforms to DB on change
+
