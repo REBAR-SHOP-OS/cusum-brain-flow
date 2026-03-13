@@ -261,7 +261,7 @@ serve(async (req) => {
         model: selectedModel === "gpt-image-1" ? "gpt-image-1" : "dall-e-3",
         prompt,
         size: "1024x1024",
-        quality: "high",
+        quality: selectedModel === "gpt-image-1" ? "high" : "hd",
         n: 1,
       }),
     });

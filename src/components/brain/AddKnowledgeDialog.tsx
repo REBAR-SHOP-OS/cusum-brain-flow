@@ -143,6 +143,8 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
             ...(defaultMetadata || {}),
             file_name: f.name,
             file_type: f.name.split(".").pop(),
+            storage_bucket: "estimation-files",
+            storage_path: f.path,
           },
           company_id: companyId,
         }));
@@ -158,7 +160,12 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
           source_url: uploadedFiles.length === 1 ? uploadedFiles[0].url : (sourceUrl.trim() || null),
           metadata: (defaultMetadata || uploadedFiles.length > 0) ? {
             ...(defaultMetadata || {}),
-            ...(uploadedFiles.length > 0 ? { file_name: uploadedFiles[0].name, file_type: uploadedFiles[0].name.split(".").pop() } : {}),
+            ...(uploadedFiles.length > 0 ? {
+              file_name: uploadedFiles[0].name,
+              file_type: uploadedFiles[0].name.split(".").pop(),
+              storage_bucket: "estimation-files",
+              storage_path: uploadedFiles[0].path,
+            } : {}),
           } : null,
           company_id: companyId,
         });

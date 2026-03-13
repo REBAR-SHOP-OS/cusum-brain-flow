@@ -1,68 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-مسئله را ریشه‌ای بررسی کردم. علت اصلی خطا ترکیبی است و دقیقا قابل بازتولید است:
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-1) منبع‌های تصویری Brain با URL امضاشده کوتاه‌مدت ذخیره می‌شوند (۱ ساعت) و بعد منقضی می‌شوند.  
-2) در `ai-agent` و `regenerate-post` لینک‌ها با Regex از متن استخراج می‌شوند و Query Token هم حذف می‌شود؛ یعنی حتی لینک معتبر هم خراب می‌شود.  
-3) وقتی حتی یک `image_url` نامعتبر داخل درخواست مدل تصویری باشد، کل درخواست 400 می‌خورد.  
-4) مسیر OpenAI تصویر هم 400 می‌دهد (پس fallback باید مقاوم باشد)، ولی علت شکست نهایی شما در اسکرین‌شات عملاً attachmentهای Brain نامعتبر است.
+## Completed: Add All Wan 2.6 Capabilities
 
-برنامه‌ی رفع ریشه‌ای (نه موقت):
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## 1) اصلاح هسته تولید تصویر در بک‌اند
-فایل‌ها:
-- `supabase/functions/ai-agent/index.ts`
-- `supabase/functions/regenerate-post/index.ts`
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-کارها:
-- حذف وابستگی به استخراج URL از `brainKnowledge` با regex برای image reference.
-- ساخت helper داخلی برای «resolve منابع تصویری»:
-  - از رکوردهای `knowledge` بخواند (agent=social, category=image).
-  - اگر URL از نوع `/storage/v1/object/sign/...` بود، bucket/path را parse کند و با service client **signed URL جدید** بسازد.
-  - اگر URL عمومی بود همان را نگه دارد.
-  - قبل از استفاده، preflight سبک (HEAD/GET کوتاه) برای valid بودن انجام دهد.
-  - فقط فرمت‌های قابل اتکا (`jpg/jpeg/png/webp`) را پاس بدهد؛ `svg` برای reference تصویر حذف شود.
-- `generatePixelImage` را resilient کنیم:
-  - attempt 1: prompt + refs + logo
-  - attempt 2: prompt + logo (بدون refs)
-  - attempt 3: prompt text-only (بدون refs/بدون logo)
-  - یعنی attachment خراب دیگر کل تولید را زمین نزند.
-- لاگ خطای واقعی مدل را ثبت کنیم (status + بخش کوتاه body) تا علت 400 بعدی مبهم نماند.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## 2) حفظ رفتار «ChatGPT انتخاب شده» بدون شکستن تولید
-فایل‌ها:
-- `supabase/functions/ai-agent/index.ts`
-- `supabase/functions/regenerate-post/index.ts`
-- (در صورت نیاز همسان‌سازی) `supabase/functions/generate-image/index.ts`
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-کارها:
-- وقتی کاربر ChatGPT انتخاب می‌کند، ابتدا مسیر OpenAI همچنان واقعاً امتحان شود.
-- اگر OpenAI 400/عدم دسترسی داد، سریع و شفاف fallback به Gemini انجام شود (بدون fail کل خروجی).
-- پیام خطای داخلی دقیق‌تر شود اما خروجی کاربر شکست نخورد.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-## 3) جلوگیری از تکرار مشکل در داده‌های جدید Brain
-فایل:
-- `src/components/brain/AddKnowledgeDialog.tsx`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-کارها:
-- علاوه بر `source_url`، مسیر پایدار فایل را در metadata ذخیره کنیم (مثل `storage_bucket`, `storage_path`).
-- از این به بعد backend برای امضا/دسترسی از path پایدار استفاده کند، نه URL منقضی‌شونده.
-
-## 4) نکته تکمیلی کیفیت خروجی
-فایل‌ها:
-- `supabase/functions/ai-agent/index.ts`
-- `supabase/functions/regenerate-post/index.ts`
-
-کارها:
-- قوانین «عدم تکرار» و «واقع‌گرایی کامل» حفظ و قوی‌تر می‌مانند.
-- اگر refs خراب بود، به‌جای fail شدن، با prompt سخت‌گیرانه‌ی realism/uniqueness تصویر تولید می‌شود.
-
-## بخش فنی (خلاصه)
-- ریشه خطا: Expired signed URLs + token stripping + brittle multimodal payload.
-- راه‌حل فنی: Signed URL refresh at runtime + URL validation + adaptive retries + robust fallback chain.
-- نتیجه: حتی با Brain resources منقضی، تولید تصویر قطع نمی‌شود و خروجی همچنان مطابق استایل‌های انتخابی و واقع‌گرایانه تولید می‌شود.
-
-## تست پذیرش بعد از پیاده‌سازی
-1) همان سناریوی فعلی `/agent/social` با پیام `1` و style فعال (مثلاً urban) باید تصویر موفق بدهد.  
-2) با Brain دارای فایل‌های قدیمی/منقضی هم نباید 400 نهایی بگیریم.  
-3) با ChatGPT selected اگر OpenAI خطا داد، خروجی باید با fallback موفق تولید شود.  
-4) تصویر خروجی نباید تکراری و نباید غیرواقعی باشد.
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

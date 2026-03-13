@@ -298,11 +298,18 @@ async function generatePixelImage(
     }
   }
 
-  // Build attempts: model + whether to include logo (Gemini path)
-  const attempts: { model: string; useLogo: boolean }[] = [
-    { model: "google/gemini-2.5-flash-image", useLogo: true },
-    { model: "google/gemini-2.5-flash-image", useLogo: true },
-    { model: "google/gemini-3-pro-image-preview", useLogo: true },
+  // Build attempts: model + whether to include logo + refs (adaptive fallback)
+  const hasRefs = !!options?.resourceImageUrls?.length;
+  const attempts: { model: string; useLogo: boolean; useRefs: boolean }[] = [
+    { model: "google/gemini-2.5-flash-image", useLogo: true, useRefs: true },
+    { model: "google/gemini-2.5-flash-image", useLogo: true, useRefs: true },
+    { model: "google/gemini-3-pro-image-preview", useLogo: true, useRefs: true },
+    // Fallback stages: drop refs first, then drop logo
+    ...(hasRefs ? [
+      { model: "google/gemini-2.5-flash-image", useLogo: true, useRefs: false },
+      { model: "google/gemini-3-pro-image-preview", useLogo: true, useRefs: false },
+    ] : []),
+    { model: "google/gemini-2.5-flash-image", useLogo: false, useRefs: false },
   ];
 
   let lastError = "Unknown error";
@@ -311,8 +318,8 @@ async function generatePixelImage(
     try {
       const contentParts: any[] = [{ type: "text", text: fullPrompt }];
 
-      // Attach resource/reference images from brain (product photos, etc.)
-      if (options?.resourceImageUrls?.length) {
+      // Attach resource/reference images from brain (product photos, etc.) — only if attempt allows it
+      if (attempt.useRefs && options?.resourceImageUrls?.length) {
         for (const refUrl of options.resourceImageUrls.slice(0, 3)) {
           contentParts.push({ type: "image_url", image_url: { url: refUrl } });
         }
@@ -333,7 +340,7 @@ async function generatePixelImage(
         });
       }
 
-      console.log(`  → Attempt: ${attempt.model}, logo=${attempt.useLogo && !!logoUrl}`);
+      console.log(`  → Attempt: ${attempt.model}, logo=${attempt.useLogo && !!logoUrl}, refs=${attempt.useRefs && !!options?.resourceImageUrls?.length}`);
 
       const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -349,8 +356,9 @@ async function generatePixelImage(
       });
 
       if (!aiRes.ok) {
+        const errSnippet = await aiRes.text().catch(() => "");
         lastError = `${attempt.model} returned ${aiRes.status}`;
-        console.warn(`  ✗ ${lastError}`);
+        console.warn(`  ✗ ${lastError}: ${errSnippet.slice(0, 200)}`);
         continue;
       }
 
@@ -636,12 +644,63 @@ Deno.serve(async (req) => {
             ? `\n\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${customInstructions}\n\n`
             : "";
 
-          // If brain has image references, extract URLs for both prompt hint and as reference images
-          const brainImageRefs = brainKnowledge
-            ? brainKnowledge.match(/https?:\/\/\S+\.(jpg|jpeg|png|webp|svg)/gi) || []
-            : [];
+          // Resolve fresh signed URLs for brain image resources instead of using expired regex-extracted URLs
+          let brainImageRefs: string[] = [];
+          try {
+            const { data: imgKnowledge } = await svcClient
+              .from("knowledge")
+              .select("source_url, metadata")
+              .eq("company_id", companyId)
+              .eq("category", "image")
+              .order("created_at", { ascending: false })
+              .limit(10);
+            if (imgKnowledge) {
+              const socialImages = imgKnowledge.filter((k: any) => (k.metadata as any)?.agent === "social");
+              for (const item of socialImages.slice(0, 5)) {
+                if (!item.source_url) continue;
+                const meta = item.metadata as Record<string, any> | null;
+                const storagePath = meta?.storage_path;
+                const storageBucket = meta?.storage_bucket || "estimation-files";
+                // If we have a stable storage path, create a fresh signed URL
+                if (storagePath) {
+                  const { data: signedData } = await svcClient.storage
+                    .from(storageBucket)
+                    .createSignedUrl(storagePath, 3600);
+                  if (signedData?.signedUrl) {
+                    brainImageRefs.push(signedData.signedUrl);
+                    continue;
+                  }
+                }
+                // Try parsing storage path from signed URL pattern
+                const signMatch = item.source_url.match(/\/object\/sign\/([^/]+)\/([^?]+)/);
+                if (signMatch) {
+                  const bucket = signMatch[1];
+                  const path = decodeURIComponent(signMatch[2]);
+                  const { data: signedData } = await svcClient.storage
+                    .from(bucket)
+                    .createSignedUrl(path, 3600);
+                  if (signedData?.signedUrl) {
+                    brainImageRefs.push(signedData.signedUrl);
+                    continue;
+                  }
+                }
+                // If it's a public URL, validate it
+                if (item.source_url.includes("/object/public/")) {
+                  try {
+                    const headRes = await fetch(item.source_url, { method: "HEAD" });
+                    if (headRes.ok) brainImageRefs.push(item.source_url);
+                  } catch {}
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Could not resolve brain image refs:", e);
+          }
+          // Filter out SVG (unsupported by image models)
+          brainImageRefs = brainImageRefs.filter(u => !/\.svg(\?|$)/i.test(u));
+          console.log(`  Brain image refs resolved: ${brainImageRefs.length} valid URLs`);
           const brainImageHint = brainImageRefs.length > 0
-            ? `\nReference brand images for style inspiration: ${brainImageRefs.slice(0, 3).join(", ")}`
+            ? `\nReference brand images for style inspiration: (${brainImageRefs.length} images attached)`
             : "";
 
           // Build anti-duplicate context from recent images
