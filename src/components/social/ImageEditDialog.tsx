@@ -28,6 +28,7 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Load image when dialog opens
