@@ -528,17 +528,18 @@ export async function executeToolCall(
           const slot = args.slot || "";
 
           // Inject mandatory style/product overrides from user selections
-          if (agent === "social" && context) {
+          // Double enforcement: from context AND from tool args
+          if (agent === "social") {
             const IMAGE_STYLE_MAP: Record<string, string> = {
               realism: "Hyper-realistic industrial photography with dramatic natural lighting",
               urban: "Gritty urban construction site with city skyline backdrop",
-              cartoon: "Bold cartoon / comic-book illustration style with thick outlines",
+              cartoon: "Bold cartoon / comic-book illustration style with thick outlines, vibrant flat colors, exaggerated proportions",
               cinematic: "Cinematic wide-angle shot with dramatic depth of field and movie-grade color grading",
               dark: "Dark moody atmosphere with high contrast shadows and dramatic rim lighting",
               golden: "Warm golden-hour lighting with lens flare and rich amber tones",
               minimal: "Clean minimalist composition with negative space and simple geometry",
-              animation: "3D Pixar-style animated render with vibrant colors",
-              painting: "Oil painting style with visible brush strokes and rich texture",
+              animation: "3D Pixar-style animated render with vibrant colors, smooth surfaces, stylized realism",
+              painting: "Oil painting style with visible brush strokes, rich texture, classical fine art aesthetic",
               ai_modern: "Futuristic AI-generated aesthetic with neon accents and digital glitch elements",
             };
             const PRODUCT_PROMPT_MAP: Record<string, string> = {
@@ -552,24 +553,32 @@ export async function executeToolCall(
             };
             const NON_REALISTIC = ["cartoon", "animation", "painting", "ai_modern"];
 
-            const uStyles = (context.imageStyles as string[]) || [];
-            const uProducts = (context.selectedProducts as string[]) || [];
-            let prefix = "";
+            // Collect styles from both context and tool args
+            const uStyles = (context?.imageStyles as string[]) || [];
+            const uProducts = (context?.selectedProducts as string[]) || [];
+            // Also check tool args (agent may pass style/products explicitly)
+            if (args.style && !uStyles.includes(args.style)) uStyles.push(args.style);
+            if (args.products) {
+              const toolProds = args.products.split(",").map((p: string) => p.trim());
+              toolProds.forEach((p: string) => { if (!uProducts.includes(p)) uProducts.push(p); });
+            }
 
-            if (uStyles.length) {
-              const desc = uStyles.map((k: string) => IMAGE_STYLE_MAP[k] || k).join(". ");
+            if (uStyles.length || uProducts.length) {
               const isNonRealistic = uStyles.some((s: string) => NON_REALISTIC.includes(s));
-              prefix += `MANDATORY STYLE: ${desc}. `;
-              if (isNonRealistic) {
-                prefix += `This is a NON-PHOTOREALISTIC style — do NOT make photorealistic. `;
+              let mandatoryBlock = "=== MANDATORY REQUIREMENTS (DO NOT IGNORE) ===\n";
+              if (uStyles.length) {
+                const desc = uStyles.map((k: string) => IMAGE_STYLE_MAP[k] || k).join(". ");
+                mandatoryBlock += `VISUAL STYLE: ${desc}.\n`;
+                if (isNonRealistic) {
+                  mandatoryBlock += `CRITICAL: This is NON-PHOTOREALISTIC. Do NOT make it look like a real photograph.\n`;
+                }
               }
-            }
-            if (uProducts.length) {
-              const desc = uProducts.map((k: string) => PRODUCT_PROMPT_MAP[k] || k).join("; ");
-              prefix += `MANDATORY PRODUCT FOCUS: ${desc}. The product MUST be the central subject. `;
-            }
-            if (prefix) {
-              imagePrompt = prefix + imagePrompt;
+              if (uProducts.length) {
+                const desc = uProducts.map((k: string) => PRODUCT_PROMPT_MAP[k] || k).join("; ");
+                mandatoryBlock += `PRIMARY SUBJECT: ${desc}. The product MUST be the central focus of the image.\n`;
+              }
+              mandatoryBlock += "=== END MANDATORY REQUIREMENTS ===\n\n";
+              imagePrompt = mandatoryBlock + imagePrompt;
             }
           }
 

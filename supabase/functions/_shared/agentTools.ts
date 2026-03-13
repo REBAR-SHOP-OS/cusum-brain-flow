@@ -66,8 +66,10 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
           parameters: {
             type: "object",
             properties: {
-              prompt: { type: "string", description: "Detailed description of the image to generate (scene, product, mood, text overlay)" },
-              slot: { type: "string", description: "Time slot identifier (e.g. '06:30', '07:30', '08:00', '12:30', '14:30')" }
+              prompt: { type: "string", description: "Detailed description of the image to generate (scene, product, mood, text overlay). MUST explicitly describe the mandatory style and products in the prompt text itself." },
+              slot: { type: "string", description: "Time slot identifier (e.g. '06:30', '07:30', '08:00', '12:30', '14:30')" },
+              style: { type: "string", description: "The visual style the user selected (e.g. cartoon, realism, painting, animation, cinematic, dark, golden, minimal, urban, ai_modern). MUST match user's selection exactly." },
+              products: { type: "string", description: "The products the user selected to feature (e.g. stirrups, cages, hooks, dowels, wire_mesh, rebar_straight, fiberglass_straight). MUST match user's selection." }
             },
             required: ["prompt"]
           }
