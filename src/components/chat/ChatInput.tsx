@@ -36,13 +36,13 @@ const IMAGE_STYLES = [
 ] as const;
 
 const PRODUCT_ICONS = [
-  { key: "fiberglass", label: "Fiberglass", icon: Cylinder, color: "#22c55e", shape: "rounded-full" },
-  { key: "stirrups", label: "Stirrups", icon: Square, color: "#f97316", shape: "rounded-none" },
-  { key: "cages", label: "Cages", icon: Box, color: "#3b82f6", shape: "rounded-lg" },
-  { key: "hooks", label: "Hooks", icon: Anchor, color: "#eab308", shape: "rounded-full" },
-  { key: "dowels", label: "Dowels", icon: ArrowDownUp, color: "#ef4444", shape: "rounded-md" },
-  { key: "wire_mesh", label: "Wire Mesh", icon: Grid3X3, color: "#a855f7", shape: "rounded-none" },
-  { key: "straight", label: "Rebar Straight", icon: Minus, color: "#6b7280", shape: "rounded-xl" },
+  { key: "fiberglass", label: "Fiberglass", icon: FiberglassIcon, color: "#22c55e", shape: "rounded-full" },
+  { key: "stirrups", label: "Stirrups", icon: StirrupIcon, color: "#f97316", shape: "rounded-none" },
+  { key: "cages", label: "Cages", icon: CageIcon, color: "#3b82f6", shape: "rounded-lg" },
+  { key: "hooks", label: "Hooks", icon: HookIcon, color: "#eab308", shape: "rounded-full" },
+  { key: "dowels", label: "Dowels", icon: DowelIcon, color: "#ef4444", shape: "rounded-md" },
+  { key: "wire_mesh", label: "Wire Mesh", icon: WireMeshIcon, color: "#a855f7", shape: "rounded-none" },
+  { key: "straight", label: "Rebar Straight", icon: StraightRebarIcon, color: "#6b7280", shape: "rounded-xl" },
 ] as const;
 
 interface ChatInputProps {
