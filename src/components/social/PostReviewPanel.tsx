@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
+import { ImageEditDialog } from "./ImageEditDialog";
 
 import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
 import { SelectionSubPanel, type SelectionOption } from "./SelectionSubPanel";
@@ -143,6 +144,7 @@ export function PostReviewPanel({
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [showStoryGen, setShowStoryGen] = useState(false); // rebuild-trigger-v1
+  const [showImageEdit, setShowImageEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imageZoomOpen, setImageZoomOpen] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
@@ -471,6 +473,12 @@ export function PostReviewPanel({
                       </label>
                     </div>
                     <div className="flex gap-2">
+                      {post?.image_url && !isVideo && (
+                        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowImageEdit(true)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit Image
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowStoryGen(true)}>
                         <Smartphone className="w-3.5 h-3.5" />
                         Auto Generate Story
@@ -934,11 +942,22 @@ export function PostReviewPanel({
         }}
       />
       {post?.image_url && !isVideo && (
-        <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
-          <DialogContent className="max-w-[60vw] max-h-[70vh] p-4 flex items-center justify-center">
-            <img src={post.image_url} alt="Full preview" className="max-w-full max-h-[65vh] object-contain rounded-lg" />
-          </DialogContent>
-        </Dialog>
+        <>
+          <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
+            <DialogContent className="max-w-[60vw] max-h-[70vh] p-4 flex items-center justify-center">
+              <img src={post.image_url} alt="Full preview" className="max-w-full max-h-[65vh] object-contain rounded-lg" />
+            </DialogContent>
+          </Dialog>
+          <ImageEditDialog
+            open={showImageEdit}
+            onOpenChange={setShowImageEdit}
+            imageUrl={post.image_url}
+            onImageReady={(url) => {
+              setShowImageEdit(false);
+              handleMediaReady(url, "image");
+            }}
+          />
+        </>
       )}
     </>
   );

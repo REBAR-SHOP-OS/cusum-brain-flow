@@ -147,7 +147,7 @@ serve(async (req) => {
       );
     }
 
-    const { prompt, model, brandContext, logoUrl, aspectRatio } = await req.json();
+    const { prompt, model, brandContext, logoUrl, aspectRatio, editImage } = await req.json();
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
@@ -158,7 +158,7 @@ serve(async (req) => {
 
     const selectedModel = model || "google/gemini-3-pro-image-preview";
 
-    console.log("Generating image with model:", selectedModel, "prompt:", prompt.slice(0, 80));
+    console.log("Generating image with model:", selectedModel, "prompt:", prompt.slice(0, 80), "editMode:", !!editImage);
 
     // ── Lovable AI (Gemini image models) ──
     if (selectedModel.startsWith("google/gemini")) {
@@ -170,6 +170,55 @@ serve(async (req) => {
         );
       }
 
+      // ── EDIT MODE: inpainting via annotated image ──
+      if (editImage) {
+        const editPrompt = `You are an image editor. The user has marked areas in RED on the image below. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`;
+
+        const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: [{
+              role: "user",
+              content: [
+                { type: "text", text: editPrompt },
+                { type: "image_url", image_url: { url: editImage } },
+              ],
+            }],
+            modalities: ["image", "text"],
+          }),
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          console.error("AI edit error:", resp.status, errText);
+          const status = resp.status === 429 ? 429 : resp.status === 402 ? 402 : 502;
+          return new Response(
+            JSON.stringify({ error: status === 429 ? "Rate limit exceeded." : status === 402 ? "AI credits exhausted." : `Edit failed (${resp.status})` }),
+            { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const data = await resp.json();
+        const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+        if (!imageUrl) {
+          return new Response(
+            JSON.stringify({ error: "No edited image returned" }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ imageUrl, revisedPrompt: data.choices?.[0]?.message?.content || null }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // ── GENERATE MODE (existing flow) ──
       // Step 1: Search Pexels for reference image
       const pexelsUrl = await searchPexelsReference(prompt);
       console.log("Pexels reference:", pexelsUrl ? "found" : "none");
