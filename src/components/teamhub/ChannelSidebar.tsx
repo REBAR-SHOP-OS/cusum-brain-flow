@@ -51,6 +51,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [dmsOpen, setDmsOpen] = useState(true);
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const { unreadSenderIds } = useUnreadSenders();
 
   const groupChannels = channels.filter((c) => c.channel_type === "group");
   const dmChannels = channels.filter((c) => c.channel_type === "dm");
