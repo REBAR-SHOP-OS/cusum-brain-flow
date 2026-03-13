@@ -312,9 +312,36 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem || startingRef.current) return;
     if (!completedLocally && machine.current_run_id && machine.status === "running") {
-      toast({ title: "Machine busy", description: "Complete or abort the current run first.", variant: "destructive" });
-      startingRef.current = false;
-      return;
+      // Check if the existing run is stale (>60 min, no output) — auto-clear it
+      try {
+        const { data: existingRun } = await supabase
+          .from("machine_runs")
+          .select("id, started_at, output_qty")
+          .eq("id", machine.current_run_id)
+          .single();
+        const ageMs = existingRun?.started_at ? Date.now() - new Date(existingRun.started_at).getTime() : 0;
+        if (existingRun && ageMs > 60 * 60 * 1000 && (!existingRun.output_qty || existingRun.output_qty === 0)) {
+          console.warn("[CutterStation] Stale run detected in handleLockAndStart, auto-clearing:", machine.current_run_id);
+          await manageMachine({
+            action: "complete-run",
+            machineId: machine.id,
+            runId: machine.current_run_id,
+            outputQty: 0,
+            scrapQty: 0,
+            notes: "Auto-cleared stale run (>60min, no output)",
+          });
+          await new Promise(r => setTimeout(r, 800));
+        } else {
+          toast({ title: "Machine busy", description: "Complete or abort the current run first.", variant: "destructive" });
+          startingRef.current = false;
+          return;
+        }
+      } catch (e) {
+        console.warn("[CutterStation] Stale-check failed, blocking start:", e);
+        toast({ title: "Machine busy", description: "Complete or abort the current run first.", variant: "destructive" });
+        startingRef.current = false;
+        return;
+      }
     }
     startingRef.current = true;
 
