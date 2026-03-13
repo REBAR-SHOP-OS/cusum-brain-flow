@@ -344,7 +344,6 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         return;
       }
     }
-    startingRef.current = true;
 
     // Force-clear stale run before starting if we just aborted
     if (completedLocally && machine.current_run_id) {
