@@ -474,7 +474,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
     console.log(`🎨 Regenerate: Using style #${selected.idx}: ${selected.style.slice(0, 60)}...`);
-    const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, { styleIndex: selected.idx, previousImageUrl: post.image_url || undefined });
+    const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, { styleIndex: selected.idx, previousImageUrl: post.image_url || undefined, resourceImageUrls: brainImageRefs.slice(0, 3) });
 
     const imageUrl = imgResult.imageUrl || post.image_url;
 
