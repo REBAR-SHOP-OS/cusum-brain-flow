@@ -25,23 +25,23 @@ export interface UploadedFile {
 }
 
 const IMAGE_STYLES = [
-  { key: "realism", label: "واقع‌گرایی", labelEn: "Realism", icon: Camera },
-  { key: "urban", label: "شهر", labelEn: "Urban", icon: Building2 },
-  { key: "construction", label: "ساخت و ساز", labelEn: "Construction", icon: HardHat },
-  { key: "ai_modern", label: "هوش مصنوعی", labelEn: "AI & Modern", icon: Cpu },
-  { key: "nature", label: "طبیعت", labelEn: "Nature", icon: TreePine },
-  { key: "advertising", label: "تبلیغاتی", labelEn: "Advertising", icon: Megaphone },
-  { key: "inspirational", label: "الهام‌بخش", labelEn: "Inspirational", icon: Flame },
+  { key: "realism", label: "Realism", icon: Camera, color: "#10b981" },
+  { key: "urban", label: "Urban", icon: Building2, color: "#6366f1" },
+  { key: "construction", label: "Construction", icon: HardHat, color: "#f59e0b" },
+  { key: "ai_modern", label: "AI & Modern", icon: Cpu, color: "#06b6d4" },
+  { key: "nature", label: "Nature", icon: TreePine, color: "#22c55e" },
+  { key: "advertising", label: "Advertising", icon: Megaphone, color: "#ec4899" },
+  { key: "inspirational", label: "Inspirational", icon: Flame, color: "#f97316" },
 ] as const;
 
 const PRODUCT_ICONS = [
-  { key: "fiberglass", label: "Fiberglass", labelFa: "فایبرگلاس", icon: Cylinder, color: "#22c55e" },
-  { key: "stirrups", label: "Stirrups", labelFa: "خاموت", icon: Square, color: "#f97316" },
-  { key: "cages", label: "Cages", labelFa: "قفسه", icon: Box, color: "#3b82f6" },
-  { key: "hooks", label: "Hooks", labelFa: "هوک", icon: Anchor, color: "#eab308" },
-  { key: "dowels", label: "Dowels", labelFa: "دوبل", icon: ArrowDownUp, color: "#ef4444" },
-  { key: "wire_mesh", label: "Wire Mesh", labelFa: "مش", icon: Grid3X3, color: "#a855f7" },
-  { key: "straight", label: "Rebar Straight", labelFa: "میلگرد مستقیم", icon: Minus, color: "#6b7280" },
+  { key: "fiberglass", label: "Fiberglass", icon: Cylinder, color: "#22c55e", shape: "rounded-full" },
+  { key: "stirrups", label: "Stirrups", icon: Square, color: "#f97316", shape: "rounded-none" },
+  { key: "cages", label: "Cages", icon: Box, color: "#3b82f6", shape: "rounded-lg" },
+  { key: "hooks", label: "Hooks", icon: Anchor, color: "#eab308", shape: "rounded-full" },
+  { key: "dowels", label: "Dowels", icon: ArrowDownUp, color: "#ef4444", shape: "rounded-md" },
+  { key: "wire_mesh", label: "Wire Mesh", icon: Grid3X3, color: "#a855f7", shape: "rounded-none" },
+  { key: "straight", label: "Rebar Straight", icon: Minus, color: "#6b7280", shape: "rounded-xl" },
 ] as const;
 
 interface ChatInputProps {
