@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTimeClock } from "@/hooks/useTimeClock";
 import { useLeaveManagement } from "@/hooks/useLeaveManagement";
 import { useFaceRecognition } from "@/hooks/useFaceRecognition";
