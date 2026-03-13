@@ -296,13 +296,14 @@ export default function SocialMediaManager() {
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 mb-4 sm:mb-6">
           <button
             onClick={() => {
-              const firstScheduled = posts.find((p) => p.status === "scheduled");
-              if (firstScheduled) setSelectedPost(firstScheduled);
+              setStatusFilter("approved_by_neel");
+              setPlatformFilter("all");
+              setSearchQuery("");
             }}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-purple-600 to-purple-500 text-white hover:opacity-90 transition-opacity"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-500 text-white hover:opacity-90 transition-opacity"
           >
-            <ThumbsUp className="w-5 h-5 shrink-0" />
-            <span className="font-medium">{postsToReview} posts to review</span>
+            <ShieldCheck className="w-5 h-5 shrink-0" />
+            <span className="font-medium">{approvedCount} Approved posts</span>
             <ArrowLeft className="w-4 h-4 rotate-[135deg]" />
           </button>
 
