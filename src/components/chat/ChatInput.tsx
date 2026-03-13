@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Cylinder, Square, Box, Anchor, ArrowDownUp, Grid3X3, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
