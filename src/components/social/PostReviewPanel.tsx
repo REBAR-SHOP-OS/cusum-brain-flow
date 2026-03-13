@@ -191,7 +191,7 @@ export function PostReviewPanel({
     if (groupPages && groupPages.length > 0) {
       setLocalPages(groupPages);
     } else {
-      setLocalPages(post.page_name ? [post.page_name] : ["Ontario Steel Detailing"]);
+      setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
     }
     setLocalContentType(post.content_type || "post");
   }, [post?.id, groupPages]);
