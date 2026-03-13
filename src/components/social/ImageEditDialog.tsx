@@ -156,60 +156,58 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Canvas */}
-          <div className="flex justify-center bg-muted rounded-lg p-2">
-            <canvas
-              ref={canvasRef}
-              className="cursor-crosshair rounded touch-none max-w-full"
-              style={{ imageRendering: "auto" }}
-              onMouseDown={onPointerDown}
-              onMouseMove={onPointerMove}
-              onMouseUp={onPointerUp}
-              onMouseLeave={onPointerUp}
-              onTouchStart={onPointerDown}
-              onTouchMove={onPointerMove}
-              onTouchEnd={onPointerUp}
-            />
-          </div>
-
-          {/* Controls */}
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Brush:</span>
-            <Slider
-              value={[brushSize]}
-              onValueChange={([v]) => setBrushSize(v)}
-              min={5}
-              max={60}
-              step={1}
-              className="flex-1"
-            />
-            <span className="text-xs text-muted-foreground w-8 text-right">{brushSize}px</span>
-            <Button variant="ghost" size="icon" onClick={handleUndo} disabled={strokes.length === 0}>
-              <Undo2 className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={handleClear} disabled={strokes.length === 0}>
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </div>
-
-          {/* Prompt + Apply */}
-          <div className="flex gap-2">
-            <Input
-              placeholder="Describe the edit... (e.g., 'change this area to blue sky')"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !loading && handleApply()}
-              className="flex-1"
-            />
-            <Button onClick={handleApply} disabled={loading || !prompt.trim()}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              {loading ? "Editing..." : "Apply"}
-            </Button>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Draw red marks on the areas you want to change, then describe the edit. The AI will modify only the marked areas.
-          </p>
+          {previewUrl ? (
+            <>
+              {/* Preview of edited image */}
+              <div className="flex justify-center bg-muted rounded-lg p-2">
+                <img src={previewUrl} alt="Edited preview" className="rounded max-w-full max-h-[500px] object-contain" />
+              </div>
+              <div className="flex gap-2 justify-center">
+                <Button variant="outline" onClick={() => setPreviewUrl(null)}>
+                  <RotateCcw className="w-4 h-4 mr-1" /> Retry
+                </Button>
+                <Button onClick={() => { onImageReady(previewUrl); onOpenChange(false); toast({ title: "Image applied" }); }}>
+                  <Check className="w-4 h-4 mr-1" /> Confirm
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">Review the edit. Confirm to apply or retry with a new prompt.</p>
+            </>
+          ) : (
+            <>
+              {/* Canvas */}
+              <div className="flex justify-center bg-muted rounded-lg p-2">
+                <canvas
+                  ref={canvasRef}
+                  className="cursor-crosshair rounded touch-none max-w-full"
+                  style={{ imageRendering: "auto" }}
+                  onMouseDown={onPointerDown}
+                  onMouseMove={onPointerMove}
+                  onMouseUp={onPointerUp}
+                  onMouseLeave={onPointerUp}
+                  onTouchStart={onPointerDown}
+                  onTouchMove={onPointerMove}
+                  onTouchEnd={onPointerUp}
+                />
+              </div>
+              {/* Controls */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Brush:</span>
+                <Slider value={[brushSize]} onValueChange={([v]) => setBrushSize(v)} min={5} max={60} step={1} className="flex-1" />
+                <span className="text-xs text-muted-foreground w-8 text-right">{brushSize}px</span>
+                <Button variant="ghost" size="icon" onClick={handleUndo} disabled={strokes.length === 0}><Undo2 className="w-4 h-4" /></Button>
+                <Button variant="ghost" size="icon" onClick={handleClear} disabled={strokes.length === 0}><Trash2 className="w-4 h-4" /></Button>
+              </div>
+              {/* Prompt + Apply */}
+              <div className="flex gap-2">
+                <Input placeholder="Describe the edit..." value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !loading && handleApply()} className="flex-1" />
+                <Button onClick={handleApply} disabled={loading || !prompt.trim()}>
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {loading ? "Editing..." : "Apply"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Draw red marks on the areas you want to change, then describe the edit.</p>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
