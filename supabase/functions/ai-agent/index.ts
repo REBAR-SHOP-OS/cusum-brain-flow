@@ -356,8 +356,9 @@ async function generatePixelImage(
       });
 
       if (!aiRes.ok) {
+        const errSnippet = await aiRes.text().catch(() => "");
         lastError = `${attempt.model} returned ${aiRes.status}`;
-        console.warn(`  ✗ ${lastError}`);
+        console.warn(`  ✗ ${lastError}: ${errSnippet.slice(0, 200)}`);
         continue;
       }
 
