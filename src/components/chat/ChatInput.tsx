@@ -24,6 +24,16 @@ export interface UploadedFile {
   path: string;
 }
 
+const IMAGE_STYLES = [
+  { key: "realism", label: "واقع‌گرایی", labelEn: "Realism", icon: Camera },
+  { key: "urban", label: "شهر", labelEn: "Urban", icon: Building2 },
+  { key: "construction", label: "ساخت و ساز", labelEn: "Construction", icon: HardHat },
+  { key: "ai_modern", label: "هوش مصنوعی", labelEn: "AI & Modern", icon: Cpu },
+  { key: "nature", label: "طبیعت", labelEn: "Nature", icon: TreePine },
+  { key: "advertising", label: "تبلیغاتی", labelEn: "Advertising", icon: Megaphone },
+  { key: "inspirational", label: "الهام‌بخش", labelEn: "Inspirational", icon: Flame },
+] as const;
+
 interface ChatInputProps {
   onSend: (message: string, files?: UploadedFile[]) => void;
   placeholder?: string;
@@ -33,6 +43,8 @@ interface ChatInputProps {
   minimalToolbar?: boolean;
   selectedModel?: string;
   onModelChange?: (model: string) => void;
+  imageStyles?: string[];
+  onImageStylesChange?: (styles: string[]) => void;
 }
 
 export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({
