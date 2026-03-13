@@ -192,6 +192,7 @@ export default function AgentWorkspace() {
     const extraContext: Record<string, unknown> = {};
     if (agentId === "social") {
       extraContext.selectedDate = format(selectedDate, "yyyy-MM-dd");
+      if (imageStyles.length > 0) extraContext.imageStyles = imageStyles;
     }
     if (mapping) {
       extraContext.userRole = mapping.userRole;
