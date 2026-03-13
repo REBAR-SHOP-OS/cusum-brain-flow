@@ -572,7 +572,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                             onSelectedProductsChange(next);
                           }}
                           className={cn(
-                            "p-2 transition-all border-2",
+                            "p-1.5 transition-all border-2",
                             prod.shape,
                             active
                               ? "border-current shadow-lg scale-110"
