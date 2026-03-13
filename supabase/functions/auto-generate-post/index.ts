@@ -232,13 +232,18 @@ serve(async (req) => {
       weekday: "long", month: "long", day: "numeric", year: "numeric",
     });
 
-    // Fetch business intelligence + brand kit in parallel
-    const [intelligence, brandKit] = await Promise.all([
+    // Fetch business intelligence + brand kit + logo + brain in parallel
+    const [intelligence, brandKit, logoUrl, brainCtx] = await Promise.all([
       fetchBusinessIntelligence(authHeader),
       fetchBrandKit(supabaseAdmin, userId),
+      resolveLogoUrl(),
+      fetchBrainContext(supabaseAdmin),
     ]);
 
     const products = pickUniqueProducts(TIME_SLOTS.length);
+    const brainInstructionsText = brainCtx.customInstructions
+      ? `\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${brainCtx.customInstructions}\n`
+      : "";
     const instructionsText = customInstructions ? `\nCustom instructions: ${customInstructions}` : "";
 
     // Generate for EACH platform
