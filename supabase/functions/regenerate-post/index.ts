@@ -63,7 +63,7 @@ async function generatePixelImage(
   prompt: string,
   svcClient: ReturnType<typeof createClient>,
   logoUrl: string | null,
-  options?: { styleIndex?: number | string; previousImageUrl?: string },
+  options?: { styleIndex?: number | string; previousImageUrl?: string; preferredModel?: string },
 ): Promise<{ imageUrl: string | null; error?: string }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) return { imageUrl: null, error: "LOVABLE_API_KEY not configured" };
@@ -75,6 +75,62 @@ async function generatePixelImage(
       "Do NOT create or draw any other logo — ONLY use the provided logo image. " +
       "Do NOT add text-based watermarks."
     : prompt;
+
+  // ─── OpenAI gpt-image-1 path (when user selects ChatGPT) ───
+  if (options?.preferredModel === "chatgpt") {
+    const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
+    if (GPT_API_KEY) {
+      try {
+        console.log("  → Attempting OpenAI gpt-image-1 for image generation...");
+        const openaiRes = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${GPT_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-image-1",
+            prompt: fullPrompt,
+            n: 1,
+            size: "1024x1024",
+            quality: "high",
+          }),
+        });
+
+        if (openaiRes.ok) {
+          const openaiData = await openaiRes.json();
+          const imgItem = openaiData.data?.[0];
+          let imageBytes: Uint8Array | null = null;
+
+          if (imgItem?.b64_json) {
+            imageBytes = Uint8Array.from(atob(imgItem.b64_json), (c) => c.charCodeAt(0));
+          } else if (imgItem?.url) {
+            const dlRes = await fetch(imgItem.url);
+            if (dlRes.ok) imageBytes = new Uint8Array(await dlRes.arrayBuffer());
+          }
+
+          if (imageBytes) {
+            const styleTag = options?.styleIndex ?? "x";
+            const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
+            const { error: uploadError } = await svcClient.storage
+              .from("social-images")
+              .upload(imagePath, imageBytes, { contentType: "image/png", upsert: false });
+
+            if (!uploadError) {
+              const { data: urlData } = svcClient.storage.from("social-images").getPublicUrl(imagePath);
+              console.log(`  ✓ OpenAI gpt-image-1 image uploaded: ${urlData.publicUrl}`);
+              return { imageUrl: urlData.publicUrl };
+            }
+            console.warn(`  ✗ OpenAI image upload failed: ${uploadError.message}`);
+          }
+        } else {
+          console.warn(`  ✗ OpenAI gpt-image-1 returned ${openaiRes.status}`);
+        }
+      } catch (e) {
+        console.warn(`  ✗ OpenAI gpt-image-1 error: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      console.log("  → Falling back to Gemini image generation...");
+    } else {
+      console.warn("  ⚠️ GPT_API_KEY not configured, falling back to Gemini for image generation");
+    }
+  }
 
   const attempts: { model: string; useLogo: boolean }[] = [
     { model: "google/gemini-2.5-flash-image", useLogo: true },
