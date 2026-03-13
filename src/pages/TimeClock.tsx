@@ -121,11 +121,15 @@ export default function TimeClock() {
     setShowRegistration(false);
     try {
       const result = await face.recognize();
-      // Fast auto-punch for very high confidence + well-enrolled
-      if (result && result.confidence >= 85 && (result.enrollment_count ?? 0) >= 3) {
-        setAutoPunchCountdown(1);
-      } else if (result && result.confidence >= 75 && (result.enrollment_count ?? 0) >= 3) {
-        setAutoPunchCountdown(2);
+      if (result && result.confidence >= 75) {
+        // If this person was already confirmed in this session, auto-punch immediately
+        if (confirmedProfilesRef.current.has(result.profile_id)) {
+          setAutoPunchCountdown(1);
+        } else if (result.confidence >= 85 && (result.enrollment_count ?? 0) >= 3) {
+          setAutoPunchCountdown(1);
+        } else if ((result.enrollment_count ?? 0) >= 3) {
+          setAutoPunchCountdown(2);
+        }
       }
     } finally {
       scanningRef.current = false;
