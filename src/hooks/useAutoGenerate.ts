@@ -16,7 +16,22 @@ export function useAutoGenerate() {
   }) => {
     setGenerating(true);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 55000);
+    // 120s timeout — edge function generates 5 images which can take 60-80s
+    const timeout = setTimeout(() => controller.abort(), 120000);
+
+    // Schedule polling re-fetches regardless of outcome
+    // Images may finish uploading after the initial response
+    const pollTimers: ReturnType<typeof setTimeout>[] = [];
+    const schedulePoll = () => {
+      [5000, 15000, 30000].forEach((delay) => {
+        pollTimers.push(
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+          }, delay)
+        );
+      });
+    };
+
     try {
       const { data, error } = await supabase.functions.invoke("auto-generate-post", {
         body: {
@@ -38,6 +53,8 @@ export function useAutoGenerate() {
           description: data.error,
           variant: "destructive",
         });
+        // Still poll — posts may have been partially created
+        schedulePoll();
         return null;
       }
 
@@ -46,21 +63,27 @@ export function useAutoGenerate() {
         description: data.message || `${data.postsCreated} post(s) ready for your approval.`,
       });
 
-      // Refresh posts list
+      // Refresh posts list immediately + schedule polls for late image uploads
       queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+      schedulePoll();
 
       return data;
     } catch (err) {
       clearTimeout(timeout);
       const isTimeout = err instanceof DOMException && err.name === "AbortError";
       const message = isTimeout
-        ? "Generation timed out — please try again with fewer platforms."
+        ? "Generation is taking longer than expected — posts will appear shortly."
         : err instanceof Error ? err.message : "Failed to generate posts";
       toast({
-        title: isTimeout ? "Timeout" : "Generation error",
+        title: isTimeout ? "Still processing…" : "Generation error",
         description: message,
-        variant: "destructive",
+        variant: isTimeout ? "default" : "destructive",
       });
+
+      // On timeout, the server is still working — poll for results
+      queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+      schedulePoll();
+
       return null;
     } finally {
       setGenerating(false);

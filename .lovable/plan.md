@@ -1,53 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Auto-Generate Reliability & Missing Images
+## Completed: Add All Wan 2.6 Capabilities
 
-## Root Cause Analysis
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-**Two critical issues found:**
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. Client Timeout (55s) vs Server Processing Time (~80s)
-The `useAutoGenerate.ts` hook has a 55-second `AbortController` timeout. However, the `auto-generate-post` edge function generates 5 images **sequentially** (each ~10-15s), taking 60-80 seconds total. When the client aborts:
-- The error toast fires ("Generation timed out")
-- `queryClient.invalidateQueries` **never runs** (it's in the success path)
-- The edge function **continues server-side** and actually succeeds
-- The user sees posts without images because the cache was never refreshed
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 2. Race Condition: Posts Inserted Before Images
-The edge function inserts posts with `image_url: null` first, then generates and uploads images one by one, updating each post. If the client fetches posts during this window, posts appear imageless.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-**Evidence from DB:** All `pending_approval` posts currently have `image_url` set — confirming images ARE generated, but the client misses the updates.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-## Solution
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### Changes to `src/hooks/useAutoGenerate.ts`
-1. **Increase timeout** from 55s to 120s (matching the edge function's realistic completion time)
-2. **Add post-completion polling**: After the edge function returns (success or timeout), schedule 2-3 delayed `invalidateQueries` calls to pick up late image updates
-3. **On timeout, still invalidate queries** — since the server continues working, the posts exist and will eventually have images
-
-### Changes to `supabase/functions/auto-generate-post/index.ts`
-1. **Generate images in parallel** (2 at a time) instead of sequentially — cut total time from ~80s to ~40s
-2. **Return early with post IDs** after inserting all text-only posts, then continue image generation asynchronously using `waitUntil` pattern (Deno doesn't support this, so parallel batching is the practical fix)
-
-### Changes to `src/pages/SocialMediaManager.tsx`
-1. After auto-generate returns, add a delayed re-fetch (5s, 15s, 30s) to catch any images that were still being uploaded
-
-## Technical Detail
-
-```text
-Current flow:
-  Client ──55s timeout──> ABORT
-  Server: insert post1 → gen img1 (10s) → insert post2 → gen img2 (10s) → ... → post5 (total ~80s)
-  Client sees: posts without images, error toast
-
-Fixed flow:
-  Client ──120s timeout──> wait
-  Server: insert all 5 posts → gen img1+img2 parallel → gen img3+img4 parallel → gen img5 (total ~40s)
-  Client: success toast + invalidate + scheduled re-fetches at 5s/15s
-```
-
-## Files
-- `src/hooks/useAutoGenerate.ts` — increase timeout, add polling re-fetches
-- `supabase/functions/auto-generate-post/index.ts` — parallelize image generation (2 concurrent)
-- `src/pages/SocialMediaManager.tsx` — add delayed re-fetch after generate
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

@@ -287,14 +287,13 @@ Return an array of 5 objects:
         // Create posts and generate images via Lovable AI
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
+        // Phase 1: Insert ALL text-only posts first (fast, ~2s total)
+        const insertedPosts: { post: any; insertedPost: any; index: number }[] = [];
         for (let i = 0; i < generatedPosts.length; i++) {
           const post = generatedPosts[i];
           const slot = TIME_SLOTS[i] || TIME_SLOTS[0];
-          let imageUrl: string | null = null;
-
           const scheduledAt = buildScheduledDate(postDate, slot.hour, slot.minute);
 
-          // Insert post first (text-only)
           const { data: insertedPost, error: insertError } = await supabaseAdmin
             .from("social_posts")
             .insert({
@@ -314,67 +313,92 @@ Return an array of 5 objects:
             console.error("Failed to insert post:", insertError);
             continue;
           }
+          insertedPosts.push({ post, insertedPost, index: i });
+        }
 
-          // Generate image via Lovable AI (gemini-2.5-flash-image)
-          if (LOVABLE_API_KEY && post.image_prompt) {
-            try {
-              console.log(`Generating image for post ${i + 1}/${generatedPosts.length}...`);
-              const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: "google/gemini-2.5-flash-image",
-                  messages: [{ role: "user", content: post.image_prompt }],
-                  modalities: ["image", "text"],
-                }),
-              });
+        // Phase 2: Generate images in PARALLEL batches of 2
+        const BATCH_SIZE = 2;
+        async function generateAndUploadImage(
+          post: any, insertedPost: any, idx: number
+        ): Promise<string | null> {
+          if (!LOVABLE_API_KEY || !post.image_prompt) return null;
+          try {
+            console.log(`Generating image for post ${idx + 1}/${generatedPosts.length}...`);
+            const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash-image",
+                messages: [{ role: "user", content: post.image_prompt }],
+                modalities: ["image", "text"],
+              }),
+            });
 
-              if (imgResp.ok) {
-                const imgData = await imgResp.json();
-                const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-
-                if (b64Url) {
-                  // Upload base64 to storage
-                  const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
-                  const binaryStr = atob(base64Data);
-                  const bytes = new Uint8Array(binaryStr.length);
-                  for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
-                  const blob = new Blob([bytes], { type: "image/png" });
-
-                  const fileName = `images/${crypto.randomUUID()}.png`;
-                  const { error: uploadErr } = await supabaseAdmin.storage
-                    .from("social-media-assets")
-                    .upload(fileName, blob, { contentType: "image/png", upsert: false });
-
-                  if (!uploadErr) {
-                    const { data: pubUrl } = supabaseAdmin.storage
-                      .from("social-media-assets")
-                      .getPublicUrl(fileName);
-                    imageUrl = pubUrl.publicUrl;
-
-                    // Update post with image URL
-                    await supabaseAdmin
-                      .from("social_posts")
-                      .update({ image_url: imageUrl })
-                      .eq("id", insertedPost.id);
-
-                    console.log(`Image uploaded for post ${i + 1}: ${fileName}`);
-                  } else {
-                    console.error("Storage upload error:", uploadErr);
-                  }
-                }
-              } else {
-                console.error("Image generation failed:", imgResp.status, await imgResp.text());
-              }
-            } catch (imgErr) {
-              console.error("Image generation error (non-critical):", imgErr);
+            if (!imgResp.ok) {
+              console.error("Image generation failed:", imgResp.status, await imgResp.text());
+              return null;
             }
-          }
 
-          // Create approval record for configured approvers
+            const imgData = await imgResp.json();
+            const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+            if (!b64Url) return null;
+
+            const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
+            const binaryStr = atob(base64Data);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            const blob = new Blob([bytes], { type: "image/png" });
+
+            const fileName = `images/${crypto.randomUUID()}.png`;
+            const { error: uploadErr } = await supabaseAdmin.storage
+              .from("social-media-assets")
+              .upload(fileName, blob, { contentType: "image/png", upsert: false });
+
+            if (uploadErr) {
+              console.error("Storage upload error:", uploadErr);
+              return null;
+            }
+
+            const { data: pubUrl } = supabaseAdmin.storage
+              .from("social-media-assets")
+              .getPublicUrl(fileName);
+            const imageUrl = pubUrl.publicUrl;
+
+            await supabaseAdmin
+              .from("social_posts")
+              .update({ image_url: imageUrl })
+              .eq("id", insertedPost.id);
+
+            console.log(`Image uploaded for post ${idx + 1}: ${fileName}`);
+            return imageUrl;
+          } catch (imgErr) {
+            console.error("Image generation error (non-critical):", imgErr);
+            return null;
+          }
+        }
+
+        // Process images in batches of 2 for parallelism
+        for (let b = 0; b < insertedPosts.length; b += BATCH_SIZE) {
+          const batch = insertedPosts.slice(b, b + BATCH_SIZE);
+          const results = await Promise.allSettled(
+            batch.map(({ post, insertedPost, index }) =>
+              generateAndUploadImage(post, insertedPost, index)
+            )
+          );
+          // Store image URLs back
+          batch.forEach(({ insertedPost }, bi) => {
+            const r = results[bi];
+            if (r.status === "fulfilled" && r.value) {
+              insertedPost.image_url = r.value;
+            }
+          });
+        }
+
+        // Phase 3: Create approval records for all inserted posts
+        for (const { post, insertedPost } of insertedPosts) {
           try {
             const { data: adminProfiles } = await supabaseAdmin
               .from("profiles")
@@ -384,7 +408,7 @@ Return an array of 5 objects:
               .filter((p: any) => p.user_roles?.some((r: any) => ["admin", "sales"].includes(r.role)));
 
             const approverIds = admins.map((a: any) => a.user_id).filter((id: any) => id !== userId) || [];
-            
+
             for (const approverId of approverIds.slice(0, 2)) {
               await supabaseAdmin.from("social_approvals").insert({
                 post_id: insertedPost.id,
@@ -421,7 +445,6 @@ Return an array of 5 objects:
 
           allCreatedPosts.push({
             ...insertedPost,
-            image_url: imageUrl || insertedPost.image_url,
             time_slot: post.time_slot,
             product: post.product,
             farsi_translation: post.farsi_translation,
