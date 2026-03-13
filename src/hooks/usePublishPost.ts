@@ -55,6 +55,7 @@ export function usePublishPost() {
           image_url: post.image_url,
           post_id: post.id,
           page_name: post.page_name,
+          force_publish: true,
         },
       });
 

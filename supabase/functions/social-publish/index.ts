@@ -115,8 +115,8 @@ serve(async (req) => {
       }
     }
 
-    // Server-side Neel approval guard
-    if (post_id) {
+    // Server-side Neel approval guard (skipped for manual "Publish Now" via force_publish)
+    if (post_id && !force_publish) {
       const { data: postCheck } = await supabaseAdmin
         .from("social_posts")
         .select("neel_approved")
