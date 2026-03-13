@@ -91,6 +91,14 @@ serve(async (req) => {
     }
   } catch (error) {
     console.error("LinkedIn OAuth error:", error);
+    // If this is a callback request, redirect to app with error instead of returning JSON
+    const reqUrl = new URL(req.url);
+    if (reqUrl.pathname.endsWith("/callback")) {
+      const errUrl = new URL("/integrations/callback", "https://erp.rebar.shop");
+      errUrl.searchParams.set("status", "error");
+      errUrl.searchParams.set("message", error instanceof Error ? error.message : "Unknown error");
+      return Response.redirect(errUrl.toString(), 302);
+    }
     return jsonRes(
       { error: error instanceof Error ? error.message : "Unknown error" },
       500
