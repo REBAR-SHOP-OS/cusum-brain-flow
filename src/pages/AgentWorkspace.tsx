@@ -90,6 +90,7 @@ export default function AgentWorkspace() {
   const [aiModel, setAiModel] = useState<string>("gemini");
   const [imageStyles, setImageStyles] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [imageAspectRatio, setImageAspectRatio] = useState<string>("1:1");
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle } = useChatSessions();
   const hasConversation = messages.length > 0;
@@ -194,6 +195,7 @@ export default function AgentWorkspace() {
       extraContext.selectedDate = format(selectedDate, "yyyy-MM-dd");
       if (imageStyles.length > 0) extraContext.imageStyles = imageStyles;
       if (selectedProducts.length > 0) extraContext.selectedProducts = selectedProducts;
+      extraContext.imageAspectRatio = imageAspectRatio;
     }
     if (mapping) {
       extraContext.userRole = mapping.userRole;
@@ -620,6 +622,8 @@ export default function AgentWorkspace() {
                 onImageStylesChange={setImageStyles}
                 selectedProducts={selectedProducts}
                 onSelectedProductsChange={setSelectedProducts}
+                imageAspectRatio={imageAspectRatio}
+                onImageAspectRatioChange={setImageAspectRatio}
               />
             </div>
 
@@ -655,10 +659,12 @@ export default function AgentWorkspace() {
               minimalToolbar={agentId === "social"}
               selectedModel={aiModel}
               onModelChange={setAiModel}
-              imageStyles={imageStyles}
-              onImageStylesChange={setImageStyles}
-              selectedProducts={selectedProducts}
-              onSelectedProductsChange={setSelectedProducts}
+                imageStyles={imageStyles}
+                onImageStylesChange={setImageStyles}
+                selectedProducts={selectedProducts}
+                onSelectedProductsChange={setSelectedProducts}
+                imageAspectRatio={imageAspectRatio}
+                onImageAspectRatioChange={setImageAspectRatio}
             />
           </>
         )}

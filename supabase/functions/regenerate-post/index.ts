@@ -63,7 +63,7 @@ async function generatePixelImage(
   prompt: string,
   svcClient: ReturnType<typeof createClient>,
   logoUrl: string | null,
-  options?: { styleIndex?: number | string; previousImageUrl?: string; preferredModel?: string; resourceImageUrls?: string[] },
+  options?: { styleIndex?: number | string; previousImageUrl?: string; preferredModel?: string; resourceImageUrls?: string[]; imageAspectRatio?: string },
 ): Promise<{ imageUrl: string | null; error?: string }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) return { imageUrl: null, error: "LOVABLE_API_KEY not configured" };
@@ -76,6 +76,13 @@ async function generatePixelImage(
       "Do NOT add text-based watermarks."
     : prompt;
 
+  // Inject aspect ratio instruction
+  const aspectRatio = options?.imageAspectRatio || "1:1";
+  const aspectInstruction = aspectRatio === "16:9"
+    ? "\n\nIMAGE ASPECT RATIO: Generate this image in LANDSCAPE 16:9 widescreen format (wider than tall)."
+    : "\n\nIMAGE ASPECT RATIO: Generate this image in SQUARE 1:1 format (equal width and height).";
+  const finalPrompt = fullPrompt + aspectInstruction;
+
   // ─── OpenAI gpt-image-1 path (when user selects ChatGPT) ───
   if (options?.preferredModel === "chatgpt") {
     const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
@@ -85,11 +92,11 @@ async function generatePixelImage(
         const openaiRes = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${GPT_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
+           body: JSON.stringify({
             model: "gpt-image-1",
-            prompt: fullPrompt,
+            prompt: finalPrompt,
             n: 1,
-            size: "1024x1024",
+            size: aspectRatio === "16:9" ? "1536x1024" : "1024x1024",
             quality: "high",
           }),
         });
@@ -148,7 +155,7 @@ async function generatePixelImage(
 
   for (const attempt of attempts) {
     try {
-      const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+      const contentParts: any[] = [{ type: "text", text: finalPrompt }];
 
       // Attach resource/reference images from brain (only if attempt allows)
       if (attempt.useRefs && options?.resourceImageUrls?.length) {

@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Clapperboard, Smile, Palette } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check, Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Clapperboard, Smile, Palette, RectangleHorizontal, Square } from "lucide-react";
 import { FiberglassIcon, StirrupIcon, CageIcon, HookIcon, DowelIcon, WireMeshIcon, StraightRebarIcon } from "./ProductIcons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -61,6 +61,8 @@ interface ChatInputProps {
   onImageStylesChange?: (styles: string[]) => void;
   selectedProducts?: string[];
   onSelectedProductsChange?: (products: string[]) => void;
+  imageAspectRatio?: string;
+  onImageAspectRatioChange?: (ratio: string) => void;
 }
 
 export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({
@@ -76,6 +78,8 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   onImageStylesChange,
   selectedProducts = [],
   onSelectedProductsChange,
+  imageAspectRatio = "1:1",
+  onImageAspectRatioChange,
 }, ref) {
   const [value, setValue] = useState("");
   const [smartMode, setSmartMode] = useState(false);
@@ -610,6 +614,52 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                   })}
                 </div>
               </div>
+            )}
+
+            {/* Image Aspect Ratio (Pixel agent only) */}
+            {minimalToolbar && onImageAspectRatioChange && (
+              <>
+                <div className="w-px h-8 bg-border mx-0.5" />
+                <div className="flex flex-col items-center gap-0.5 bg-muted/30 rounded-lg px-1.5 py-0.5">
+                  <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Size</span>
+                  <div className="flex items-center gap-0.5">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => onImageAspectRatioChange("16:9")}
+                          className={cn(
+                            "p-1.5 rounded-lg transition-all border-2",
+                            imageAspectRatio === "16:9"
+                              ? "border-primary shadow-md scale-110 bg-primary/15 text-primary"
+                              : "border-transparent hover:scale-105 text-muted-foreground bg-muted/20"
+                          )}
+                        >
+                          <RectangleHorizontal className="w-4 h-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Landscape (16:9)</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => onImageAspectRatioChange("1:1")}
+                          className={cn(
+                            "p-1.5 rounded-lg transition-all border-2",
+                            imageAspectRatio === "1:1"
+                              ? "border-primary shadow-md scale-110 bg-primary/15 text-primary"
+                              : "border-transparent hover:scale-105 text-muted-foreground bg-muted/20"
+                          )}
+                        >
+                          <Square className="w-4 h-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Square (1:1)</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </div>
+              </>
             )}
 
             {/* Spacer */}
