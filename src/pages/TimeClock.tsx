@@ -54,6 +54,9 @@ export default function TimeClock() {
   const [autoPunchCountdown, setAutoPunchCountdown] = useState(0);
   const [showRegistration, setShowRegistration] = useState(false);
 
+  // Cache of profile IDs confirmed during this kiosk session
+  const confirmedProfilesRef = useRef<Set<string>>(new Set());
+
   const now = new Date();
 
   // Fetch enrollment count
