@@ -107,6 +107,8 @@ export default function SocialMediaManager() {
     }
     if (statusFilter === "approved_by_neel") {
       items = items.filter((p) => p.neel_approved);
+    } else if (statusFilter === "pending_approval") {
+      items = items.filter((p) => p.status === "scheduled" && !p.neel_approved);
     } else if (statusFilter !== "all") {
       items = items.filter((p) => p.status === statusFilter);
     }
