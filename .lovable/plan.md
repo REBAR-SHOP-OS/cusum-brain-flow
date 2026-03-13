@@ -1,25 +1,38 @@
 
 
-# Screenshot: فریز فوری صفحه هنگام کلیک
+# Fix: "Machine Busy" Error — Stale Run Detection
 
-## مشکل
-وقتی دکمه اسکرین‌شات زده می‌شود، html2canvas زمان می‌برد (۱-۳ ثانیه). در این مدت ارورها یا حالت‌های موقت ممکن است ناپدید شوند و اسکرین‌شات وضعیت اصلی را نشان ندهد.
+## Root Cause
 
-## راه‌حل
+CUTTER-01 has a run (`23e3756b`) that's been in `running` status for **3+ hours** with zero output. This is an orphaned/stale run — the operator likely navigated away or the browser refreshed without completing it.
 
-### `src/components/feedback/ScreenshotFeedbackButton.tsx`
+The current auto-recovery logic on mount (line 88) only clears runs where `status !== "running"`. A genuinely stale run that's still marked `running` in the DB is treated as active, blocking all new starts.
 
-۱. **فریز فوری**: بلافاصله پس از کلیک (قبل از شروع html2canvas):
-   - یک `<div>` تمام‌صفحه با `position: fixed; inset: 0; z-index: 9998` اضافه شود که تمام تعاملات را مسدود کند
-   - یک `<style>` تزریق شود: `* { animation-play-state: paused !important; transition: none !important; }` تا انیمیشن‌ها متوقف شوند
-   - `document.body.style.pointerEvents = 'none'` برای جلوگیری از hover effects
+## Fix
 
-۲. **رفع فریز**: بعد از اتمام capture (چه موفق چه ناموفق) در `finally` block، overlay و style حذف شوند
+### `src/components/shopfloor/CutterStationView.tsx`
 
-۳. **ترتیب اجرا**:
+**1. Time-based stale detection on mount** (lines ~87-103):
+
+When a run IS `running` in the DB, add a check: if `started_at` is older than 60 minutes AND `output_qty` is null/0, treat it as stale and auto-clear it — same as the existing non-running cleanup path.
+
 ```text
-کلیک → فریز فوری (sync) → capture async → نتیجه → رفع فریز → نمایش overlay
+Run is "running" in DB
+  ├── started_at > 60 min ago AND output_qty = 0/null → STALE → auto-clear
+  └── started_at < 60 min → genuinely active → restore
 ```
 
-تغییرات فقط در تابع `capture` در همین فایل — حدود ۱۰ خط اضافه شدن در ابتدا و ۳ خط در `finally`.
+**2. Improve the mount query** (line ~85):
+
+Add `started_at, output_qty` to the `select` so we have the data needed for the time check.
+
+**3. Add stale override in handleLockAndStart** (line ~310):
+
+If the machine's `current_run_id` exists but was started >60 min ago, treat it as stale and auto-clear before starting the new run (similar to the existing `completedLocally` path at line 318).
+
+### Summary
+
+- ~15 lines changed in the mount restoration block
+- ~10 lines added in `handleLockAndStart` for stale-run auto-clear
+- No backend changes needed — the `complete-run` action already handles cleanup
 
