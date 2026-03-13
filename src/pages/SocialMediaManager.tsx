@@ -194,7 +194,8 @@ export default function SocialMediaManager() {
     }
   }, [filteredPosts]);
 
-  const postsToReview = posts.filter((p) => p.status === "scheduled").length;
+  const approvedCount = posts.filter((p) => p.neel_approved).length;
+  const postsToReview = approvedCount;
 
   const handlePrevWeek = () => setWeekStart((prev) => addDays(prev, -7));
   const handleNextWeek = () => setWeekStart((prev) => addDays(prev, 7));
