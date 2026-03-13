@@ -43,7 +43,6 @@ export function AppSidebar() {
   // AI bot account: only Dashboard + Shop Floor
   if (email === "ai@rebar.shop") {
     const aiNav: NavItem[] = [
-      { name: "Dashboard", href: "/home", icon: Home },
       { name: "Kiosk", href: "/timeclock?kiosk=1", icon: Maximize },
       { name: "Shop Floor", href: "/shop-floor", icon: Factory },
     ];
