@@ -132,10 +132,16 @@ async function generatePixelImage(
     }
   }
 
-  const attempts: { model: string; useLogo: boolean }[] = [
-    { model: "google/gemini-2.5-flash-image", useLogo: true },
-    { model: "google/gemini-2.5-flash-image", useLogo: true },
-    { model: "google/gemini-3-pro-image-preview", useLogo: true },
+  const hasRefs = !!options?.resourceImageUrls?.length;
+  const attempts: { model: string; useLogo: boolean; useRefs: boolean }[] = [
+    { model: "google/gemini-2.5-flash-image", useLogo: true, useRefs: true },
+    { model: "google/gemini-2.5-flash-image", useLogo: true, useRefs: true },
+    { model: "google/gemini-3-pro-image-preview", useLogo: true, useRefs: true },
+    ...(hasRefs ? [
+      { model: "google/gemini-2.5-flash-image", useLogo: true, useRefs: false },
+      { model: "google/gemini-3-pro-image-preview", useLogo: true, useRefs: false },
+    ] : []),
+    { model: "google/gemini-2.5-flash-image", useLogo: false, useRefs: false },
   ];
 
   let lastError = "Unknown error";
