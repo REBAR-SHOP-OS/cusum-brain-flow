@@ -1090,6 +1090,10 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                 onNegativePromptChange={setNegativePrompt}
                 customAudioFile={customAudioFile}
                 onCustomAudioFileChange={setCustomAudioFile}
+                firstFrameImage={firstFrameImage}
+                onFirstFrameImageChange={setFirstFrameImage}
+                lastFrameImage={lastFrameImage}
+                onLastFrameImageChange={setLastFrameImage}
               />
             </div>
           )}
