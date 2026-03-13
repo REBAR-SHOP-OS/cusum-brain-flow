@@ -33,6 +33,9 @@ const IMAGE_STYLES = [
   { key: "nature", label: "Nature", icon: TreePine, color: "#22c55e" },
   { key: "advertising", label: "Advertising", icon: Megaphone, color: "#ec4899" },
   { key: "inspirational", label: "Inspirational", icon: Flame, color: "#f97316" },
+  { key: "cartoon", label: "Cartoon", icon: Smile, color: "#a855f7" },
+  { key: "animation", label: "Animation", icon: Clapperboard, color: "#8b5cf6" },
+  { key: "painting", label: "Painting", icon: Palette, color: "#e11d48" },
 ] as const;
 
 const PRODUCT_ICONS = [
