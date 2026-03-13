@@ -80,8 +80,12 @@ async function generatePixelImage(
   const aspectRatio = options?.imageAspectRatio || "1:1";
   const aspectInstruction = aspectRatio === "16:9"
     ? "\n\nIMAGE ASPECT RATIO: Generate this image in LANDSCAPE 16:9 widescreen format (wider than tall)."
+    : aspectRatio === "9:16"
+    ? "\n\nIMAGE ASPECT RATIO: Generate this image in VERTICAL 9:16 portrait format (taller than wide, suitable for Stories/Reels)."
     : "\n\nIMAGE ASPECT RATIO: Generate this image in SQUARE 1:1 format (equal width and height).";
   const finalPrompt = fullPrompt + aspectInstruction;
+
+  const openaiSizeMap: Record<string, string> = { "16:9": "1536x1024", "9:16": "1024x1536", "1:1": "1024x1024" };
 
   // ─── OpenAI gpt-image-1 path (when user selects ChatGPT) ───
   if (options?.preferredModel === "chatgpt") {
@@ -96,7 +100,7 @@ async function generatePixelImage(
             model: "gpt-image-1",
             prompt: finalPrompt,
             n: 1,
-            size: aspectRatio === "16:9" ? "1536x1024" : "1024x1024",
+            size: openaiSizeMap[aspectRatio] || "1024x1024",
             quality: "high",
           }),
         });
