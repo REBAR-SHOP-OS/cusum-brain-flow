@@ -74,16 +74,20 @@ async function veoGenerate(
   // First frame image (image-to-video start)
   if (firstFrameBase64) {
     instance.image = {
-      bytesBase64Encoded: firstFrameBase64,
-      mimeType: firstFrameMimeType || "image/jpeg",
+      inlineData: {
+        mimeType: firstFrameMimeType || "image/jpeg",
+        data: firstFrameBase64,
+      },
     };
   }
 
-  // Last frame image (image-to-video end) — NO nested `image` wrapper per Gemini API
+  // Last frame image (image-to-video end)
   if (lastFrameBase64) {
     instance.lastFrame = {
-      bytesBase64Encoded: lastFrameBase64,
-      mimeType: lastFrameMimeType || "image/jpeg",
+      inlineData: {
+        mimeType: lastFrameMimeType || "image/jpeg",
+        data: lastFrameBase64,
+      },
     };
   }
 
