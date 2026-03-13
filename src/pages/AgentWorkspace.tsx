@@ -330,7 +330,9 @@ export default function AgentWorkspace() {
 
         const { error } = await supabase.from("social_posts").insert({
           platform: lastPixelPost.platform || "instagram",
-          status: "draft",
+          status: "pending_approval",
+          qa_status: "needs_review",
+          neel_approved: false,
           title: lastPixelPost.theme || lastPixelPost.product || "Pixel Post",
           content: lastPixelPost.caption,
           image_url: lastPixelPost.imageUrl || null,
@@ -342,7 +344,7 @@ export default function AgentWorkspace() {
           console.error("Failed to save pixel post:", error);
           toast.error("Failed to save post to calendar");
         } else {
-          toast.success("Post saved to calendar as draft ✅");
+          toast.success("Post saved to calendar for approval ✅");
         }
       } catch (err) {
         console.error("Error saving pixel post:", err);
@@ -414,7 +416,9 @@ export default function AgentWorkspace() {
       // Create a single unassigned card — platform/page chosen later in Social Media Manager
       const { error } = await supabase.from("social_posts").insert({
         platform: "unassigned",
-        status: "draft",
+        status: "pending_approval",
+        qa_status: "needs_review",
+        neel_approved: false,
         title,
         content,
         image_url: post.imageUrl || null,
