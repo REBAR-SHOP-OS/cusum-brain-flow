@@ -1,46 +1,52 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# تغییرات: دکمه‌های رنگی و شکل متفاوت + حذف فارسی
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## مشکلات فعلی
+1. آیکون‌های style و product ظاهر ساده دارند — باید شبیه دکمه‌های رنگارنگ شوند
+2. Tooltip و label‌ها شامل متن فارسی هستند — باید کاملاً انگلیسی شوند
+3. دکمه‌های style همه یک رنگ (primary) دارند — هر کدام باید رنگ مجزا داشته باشند
+4. دکمه‌های محصولات باید شکل (shape) متفاوت داشته باشند
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## تغییرات
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### فایل: `src/components/chat/ChatInput.tsx`
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+**1. آرایه IMAGE_STYLES:**
+- حذف `label` فارسی، فقط `labelEn` (یا `label` انگلیسی) نگه داشته شود
+- اضافه کردن `color` به هر style:
+  - Realism → `#10b981` (emerald)
+  - Urban → `#6366f1` (indigo)
+  - Construction → `#f59e0b` (amber)
+  - AI & Modern → `#06b6d4` (cyan)
+  - Nature → `#22c55e` (green)
+  - Advertising → `#ec4899` (pink)
+  - Inspirational → `#f97316` (orange)
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+**2. آرایه PRODUCT_ICONS:**
+- حذف `labelFa`
+- اضافه کردن `shape` به هر محصول برای تفاوت ظاهری:
+  - Fiberglass → `rounded-full`
+  - Stirrups → `rounded-none` (مربع)
+  - Cages → `rounded-lg`
+  - Hooks → `rounded-full`
+  - Dowels → `rounded-md`
+  - Wire Mesh → `rounded-none`
+  - Straight → `rounded-xl`
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+**3. رندر Style buttons (خطوط ~518-550):**
+- هر دکمه با رنگ مخصوص خودش رندر شود (مشابه product buttons)
+- وقتی active: پس‌زمینه رنگی + border رنگی + آیکون رنگی
+- وقتی inactive: آیکون با رنگ ملایم‌تر همان رنگ
+- Tooltip فقط انگلیسی
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+**4. رندر Product buttons (خطوط ~554-588):**
+- هر دکمه shape متفاوت داشته باشد (از `shape` property)
+- active/inactive styling مشابه فعلی ولی با shape اعمال‌شده
+- Tooltip فقط انگلیسی
+
+**5. اندازه آیکون‌ها:**
+- Style icons: `w-4 h-4` → `w-5 h-5`
+- Product icons: `w-5 h-5` → `w-6 h-6`
+- padding دکمه‌ها: `p-1.5` → `p-2`
+
