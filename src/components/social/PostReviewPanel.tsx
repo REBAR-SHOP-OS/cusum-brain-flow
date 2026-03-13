@@ -942,11 +942,22 @@ export function PostReviewPanel({
         }}
       />
       {post?.image_url && !isVideo && (
-        <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
-          <DialogContent className="max-w-[60vw] max-h-[70vh] p-4 flex items-center justify-center">
-            <img src={post.image_url} alt="Full preview" className="max-w-full max-h-[65vh] object-contain rounded-lg" />
-          </DialogContent>
-        </Dialog>
+        <>
+          <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
+            <DialogContent className="max-w-[60vw] max-h-[70vh] p-4 flex items-center justify-center">
+              <img src={post.image_url} alt="Full preview" className="max-w-full max-h-[65vh] object-contain rounded-lg" />
+            </DialogContent>
+          </Dialog>
+          <ImageEditDialog
+            open={showImageEdit}
+            onOpenChange={setShowImageEdit}
+            imageUrl={post.image_url}
+            onImageReady={(url) => {
+              setShowImageEdit(false);
+              handleMediaReady(url, "image");
+            }}
+          />
+        </>
       )}
     </>
   );
