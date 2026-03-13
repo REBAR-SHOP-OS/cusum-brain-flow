@@ -1,46 +1,41 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: User-selected style & product must strictly control image generation
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+The `PIXEL_SLOTS` array hardcodes each slot's product (e.g., slot 2 = "Rebar Cages"). When a user selects "stirrups" + "realism" style and picks slot 2, the image prompt still uses "Rebar Cages" as the product focus because:
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+1. `generateDynamicContent(slot, ...)` uses `slot.product` to generate caption/slogan — ignoring user's product selection
+2. The `PRODUCT FOCUS:` line at line 774 falls back to `slot.product` when no override exists, but even with override, the caption was already generated for the wrong product
+3. The `effectiveStyle` override works but is buried among competing style directives
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Changes
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### `supabase/functions/ai-agent/index.ts`
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+1. **Override slot product with user selection** (~line 628): Before the `for` loop body, when `userSelectedProducts` is set, override `slot.product` so that `generateDynamicContent` creates captions about the correct product:
+   ```typescript
+   const effectiveSlotProduct = userSelectedProducts?.length
+     ? userSelectedProducts.map(k => PRODUCT_PROMPT_MAP[k] || k).join(" & ")
+     : slot.product;
+   ```
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+2. **Pass overridden product to `generateDynamicContent`** (~line 637): Replace `slot` with a modified slot object that uses `effectiveSlotProduct`
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+3. **Strengthen the image prompt priority** (~line 768-785): Move user-selected product/style blocks to the TOP of the prompt with `HIGHEST PRIORITY` markers, and make the instruction more explicit:
+   ```
+   ## HIGHEST PRIORITY — USER EXPLICITLY REQUESTED:
+   STYLE: {effectiveStyle}
+   PRODUCT: {productFocusOverride}
+   The image MUST show exactly this product in this style. Override all other defaults.
+   ```
+
+4. **Move `userSelectedProducts` extraction earlier** (~line 760): Extract it before the loop so it's available for slot product override
+
+### `supabase/functions/regenerate-post/index.ts`
+Same priority strengthening for user product/style in the regeneration prompt.
+
+### Files
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/regenerate-post/index.ts`
+
