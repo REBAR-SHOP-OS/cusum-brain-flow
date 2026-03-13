@@ -323,7 +323,7 @@ Scientific explanations, technical specifications, engineering terminology, mate
 - Purely promotional advertising style — NOT fantasy, cartoon, or scientific/technical
 - Clean, professional, visually striking — like professional documentary/commercial photography
 - Use Brain files (logo & content reference) when available
-${instructionsText}
+${brainInstructionsText}${instructionsText}
 
 Return valid JSON only. No markdown, no code blocks.
 Return an array of 5 objects:
