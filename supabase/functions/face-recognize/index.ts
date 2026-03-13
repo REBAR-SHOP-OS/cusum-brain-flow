@@ -176,7 +176,7 @@ You MUST call the face_match_result function with your answer.`,
       console.log(`[face-recognize] Calling AI with ${enrolledFaces.length} enrolled faces`);
       aiResult = await callAI({
         provider: "gemini",
-        model: "gemini-2.5-flash",
+        model: "gemini-2.5-pro",
         messages: [
           {
             role: "user",
