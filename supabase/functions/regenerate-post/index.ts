@@ -76,6 +76,13 @@ async function generatePixelImage(
       "Do NOT add text-based watermarks."
     : prompt;
 
+  // Inject aspect ratio instruction
+  const aspectRatio = options?.imageAspectRatio || "1:1";
+  const aspectInstruction = aspectRatio === "16:9"
+    ? "\n\nIMAGE ASPECT RATIO: Generate this image in LANDSCAPE 16:9 widescreen format (wider than tall)."
+    : "\n\nIMAGE ASPECT RATIO: Generate this image in SQUARE 1:1 format (equal width and height).";
+  const finalPrompt = fullPrompt + aspectInstruction;
+
   // ─── OpenAI gpt-image-1 path (when user selects ChatGPT) ───
   if (options?.preferredModel === "chatgpt") {
     const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
