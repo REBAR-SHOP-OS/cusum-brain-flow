@@ -23,6 +23,7 @@ import {
   Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal,
 } from "lucide-react";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { isPrivateIp, browserPing } from "@/lib/browserPing";
 
 const ZONES = [
   "loading_dock", "dispatch_yard", "cutter_area",
@@ -70,6 +71,9 @@ export default function CameraManager() {
   const [saving, setSaving] = useState(false);
   const [pingStatus, setPingStatus] = useState<Record<string, "untested" | "testing" | "online" | "offline">>({});
   const [pingLatency, setPingLatency] = useState<Record<string, number | null>>({});
+  const [pingMethod, setPingMethod] = useState<Record<string, string>>({});
+  const [agentUrl, setAgentUrl] = useState(() => localStorage.getItem("camera_agent_url") || "");
+  const [showAgentConfig, setShowAgentConfig] = useState(false);
 
   const fetchCameras = async () => {
     if (!companyId) return;
@@ -160,9 +164,67 @@ export default function CameraManager() {
     }
   };
 
+  const saveAgentUrl = (url: string) => {
+    setAgentUrl(url);
+    localStorage.setItem("camera_agent_url", url);
+  };
+
   const handleTestConnection = async (cam: CameraRow) => {
     setPingStatus((s) => ({ ...s, [cam.id]: "testing" }));
+
+    const setResult = (reachable: boolean, latency: number | null, method: string, details?: string, error?: string) => {
+      const status = reachable ? "online" : "offline";
+      setPingStatus((s) => ({ ...s, [cam.id]: status }));
+      setPingLatency((s) => ({ ...s, [cam.id]: latency }));
+      setPingMethod((s) => ({ ...s, [cam.id]: method }));
+      if (reachable) {
+        toast({ title: `✅ ${cam.name} is online`, description: `${details || ""} via ${method} (${latency}ms)` });
+      } else {
+        toast({ title: `❌ ${cam.name} is offline`, description: error || "Not reachable", variant: "destructive" });
+      }
+    };
+
     try {
+      const privateIp = isPrivateIp(cam.ip_address);
+
+      // Strategy 1: Browser-side ping for private IPs
+      if (privateIp) {
+        const bp = await browserPing(cam.ip_address);
+        if (bp.reachable) {
+          setResult(true, bp.latency_ms, "browser", "HTTP");
+          return;
+        }
+      }
+
+      // Strategy 2: Local agent relay (if configured)
+      if (agentUrl) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
+          const resp = await fetch(`${agentUrl}/agent/ping`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ip_address: cam.ip_address, port: cam.port }),
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          if (resp.ok) {
+            const result = await resp.json();
+            if (result.reachable) {
+              const details = [result.http_reachable && "HTTP", result.rtsp_reachable && "RTSP"].filter(Boolean).join(" + ");
+              setResult(true, result.latency_ms, "agent", details);
+              return;
+            }
+            // Agent responded but camera offline — still trust agent over cloud
+            setResult(false, result.latency_ms, "agent", undefined, "Not reachable via local agent");
+            return;
+          }
+        } catch {
+          // Agent unreachable — fall through to cloud
+        }
+      }
+
+      // Strategy 3: Cloud edge function (public IPs or fallback)
       const result = await invokeEdgeFunction<{
         reachable: boolean;
         http_reachable: boolean;
@@ -171,19 +233,8 @@ export default function CameraManager() {
         error?: string;
       }>("camera-ping", { ip_address: cam.ip_address, port: cam.port });
 
-      const status = result.reachable ? "online" : "offline";
-      setPingStatus((s) => ({ ...s, [cam.id]: status }));
-      setPingLatency((s) => ({ ...s, [cam.id]: result.latency_ms }));
-
-      if (result.reachable) {
-        const details = [
-          result.http_reachable && "HTTP",
-          result.rtsp_reachable && "RTSP",
-        ].filter(Boolean).join(" + ");
-        toast({ title: `✅ ${cam.name} is online`, description: `Reachable via ${details} (${result.latency_ms}ms)` });
-      } else {
-        toast({ title: `❌ ${cam.name} is offline`, description: result.error || "Not reachable", variant: "destructive" });
-      }
+      const details = [result.http_reachable && "HTTP", result.rtsp_reachable && "RTSP"].filter(Boolean).join(" + ");
+      setResult(result.reachable, result.latency_ms, "cloud", details, result.error);
     } catch (err: any) {
       setPingStatus((s) => ({ ...s, [cam.id]: "offline" }));
       toast({ title: "Connection test failed", description: err.message, variant: "destructive" });
@@ -201,14 +252,31 @@ export default function CameraManager() {
   return (
     <>
       <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
             <Camera className="w-4 h-4 text-primary" />
             Registered Cameras
           </CardTitle>
-          <Button size="sm" onClick={openAdd} className="gap-1.5">
-            <Plus className="w-3.5 h-3.5" /> Add Camera
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setShowAgentConfig(!showAgentConfig)}>
+              <Signal className="w-3 h-3" /> Agent
+            </Button>
+            <Button size="sm" onClick={openAdd} className="gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Add Camera
+            </Button>
+          </div>
+          {showAgentConfig && (
+            <div className="w-full flex items-center gap-2 mt-1">
+              <Label className="text-[10px] whitespace-nowrap text-muted-foreground">Local Agent URL:</Label>
+              <Input
+                className="h-7 text-xs font-mono max-w-xs"
+                placeholder="http://192.168.1.50:8000"
+                value={agentUrl}
+                onChange={(e) => saveAgentUrl(e.target.value)}
+              />
+              {agentUrl && <Badge variant="outline" className="text-[9px]">configured</Badge>}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {cameras.length === 0 ? (
@@ -241,6 +309,9 @@ export default function CameraManager() {
                               <Wifi className="w-3.5 h-3.5 text-emerald-400" />
                               {pingLatency[cam.id] != null && (
                                 <span className="text-[9px] text-muted-foreground">{pingLatency[cam.id]}ms</span>
+                              )}
+                              {pingMethod[cam.id] && (
+                                <span className="text-[8px] text-muted-foreground/70">{pingMethod[cam.id]}</span>
                               )}
                             </div>
                           );
