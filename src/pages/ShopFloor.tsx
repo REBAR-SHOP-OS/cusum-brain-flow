@@ -5,7 +5,8 @@ import {
   PackageCheck,
   ArrowLeft,
   ClipboardList,
-  Truck
+  Truck,
+  Camera,
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
