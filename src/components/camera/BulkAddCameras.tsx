@@ -35,6 +35,7 @@ interface Props {
   companyId: string;
   existingCreds: { username: string; password: string } | null;
   agentUrl?: string;
+  onAgentUrlChange?: (url: string) => void;
   onDone: () => void;
 }
 
