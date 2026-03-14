@@ -310,6 +310,9 @@ export default function CameraManager() {
                               {pingLatency[cam.id] != null && (
                                 <span className="text-[9px] text-muted-foreground">{pingLatency[cam.id]}ms</span>
                               )}
+                              {pingMethod[cam.id] && (
+                                <span className="text-[8px] text-muted-foreground/70">{pingMethod[cam.id]}</span>
+                              )}
                             </div>
                           );
                           if (ps === "offline") return <WifiOff className="w-3.5 h-3.5 text-destructive" />;
