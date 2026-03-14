@@ -221,7 +221,7 @@ export default function CameraManager() {
         return;
       }
       payload.password = form.password;
-      ({ error } = await supabase.from("cameras").insert(payload));
+      ({ error } = await supabase.from("cameras").insert(payload as any));
     }
 
     setSaving(false);
