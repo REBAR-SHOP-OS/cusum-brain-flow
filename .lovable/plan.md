@@ -1,46 +1,66 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
+
+
+# Best Solution: Network Scan via Reolink HTTP API
+
+## Research Findings
+
+Reolink cameras all expose an HTTP API at `http://<ip>/cgi-bin/api.cgi`. The key endpoints:
+
+- **Login**: POST `[{cmd:"Login", action:0, param:{User:{userName:"...", password:"..."}}}]` -- returns a token
+- **GetDevInfo**: Returns model, name, firmware, serial, channels
+- **GetChannelStatus** (NVR only): Lists all connected cameras with name, type, online status
+- **GetLocalLink**: Returns IP, MAC, gateway info
+
+There is NO broadcast/multicast discovery protocol. Reolink uses their proprietary P2P protocol for discovery in their own app, which is undocumented. The only reliable programmatic approach is **IP range scanning** with credential validation.
+
+## Recommended Approach: "Auto-Discover" Subnet Scanner
+
+Build an edge function that takes a subnet + credentials, scans an IP range, and for each IP tries to login via the Reolink HTTP API. If login succeeds, it calls `GetDevInfo` to pull the camera name, model, and serial -- then returns a list of discovered cameras ready to register.
+
+### Architecture
+
+```text
+Browser UI                Edge Function               Camera (LAN)
+─────────                 ─────────────               ────────────
+[Scan 10.0.0.100-200] →  camera-discover  ──HTTP──→  /cgi-bin/api.cgi
+                          (Login + GetDevInfo)         (each IP in range)
+                     ←    [{ip, name, model, serial}]
+```
+
+**Problem**: Edge functions run in the cloud and cannot reach private IPs (10.x.x.x). This must run on the **Local Agent** (the FastAPI service in `camera-intelligence/`).
+
+### Solution: Two-path discovery
+
+1. **Local Agent path** (primary): Add a `/discover` endpoint to the FastAPI service that scans an IP range, attempts Reolink HTTP API login on each, and returns discovered cameras with device info.
+
+2. **Bulk Add UI enhancement**: Update the existing Bulk Add dialog to include a "Scan Subnet" button that calls the Local Agent's discover endpoint. Discovered cameras auto-populate the table with real names/models from the device.
+
+3. **Fallback (no agent)**: Keep the current manual IP entry in Bulk Add for users without the Local Agent running.
 
 ### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+1. **New file: `camera-intelligence/discover.py`**
+   - FastAPI endpoint `POST /discover` accepting `{subnet: "10.0.0", start: 100, end: 200, username, password}`
+   - For each IP, attempt HTTP POST to `/cgi-bin/api.cgi` with Login command (2s timeout)
+   - On success, call GetDevInfo to get name/model/serial
+   - Return array of discovered cameras
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+2. **Update `camera-intelligence/main.py`** (or router registration)
+   - Register the new discover router
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+3. **Update `src/components/camera/BulkAddCameras.tsx`**
+   - Add "Scan Subnet" button next to Parse
+   - When clicked, calls the Local Agent `/discover` endpoint
+   - Auto-populates the camera table with discovered devices (name from GetDevInfo, IP, auto-suggest zone based on camera name)
+   - Shows scan progress (scanning X of Y IPs...)
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+4. **Update `src/components/camera/CameraManager.tsx`**
+   - Pass the Local Agent URL to BulkAddCameras if configured
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### Why This Is the Easiest Way
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+- No manual IP entry needed -- just click "Scan" and all Reolink cameras on the subnet are found automatically with their real names and models
+- Uses the official Reolink HTTP API (same as their own app uses internally)
+- Credentials are validated during scan, so you know they work before registering
+- One-click "Add All" after review
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
-
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
