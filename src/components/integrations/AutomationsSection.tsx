@@ -119,6 +119,15 @@ const defaultAutomations: Automation[] = [
     icon: "video",
     route: "/ad-director",
   },
+  {
+    id: "camera-intelligence",
+    name: "Camera AI",
+    description: "Vision & dispatch intelligence for shop floor",
+    enabled: true,
+    color: "teal",
+    icon: "camera",
+    route: "/shopfloor/camera-intelligence",
+  },
 ];
 
 const colorGradients = {
