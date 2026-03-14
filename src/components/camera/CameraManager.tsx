@@ -401,6 +401,12 @@ export default function CameraManager() {
           }
         } catch { /* fall through */ }
       }
+      // Private IPs can't be reached from cloud — skip edge function to avoid 30s timeout
+      if (privateIp) {
+        setResult(false, null, "browser", undefined,
+          "Private IP — configure a Local Agent to test LAN cameras");
+        return;
+      }
       const result = await invokeEdgeFunction<{
         reachable: boolean; http_reachable: boolean; rtsp_reachable: boolean;
         latency_ms: number | null; error?: string;
