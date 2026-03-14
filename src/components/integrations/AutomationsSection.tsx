@@ -14,7 +14,7 @@ export interface Automation {
   description: string;
   enabled: boolean;
   color: "purple" | "blue" | "gold" | "teal" | "red";
-  icon: "social" | "inbox" | "summary" | "comment" | "email" | "website" | "code" | "search" | "video";
+  icon: "social" | "inbox" | "summary" | "comment" | "email" | "website" | "code" | "search" | "video" | "camera";
   beta?: boolean;
   route?: string;
 }
