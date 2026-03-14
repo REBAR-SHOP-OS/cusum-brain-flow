@@ -88,14 +88,20 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onA
     })));
   };
 
+  const effectiveAgentUrl = localAgentUrl || agentUrl;
+
   const handleScanSubnet = async () => {
-    if (!agentUrl) {
-      toast({ title: "Local Agent not configured", description: "Set the Local Agent URL in camera settings to use subnet scanning.", variant: "destructive" });
+    if (!effectiveAgentUrl) {
+      toast({ title: "Agent URL required", description: "Enter your Local Agent URL (e.g. http://192.168.1.50:8000) to scan.", variant: "destructive" });
       return;
     }
     if (!password) {
       toast({ title: "Password required", description: "Enter the camera password before scanning.", variant: "destructive" });
       return;
+    }
+    // Persist agent URL
+    if (onAgentUrlChange && effectiveAgentUrl !== agentUrl) {
+      onAgentUrlChange(effectiveAgentUrl);
     }
     setScanning(true);
     setScanProgress(10);
@@ -103,7 +109,7 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onA
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 120000);
       setScanProgress(20);
-      const resp = await fetch(`${agentUrl}/agent/discover`, {
+      const resp = await fetch(`${effectiveAgentUrl}/agent/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
