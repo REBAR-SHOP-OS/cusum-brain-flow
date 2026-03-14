@@ -23,6 +23,7 @@ import {
   Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal,
 } from "lucide-react";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { isPrivateIp, browserPing } from "@/lib/browserPing";
 
 const ZONES = [
   "loading_dock", "dispatch_yard", "cutter_area",
