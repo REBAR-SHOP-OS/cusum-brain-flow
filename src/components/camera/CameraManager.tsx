@@ -78,15 +78,21 @@ export default function CameraManager() {
   const [showAgentConfig, setShowAgentConfig] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
 
-  const handleQrScanned = (uid: string) => {
+  const handleQrScanned = (raw: string) => {
+    const parsed = parseReolinkQr(raw);
     setEditingId(null);
     setForm({
       ...EMPTY_FORM,
-      camera_id: uid,
-      name: `Camera-${uid.slice(-6)}`,
+      camera_id: parsed.uid ?? "",
+      name: parsed.uid ? `Camera-${parsed.uid.slice(-6)}` : "",
+      username: parsed.username ?? EMPTY_FORM.username,
+      password: parsed.password ?? EMPTY_FORM.password,
+      ip_address: parsed.ip_address ?? EMPTY_FORM.ip_address,
+      port: parsed.port ?? EMPTY_FORM.port,
     });
     setDialogOpen(true);
-    toast({ title: "QR scanned", description: `UID: ${uid}` });
+    const fields = Object.keys(parsed).filter(k => (parsed as any)[k] != null);
+    toast({ title: "QR scanned", description: `Extracted: ${fields.join(", ")}` });
   };
 
   const fetchCameras = async () => {
