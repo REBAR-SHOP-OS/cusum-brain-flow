@@ -88,7 +88,8 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onA
     })));
   };
 
-  const effectiveAgentUrl = localAgentUrl || agentUrl;
+  const rawAgentUrl = localAgentUrl || agentUrl;
+  const effectiveAgentUrl = rawAgentUrl && !rawAgentUrl.startsWith("http") ? `http://${rawAgentUrl}` : rawAgentUrl;
 
   const handleScanSubnet = async () => {
     if (!effectiveAgentUrl) {
