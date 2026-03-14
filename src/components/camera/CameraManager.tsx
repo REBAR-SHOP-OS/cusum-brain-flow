@@ -71,6 +71,9 @@ export default function CameraManager() {
   const [saving, setSaving] = useState(false);
   const [pingStatus, setPingStatus] = useState<Record<string, "untested" | "testing" | "online" | "offline">>({});
   const [pingLatency, setPingLatency] = useState<Record<string, number | null>>({});
+  const [pingMethod, setPingMethod] = useState<Record<string, string>>({});
+  const [agentUrl, setAgentUrl] = useState(() => localStorage.getItem("camera_agent_url") || "");
+  const [showAgentConfig, setShowAgentConfig] = useState(false);
 
   const fetchCameras = async () => {
     if (!companyId) return;
