@@ -1,46 +1,47 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Dual Camera Ping: Browser-Side + Local Agent Relay
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Overview
+Implement two fallback ping methods so cameras on private LANs can be verified:
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+1. **Browser-side ping** — for private IPs (10.x, 192.168.x, 172.16-31.x), attempt an HTTP fetch directly from the user's browser which has LAN access
+2. **Local agent relay** — add a `/ping` endpoint to the FastAPI camera-intelligence service so the ERP can proxy connectivity checks through the on-premise agent
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+The existing cloud edge function remains as the third option for public IPs.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Changes
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 1. Browser-side ping utility
+**Create**: `src/lib/browserPing.ts`
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+- Helper function `isPrivateIp(ip: string): boolean` — detects RFC 1918 ranges
+- `browserPing(ip: string, port?: number): Promise<PingResult>` — attempts `fetch("http://{ip}/", { mode: "no-cors", signal })` with a 5s timeout
+- Returns `{ reachable: boolean, latency_ms: number, method: "browser" }`
+- Note: `no-cors` mode means we detect reachability by whether the request completes vs times out (opaque response is still "reachable")
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. Local agent relay endpoint
+**Modify**: `camera-intelligence/main.py` — mount new ping router
+
+**Create**: `camera-intelligence/ping.py`
+- `POST /ping` endpoint accepting `{ ip_address, port }`
+- Attempts HTTP GET to camera IP (port 80) with 5s timeout
+- Attempts TCP socket connect to RTSP port with 5s timeout
+- Returns `{ reachable, http_reachable, rtsp_reachable, latency_ms }`
+
+### 3. Update CameraManager ping logic
+**Modify**: `src/components/camera/CameraManager.tsx`
+
+Update `handleTestConnection` with a strategy cascade:
+1. If IP is private → try browser-side ping first
+2. If browser ping fails or inconclusive → try local agent relay (if configured)
+3. Fall back to cloud edge function for public IPs
+
+Add a small settings state for the local agent URL (stored in localStorage, e.g. `http://192.168.1.50:8000`), with a tiny config input in the card header.
+
+### Files
+- **Create**: `src/lib/browserPing.ts`
+- **Create**: `camera-intelligence/ping.py`
+- **Modify**: `camera-intelligence/main.py` (mount ping router)
+- **Modify**: `src/components/camera/CameraManager.tsx` (ping strategy cascade + agent URL config)
+
