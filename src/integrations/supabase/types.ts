@@ -1617,6 +1617,57 @@ export type Database = {
           },
         ]
       }
+      cameras: {
+        Row: {
+          assigned_zone: string | null
+          camera_id: string
+          company_id: string
+          created_at: string
+          id: string
+          ip_address: string
+          is_active: boolean
+          location: string | null
+          name: string
+          password: string | null
+          port: number
+          rtsp_path: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          assigned_zone?: string | null
+          camera_id: string
+          company_id: string
+          created_at?: string
+          id?: string
+          ip_address: string
+          is_active?: boolean
+          location?: string | null
+          name: string
+          password?: string | null
+          port?: number
+          rtsp_path?: string
+          updated_at?: string
+          username?: string
+        }
+        Update: {
+          assigned_zone?: string | null
+          camera_id?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          ip_address?: string
+          is_active?: boolean
+          location?: string | null
+          name?: string
+          password?: string | null
+          port?: number
+          rtsp_path?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
       cca_schedule_items: {
         Row: {
           additions: number
