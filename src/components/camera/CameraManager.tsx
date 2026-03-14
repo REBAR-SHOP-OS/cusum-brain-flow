@@ -264,7 +264,24 @@ export default function CameraManager() {
     };
 
     try {
-      // Use local agent if configured, else cloud
+      const ip = form.ip_address.trim();
+      const privateIp = isPrivateIp(ip);
+
+      // 1. Try browser ping first for private IPs
+      if (privateIp) {
+        const bp = await browserPing(ip, form.http_port || 80);
+        result.http = bp.reachable;
+        result.latency_ms = bp.latency_ms;
+        if (bp.reachable) {
+          // Browser confirmed HTTP reachable on LAN
+          result.error = undefined;
+          setDialogTestResult(result);
+          setDialogTesting(false);
+          return;
+        }
+      }
+
+      // 2. Try local agent if configured
       if (agentUrl) {
         try {
           const controller = new AbortController();
@@ -273,7 +290,7 @@ export default function CameraManager() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              ip_address: form.ip_address.trim(),
+              ip_address: ip,
               port: form.port,
               http_port: form.http_port,
               https_port: form.https_port,
@@ -305,7 +322,15 @@ export default function CameraManager() {
         }
       }
 
-      // Cloud fallback
+      // 3. Skip cloud for private IPs — it can never reach them
+      if (privateIp) {
+        result.error = "Private IP — browser ping failed. Configure a Local Agent (click Agent button) for full RTSP/credential testing on your LAN.";
+        setDialogTestResult(result);
+        setDialogTesting(false);
+        return;
+      }
+
+      // 4. Cloud fallback (public IPs only)
       const r = await invokeEdgeFunction<{
         reachable: boolean;
         http_reachable: boolean;
@@ -313,7 +338,7 @@ export default function CameraManager() {
         latency_ms: number | null;
         error?: string;
       }>("camera-ping", {
-        ip_address: form.ip_address.trim(),
+        ip_address: ip,
         port: form.port,
       });
 
