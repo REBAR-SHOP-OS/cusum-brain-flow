@@ -20,8 +20,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff,
+  Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal,
 } from "lucide-react";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 const ZONES = [
   "loading_dock", "dispatch_yard", "cutter_area",
