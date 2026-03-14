@@ -1551,6 +1551,72 @@ export type Database = {
           },
         ]
       }
+      camera_events: {
+        Row: {
+          camera_id: string | null
+          company_id: string
+          confidence: number | null
+          created_at: string | null
+          detected_class: string | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          recommended_action: string | null
+          related_delivery_id: string | null
+          related_machine_id: string | null
+          related_order_id: string | null
+          snapshot_url: string | null
+          zone: string | null
+        }
+        Insert: {
+          camera_id?: string | null
+          company_id: string
+          confidence?: number | null
+          created_at?: string | null
+          detected_class?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          recommended_action?: string | null
+          related_delivery_id?: string | null
+          related_machine_id?: string | null
+          related_order_id?: string | null
+          snapshot_url?: string | null
+          zone?: string | null
+        }
+        Update: {
+          camera_id?: string | null
+          company_id?: string
+          confidence?: number | null
+          created_at?: string | null
+          detected_class?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          recommended_action?: string | null
+          related_delivery_id?: string | null
+          related_machine_id?: string | null
+          related_order_id?: string | null
+          snapshot_url?: string | null
+          zone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "camera_events_related_machine_id_fkey"
+            columns: ["related_machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "camera_events_related_order_id_fkey"
+            columns: ["related_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cca_schedule_items: {
         Row: {
           additions: number
