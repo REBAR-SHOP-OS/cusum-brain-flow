@@ -44,6 +44,7 @@ app.include_router(zones_router, prefix="/zones", tags=["Zones"])
 app.include_router(rules_router, prefix="/rules", tags=["Rules"])
 app.include_router(alerts_router, prefix="/alerts", tags=["Alerts"])
 app.include_router(ping_router, prefix="/agent", tags=["Agent Relay"])
+app.include_router(discover_router, prefix="/agent", tags=["Discovery"])
 
 
 @app.get("/system/health")
