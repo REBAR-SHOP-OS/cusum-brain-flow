@@ -453,6 +453,13 @@ export default function CameraManager() {
             <Button variant="outline" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setQrOpen(true)}>
               <ScanLine className="w-3 h-3" /> Scan QR
             </Button>
+            {companyId && (
+              <BulkAddCameras
+                companyId={companyId}
+                existingCreds={cameras.length > 0 ? { username: cameras[0].username, password: "" } : null}
+                onDone={fetchCameras}
+              />
+            )}
             <Button size="sm" onClick={openAdd} className="gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Add Camera
             </Button>
