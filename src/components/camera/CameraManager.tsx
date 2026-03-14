@@ -264,6 +264,18 @@ export default function CameraManager() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleTestConnection(cam)}
+                            disabled={pingStatus[cam.id] === "testing"}
+                            title="Test connection"
+                          >
+                            {pingStatus[cam.id] === "testing"
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <Signal className="w-3 h-3" />}
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(cam)}>
                             <Pencil className="w-3 h-3" />
                           </Button>
