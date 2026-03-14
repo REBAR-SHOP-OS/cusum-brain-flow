@@ -164,9 +164,67 @@ export default function CameraManager() {
     }
   };
 
+  const saveAgentUrl = (url: string) => {
+    setAgentUrl(url);
+    localStorage.setItem("camera_agent_url", url);
+  };
+
   const handleTestConnection = async (cam: CameraRow) => {
     setPingStatus((s) => ({ ...s, [cam.id]: "testing" }));
+
+    const setResult = (reachable: boolean, latency: number | null, method: string, details?: string, error?: string) => {
+      const status = reachable ? "online" : "offline";
+      setPingStatus((s) => ({ ...s, [cam.id]: status }));
+      setPingLatency((s) => ({ ...s, [cam.id]: latency }));
+      setPingMethod((s) => ({ ...s, [cam.id]: method }));
+      if (reachable) {
+        toast({ title: `✅ ${cam.name} is online`, description: `${details || ""} via ${method} (${latency}ms)` });
+      } else {
+        toast({ title: `❌ ${cam.name} is offline`, description: error || "Not reachable", variant: "destructive" });
+      }
+    };
+
     try {
+      const privateIp = isPrivateIp(cam.ip_address);
+
+      // Strategy 1: Browser-side ping for private IPs
+      if (privateIp) {
+        const bp = await browserPing(cam.ip_address);
+        if (bp.reachable) {
+          setResult(true, bp.latency_ms, "browser", "HTTP");
+          return;
+        }
+      }
+
+      // Strategy 2: Local agent relay (if configured)
+      if (agentUrl) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
+          const resp = await fetch(`${agentUrl}/agent/ping`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ip_address: cam.ip_address, port: cam.port }),
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          if (resp.ok) {
+            const result = await resp.json();
+            if (result.reachable) {
+              const details = [result.http_reachable && "HTTP", result.rtsp_reachable && "RTSP"].filter(Boolean).join(" + ");
+              setResult(true, result.latency_ms, "agent", details);
+              return;
+            }
+            // Agent responded but camera offline — still trust agent over cloud
+            setResult(false, result.latency_ms, "agent", undefined, "Not reachable via local agent");
+            return;
+          }
+        } catch {
+          // Agent unreachable — fall through to cloud
+        }
+      }
+
+      // Strategy 3: Cloud edge function (public IPs or fallback)
       const result = await invokeEdgeFunction<{
         reachable: boolean;
         http_reachable: boolean;
@@ -175,19 +233,8 @@ export default function CameraManager() {
         error?: string;
       }>("camera-ping", { ip_address: cam.ip_address, port: cam.port });
 
-      const status = result.reachable ? "online" : "offline";
-      setPingStatus((s) => ({ ...s, [cam.id]: status }));
-      setPingLatency((s) => ({ ...s, [cam.id]: result.latency_ms }));
-
-      if (result.reachable) {
-        const details = [
-          result.http_reachable && "HTTP",
-          result.rtsp_reachable && "RTSP",
-        ].filter(Boolean).join(" + ");
-        toast({ title: `✅ ${cam.name} is online`, description: `Reachable via ${details} (${result.latency_ms}ms)` });
-      } else {
-        toast({ title: `❌ ${cam.name} is offline`, description: result.error || "Not reachable", variant: "destructive" });
-      }
+      const details = [result.http_reachable && "HTTP", result.rtsp_reachable && "RTSP"].filter(Boolean).join(" + ");
+      setResult(result.reachable, result.latency_ms, "cloud", details, result.error);
     } catch (err: any) {
       setPingStatus((s) => ({ ...s, [cam.id]: "offline" }));
       toast({ title: "Connection test failed", description: err.message, variant: "destructive" });
