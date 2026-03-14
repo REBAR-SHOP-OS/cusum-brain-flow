@@ -274,6 +274,9 @@ export default function CameraManager() {
             <Button variant="outline" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setShowAgentConfig(!showAgentConfig)}>
               <Signal className="w-3 h-3" /> Agent
             </Button>
+            <Button variant="outline" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setQrOpen(true)}>
+              <ScanLine className="w-3 h-3" /> Scan QR
+            </Button>
             <Button size="sm" onClick={openAdd} className="gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Add Camera
             </Button>
