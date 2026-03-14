@@ -160,6 +160,36 @@ export default function CameraManager() {
     }
   };
 
+  const handleTestConnection = async (cam: CameraRow) => {
+    setPingStatus((s) => ({ ...s, [cam.id]: "testing" }));
+    try {
+      const result = await invokeEdgeFunction<{
+        reachable: boolean;
+        http_reachable: boolean;
+        rtsp_reachable: boolean;
+        latency_ms: number | null;
+        error?: string;
+      }>("camera-ping", { ip_address: cam.ip_address, port: cam.port });
+
+      const status = result.reachable ? "online" : "offline";
+      setPingStatus((s) => ({ ...s, [cam.id]: status }));
+      setPingLatency((s) => ({ ...s, [cam.id]: result.latency_ms }));
+
+      if (result.reachable) {
+        const details = [
+          result.http_reachable && "HTTP",
+          result.rtsp_reachable && "RTSP",
+        ].filter(Boolean).join(" + ");
+        toast({ title: `✅ ${cam.name} is online`, description: `Reachable via ${details} (${result.latency_ms}ms)` });
+      } else {
+        toast({ title: `❌ ${cam.name} is offline`, description: result.error || "Not reachable", variant: "destructive" });
+      }
+    } catch (err: any) {
+      setPingStatus((s) => ({ ...s, [cam.id]: "offline" }));
+      toast({ title: "Connection test failed", description: err.message, variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
