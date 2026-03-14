@@ -1619,50 +1619,80 @@ export type Database = {
       }
       cameras: {
         Row: {
+          api_status: string | null
           assigned_zone: string | null
+          brand: string | null
           camera_id: string
           company_id: string
           created_at: string
+          http_port: number | null
+          https_port: number | null
           id: string
           ip_address: string
           is_active: boolean
+          last_seen_at: string | null
           location: string | null
+          model: string | null
           name: string
+          online_offline_status: string | null
           password: string | null
           port: number
           rtsp_path: string
+          rtsp_path_secondary: string | null
+          stream_status: string | null
+          uid: string | null
           updated_at: string
           username: string
         }
         Insert: {
+          api_status?: string | null
           assigned_zone?: string | null
+          brand?: string | null
           camera_id: string
           company_id: string
           created_at?: string
+          http_port?: number | null
+          https_port?: number | null
           id?: string
           ip_address: string
           is_active?: boolean
+          last_seen_at?: string | null
           location?: string | null
+          model?: string | null
           name: string
+          online_offline_status?: string | null
           password?: string | null
           port?: number
           rtsp_path?: string
+          rtsp_path_secondary?: string | null
+          stream_status?: string | null
+          uid?: string | null
           updated_at?: string
           username?: string
         }
         Update: {
+          api_status?: string | null
           assigned_zone?: string | null
+          brand?: string | null
           camera_id?: string
           company_id?: string
           created_at?: string
+          http_port?: number | null
+          https_port?: number | null
           id?: string
           ip_address?: string
           is_active?: boolean
+          last_seen_at?: string | null
           location?: string | null
+          model?: string | null
           name?: string
+          online_offline_status?: string | null
           password?: string | null
           port?: number
           rtsp_path?: string
+          rtsp_path_secondary?: string | null
+          stream_status?: string | null
+          uid?: string | null
           updated_at?: string
           username?: string
         }
