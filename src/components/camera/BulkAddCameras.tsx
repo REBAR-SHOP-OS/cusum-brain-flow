@@ -35,6 +35,7 @@ interface Props {
   companyId: string;
   existingCreds: { username: string; password: string } | null;
   agentUrl?: string;
+  onAgentUrlChange?: (url: string) => void;
   onDone: () => void;
 }
 
@@ -59,7 +60,7 @@ function parseIps(raw: string, subnet: string): string[] {
   return [...new Set(ips)];
 }
 
-export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onDone }: Props) {
+export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onAgentUrlChange, onDone }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [subnet, setSubnet] = useState("10.0.0");
@@ -72,6 +73,7 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onD
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [localAgentUrl, setLocalAgentUrl] = useState(agentUrl || "");
 
   const handleParse = () => {
     const ips = parseIps(ipInput, subnet);
@@ -86,14 +88,20 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onD
     })));
   };
 
+  const effectiveAgentUrl = localAgentUrl || agentUrl;
+
   const handleScanSubnet = async () => {
-    if (!agentUrl) {
-      toast({ title: "Local Agent not configured", description: "Set the Local Agent URL in camera settings to use subnet scanning.", variant: "destructive" });
+    if (!effectiveAgentUrl) {
+      toast({ title: "Agent URL required", description: "Enter your Local Agent URL (e.g. http://192.168.1.50:8000) to scan.", variant: "destructive" });
       return;
     }
     if (!password) {
       toast({ title: "Password required", description: "Enter the camera password before scanning.", variant: "destructive" });
       return;
+    }
+    // Persist agent URL
+    if (onAgentUrlChange && effectiveAgentUrl !== agentUrl) {
+      onAgentUrlChange(effectiveAgentUrl);
     }
     setScanning(true);
     setScanProgress(10);
@@ -101,7 +109,7 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onD
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 120000);
       setScanProgress(20);
-      const resp = await fetch(`${agentUrl}/agent/discover`, {
+      const resp = await fetch(`${effectiveAgentUrl}/agent/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -216,30 +224,39 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onD
             </div>
 
             {/* Auto-Discover */}
-            {agentUrl && (
-              <div className="border border-dashed rounded-md p-3 space-y-2">
-                <Label className="text-xs font-medium flex items-center gap-1.5">
-                  <Radar className="w-3.5 h-3.5" /> Auto-Discover (Subnet Scan)
-                </Label>
-                <div className="flex items-end gap-2">
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Start</Label>
-                    <Input className="h-7 text-xs font-mono w-20" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">End</Label>
-                    <Input className="h-7 text-xs font-mono w-20" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} />
-                  </div>
-                  <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs" onClick={handleScanSubnet} disabled={scanning}>
-                    {scanning ? <><Loader2 className="w-3 h-3 animate-spin" /> Scanning...</> : <><Radar className="w-3 h-3" /> Scan Subnet</>}
-                  </Button>
+            <div className="border border-dashed rounded-md p-3 space-y-2">
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Radar className="w-3.5 h-3.5" /> Auto-Discover (Subnet Scan)
+              </Label>
+              {!agentUrl && (
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">Local Agent URL</Label>
+                  <Input
+                    className="h-7 text-xs font-mono"
+                    placeholder="http://192.168.1.50:8000"
+                    value={localAgentUrl}
+                    onChange={(e) => setLocalAgentUrl(e.target.value)}
+                  />
                 </div>
-                {scanning && <Progress value={scanProgress} className="h-1.5" />}
-                <p className="text-[10px] text-muted-foreground">
-                  Scans {subnet}.{rangeStart}–{rangeEnd} via Local Agent, auto-discovers Reolink cameras using their HTTP API.
-                </p>
+              )}
+              <div className="flex items-end gap-2">
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">Start</Label>
+                  <Input className="h-7 text-xs font-mono w-20" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">End</Label>
+                  <Input className="h-7 text-xs font-mono w-20" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} />
+                </div>
+                <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs" onClick={handleScanSubnet} disabled={scanning}>
+                  {scanning ? <><Loader2 className="w-3 h-3 animate-spin" /> Scanning...</> : <><Radar className="w-3 h-3" /> Scan Subnet</>}
+                </Button>
               </div>
-            )}
+              {scanning && <Progress value={scanProgress} className="h-1.5" />}
+              <p className="text-[10px] text-muted-foreground">
+                Scans {subnet}.{rangeStart}–{rangeEnd} via Local Agent, auto-discovers Reolink cameras using their HTTP API.
+              </p>
+            </div>
 
             {/* Manual IP Input */}
             <div>
