@@ -233,11 +233,23 @@ export default function CameraManager() {
                   {cameras.map((cam) => (
                     <TableRow key={cam.id}>
                       <TableCell>
-                        {cam.is_active ? (
-                          <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                        ) : (
-                          <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
+                        {(() => {
+                          const ps = pingStatus[cam.id] || "untested";
+                          if (ps === "testing") return <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />;
+                          if (ps === "online") return (
+                            <div className="flex items-center gap-1">
+                              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                              {pingLatency[cam.id] != null && (
+                                <span className="text-[9px] text-muted-foreground">{pingLatency[cam.id]}ms</span>
+                              )}
+                            </div>
+                          );
+                          if (ps === "offline") return <WifiOff className="w-3.5 h-3.5 text-destructive" />;
+                          // untested — show static based on is_active
+                          return cam.is_active
+                            ? <Wifi className="w-3.5 h-3.5 text-muted-foreground/50" />
+                            : <WifiOff className="w-3.5 h-3.5 text-muted-foreground/50" />;
+                        })()}
                       </TableCell>
                       <TableCell className="text-xs font-medium">{cam.name}</TableCell>
                       <TableCell className="text-[10px] text-muted-foreground font-mono">{cam.camera_id}</TableCell>
