@@ -20,8 +20,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal,
+  Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal, ScanLine,
 } from "lucide-react";
+import QRCameraScanner from "./QRCameraScanner";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { isPrivateIp, browserPing } from "@/lib/browserPing";
 
@@ -74,6 +75,18 @@ export default function CameraManager() {
   const [pingMethod, setPingMethod] = useState<Record<string, string>>({});
   const [agentUrl, setAgentUrl] = useState(() => localStorage.getItem("camera_agent_url") || "");
   const [showAgentConfig, setShowAgentConfig] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+
+  const handleQrScanned = (uid: string) => {
+    setEditingId(null);
+    setForm({
+      ...EMPTY_FORM,
+      camera_id: uid,
+      name: `Camera-${uid.slice(-6)}`,
+    });
+    setDialogOpen(true);
+    toast({ title: "QR scanned", description: `UID: ${uid}` });
+  };
 
   const fetchCameras = async () => {
     if (!companyId) return;
@@ -261,6 +274,9 @@ export default function CameraManager() {
             <Button variant="outline" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setShowAgentConfig(!showAgentConfig)}>
               <Signal className="w-3 h-3" /> Agent
             </Button>
+            <Button variant="outline" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setQrOpen(true)}>
+              <ScanLine className="w-3 h-3" /> Scan QR
+            </Button>
             <Button size="sm" onClick={openAdd} className="gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Add Camera
             </Button>
@@ -436,6 +452,8 @@ export default function CameraManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <QRCameraScanner open={qrOpen} onOpenChange={setQrOpen} onScanned={handleQrScanned} />
     </>
   );
 }
