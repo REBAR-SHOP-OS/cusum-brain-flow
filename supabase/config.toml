@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.camera-events]
 verify_jwt = false
+
+[functions.camera-ping]
+verify_jwt = false

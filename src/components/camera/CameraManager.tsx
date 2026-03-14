@@ -20,8 +20,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff,
+  Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal,
 } from "lucide-react";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 const ZONES = [
   "loading_dock", "dispatch_yard", "cutter_area",
@@ -67,6 +68,8 @@ export default function CameraManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [pingStatus, setPingStatus] = useState<Record<string, "untested" | "testing" | "online" | "offline">>({});
+  const [pingLatency, setPingLatency] = useState<Record<string, number | null>>({});
 
   const fetchCameras = async () => {
     if (!companyId) return;
@@ -157,6 +160,36 @@ export default function CameraManager() {
     }
   };
 
+  const handleTestConnection = async (cam: CameraRow) => {
+    setPingStatus((s) => ({ ...s, [cam.id]: "testing" }));
+    try {
+      const result = await invokeEdgeFunction<{
+        reachable: boolean;
+        http_reachable: boolean;
+        rtsp_reachable: boolean;
+        latency_ms: number | null;
+        error?: string;
+      }>("camera-ping", { ip_address: cam.ip_address, port: cam.port });
+
+      const status = result.reachable ? "online" : "offline";
+      setPingStatus((s) => ({ ...s, [cam.id]: status }));
+      setPingLatency((s) => ({ ...s, [cam.id]: result.latency_ms }));
+
+      if (result.reachable) {
+        const details = [
+          result.http_reachable && "HTTP",
+          result.rtsp_reachable && "RTSP",
+        ].filter(Boolean).join(" + ");
+        toast({ title: `✅ ${cam.name} is online`, description: `Reachable via ${details} (${result.latency_ms}ms)` });
+      } else {
+        toast({ title: `❌ ${cam.name} is offline`, description: result.error || "Not reachable", variant: "destructive" });
+      }
+    } catch (err: any) {
+      setPingStatus((s) => ({ ...s, [cam.id]: "offline" }));
+      toast({ title: "Connection test failed", description: err.message, variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -200,11 +233,23 @@ export default function CameraManager() {
                   {cameras.map((cam) => (
                     <TableRow key={cam.id}>
                       <TableCell>
-                        {cam.is_active ? (
-                          <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                        ) : (
-                          <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
+                        {(() => {
+                          const ps = pingStatus[cam.id] || "untested";
+                          if (ps === "testing") return <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />;
+                          if (ps === "online") return (
+                            <div className="flex items-center gap-1">
+                              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                              {pingLatency[cam.id] != null && (
+                                <span className="text-[9px] text-muted-foreground">{pingLatency[cam.id]}ms</span>
+                              )}
+                            </div>
+                          );
+                          if (ps === "offline") return <WifiOff className="w-3.5 h-3.5 text-destructive" />;
+                          // untested — show static based on is_active
+                          return cam.is_active
+                            ? <Wifi className="w-3.5 h-3.5 text-muted-foreground/50" />
+                            : <WifiOff className="w-3.5 h-3.5 text-muted-foreground/50" />;
+                        })()}
                       </TableCell>
                       <TableCell className="text-xs font-medium">{cam.name}</TableCell>
                       <TableCell className="text-[10px] text-muted-foreground font-mono">{cam.camera_id}</TableCell>
@@ -219,6 +264,18 @@ export default function CameraManager() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleTestConnection(cam)}
+                            disabled={pingStatus[cam.id] === "testing"}
+                            title="Test connection"
+                          >
+                            {pingStatus[cam.id] === "testing"
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <Signal className="w-3 h-3" />}
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(cam)}>
                             <Pencil className="w-3 h-3" />
                           </Button>
