@@ -68,6 +68,8 @@ export default function CameraManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [pingStatus, setPingStatus] = useState<Record<string, "untested" | "testing" | "online" | "offline">>({});
+  const [pingLatency, setPingLatency] = useState<Record<string, number | null>>({});
 
   const fetchCameras = async () => {
     if (!companyId) return;
