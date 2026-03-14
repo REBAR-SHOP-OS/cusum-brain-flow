@@ -1,46 +1,62 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Camera Management UI
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Overview
+Add a `cameras` table to the database and a management UI panel within the Camera Intelligence dashboard, allowing registration and editing of Reolink cameras directly from the ERP.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Database
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+New table `public.cameras`:
+```sql
+CREATE TABLE public.cameras (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  camera_id text NOT NULL,          -- e.g. "cam_loading_dock"
+  name text NOT NULL,               -- display name
+  ip_address text NOT NULL,
+  port integer DEFAULT 554,
+  username text DEFAULT 'admin',
+  password text,                    -- stored encrypted ideally, but functional for now
+  rtsp_path text DEFAULT '/h264Preview_01_main',
+  location text,                    -- e.g. "Loading Dock"
+  assigned_zone text,               -- links to zone id
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+-- RLS: company-scoped
+ALTER TABLE public.cameras ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users see own company cameras"
+  ON public.cameras FOR SELECT TO authenticated
+  USING (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+CREATE POLICY "Users insert own company cameras"
+  ON public.cameras FOR INSERT TO authenticated
+  WITH CHECK (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+CREATE POLICY "Users update own company cameras"
+  ON public.cameras FOR UPDATE TO authenticated
+  USING (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+CREATE POLICY "Users delete own company cameras"
+  ON public.cameras FOR DELETE TO authenticated
+  USING (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+```
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+## Frontend Changes
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 1. New component: `src/components/camera/CameraManager.tsx`
+- Table listing all registered cameras (name, IP, location, zone, active status)
+- "Add Camera" button opens a dialog form with fields: Name, Camera ID, IP Address, Port, Username, Password, RTSP Path, Location, Zone (dropdown of ZONES), Active toggle
+- Edit and Delete actions per row
+- Uses react-hook-form + zod validation
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. Modify: `src/pages/CameraIntelligence.tsx`
+- Add a "Cameras" tab/section at the top (using Tabs or a toggle button) alongside existing dashboard
+- Import and render `CameraManager` in a new panel
+- Add a Settings/Camera icon button in the header to toggle the management view
+
+## Files
+- **Create**: `src/components/camera/CameraManager.tsx`
+- **Modify**: `src/pages/CameraIntelligence.tsx` (add camera management toggle)
+- **Migration**: 1 (cameras table + RLS)
+
