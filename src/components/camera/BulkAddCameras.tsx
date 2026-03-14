@@ -224,30 +224,39 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onA
             </div>
 
             {/* Auto-Discover */}
-            {agentUrl && (
-              <div className="border border-dashed rounded-md p-3 space-y-2">
-                <Label className="text-xs font-medium flex items-center gap-1.5">
-                  <Radar className="w-3.5 h-3.5" /> Auto-Discover (Subnet Scan)
-                </Label>
-                <div className="flex items-end gap-2">
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Start</Label>
-                    <Input className="h-7 text-xs font-mono w-20" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">End</Label>
-                    <Input className="h-7 text-xs font-mono w-20" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} />
-                  </div>
-                  <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs" onClick={handleScanSubnet} disabled={scanning}>
-                    {scanning ? <><Loader2 className="w-3 h-3 animate-spin" /> Scanning...</> : <><Radar className="w-3 h-3" /> Scan Subnet</>}
-                  </Button>
+            <div className="border border-dashed rounded-md p-3 space-y-2">
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Radar className="w-3.5 h-3.5" /> Auto-Discover (Subnet Scan)
+              </Label>
+              {!agentUrl && (
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">Local Agent URL</Label>
+                  <Input
+                    className="h-7 text-xs font-mono"
+                    placeholder="http://192.168.1.50:8000"
+                    value={localAgentUrl}
+                    onChange={(e) => setLocalAgentUrl(e.target.value)}
+                  />
                 </div>
-                {scanning && <Progress value={scanProgress} className="h-1.5" />}
-                <p className="text-[10px] text-muted-foreground">
-                  Scans {subnet}.{rangeStart}–{rangeEnd} via Local Agent, auto-discovers Reolink cameras using their HTTP API.
-                </p>
+              )}
+              <div className="flex items-end gap-2">
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">Start</Label>
+                  <Input className="h-7 text-xs font-mono w-20" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">End</Label>
+                  <Input className="h-7 text-xs font-mono w-20" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} />
+                </div>
+                <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs" onClick={handleScanSubnet} disabled={scanning}>
+                  {scanning ? <><Loader2 className="w-3 h-3 animate-spin" /> Scanning...</> : <><Radar className="w-3 h-3" /> Scan Subnet</>}
+                </Button>
               </div>
-            )}
+              {scanning && <Progress value={scanProgress} className="h-1.5" />}
+              <p className="text-[10px] text-muted-foreground">
+                Scans {subnet}.{rangeStart}–{rangeEnd} via Local Agent, auto-discovers Reolink cameras using their HTTP API.
+              </p>
+            </div>
 
             {/* Manual IP Input */}
             <div>
