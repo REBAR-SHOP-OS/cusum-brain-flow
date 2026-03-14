@@ -13,6 +13,7 @@ from zones import router as zones_router
 from rules import router as rules_router
 from alerts import router as alerts_router
 from ping import router as ping_router
+from discover import router as discover_router
 
 
 @asynccontextmanager
