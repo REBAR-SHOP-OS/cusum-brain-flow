@@ -24,6 +24,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle,
 } from "lucide-react";
 import QRCameraScanner from "./QRCameraScanner";
+import BulkAddCameras from "./BulkAddCameras";
 import { parseReolinkQr } from "@/lib/parseReolinkQr";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { isPrivateIp, browserPing } from "@/lib/browserPing";
