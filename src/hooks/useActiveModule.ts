@@ -13,6 +13,7 @@ const ROUTE_MAP: Record<string, { module: string; moduleRoute: string; page?: st
   "/customers": { module: "CRM", moduleRoute: "/pipeline", page: "Customers" },
   "/shop-floor": { module: "Manufacturing", moduleRoute: "/shop-floor", page: "Shop Floor" },
   "/shopfloor/station": { module: "Manufacturing", moduleRoute: "/shop-floor", page: "Station" },
+  "/shopfloor/camera-intelligence": { module: "Manufacturing", moduleRoute: "/shop-floor", page: "Camera Intelligence" },
   "/deliveries": { module: "Logistics", moduleRoute: "/deliveries", page: "Deliveries" },
   "/office": { module: "Office Portal", moduleRoute: "/office" },
   "/admin": { module: "Administration", moduleRoute: "/admin" },

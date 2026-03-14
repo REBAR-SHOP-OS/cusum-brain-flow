@@ -92,6 +92,7 @@ import Unsubscribe from "./pages/Unsubscribe";
 import InboxManager from "./pages/InboxManager";
 import OrgChart from "./pages/OrgChart";
 import GlassesCapture from "./pages/GlassesCapture";
+import CameraIntelligence from "./pages/CameraIntelligence";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -169,6 +170,7 @@ const App = () => (
                     <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
                     <Route path="/shopfloor/inventory" element={<P><InventoryCountPage /></P>} />
                     <Route path="/shopfloor/delivery-ops" element={<P><DeliveryOps /></P>} />
+                    <Route path="/shopfloor/camera-intelligence" element={<P><CameraIntelligence /></P>} />
                     <Route path="/shopfloor/delivery/:stopId" element={<P><DeliveryTerminal /></P>} />
                     
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />

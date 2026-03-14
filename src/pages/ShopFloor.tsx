@@ -5,7 +5,8 @@ import {
   PackageCheck,
   ArrowLeft,
   ClipboardList,
-  Truck
+  Truck,
+  Camera,
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
@@ -60,6 +61,12 @@ const hubCards: HubCard[] = [
     subtitle: "DISPATCH & DROP-OFF",
     icon: <Truck className="w-7 h-7" />,
     to: "/shopfloor/delivery-ops",
+  },
+  {
+    label: "CAMERA AI",
+    subtitle: "VISION & DISPATCH",
+    icon: <Camera className="w-7 h-7" />,
+    to: "/shopfloor/camera-intelligence",
   },
 ];
 

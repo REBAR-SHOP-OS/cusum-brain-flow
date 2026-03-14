@@ -1,86 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Production Visibility + Dispatch Intelligence Module
+## Completed: Add All Wan 2.6 Capabilities
 
-## What We're Building
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-Two parallel deliverables:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-1. **Python FastAPI service** (reference code, deployed externally) — connects Reolink cameras + YOLOv8 to ERP data
-2. **Lovable-side integration** — database table, webhook edge function, React dashboard page
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Part A — Python FastAPI Service (10 files)
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-Reference files under `camera-intelligence/` in project root. These are deployed separately on your own server/Docker.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-| File | Purpose |
-|---|---|
-| `main.py` | FastAPI app with all routers, CORS, lifespan startup |
-| `erp_adapter.py` | Reads machines/orders/cut_plans/deliveries from Supabase REST API |
-| `camera.py` | RTSP stream manager, frame capture via OpenCV |
-| `detector.py` | YOLOv8 inference, class filtering (person/truck/forklift/pallet) |
-| `zones.py` | Polygon zone engine with point-in-zone checks |
-| `rules.py` | `(class, zone)` → ERP event mapping (truck+loading_dock → truck_arrived) |
-| `events.py` | Event generation, JSONL file logging, webhook POST to Lovable edge function |
-| `alerts.py` | Webhook + Telegram placeholder alert routing |
-| `ops_summary.py` | Health summary: idle/running/blocked machines, order bottlenecks |
-| `config.yaml` | Zone polygons, camera URLs, alert thresholds, ERP connection |
-| `requirements.txt` | fastapi, uvicorn, opencv-python, ultralytics, shapely, httpx, pyyaml |
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-Key features:
-- **Zone Engine**: polygon coords, allowed_classes, priority, linked ERP entity
-- **Rules Engine**: detection → ERP event mapping
-- **Dispatch Readiness**: truck at loading zone + order ready → `dispatch_ready_event`
-- **Machine Utilization**: camera activity vs ERP machine status → anomaly events
-- **JSONL logging**: full event context with snapshot_path, recommended_action
-
-Endpoints: `GET /ops/summary`, `/ops/machines`, `/ops/orders`, `/ops/deliveries`, `/events/recent`, `POST /zones/update`, `/rules/update`, `/alerts/test`, `GET /system/health`
-
-## Part B — Lovable Integration
-
-### 1. DB Migration: `camera_events` table
-```sql
-CREATE TABLE public.camera_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id uuid NOT NULL,
-  event_type text NOT NULL,
-  camera_id text,
-  zone text,
-  detected_class text,
-  confidence numeric,
-  related_machine_id uuid REFERENCES machines(id),
-  related_order_id uuid REFERENCES work_orders(id),
-  related_delivery_id uuid,
-  snapshot_url text,
-  recommended_action text,
-  metadata jsonb DEFAULT '{}',
-  created_at timestamptz DEFAULT now()
-);
--- RLS: company_id scoped read for authenticated users
--- Realtime enabled
-```
-
-### 2. Edge Function: `camera-events`
-- POST webhook receiver with API-key auth (not JWT — external FastAPI caller)
-- Validates payload, inserts into `camera_events`
-- Returns 200 with event ID
-
-### 3. React Page: `src/pages/CameraIntelligence.tsx`
-Route: `/shopfloor/camera-intelligence`
-
-Four panels:
-- **Live Event Feed** — realtime table with event type badges, zone, confidence, timestamps
-- **Dispatch Readiness** — highlights `dispatch_ready_event` and `truck_arrived`
-- **Machine Anomaly** — utilization mismatches (idle-but-active, running-but-empty)
-- **Zone Status Grid** — cards per zone showing last activity and alert level
-
-### 4. Wiring
-- Add hub card to `ShopFloor.tsx` (Camera icon, "CAMERA AI" label)
-- Add route in `App.tsx`
-- Add to `useActiveModule.ts`
-
-## Files Created/Modified
-- **Created**: `camera-intelligence/` (10 Python files), `src/pages/CameraIntelligence.tsx`, `supabase/functions/camera-events/index.ts`
-- **Modified**: `src/pages/ShopFloor.tsx`, `src/App.tsx`, `src/hooks/useActiveModule.ts`
-- **Migration**: 1 (camera_events table + RLS + realtime)
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
