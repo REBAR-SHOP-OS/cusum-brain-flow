@@ -252,14 +252,31 @@ export default function CameraManager() {
   return (
     <>
       <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
             <Camera className="w-4 h-4 text-primary" />
             Registered Cameras
           </CardTitle>
-          <Button size="sm" onClick={openAdd} className="gap-1.5">
-            <Plus className="w-3.5 h-3.5" /> Add Camera
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setShowAgentConfig(!showAgentConfig)}>
+              <Signal className="w-3 h-3" /> Agent
+            </Button>
+            <Button size="sm" onClick={openAdd} className="gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Add Camera
+            </Button>
+          </div>
+          {showAgentConfig && (
+            <div className="w-full flex items-center gap-2 mt-1">
+              <Label className="text-[10px] whitespace-nowrap text-muted-foreground">Local Agent URL:</Label>
+              <Input
+                className="h-7 text-xs font-mono max-w-xs"
+                placeholder="http://192.168.1.50:8000"
+                value={agentUrl}
+                onChange={(e) => saveAgentUrl(e.target.value)}
+              />
+              {agentUrl && <Badge variant="outline" className="text-[9px]">configured</Badge>}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {cameras.length === 0 ? (
