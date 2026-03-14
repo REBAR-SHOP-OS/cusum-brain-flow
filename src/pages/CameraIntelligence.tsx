@@ -3,14 +3,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead,
   TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   Camera, Truck, AlertTriangle, Activity,
-  Shield, MapPin, Clock, Loader2,
+  Shield, MapPin, Clock, Loader2, Settings,
 } from "lucide-react";
+import CameraManager from "@/components/camera/CameraManager";
 
 interface CameraEvent {
   id: string;
