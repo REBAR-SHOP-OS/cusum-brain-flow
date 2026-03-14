@@ -20,8 +20,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal,
+  Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal, ScanLine,
 } from "lucide-react";
+import QRCameraScanner from "./QRCameraScanner";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { isPrivateIp, browserPing } from "@/lib/browserPing";
 
