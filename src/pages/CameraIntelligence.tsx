@@ -134,172 +134,189 @@ export default function CameraIntelligence() {
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MiniStat label="Total Events" value={events.length} icon={<Camera className="w-4 h-4" />} />
-        <MiniStat label="Dispatch" value={dispatchEvents.length} icon={<Truck className="w-4 h-4" />} />
-        <MiniStat label="Anomalies" value={anomalyEvents.length} icon={<Activity className="w-4 h-4" />} />
-        <MiniStat label="Alerts" value={alertEvents.length} icon={<AlertTriangle className="w-4 h-4" />} />
-      </div>
+      <Tabs defaultValue="dashboard" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="dashboard" className="gap-1.5">
+            <Activity className="w-3.5 h-3.5" /> Dashboard
+          </TabsTrigger>
+          <TabsTrigger value="cameras" className="gap-1.5">
+            <Settings className="w-3.5 h-3.5" /> Cameras
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Dispatch Readiness */}
-        <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
-              <Truck className="w-4 h-4 text-emerald-400" />
-              Dispatch Readiness
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 max-h-64 overflow-y-auto">
-            {dispatchEvents.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No dispatch events yet</p>
-            ) : (
-              dispatchEvents.slice(0, 10).map((e) => (
-                <div key={e.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-border/30 last:border-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Badge className={`text-[10px] shrink-0 ${EVENT_COLORS[e.event_type] ?? ""}`}>
-                      {e.event_type.replace(/_/g, " ")}
-                    </Badge>
-                    {e.zone && <span className="text-[10px] text-muted-foreground truncate">{e.zone}</span>}
-                  </div>
-                  <span className="text-[10px] text-muted-foreground shrink-0">
-                    {new Date(e.created_at).toLocaleTimeString()}
-                  </span>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+        <TabsContent value="dashboard" className="space-y-4">
+          {/* Stats row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <MiniStat label="Total Events" value={events.length} icon={<Camera className="w-4 h-4" />} />
+            <MiniStat label="Dispatch" value={dispatchEvents.length} icon={<Truck className="w-4 h-4" />} />
+            <MiniStat label="Anomalies" value={anomalyEvents.length} icon={<Activity className="w-4 h-4" />} />
+            <MiniStat label="Alerts" value={alertEvents.length} icon={<AlertTriangle className="w-4 h-4" />} />
+          </div>
 
-        {/* Machine Anomalies */}
-        <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
-              <Activity className="w-4 h-4 text-yellow-400" />
-              Machine Anomalies
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 max-h-64 overflow-y-auto">
-            {anomalyEvents.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No anomalies detected</p>
-            ) : (
-              anomalyEvents.slice(0, 10).map((e) => (
-                <div key={e.id} className="py-1.5 border-b border-border/30 last:border-0">
-                  <div className="flex items-center justify-between">
-                    <Badge className={EVENT_COLORS.utilization_anomaly}>anomaly</Badge>
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(e.created_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  {e.recommended_action && (
-                    <p className="text-[10px] text-muted-foreground mt-1">{e.recommended_action}</p>
-                  )}
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Zone Status */}
-        <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-primary" />
-              Zone Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-2">
-            {ZONES.map((z) => {
-              const last = zoneLastActivity[z];
-              const hasAlert = last && (last.event_type === "unauthorized_zone_entry" || last.event_type === "after_hours_motion");
-              return (
-                <div
-                  key={z}
-                  className={`rounded-lg border p-2.5 ${
-                    hasAlert
-                      ? "border-destructive/40 bg-destructive/5"
-                      : last
-                        ? "border-primary/30 bg-primary/5"
-                        : "border-border/40 bg-muted/20"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {ZONE_ICONS[z] ?? <MapPin className="w-3 h-3" />}
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/80">
-                      {z.replace(/_/g, " ")}
-                    </span>
-                  </div>
-                  {last ? (
-                    <p className="text-[9px] text-muted-foreground flex items-center gap-1">
-                      <Clock className="w-2.5 h-2.5" />
-                      {new Date(last.created_at).toLocaleTimeString()}
-                    </p>
-                  ) : (
-                    <p className="text-[9px] text-muted-foreground">No activity</p>
-                  )}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Live Event Feed */}
-      <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
-            <Camera className="w-4 h-4 text-primary" />
-            Live Event Feed
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-[10px]">Time</TableHead>
-                  <TableHead className="text-[10px]">Type</TableHead>
-                  <TableHead className="text-[10px]">Zone</TableHead>
-                  <TableHead className="text-[10px]">Class</TableHead>
-                  <TableHead className="text-[10px]">Conf.</TableHead>
-                  <TableHead className="text-[10px]">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">
-                      No camera events yet. Connect your FastAPI service to start receiving detections.
-                    </TableCell>
-                  </TableRow>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Dispatch Readiness */}
+            <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-emerald-400" />
+                  Dispatch Readiness
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 max-h-64 overflow-y-auto">
+                {dispatchEvents.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No dispatch events yet</p>
                 ) : (
-                  events.slice(0, 50).map((e) => (
-                    <TableRow key={e.id}>
-                      <TableCell className="text-[10px] text-muted-foreground whitespace-nowrap">
-                        {new Date(e.created_at).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-[9px] ${EVENT_COLORS[e.event_type] ?? "bg-muted text-muted-foreground"}`}>
+                  dispatchEvents.slice(0, 10).map((e) => (
+                    <div key={e.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-border/30 last:border-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge className={`text-[10px] shrink-0 ${EVENT_COLORS[e.event_type] ?? ""}`}>
                           {e.event_type.replace(/_/g, " ")}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-[10px]">{e.zone ?? "—"}</TableCell>
-                      <TableCell className="text-[10px]">{e.detected_class ?? "—"}</TableCell>
-                      <TableCell className="text-[10px]">
-                        {e.confidence != null ? `${(e.confidence * 100).toFixed(0)}%` : "—"}
-                      </TableCell>
-                      <TableCell className="text-[10px] text-muted-foreground max-w-[200px] truncate">
-                        {e.recommended_action ?? "—"}
-                      </TableCell>
-                    </TableRow>
+                        {e.zone && <span className="text-[10px] text-muted-foreground truncate">{e.zone}</span>}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {new Date(e.created_at).toLocaleTimeString()}
+                      </span>
+                    </div>
                   ))
                 )}
-              </TableBody>
-            </Table>
+              </CardContent>
+            </Card>
+
+            {/* Machine Anomalies */}
+            <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-yellow-400" />
+                  Machine Anomalies
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 max-h-64 overflow-y-auto">
+                {anomalyEvents.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No anomalies detected</p>
+                ) : (
+                  anomalyEvents.slice(0, 10).map((e) => (
+                    <div key={e.id} className="py-1.5 border-b border-border/30 last:border-0">
+                      <div className="flex items-center justify-between">
+                        <Badge className={EVENT_COLORS.utilization_anomaly}>anomaly</Badge>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(e.created_at).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      {e.recommended_action && (
+                        <p className="text-[10px] text-muted-foreground mt-1">{e.recommended_action}</p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Zone Status */}
+            <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-primary" />
+                  Zone Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-2">
+                {ZONES.map((z) => {
+                  const last = zoneLastActivity[z];
+                  const hasAlert = last && (last.event_type === "unauthorized_zone_entry" || last.event_type === "after_hours_motion");
+                  return (
+                    <div
+                      key={z}
+                      className={`rounded-lg border p-2.5 ${
+                        hasAlert
+                          ? "border-destructive/40 bg-destructive/5"
+                          : last
+                            ? "border-primary/30 bg-primary/5"
+                            : "border-border/40 bg-muted/20"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        {ZONE_ICONS[z] ?? <MapPin className="w-3 h-3" />}
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/80">
+                          {z.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      {last ? (
+                        <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" />
+                          {new Date(last.created_at).toLocaleTimeString()}
+                        </p>
+                      ) : (
+                        <p className="text-[9px] text-muted-foreground">No activity</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Live Event Feed */}
+          <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-bold tracking-wider uppercase flex items-center gap-2">
+                <Camera className="w-4 h-4 text-primary" />
+                Live Event Feed
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[10px]">Time</TableHead>
+                      <TableHead className="text-[10px]">Type</TableHead>
+                      <TableHead className="text-[10px]">Zone</TableHead>
+                      <TableHead className="text-[10px]">Class</TableHead>
+                      <TableHead className="text-[10px]">Conf.</TableHead>
+                      <TableHead className="text-[10px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {events.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">
+                          No camera events yet. Connect your FastAPI service to start receiving detections.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      events.slice(0, 50).map((e) => (
+                        <TableRow key={e.id}>
+                          <TableCell className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {new Date(e.created_at).toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`text-[9px] ${EVENT_COLORS[e.event_type] ?? "bg-muted text-muted-foreground"}`}>
+                              {e.event_type.replace(/_/g, " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-[10px]">{e.zone ?? "—"}</TableCell>
+                          <TableCell className="text-[10px]">{e.detected_class ?? "—"}</TableCell>
+                          <TableCell className="text-[10px]">
+                            {e.confidence != null ? `${(e.confidence * 100).toFixed(0)}%` : "—"}
+                          </TableCell>
+                          <TableCell className="text-[10px] text-muted-foreground max-w-[200px] truncate">
+                            {e.recommended_action ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cameras">
+          <CameraManager />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
