@@ -458,6 +458,7 @@ export default function CameraManager() {
                 companyId={companyId}
                 existingCreds={cameras.length > 0 ? { username: cameras[0].username, password: "" } : null}
                 agentUrl={agentUrl}
+                onAgentUrlChange={saveAgentUrl}
                 onDone={fetchCameras}
               />
             )}
