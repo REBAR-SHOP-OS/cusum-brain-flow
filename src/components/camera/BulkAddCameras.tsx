@@ -60,7 +60,7 @@ function parseIps(raw: string, subnet: string): string[] {
   return [...new Set(ips)];
 }
 
-export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onDone }: Props) {
+export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onAgentUrlChange, onDone }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [subnet, setSubnet] = useState("10.0.0");
@@ -73,6 +73,7 @@ export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onD
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [localAgentUrl, setLocalAgentUrl] = useState(agentUrl || "");
 
   const handleParse = () => {
     const ips = parseIps(ipInput, subnet);
