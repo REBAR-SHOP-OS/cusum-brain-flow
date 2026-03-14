@@ -75,6 +75,18 @@ export default function CameraManager() {
   const [pingMethod, setPingMethod] = useState<Record<string, string>>({});
   const [agentUrl, setAgentUrl] = useState(() => localStorage.getItem("camera_agent_url") || "");
   const [showAgentConfig, setShowAgentConfig] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+
+  const handleQrScanned = (uid: string) => {
+    setEditingId(null);
+    setForm({
+      ...EMPTY_FORM,
+      camera_id: uid,
+      name: `Camera-${uid.slice(-6)}`,
+    });
+    setDialogOpen(true);
+    toast({ title: "QR scanned", description: `UID: ${uid}` });
+  };
 
   const fetchCameras = async () => {
     if (!companyId) return;
