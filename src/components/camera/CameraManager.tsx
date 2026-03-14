@@ -23,6 +23,7 @@ import {
   Plus, Pencil, Trash2, Camera, Loader2, Wifi, WifiOff, Signal, ScanLine,
 } from "lucide-react";
 import QRCameraScanner from "./QRCameraScanner";
+import { parseReolinkQr } from "@/lib/parseReolinkQr";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { isPrivateIp, browserPing } from "@/lib/browserPing";
 
