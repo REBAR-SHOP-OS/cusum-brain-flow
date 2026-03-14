@@ -56,18 +56,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Normal flow: check for existing session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        // Stale/corrupt token in storage — clear it to stop bad_jwt polling
-        console.warn('Session recovery failed, clearing stale auth state:', error.message);
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (error || !session) {
+        if (error) {
+          console.warn('Session recovery failed, clearing stale auth state:', error.message);
+          supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+        }
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      // Validate token server-side — getSession only reads localStorage
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.warn('Stale JWT detected, clearing session:', userError?.message);
         supabase.auth.signOut({ scope: 'local' }).catch(() => {});
         setSession(null);
         setUser(null);
         setLoading(false);
         return;
       }
+
       setSession(session);
-      setUser(session?.user ?? null);
+      setUser(user);
       setLoading(false);
     });
 
