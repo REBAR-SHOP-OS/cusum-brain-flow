@@ -14,7 +14,8 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Loader2, Plus } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Loader2, Plus, Radar } from "lucide-react";
 
 const ZONES = [
   "loading_dock", "dispatch_yard", "cutter_area",
@@ -26,11 +27,14 @@ interface BulkCamera {
   ip: string;
   name: string;
   zone: string;
+  model?: string;
+  serial?: string;
 }
 
 interface Props {
   companyId: string;
   existingCreds: { username: string; password: string } | null;
+  agentUrl?: string;
   onDone: () => void;
 }
 
@@ -55,15 +59,19 @@ function parseIps(raw: string, subnet: string): string[] {
   return [...new Set(ips)];
 }
 
-export default function BulkAddCameras({ companyId, existingCreds, onDone }: Props) {
+export default function BulkAddCameras({ companyId, existingCreds, agentUrl, onDone }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [subnet, setSubnet] = useState("10.0.0");
+  const [rangeStart, setRangeStart] = useState("100");
+  const [rangeEnd, setRangeEnd] = useState("200");
   const [ipInput, setIpInput] = useState("");
   const [username, setUsername] = useState(existingCreds?.username || "admin");
   const [password, setPassword] = useState(existingCreds?.password || "");
   const [cameras, setCameras] = useState<BulkCamera[]>([]);
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
 
   const handleParse = () => {
     const ips = parseIps(ipInput, subnet);
@@ -76,6 +84,58 @@ export default function BulkAddCameras({ companyId, existingCreds, onDone }: Pro
       name: `Camera-${ip.split(".").pop()}`,
       zone: "",
     })));
+  };
+
+  const handleScanSubnet = async () => {
+    if (!agentUrl) {
+      toast({ title: "Local Agent not configured", description: "Set the Local Agent URL in camera settings to use subnet scanning.", variant: "destructive" });
+      return;
+    }
+    if (!password) {
+      toast({ title: "Password required", description: "Enter the camera password before scanning.", variant: "destructive" });
+      return;
+    }
+    setScanning(true);
+    setScanProgress(10);
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 120000);
+      setScanProgress(20);
+      const resp = await fetch(`${agentUrl}/agent/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subnet,
+          start: parseInt(rangeStart) || 1,
+          end: parseInt(rangeEnd) || 254,
+          username,
+          password,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      setScanProgress(90);
+      if (!resp.ok) throw new Error(`Agent returned ${resp.status}`);
+      const data = await resp.json();
+      setScanProgress(100);
+      if (data.cameras && data.cameras.length > 0) {
+        setCameras(data.cameras.map((c: any) => ({
+          ip: c.ip,
+          name: c.name || `Camera-${c.ip.split(".").pop()}`,
+          zone: "",
+          model: c.model,
+          serial: c.serial,
+        })));
+        toast({ title: `Found ${data.cameras.length} camera(s)`, description: `Scanned ${data.scanned} IPs` });
+      } else {
+        toast({ title: "No cameras found", description: `Scanned ${data.scanned || 0} IPs with no Reolink responses.`, variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Scan failed", description: err.message || "Could not reach Local Agent", variant: "destructive" });
+    } finally {
+      setScanning(false);
+      setScanProgress(0);
+    }
   };
 
   const updateCamera = (idx: number, field: keyof BulkCamera, val: string) => {
@@ -109,6 +169,7 @@ export default function BulkAddCameras({ companyId, existingCreds, onDone }: Pro
       assigned_zone: c.zone,
       is_active: true,
       brand: "Reolink",
+      model: c.model || null,
     }));
 
     const { error } = await supabase.from("cameras").insert(rows as any);
@@ -154,9 +215,35 @@ export default function BulkAddCameras({ companyId, existingCreds, onDone }: Pro
               </div>
             </div>
 
-            {/* IP Input */}
+            {/* Auto-Discover */}
+            {agentUrl && (
+              <div className="border border-dashed rounded-md p-3 space-y-2">
+                <Label className="text-xs font-medium flex items-center gap-1.5">
+                  <Radar className="w-3.5 h-3.5" /> Auto-Discover (Subnet Scan)
+                </Label>
+                <div className="flex items-end gap-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Start</Label>
+                    <Input className="h-7 text-xs font-mono w-20" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">End</Label>
+                    <Input className="h-7 text-xs font-mono w-20" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} />
+                  </div>
+                  <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs" onClick={handleScanSubnet} disabled={scanning}>
+                    {scanning ? <><Loader2 className="w-3 h-3 animate-spin" /> Scanning...</> : <><Radar className="w-3 h-3" /> Scan Subnet</>}
+                  </Button>
+                </div>
+                {scanning && <Progress value={scanProgress} className="h-1.5" />}
+                <p className="text-[10px] text-muted-foreground">
+                  Scans {subnet}.{rangeStart}–{rangeEnd} via Local Agent, auto-discovers Reolink cameras using their HTTP API.
+                </p>
+              </div>
+            )}
+
+            {/* Manual IP Input */}
             <div>
-              <Label className="text-xs">IPs (last octet, full IP, or range like 140-145)</Label>
+              <Label className="text-xs">Manual IPs (last octet, full IP, or range like 140-145)</Label>
               <div className="flex gap-2">
                 <Textarea
                   className="text-xs font-mono min-h-[60px]"
@@ -178,6 +265,7 @@ export default function BulkAddCameras({ companyId, existingCreds, onDone }: Pro
                     <TableRow>
                       <TableHead className="text-xs">IP</TableHead>
                       <TableHead className="text-xs">Name</TableHead>
+                      <TableHead className="text-xs">Model</TableHead>
                       <TableHead className="text-xs">Zone</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -192,6 +280,7 @@ export default function BulkAddCameras({ companyId, existingCreds, onDone }: Pro
                             onChange={(e) => updateCamera(idx, "name", e.target.value)}
                           />
                         </TableCell>
+                        <TableCell className="text-xs py-1 text-muted-foreground">{cam.model || "—"}</TableCell>
                         <TableCell className="py-1">
                           <Select value={cam.zone} onValueChange={(v) => updateCamera(idx, "zone", v)}>
                             <SelectTrigger className="h-7 text-xs">
