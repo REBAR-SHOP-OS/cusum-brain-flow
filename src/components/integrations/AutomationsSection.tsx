@@ -148,6 +148,7 @@ const iconComponents = {
   code: Code,
   search: Search,
   video: Video,
+  camera: Camera,
 };
 
 interface AutomationCardProps {
