@@ -62,6 +62,12 @@ const hubCards: HubCard[] = [
     icon: <Truck className="w-7 h-7" />,
     to: "/shopfloor/delivery-ops",
   },
+  {
+    label: "CAMERA AI",
+    subtitle: "VISION & DISPATCH",
+    icon: <Camera className="w-7 h-7" />,
+    to: "/shopfloor/camera-intelligence",
+  },
 ];
 
 export default function ShopFloor() {

@@ -170,6 +170,7 @@ const App = () => (
                     <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
                     <Route path="/shopfloor/inventory" element={<P><InventoryCountPage /></P>} />
                     <Route path="/shopfloor/delivery-ops" element={<P><DeliveryOps /></P>} />
+                    <Route path="/shopfloor/camera-intelligence" element={<P><CameraIntelligence /></P>} />
                     <Route path="/shopfloor/delivery/:stopId" element={<P><DeliveryTerminal /></P>} />
                     
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
