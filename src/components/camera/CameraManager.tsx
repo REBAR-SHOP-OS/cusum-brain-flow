@@ -452,6 +452,8 @@ export default function CameraManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <QRCameraScanner open={qrOpen} onOpenChange={setQrOpen} onScanned={handleQrScanned} />
     </>
   );
 }
