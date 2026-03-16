@@ -10,6 +10,7 @@ export function DetailedListView() {
   const { plans, loading: plansLoading } = useCutPlans();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const { items, loading: itemsLoading } = useCutPlanItems(selectedPlanId);
+  const unitSystem = useUnitSystem();
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
