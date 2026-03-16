@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -72,12 +73,13 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
     if (!isSuperAdmin) return null;
 
-    return (
+    return createPortal(
       <>
         {showVoiceChat && (
           <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
         )}
         <div
+          data-feedback-btn="true"
           className="fixed z-[9999] group"
           style={{ left: pos.x, top: pos.y, touchAction: "none" }}
           onMouseEnter={() => !isMobile && setShowActions(true)}
@@ -125,7 +127,8 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
             <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-background rounded-full" />
           </button>
         </div>
-      </>
+      </>,
+      document.body
     );
   }
 );
