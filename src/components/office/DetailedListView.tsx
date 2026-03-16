@@ -187,7 +187,7 @@ export function DetailedListView() {
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </span>
-                  <span className="text-xs font-bold">{item.cut_length_mm}</span>
+                  <span className="text-xs font-bold">{formatLength(item.cut_length_mm, unitSystem)}</span>
                   {dimCols.map(c => (
                     <span key={c} className="text-xs text-muted-foreground">
                       {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">MM</sub></span> : ""}
