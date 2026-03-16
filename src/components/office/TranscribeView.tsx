@@ -161,6 +161,7 @@ export function TranscribeView() {
   const [completedSpeakers, setCompletedSpeakers] = useState<Set<string>>(new Set());
   const [generatingReport, setGeneratingReport] = useState<string | null>(null);
   const [isFinalReportLoading, setIsFinalReportLoading] = useState(false);
+  const [viewingReport, setViewingReport] = useState<string | null>(null);
 
   const allSpeakersComplete = CONVERSATION_SPEAKERS.every(s => completedSpeakers.has(s.name));
 
