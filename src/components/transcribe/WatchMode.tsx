@@ -87,12 +87,17 @@ export function WatchMode() {
       {/* Bottom half: transcript */}
       <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
         {committedTranscripts.map((t) => (
-          <p key={t.id} className="text-lg font-medium leading-snug">{t.text}</p>
+          <p key={t.id} className="text-lg font-medium leading-snug">
+            {t.isTranslating ? (
+              <span className="text-white/60 italic animate-pulse">translating…</span>
+            ) : (
+              t.translatedText || t.text
+            )}
+          </p>
         ))}
         {partialText && (
-          <p className="text-lg text-white/60 italic">
-            {partialText}
-            <span className="animate-pulse">▊</span>
+          <p className="text-lg text-white/60 italic animate-pulse">
+            Listening…
           </p>
         )}
         {!isConnected && committedTranscripts.length === 0 && (

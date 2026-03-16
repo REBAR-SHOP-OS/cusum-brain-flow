@@ -43,9 +43,10 @@ export function LiveTranscript({
             </span>
             <div className="flex flex-col gap-0.5">
               <span className="text-sm text-foreground">
-                {t.translatedText || t.text}
-                {t.isTranslating && (
-                  <span className="ml-1 text-xs text-muted-foreground italic animate-pulse">translating…</span>
+                {t.isTranslating ? (
+                  <span className="text-xs text-muted-foreground italic animate-pulse">translating…</span>
+                ) : (
+                  t.translatedText || ""
                 )}
               </span>
             </div>
@@ -56,9 +57,8 @@ export function LiveTranscript({
             <span className="text-[10px] font-mono text-muted-foreground shrink-0 pt-0.5 min-w-[3rem]">
               …
             </span>
-            <span className="text-sm text-muted-foreground italic">
-              {partial}
-              <span className="animate-pulse">▊</span>
+            <span className="text-sm text-muted-foreground italic animate-pulse">
+              Listening…
             </span>
           </div>
         )}
