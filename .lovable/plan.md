@@ -1,58 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Implement Missing Empire Agent Tool Handlers
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The empire agent defines `resolve_task` as a tool and references `generate_patch`, `create_fix_ticket`, `read_task`, `update_fix_ticket`, `list_fix_tickets`, and `validate_code` in its system prompt, but none of these have actual implementations in `agentToolExecutor.ts`. They all fall through to the generic `"Tool executed (simulated)"` fallback, making the autofix and code-patch workflows non-functional.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Root Cause
-- `resolve_task` is defined in `agentTools.ts` (line 266) but has no handler in `agentToolExecutor.ts`
-- `generate_patch`, `create_fix_ticket`, `read_task`, `update_fix_ticket`, `list_fix_tickets`, `validate_code` are mentioned in the empire prompt but neither defined as tools in `agentTools.ts` nor handled in `agentToolExecutor.ts`
-- `companyId` IS correctly fetched and passed through the chain — that is not the issue
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Plan
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 1. Add missing tool definitions to `agentTools.ts`
-Add the following tools for the empire agent (alongside existing `db_read_query`, `db_write_fix`, `resolve_task`):
-- `read_task` — read an autofix task by ID from `autopilot_tasks` or similar table
-- `generate_patch` — create a code patch entry in `code_patches` table
-- `validate_code` — basic static validation of a patch (syntax check)
-- `create_fix_ticket` — insert into `fix_tickets` table
-- `update_fix_ticket` — update a fix ticket status
-- `list_fix_tickets` — list open fix tickets for the company
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 2. Add tool handler implementations to `agentToolExecutor.ts`
-Before the default fallback (line 864), add `else if` blocks for each tool:
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-- **`resolve_task`**: Update the task record (in whichever table stores autofix tasks — likely `autopilot_runs` or a tasks table) with `status = "resolved"` and the resolution note. Uses `companyId` for tenant scoping.
-- **`read_task`**: Fetch task by ID, scoped to `companyId`.
-- **`generate_patch`**: Insert into `code_patches` table with `company_id`, `created_by`, file path, patch content, and status "pending".
-- **`validate_code`**: Run basic validation (check for dangerous patterns like `DROP TABLE`, ensure patch content is non-empty).
-- **`create_fix_ticket`**: Insert into `fix_tickets` table with company scoping.
-- **`update_fix_ticket`**: Update fix ticket by ID.
-- **`list_fix_tickets`**: Query open fix tickets for the company.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 3. Database check
-Before implementing, verify which tables exist (`code_patches`, `fix_tickets`, `autopilot_tasks`) to ensure the handlers target real tables.
-
-### Technical Details
-
-```text
-agentTools.ts (empire block)
-├── db_read_query     ✅ defined + implemented
-├── db_write_fix      ✅ defined + implemented
-├── resolve_task      ⚠️ defined, NOT implemented
-├── read_task         ❌ not defined, not implemented
-├── generate_patch    ❌ not defined, not implemented
-├── validate_code     ❌ not defined, not implemented
-├── create_fix_ticket ❌ not defined, not implemented
-├── update_fix_ticket ❌ not defined, not implemented
-└── list_fix_tickets  ❌ not defined, not implemented
-```
-
-The fix touches two files:
-- `supabase/functions/_shared/agentTools.ts` — add 6 tool definitions
-- `supabase/functions/_shared/agentToolExecutor.ts` — add 7 tool handlers (before line 864)
-
-May also require a database migration to create `fix_tickets` table if it doesn't exist.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

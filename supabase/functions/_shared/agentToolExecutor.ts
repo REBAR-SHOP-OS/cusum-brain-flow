@@ -860,6 +860,115 @@ export async function executeToolCall(
       }
     }
 
+    // ── Empire Tools ──────────────────────────────────────────────
+    else if (toolName === "resolve_task") {
+      const { task_id, resolution_note, new_status } = args;
+      if (!task_id) { result.result = { error: "task_id is required" }; }
+      else {
+        const { error } = await serviceClient.from("autopilot_runs")
+          .update({ status: new_status || "resolved", approval_note: resolution_note, completed_at: new Date().toISOString() })
+          .eq("id", task_id)
+          .eq("company_id", companyId);
+        result.result = error ? { error: error.message } : { success: true, message: `Task ${task_id} resolved.` };
+      }
+    }
+
+    else if (toolName === "read_task") {
+      const { task_id } = args;
+      if (!task_id) { result.result = { error: "task_id is required" }; }
+      else {
+        const { data, error } = await serviceClient.from("autopilot_runs")
+          .select("*")
+          .eq("id", task_id)
+          .eq("company_id", companyId)
+          .maybeSingle();
+        result.result = error ? { error: error.message } : { success: true, task: data };
+      }
+    }
+
+    else if (toolName === "generate_patch") {
+      const { file_path, patch_content, description, patch_type, target_system } = args;
+      if (!file_path || !patch_content) { result.result = { error: "file_path and patch_content are required" }; }
+      else {
+        const { data, error } = await serviceClient.from("code_patches").insert({
+          company_id: companyId,
+          created_by: userId,
+          file_path,
+          patch_content,
+          description: description || "",
+          patch_type: patch_type || "fix",
+          target_system: target_system || "lovable",
+          status: "pending",
+        }).select("id").single();
+        result.result = error ? { error: error.message } : { success: true, patch_id: data?.id, message: "Patch created for review." };
+      }
+    }
+
+    else if (toolName === "validate_code") {
+      const { patch_content } = args;
+      if (!patch_content || !patch_content.trim()) {
+        result.result = { valid: false, errors: ["Patch content is empty."] };
+      } else {
+        const errors: string[] = [];
+        const dangerous = ["DROP TABLE", "DROP SCHEMA", "TRUNCATE", "DELETE FROM auth.", "ALTER SYSTEM", "pg_terminate"];
+        for (const p of dangerous) {
+          if (patch_content.toUpperCase().includes(p)) errors.push(`Dangerous pattern detected: ${p}`);
+        }
+        if (patch_content.length > 50000) errors.push("Patch exceeds 50k character limit.");
+        result.result = { valid: errors.length === 0, errors };
+      }
+    }
+
+    else if (toolName === "create_fix_ticket") {
+      const { system_area, repro_steps, expected_result, actual_result, severity, page_url, screenshot_url } = args;
+      if (!system_area || !repro_steps) { result.result = { error: "system_area and repro_steps are required" }; }
+      else {
+        const { data, error } = await serviceClient.from("fix_tickets").insert({
+          company_id: companyId,
+          reporter_user_id: userId,
+          system_area,
+          repro_steps,
+          expected_result: expected_result || null,
+          actual_result: actual_result || null,
+          severity: severity || "medium",
+          status: "open",
+          page_url: page_url || null,
+          screenshot_url: screenshot_url || null,
+        }).select("id").single();
+        result.result = error ? { error: error.message } : { success: true, ticket_id: data?.id, message: "Fix ticket created." };
+      }
+    }
+
+    else if (toolName === "update_fix_ticket") {
+      const { ticket_id, status, fix_output, fix_output_type } = args;
+      if (!ticket_id) { result.result = { error: "ticket_id is required" }; }
+      else {
+        const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+        if (fix_output) updates.fix_output = fix_output;
+        if (fix_output_type) updates.fix_output_type = fix_output_type;
+        if (status === "diagnosed") updates.diagnosed_at = new Date().toISOString();
+        if (status === "fixed") updates.fixed_at = new Date().toISOString();
+        if (status === "verified") updates.verified_at = new Date().toISOString();
+        const { error } = await serviceClient.from("fix_tickets")
+          .update(updates)
+          .eq("id", ticket_id)
+          .eq("company_id", companyId);
+        result.result = error ? { error: error.message } : { success: true, message: `Ticket ${ticket_id} updated to ${status}.` };
+      }
+    }
+
+    else if (toolName === "list_fix_tickets") {
+      const statusFilter = args.status_filter || "open";
+      const limit = args.limit || 20;
+      const { data, error } = await serviceClient.from("fix_tickets")
+        .select("id, system_area, severity, status, created_at, page_url, repro_steps")
+        .eq("company_id", companyId)
+        .eq("status", statusFilter)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      result.result = error ? { error: error.message } : { success: true, tickets: data, count: data?.length || 0 };
+    }
+
     // Default fallback
     else {
       result.result = { success: true, message: "Tool executed (simulated)" };

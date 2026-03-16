@@ -273,6 +273,100 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
             required: ["task_id", "resolution_note"]
           }
         }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "read_task",
+          description: "Read an autopilot run / autofix task by ID.",
+          parameters: {
+            type: "object",
+            properties: { task_id: { type: "string", description: "UUID of the autopilot run" } },
+            required: ["task_id"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "generate_patch",
+          description: "Create a code patch entry for review.",
+          parameters: {
+            type: "object",
+            properties: {
+              file_path: { type: "string", description: "Target file path" },
+              patch_content: { type: "string", description: "Unified diff or replacement code" },
+              description: { type: "string", description: "What the patch does" },
+              patch_type: { type: "string", description: "Type: fix, feature, refactor" },
+              target_system: { type: "string", description: "e.g. lovable, odoo, wordpress" }
+            },
+            required: ["file_path", "patch_content", "description"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "validate_code",
+          description: "Validate a code patch for dangerous patterns before applying.",
+          parameters: {
+            type: "object",
+            properties: { patch_content: { type: "string", description: "Code to validate" } },
+            required: ["patch_content"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "create_fix_ticket",
+          description: "Create a fix ticket to track a bug or issue.",
+          parameters: {
+            type: "object",
+            properties: {
+              system_area: { type: "string", description: "Affected system area" },
+              repro_steps: { type: "string", description: "Steps to reproduce" },
+              expected_result: { type: "string", description: "What should happen" },
+              actual_result: { type: "string", description: "What actually happens" },
+              severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+              page_url: { type: "string", description: "URL of affected page" },
+              screenshot_url: { type: "string", description: "Screenshot evidence URL" }
+            },
+            required: ["system_area", "repro_steps", "severity"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "update_fix_ticket",
+          description: "Update the status or details of a fix ticket.",
+          parameters: {
+            type: "object",
+            properties: {
+              ticket_id: { type: "string" },
+              status: { type: "string", enum: ["open", "diagnosed", "fixing", "fixed", "verified", "closed"] },
+              fix_output: { type: "string", description: "Description of fix applied" },
+              fix_output_type: { type: "string", description: "e.g. patch, config, migration" }
+            },
+            required: ["ticket_id", "status"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "list_fix_tickets",
+          description: "List open fix tickets for the company.",
+          parameters: {
+            type: "object",
+            properties: {
+              status_filter: { type: "string", description: "Filter by status (default: open)" },
+              limit: { type: "number", description: "Max results (default 20)" }
+            },
+            required: []
+          }
+        }
       }
     );
   }
