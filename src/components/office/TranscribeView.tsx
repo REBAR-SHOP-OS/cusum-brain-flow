@@ -763,6 +763,7 @@ export function TranscribeView() {
             <PostProcessToolbar
               transcript={originalText}
               onResult={handlePostProcessResult}
+              selectedSpeaker={selectedSpeaker}
             />
           </CardContent>
         </Card>
