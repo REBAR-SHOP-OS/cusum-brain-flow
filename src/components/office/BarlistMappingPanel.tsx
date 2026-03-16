@@ -254,7 +254,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
               <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border min-w-0">
                 <div className="flex items-center gap-1 min-w-[70px] shrink-0">
                   {field.required && <span className="text-destructive text-[10px]">*</span>}
-                  <span className="text-xs font-medium text-foreground truncate">{field.label}</span>
+                  <span className="text-xs font-medium text-foreground truncate">
+                    {field.key === "length" ? `Cut Length (${lengthUnit})` : field.label}
+                  </span>
                 </div>
                 <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
                 <Select
@@ -273,6 +275,24 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                     ))}
                   </SelectContent>
                 </Select>
+                {field.key === "length" && (
+                  <Select
+                    value={lengthUnit}
+                    onValueChange={(val) => { setLengthUnit(val as LengthUnit); setConfirmed(false); }}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-[80px] shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LENGTH_UNITS.map(u => (
+                        <SelectItem key={u.value} value={u.value} className="text-xs">
+                          {u.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             ))}
           </div>
