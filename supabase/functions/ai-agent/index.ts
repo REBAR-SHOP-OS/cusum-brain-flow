@@ -397,6 +397,9 @@ async function generatePixelImage(
         imageBytes = new Uint8Array(buf);
       }
 
+      // Enforce aspect ratio via server-side crop/resize
+      imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+
       // Encode styleIndex in filename for dedup tracking (set by caller via options)
       const styleTag = options?.styleIndex ?? "x";
       const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
