@@ -1,47 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Add Live Translation Panel on the Right Side
+## Completed: Add All Wan 2.6 Capabilities
 
-## What
-Add a right-side column/panel to the Transcribe page that shows a live translation of the transcript into a user-selected language. A language selector icon at the top of the panel lets the user choose the target language.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Layout
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-```text
-┌─────────┬──────────────────────┬─────────────────────┐
-│ Speaker │   Main Content       │  Live Translation   │
-│ Circles │   (existing)         │  [🌐 Language ▾]    │
-│  [R]    │                      │                     │
-│  [B]    │  Tabs / Mic / etc    │  Translated text    │
-│  [V]    │                      │  appears here in    │
-│  [S]    │  Live Transcript     │  real-time as       │
-│  [K]    │                      │  segments commit    │
-│         │                      │                     │
-└─────────┴──────────────────────┴─────────────────────┘
-```
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Changes
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### `src/components/office/TranscribeView.tsx`
-1. Add `translationLang` state (default `"fa"` / Farsi, selectable from LANGUAGES list)
-2. Wrap the existing layout in a 3-column flex: speakers | main | translation panel
-3. Add a right-side panel (`w-80`) containing:
-   - A language selector icon/dropdown (Globe icon + Select) at the top
-   - A `ScrollArea` that displays each committed transcript segment translated into the selected language
-4. On mobile: the translation panel collapses below the main content
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### `src/hooks/useRealtimeTranscribe.ts`
-- Already translates to English. No changes needed here — the right panel will do its own translation calls.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### New: Translation logic in TranscribeView
-- When `translationLang` changes or new committed transcripts arrive, fire translation requests (to `translate-message` edge function) for each new segment into the selected language
-- Store translations in a local `Map<string, string>` keyed by transcript entry ID
-- Show "translating…" indicator per segment while pending
-
-### Visual Design
-- Panel has a subtle border-left, matching the page background
-- Globe icon button opens language dropdown
-- Each translated line shows timestamp + translated text
-- Muted original text shown below each translation for reference
-- Hidden when no language is selected or on very small screens
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
