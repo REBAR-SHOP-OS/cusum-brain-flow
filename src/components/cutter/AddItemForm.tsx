@@ -54,7 +54,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
             <SelectContent>
               {rebarSizes.map(s => (
                 <SelectItem key={s.bar_code} value={s.bar_code}>
-                  {s.bar_code} — {s.diameter_mm}mm
+                  {barSizeLabel(s.bar_code, unitSystem)} — {s.diameter_mm}mm
                 </SelectItem>
               ))}
             </SelectContent>
