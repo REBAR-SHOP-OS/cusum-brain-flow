@@ -88,7 +88,8 @@ Return ONLY a JSON object with language codes as keys and clean translations as 
 Example: {"fa": "سلام، حالت چطوره؟", "en": "Hello, how are you?"}
 
 IMPORTANT: Each language value must contain text ONLY in that language. The "en" value must be pure English. The "fa" value must be pure Farsi/Persian script. Never mix languages in a single value.
-IMPORTANT: When the speech is clearly in a non-English language rendered phonetically, prioritize reconstructing the original language meaning over literal English interpretation.${contextSection}`;
+IMPORTANT: When the speech is clearly in a non-English language rendered phonetically, prioritize reconstructing the original language meaning over literal English interpretation.
+IMPORTANT: If the input is completely unintelligible gibberish, noise artifacts, meaningless symbols (e.g. Ol Chiki script fragments, replacement characters, random Unicode), or has no recoverable speech content, return empty strings for ALL language keys (e.g., {"en": "", "fa": ""}). Do NOT fabricate or guess content from noise.${contextSection}`;
 
     const result = await callAI({
       provider: "gemini",
