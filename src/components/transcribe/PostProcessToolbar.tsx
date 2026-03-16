@@ -18,6 +18,9 @@ interface PostProcessToolbarProps {
   transcript: string;
   onResult: (result: string, type: string) => void;
   selectedSpeaker?: string | null;
+  onFinalReport?: () => void;
+  allSpeakersComplete?: boolean;
+  isFinalReportLoading?: boolean;
 }
 
 async function generatePdfReport(transcript: string, summary: string, selectedSpeaker: string | null) {
