@@ -7,6 +7,8 @@ interface CommittedTranscript {
   id: string;
   text: string;
   timestamp: number;
+  translatedText?: string;
+  isTranslating?: boolean;
 }
 
 export function useRealtimeTranscribe() {
@@ -25,11 +27,35 @@ export function useRealtimeTranscribe() {
     onCommittedTranscript: (data) => {
       if (!data.text.trim()) return;
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      const entryId = crypto.randomUUID();
       setCommittedTranscripts((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), text: data.text, timestamp: elapsed },
+        { id: entryId, text: data.text, timestamp: elapsed, isTranslating: true },
       ]);
       setPartialText("");
+
+      // Fire-and-forget translation to English
+      supabase.functions
+        .invoke("translate-message", {
+          body: { text: data.text, sourceLang: "auto", targetLangs: ["en"] },
+        })
+        .then(({ data: res }) => {
+          const translated = res?.translations?.en;
+          setCommittedTranscripts((prev) =>
+            prev.map((t) =>
+              t.id === entryId
+                ? { ...t, translatedText: translated || t.text, isTranslating: false }
+                : t
+            )
+          );
+        })
+        .catch(() => {
+          setCommittedTranscripts((prev) =>
+            prev.map((t) =>
+              t.id === entryId ? { ...t, translatedText: t.text, isTranslating: false } : t
+            )
+          );
+        });
     },
   });
 
@@ -71,7 +97,7 @@ export function useRealtimeTranscribe() {
   }, []);
 
   const getFullTranscript = useCallback(() => {
-    return committedTranscripts.map((t) => t.text).join(" ");
+    return committedTranscripts.map((t) => t.translatedText || t.text).join(" ");
   }, [committedTranscripts]);
 
   return {

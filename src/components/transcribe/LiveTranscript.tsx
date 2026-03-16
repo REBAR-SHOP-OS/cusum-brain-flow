@@ -5,6 +5,8 @@ interface CommittedTranscript {
   id: string;
   text: string;
   timestamp: number;
+  translatedText?: string;
+  isTranslating?: boolean;
 }
 
 function formatTimestamp(seconds: number) {
@@ -38,7 +40,17 @@ export function LiveTranscript({
             <span className="text-[10px] font-mono text-muted-foreground shrink-0 pt-0.5 min-w-[3rem]">
               {formatTimestamp(t.timestamp)}
             </span>
-            <span className="text-sm text-foreground">{t.text}</span>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm text-foreground">
+                {t.translatedText || t.text}
+                {t.isTranslating && (
+                  <span className="ml-1 text-xs text-muted-foreground italic animate-pulse">translating…</span>
+                )}
+              </span>
+              {t.translatedText && t.translatedText !== t.text && (
+                <span className="text-[11px] text-muted-foreground/60 italic">{t.text}</span>
+              )}
+            </div>
           </div>
         ))}
         {partial && (
