@@ -1,34 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Focus on Main Speakers & Filter Background Noise
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The transcription system captures all audio equally — main speakers and background side-conversations alike. The user wants only the primary (louder, clearer) speakers to be transcribed, with background chatter filtered out.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Approach
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-There are two layers where we can improve this:
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### Layer 1: Microphone-level noise suppression (already active)
-The `useRealtimeTranscribe.ts` already enables `echoCancellation`, `noiseSuppression`, and `autoGainControl`. This helps but doesn't distinguish main vs. side speakers.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### Layer 2: AI post-processing filter (translate-message prompt update)
-Update the `translate-message` system prompt to instruct the AI to identify and discard fragments that appear to be background/side conversations — short mumbles, incomplete fragments, off-topic interjections — and only translate clear, coherent speech from the main speaker(s).
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### Layer 3: Short fragment filtering (client-side)
-Add a minimum text length filter in `useRealtimeTranscribe.ts` to skip very short committed transcripts (e.g., under 3 words) that are likely background noise or partial side-conversation fragments.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-## Changes
-
-### 1. `supabase/functions/translate-message/index.ts` — Update system prompt
-Add instructions to filter background noise at the AI level:
-- "If the text appears to be background chatter, a side conversation fragment, or unintelligible mumbling (very short, incomplete, or incoherent), return empty strings for all languages"
-- "Focus only on clear, coherent speech from the main speaker(s)"
-
-### 2. `src/hooks/useRealtimeTranscribe.ts` — Add minimum length filter
-In `onCommittedTranscript`, skip segments that are too short (under 2 words or under 5 characters) before sending to the translation API — these are almost always background noise.
-
-## Files
-- **Edit**: `supabase/functions/translate-message/index.ts`
-- **Edit**: `src/hooks/useRealtimeTranscribe.ts`
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

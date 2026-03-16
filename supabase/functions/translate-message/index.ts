@@ -80,6 +80,7 @@ Your job:
 3. Do NOT reconstruct phonetic approximations into other languages — translate the words as they are
 4. Ignore only pure noise artifacts like "[laughter]", "[background noise]", or replacement characters
 5. Preserve the speaker's actual words faithfully in each translation
+6. SPEAKER FOCUS: Only translate clear, coherent speech from main speakers. If the text appears to be background chatter, a side conversation fragment, unintelligible mumbling, random filler sounds, or an incomplete/incoherent fragment that does not convey meaningful speech, return empty strings for ALL language keys (e.g., {"en": "", "fa": ""}). Focus on the primary, louder, clearer voice(s) — discard ambient noise and side talk.
 
 Return ONLY a JSON object with language codes as keys and translations as values. No markdown, no explanation.
 Example: {"fa": "سلام، حالت چطوره؟", "en": "Hello, how are you?"}
