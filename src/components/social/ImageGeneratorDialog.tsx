@@ -170,7 +170,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
     setImageUrl(null);
     setRevisedPrompt(null);
     setPexelsInspired(false);
-    setSelectedThemes(brandKit?.logo_url ? new Set(["logo"]) : new Set());
+    setSelectedThemes(new Set());
     setError(null);
   };
 
