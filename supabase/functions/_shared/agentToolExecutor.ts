@@ -771,6 +771,11 @@ export async function executeToolCall(
               imageBytes = new Uint8Array(await dl.arrayBuffer());
             }
 
+            // Enforce aspect ratio via server-side crop/resize
+            if (aspectRatio) {
+              imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+            }
+
             const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
             const { error: uploadError } = await svcClient.storage
               .from("social-images")
