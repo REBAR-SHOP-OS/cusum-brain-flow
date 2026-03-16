@@ -1,43 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix Image Edit "Rate limit exceeded" Error
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-When editing images in the ImageEditDialog, the Lovable AI gateway returns a 429 rate limit error. The current code has no retry logic for rate-limited requests — it fails immediately and shows the error toast.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Solution
-Add automatic retry with exponential backoff for 429 (rate limit) errors in two places:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. Edge Function: `supabase/functions/generate-image/index.ts`
-- Wrap the AI gateway call in the **edit mode** section (lines 188-211) with a retry loop (up to 3 attempts)
-- On 429, wait 2s → 4s before retrying
-- Only retry on 429; other errors fail immediately as before
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 2. Client: `src/components/social/ImageEditDialog.tsx`
-- Increase the timeout from 60s to 90s (to account for backend retries)
-- Add `retries: 1` to `invokeEdgeFunction` options so the client also retries once on timeout
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### What changes
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-**`generate-image/index.ts`** — edit mode AI call (around line 188):
-```typescript
-// Retry loop for rate limits
-let resp: Response | null = null;
-for (let attempt = 0; attempt < 3; attempt++) {
-  resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", { ... });
-  if (resp.status !== 429 || attempt === 2) break;
-  const wait = (attempt + 1) * 2000;
-  console.log(`Rate limited on edit attempt ${attempt + 1}, waiting ${wait}ms...`);
-  await new Promise(r => setTimeout(r, wait));
-}
-```
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-**`ImageEditDialog.tsx`** — increase timeout:
-```typescript
-const data = await invokeEdgeFunction<{ imageUrl: string }>("generate-image", {
-  ...
-}, { timeoutMs: 90000, retries: 1 });
-```
-
-This gives the system up to 3 backend attempts with backoff, plus 1 client-level retry — significantly reducing the chance of a user-facing rate limit error.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

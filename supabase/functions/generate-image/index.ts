@@ -185,28 +185,37 @@ serve(async (req) => {
           contentParts.push({ type: "image_url", image_url: { url: referenceImage } });
         }
 
-        const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: selectedModel,
-            messages: [{
-              role: "user",
-              content: contentParts,
-            }],
-            modalities: ["image", "text"],
-          }),
-        });
+        // Retry loop for rate limits
+        let resp: Response | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: selectedModel,
+              messages: [{
+                role: "user",
+                content: contentParts,
+              }],
+              modalities: ["image", "text"],
+            }),
+          });
 
-        if (!resp.ok) {
-          const errText = await resp.text();
-          console.error("AI edit error:", resp.status, errText);
-          const status = resp.status === 429 ? 429 : resp.status === 402 ? 402 : 502;
+          if (resp.status !== 429 || attempt === 2) break;
+          const wait = (attempt + 1) * 2000;
+          console.log(`Rate limited on edit attempt ${attempt + 1}, waiting ${wait}ms...`);
+          await new Promise(r => setTimeout(r, wait));
+        }
+
+        if (!resp!.ok) {
+          const errText = await resp!.text();
+          console.error("AI edit error:", resp!.status, errText);
+          const status = resp!.status === 429 ? 429 : resp!.status === 402 ? 402 : 502;
           return new Response(
-            JSON.stringify({ error: status === 429 ? "Rate limit exceeded." : status === 402 ? "AI credits exhausted." : `Edit failed (${resp.status})` }),
+            JSON.stringify({ error: status === 429 ? "Rate limit exceeded — retries exhausted." : status === 402 ? "AI credits exhausted." : `Edit failed (${resp!.status})` }),
             { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
