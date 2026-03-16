@@ -20,7 +20,7 @@ export default function CEOPortal() {
 
   return (
     <ScrollArea className="h-full">
-      <LiveMonitorView />
+      <CEODashboardView />
     </ScrollArea>
   );
 }
