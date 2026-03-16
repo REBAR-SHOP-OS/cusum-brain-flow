@@ -49,7 +49,7 @@ const statusFilters = [
 export default function SocialMediaManager() {
   const navigate = useNavigate();
   const { generatePosts, generating } = useAutoGenerate();
-  const { posts, isLoading, updatePost, deletePost } = useSocialPosts();
+  const { posts, isLoading, updatePost, deletePost, createPost } = useSocialPosts();
   const { completedChecklist, toggleChecklist } = useStrategyChecklist();
   const { pendingApprovals } = useSocialApprovals();
   const [showApprovals, setShowApprovals] = useState(false);
