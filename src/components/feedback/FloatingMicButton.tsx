@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Mic, MicOff } from "lucide-react";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 

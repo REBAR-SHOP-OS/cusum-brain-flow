@@ -195,6 +195,12 @@
   }
 }
 
+/* Floating buttons always interactive over Radix overlays */
+[data-feedback-btn="true"] {
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+}
+
 /* Odoo HTML body rendering */
 .odoo-html-body {
   word-break: break-word;
