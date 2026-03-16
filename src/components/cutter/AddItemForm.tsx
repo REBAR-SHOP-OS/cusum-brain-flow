@@ -20,6 +20,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
   const [qtyBars, setQtyBars] = useState(1);
   const [cutLengthMm, setCutLengthMm] = useState(6000);
   const [piecesPerBar, setPiecesPerBar] = useState(1);
+  const unitSystem = useUnitSystem();
 
   const maxAllowed = useMemo(() => {
     if (!barCode) return null;
