@@ -120,7 +120,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
         <Alert variant="destructive" className="py-2">
           <AlertTriangle className="w-4 h-4" />
           <AlertDescription className="text-xs">
-            Qty {qtyBars} exceeds max allowed ({maxAllowed}) for {barCode} on DTX 400.
+            Qty {qtyBars} exceeds max allowed ({maxAllowed}) for {barSizeLabel(barCode, unitSystem)}.
           </AlertDescription>
         </Alert>
       )}
