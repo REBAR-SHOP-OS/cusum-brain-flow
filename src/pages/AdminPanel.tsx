@@ -15,9 +15,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import {
   Shield, Plus, Pencil, Trash2, DollarSign, Users, Building2, Loader2,
-  Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch,
+  Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch, BarChart3,
 } from "lucide-react";
 import { LiveMonitorView } from "@/components/office/LiveMonitorView";
+import { CEODashboards } from "@/components/dashboards/CEODashboards";
 import { DiagnosticLogView } from "@/components/office/DiagnosticLogView";
 import { MemberAreaView } from "@/components/office/MemberAreaView";
 import { useProfiles, useSalaries, type Profile, type EmployeeSalary } from "@/hooks/useProfiles";
