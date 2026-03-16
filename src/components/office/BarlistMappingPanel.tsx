@@ -180,6 +180,9 @@ export interface MappedRow {
 export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disabled }: BarlistMappingPanelProps) {
   const [mapping, setMapping] = useState<Record<string, string>>(() => autoDetectMapping(rows));
   const [confirmed, setConfirmed] = useState(false);
+  const [lengthUnit, setLengthUnit] = useState<LengthUnit>("mm");
+
+  const lengthFactor = useMemo(() => LENGTH_UNITS.find(u => u.value === lengthUnit)?.factor ?? 1, [lengthUnit]);
 
   const issues = useMemo(() => checkDataCoverage(rows, mapping), [rows, mapping]);
   const blockers = issues.filter(i => i.type === "missing" || i.type === "empty");
