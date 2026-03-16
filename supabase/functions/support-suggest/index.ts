@@ -92,12 +92,13 @@ ${kbContext || "No articles available."}`,
       },
     ];
 
-    // Gemini Flash: customer-facing draft suggestion
+    // Gemini Flash: customer-facing draft suggestion (with GPT fallback)
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
       agentName: "support",
       messages: chatMessages,
+      fallback: { provider: "gpt", model: "gpt-4o-mini" },
     });
 
     const suggestion = result.content;
