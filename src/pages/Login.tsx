@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
