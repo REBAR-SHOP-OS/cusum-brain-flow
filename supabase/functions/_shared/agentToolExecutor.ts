@@ -1,5 +1,6 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cropToAspectRatio } from "./imageResize.ts";
 
 export async function executeToolCall(
   toolCall: any, 
