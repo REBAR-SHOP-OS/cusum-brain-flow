@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Bug, Copy, Check, ExternalLink, Trash2, RefreshCw, AlertTriangle, AlertCircle, Info, Wand2 } from "lucide-react";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { Bug, Copy, Check, ExternalLink, Trash2, RefreshCw, AlertTriangle, AlertCircle, Info, Wand2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface FixRequest {
   id: string;
@@ -63,6 +65,9 @@ export function FixRequestQueue() {
   const [lastChecked, setLastChecked] = useState<Date>(new Date());
   const [refreshing, setRefreshing] = useState(false);
   const [fixingAll, setFixingAll] = useState(false);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [generatedPrompt, setGeneratedPrompt] = useState<string | null>(null);
+  const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const prevCountRef = useRef(0);
 
   const loadRequests = useCallback(async () => {
@@ -227,6 +232,32 @@ export function FixRequestQueue() {
     toast.success("Marked as resolved");
   };
 
+  const generateLovableCommand = async (req: FixRequest) => {
+    setGeneratingId(req.id);
+    try {
+      const result = await invokeEdgeFunction<{ prompt: string }>("generate-fix-prompt", {
+        title: req.affected_area || "Fix Request",
+        description: req.description,
+        screenshots: req.photo_url ? [req.photo_url] : [],
+        priority: classifySeverity(req.description),
+        source: "vizzy_fix_request",
+      });
+      setGeneratedPrompt(result.prompt);
+      setPromptDialogOpen(true);
+    } catch (err: any) {
+      toast.error("Failed to generate command", { description: err.message });
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const copyPrompt = () => {
+    if (generatedPrompt) {
+      navigator.clipboard.writeText(generatedPrompt);
+      toast.success("Lovable command copied — paste it in chat");
+    }
+  };
+
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-3">
       <div className="flex items-center gap-2">
@@ -284,6 +315,14 @@ export function FixRequestQueue() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => generateLovableCommand(req)}
+                    disabled={generatingId === req.id}
+                    className="p-1.5 rounded-md hover:bg-muted transition-colors text-primary hover:text-primary/80 disabled:opacity-50"
+                    title="Generate Lovable fix command"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${generatingId === req.id ? "animate-pulse" : ""}`} />
+                  </button>
                   {req.photo_url && (
                     <a href={req.photo_url} target="_blank" rel="noopener noreferrer"
                       className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
@@ -308,6 +347,27 @@ export function FixRequestQueue() {
       <p className="text-[10px] text-muted-foreground text-right">
         Last checked: {lastChecked.toLocaleTimeString()} · Auto-refreshes every 5 min
       </p>
+
+      <Dialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Lovable Fix Command
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh] rounded-lg bg-muted p-4">
+            <pre className="text-sm whitespace-pre-wrap font-mono text-foreground">{generatedPrompt}</pre>
+          </div>
+          <button
+            onClick={copyPrompt}
+            className="w-full flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground py-2 px-4 text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Copy className="w-4 h-4" />
+            Copy to Clipboard
+          </button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

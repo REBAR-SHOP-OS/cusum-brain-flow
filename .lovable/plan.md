@@ -1,24 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Add "Generate Lovable Command" to Fix Requests
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The current FIX ALL system handles stale/auth/cache errors but cannot fix actual code bugs. When a real code error is logged, you have to manually describe the problem to Lovable. The `generate-fix-prompt` edge function already exists but is only wired to the Tasks page -- not to fix requests.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Solution
-Add a one-click "Generate Lovable Command" button to each fix request in the FixRequestQueue. When clicked, it calls the existing `generate-fix-prompt` edge function with the error details, then shows a copyable prompt you can paste directly into Lovable chat.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Changes
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 1. Modify `src/components/ceo/FixRequestQueue.tsx`
-- Add a "magic wand" / "Sparkles" button per fix request row
-- On click, call `supabase.functions.invoke("generate-fix-prompt")` with the request's description, affected_area, and any screenshot URL
-- Show a dialog/toast with the generated prompt and a "Copy" button
-- Add loading state per request while generating
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 2. No backend changes needed
-The `generate-fix-prompt` edge function already accepts title, description, screenshots, and priority -- it will work as-is with fix request data.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-## Result
-Each fix request gets a button that generates a detailed, structured Lovable command prompt. One click to generate, one click to copy, paste into Lovable chat to fix the code bug.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
