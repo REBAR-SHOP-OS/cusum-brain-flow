@@ -866,7 +866,7 @@ export function PostReviewPanel({
                           return;
                         }
 
-                        if ((post.content || "").length < 20) {
+                        if (localContentType !== "story" && (post.content || "").length < 20) {
                           toast({ title: "Content too short", description: "Post content must be at least 20 characters to schedule.", variant: "destructive" });
                           return;
                         }
