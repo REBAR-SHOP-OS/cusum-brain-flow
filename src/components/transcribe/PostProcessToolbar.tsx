@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Loader2, Languages, ListChecks, FileText, Sparkles, Eraser, MessageSquare } from "lucide-react";
+import { Loader2, Languages, ListChecks, FileText, Sparkles, Eraser, MessageSquare, ClipboardList } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
