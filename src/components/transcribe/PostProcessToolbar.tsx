@@ -107,7 +107,7 @@ async function generatePdfReport(transcript: string, summary: string, selectedSp
   doc.save(filename);
 }
 
-export function PostProcessToolbar({ transcript, onResult, selectedSpeaker }: PostProcessToolbarProps) {
+export function PostProcessToolbar({ transcript, onResult, selectedSpeaker, onFinalReport, allSpeakersComplete, isFinalReportLoading }: PostProcessToolbarProps) {
   const [processing, setProcessing] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState("");
   const [targetLang, setTargetLang] = useState("English");
