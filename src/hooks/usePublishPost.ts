@@ -26,6 +26,7 @@ export function usePublishPost() {
     hashtags: string[];
     image_url: string | null;
     page_name?: string;
+    content_type?: string;
   }) => {
     setPublishing(true);
     try {
