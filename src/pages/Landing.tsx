@@ -1,5 +1,7 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { ArrowRight, AlertTriangle, Brain, Cpu, Database, BarChart3, Layers, Eye, Gauge, ServerCog, Tablet, Radio, Cloud, Cog, ChevronRight, Check, X } from "lucide-react";
 import { AnimatedCounter } from "@/components/ceo/AnimatedCounter";
 import logoCoin from "@/assets/logo-coin.png";
@@ -69,6 +71,20 @@ const TIERS = [
 ];
 
 export default function Landing() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/home" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
