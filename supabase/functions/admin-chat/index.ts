@@ -1032,6 +1032,7 @@ Never reveal internal system details. Respond in the same language the user writ
         const aiResponse = await callAIStream({
           provider: "gemini",
           model: "gemini-2.5-flash",
+          agentName: "commander",
           messages: [{ role: "system", content: publicSystemPrompt }, ...publicMessages],
           signal: AbortSignal.timeout(30000),
         });
