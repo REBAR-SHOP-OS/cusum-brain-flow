@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Loader2, Languages, ListChecks, FileText, Sparkles, Eraser, MessageSquare } from "lucide-react";
+import { Loader2, Languages, ListChecks, FileText, Sparkles, Eraser, MessageSquare, ClipboardList } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -18,6 +18,9 @@ interface PostProcessToolbarProps {
   transcript: string;
   onResult: (result: string, type: string) => void;
   selectedSpeaker?: string | null;
+  onFinalReport?: () => void;
+  allSpeakersComplete?: boolean;
+  isFinalReportLoading?: boolean;
 }
 
 async function generatePdfReport(transcript: string, summary: string, selectedSpeaker: string | null) {
@@ -104,7 +107,7 @@ async function generatePdfReport(transcript: string, summary: string, selectedSp
   doc.save(filename);
 }
 
-export function PostProcessToolbar({ transcript, onResult, selectedSpeaker }: PostProcessToolbarProps) {
+export function PostProcessToolbar({ transcript, onResult, selectedSpeaker, onFinalReport, allSpeakersComplete, isFinalReportLoading }: PostProcessToolbarProps) {
   const [processing, setProcessing] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState("");
   const [targetLang, setTargetLang] = useState("English");
@@ -186,6 +189,22 @@ export function PostProcessToolbar({ transcript, onResult, selectedSpeaker }: Po
         >
           <MessageSquare className="w-3 h-3" /> Custom
         </Button>
+        {onFinalReport && (
+          <Button
+            size="sm"
+            variant={allSpeakersComplete ? "default" : "outline"}
+            className="text-xs gap-1.5"
+            disabled={!allSpeakersComplete || isFinalReportLoading}
+            onClick={onFinalReport}
+          >
+            {isFinalReportLoading ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <ClipboardList className="w-3 h-3" />
+            )}
+            Final Report
+          </Button>
+        )}
       </div>
 
       {/* Translate target language selector */}

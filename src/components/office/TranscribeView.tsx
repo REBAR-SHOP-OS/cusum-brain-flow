@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users, Volume2, Square, Save, Watch, Globe } from "lucide-react";
+import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users, Volume2, Square, Save, Watch, Globe, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -144,7 +144,7 @@ const TRANSLATION_LANGUAGES = LANGUAGES.filter(l => l.value !== "auto");
 export function TranscribeView() {
   const navigate = useNavigate();
   const [sourceLang, setSourceLang] = useState("auto");
-  const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(null);
+  const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(CONVERSATION_SPEAKERS[0].name);
   const [translationLang, setTranslationLang] = useState("fa");
   const [translationMap, setTranslationMap] = useState<Record<string, string>>({});
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
@@ -153,6 +153,15 @@ export function TranscribeView() {
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Per-speaker tracking
+  const [speakerTranscripts, setSpeakerTranscripts] = useState<Record<string, any[]>>({});
+  const [speakerReports, setSpeakerReports] = useState<Record<string, string>>({});
+  const [completedSpeakers, setCompletedSpeakers] = useState<Set<string>>(new Set());
+  const [generatingReport, setGeneratingReport] = useState<string | null>(null);
+  const [isFinalReportLoading, setIsFinalReportLoading] = useState(false);
+
+  const allSpeakersComplete = CONVERSATION_SPEAKERS.every(s => completedSpeakers.has(s.name));
 
   // Results
   const [originalText, setOriginalText] = useState("");
@@ -486,6 +495,170 @@ export function TranscribeView() {
     realtime.clearTranscripts();
   };
 
+  // Handle stop recording: save speaker transcript, generate report, auto-advance
+  const handleStopRecording = async () => {
+    if (!selectedSpeaker) {
+      realtime.disconnect();
+      return;
+    }
+
+    const transcripts = [...realtime.committedTranscripts];
+    const fullText = realtime.getFullTranscript();
+    realtime.disconnect();
+
+    if (!fullText.trim()) return;
+
+    // Save transcripts for this speaker
+    setSpeakerTranscripts(prev => ({ ...prev, [selectedSpeaker]: transcripts }));
+    setOriginalText(fullText);
+
+    // Generate individual summary
+    setGeneratingReport(selectedSpeaker);
+    try {
+      const { data, error } = await supabase.functions.invoke("transcribe-translate", {
+        body: {
+          mode: "text",
+          text: fullText,
+          postProcess: "summarize",
+        },
+      });
+      if (error) throw new Error(error.message);
+      const summary = data?.result || data?.english || data?.original || JSON.stringify(data);
+      setSpeakerReports(prev => ({ ...prev, [selectedSpeaker]: summary }));
+      toast.success(`${selectedSpeaker}'s report saved ✓`);
+    } catch (err: any) {
+      // Save raw transcript as fallback
+      setSpeakerReports(prev => ({ ...prev, [selectedSpeaker]: fullText }));
+      toast.error(`Failed to generate ${selectedSpeaker}'s report`);
+    } finally {
+      setGeneratingReport(null);
+    }
+
+    // Mark completed
+    setCompletedSpeakers(prev => new Set([...prev, selectedSpeaker]));
+
+    // Auto-advance to next incomplete speaker
+    const currentIdx = CONVERSATION_SPEAKERS.findIndex(s => s.name === selectedSpeaker);
+    const nextSpeaker = CONVERSATION_SPEAKERS.find((s, i) => i > currentIdx && !completedSpeakers.has(s.name))
+      || CONVERSATION_SPEAKERS.find(s => !completedSpeakers.has(s.name) && s.name !== selectedSpeaker);
+    if (nextSpeaker) {
+      setSelectedSpeaker(nextSpeaker.name);
+    }
+
+    // Clear realtime for next speaker
+    realtime.clearTranscripts();
+    setOriginalText("");
+    setProcessedOutput("");
+    setProcessedType("");
+  };
+
+  // Generate final consolidated PDF report
+  const handleFinalReport = async () => {
+    if (!allSpeakersComplete) return;
+    setIsFinalReportLoading(true);
+
+    try {
+      // Build combined text for consolidated analysis
+      const combinedReports = CONVERSATION_SPEAKERS.map(s =>
+        `${s.name}:\n${speakerReports[s.name] || "No report available"}`
+      ).join("\n\n---\n\n");
+
+      // Get AI consolidated analysis
+      let consolidatedAnalysis = "";
+      try {
+        const { data, error } = await supabase.functions.invoke("transcribe-translate", {
+          body: {
+            mode: "text",
+            text: combinedReports,
+            postProcess: "custom",
+            customPrompt: "Analyze all the individual speaker reports below and provide a consolidated meeting analysis. Include: key themes discussed, decisions made, action items, and overall meeting assessment. Be concise and structured.",
+          },
+        });
+        if (error) throw error;
+        consolidatedAnalysis = data?.result || data?.english || "";
+      } catch {
+        consolidatedAnalysis = "Consolidated analysis could not be generated.";
+      }
+
+      // Generate PDF
+      const { default: jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const maxWidth = pageWidth - margin * 2;
+      let y = margin;
+
+      const addText = (text: string, fontSize: number, style: "normal" | "bold" = "normal", color: [number, number, number] = [30, 30, 30]) => {
+        doc.setFontSize(fontSize);
+        doc.setFont("helvetica", style);
+        doc.setTextColor(...color);
+        const lines = doc.splitTextToSize(text, maxWidth);
+        for (const line of lines) {
+          if (y + fontSize * 0.5 > pageHeight - 25) {
+            doc.addPage();
+            y = margin;
+          }
+          doc.text(line, margin, y);
+          y += fontSize * 0.45;
+        }
+      };
+      const addSpacer = (h = 6) => { y += h; };
+
+      // Title
+      addText("FINAL MEETING REPORT", 22, "bold", [20, 20, 80]);
+      addSpacer(4);
+
+      const now = new Date();
+      addText(`Date: ${now.toLocaleDateString()} — ${now.toLocaleTimeString()}`, 10, "normal", [100, 100, 100]);
+      addSpacer(2);
+      addText(`Participants: ${CONVERSATION_SPEAKERS.map(s => s.name).join(", ")}`, 11, "bold");
+      addSpacer(4);
+
+      // Separator
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, y, pageWidth - margin, y);
+      addSpacer(6);
+
+      // Individual speaker sections
+      for (const speaker of CONVERSATION_SPEAKERS) {
+        addText(speaker.name, 16, "bold", [20, 20, 80]);
+        addSpacer(3);
+        addText(speakerReports[speaker.name] || "No report available", 10, "normal", [50, 50, 50]);
+        addSpacer(8);
+
+        doc.setDrawColor(220, 220, 220);
+        doc.line(margin, y, pageWidth - margin, y);
+        addSpacer(6);
+      }
+
+      // Consolidated Analysis
+      addText("CONSOLIDATED ANALYSIS", 16, "bold", [20, 20, 80]);
+      addSpacer(3);
+      addText(consolidatedAnalysis, 10, "normal", [30, 30, 30]);
+      addSpacer(12);
+
+      // Disclaimer
+      doc.setDrawColor(220, 180, 50);
+      doc.setFillColor(255, 250, 230);
+      const disclaimerY = Math.min(y, pageHeight - 30);
+      if (disclaimerY < margin) doc.addPage();
+      const finalY = disclaimerY < margin ? margin : disclaimerY;
+      doc.roundedRect(margin, finalY, maxWidth, 14, 2, 2, "FD");
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(140, 100, 0);
+      doc.text("This report was generated by Artificial Intelligence and may contain inaccuracies.", pageWidth / 2, finalY + 8, { align: "center" });
+
+      doc.save(`final-meeting-report-${now.toISOString().slice(0, 10)}.pdf`);
+      toast.success("Final report PDF downloaded");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate final report");
+    } finally {
+      setIsFinalReportLoading(false);
+    }
+  };
+
   const hasContent = originalText || englishText || processedOutput || realtime.committedTranscripts.length > 0;
 
   return (
@@ -495,12 +668,24 @@ export function TranscribeView() {
         {CONVERSATION_SPEAKERS.map((s) => (
           <button
             key={s.name}
-            onClick={() => setSelectedSpeaker(prev => prev === s.name ? null : s.name)}
+            onClick={() => setSelectedSpeaker(s.name)}
             className={`flex flex-col items-center gap-0.5 group transition-all ${selectedSpeaker === s.name ? "scale-110" : "opacity-70 hover:opacity-100"}`}
             title={`${s.name} ↔ NEEL`}
           >
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-2 ring-primary" : ""}`}>
-              {s.name[0]}
+            <div className="relative">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-2 ring-primary" : ""}`}>
+                {s.name[0]}
+              </div>
+              {completedSpeakers.has(s.name) && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center ring-2 ring-background">
+                  <Check className="w-3 h-3 text-white" />
+                </div>
+              )}
+              {generatingReport === s.name && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center ring-2 ring-background">
+                  <Loader2 className="w-3 h-3 text-white animate-spin" />
+                </div>
+              )}
             </div>
             <span className="text-[9px] font-medium text-muted-foreground group-hover:text-foreground">{s.name}</span>
           </button>
@@ -512,11 +697,18 @@ export function TranscribeView() {
         {CONVERSATION_SPEAKERS.map((s) => (
           <button
             key={s.name}
-            onClick={() => setSelectedSpeaker(prev => prev === s.name ? null : s.name)}
+            onClick={() => setSelectedSpeaker(s.name)}
             className={`flex flex-col items-center gap-0.5 shrink-0 ${selectedSpeaker === s.name ? "scale-110" : "opacity-70"}`}
           >
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-1 ring-primary" : ""}`}>
-              {s.name[0]}
+            <div className="relative">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-1 ring-primary" : ""}`}>
+                {s.name[0]}
+              </div>
+              {completedSpeakers.has(s.name) && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center ring-2 ring-background">
+                  <Check className="w-2.5 h-2.5 text-white" />
+                </div>
+              )}
             </div>
             <span className="text-[8px] font-medium text-muted-foreground">{s.name}</span>
           </button>
@@ -578,7 +770,7 @@ export function TranscribeView() {
                 size="lg"
                 variant={realtime.isConnected ? "destructive" : "default"}
                 className="rounded-full h-16 w-16"
-                onClick={realtime.isConnected ? realtime.disconnect : realtime.connect}
+                onClick={realtime.isConnected ? handleStopRecording : realtime.connect}
                 disabled={realtime.isConnecting}
               >
                 {realtime.isConnecting ? (
@@ -773,6 +965,9 @@ export function TranscribeView() {
               transcript={originalText}
               onResult={handlePostProcessResult}
               selectedSpeaker={selectedSpeaker}
+              onFinalReport={handleFinalReport}
+              allSpeakersComplete={allSpeakersComplete}
+              isFinalReportLoading={isFinalReportLoading}
             />
           </CardContent>
         </Card>

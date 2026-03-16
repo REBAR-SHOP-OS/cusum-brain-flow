@@ -1,87 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Per-Speaker Recording Flow + Final Consolidated PDF Report
+## Completed: Add All Wan 2.6 Capabilities
 
-## What the user wants
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-1. **Sequential per-speaker recording**: When recording stops for a speaker, show a checkmark on their avatar, save their individual report, and auto-advance to the next speaker.
-2. **"Final Report" button**: After all 5 speakers are done, generate a consolidated PDF report with each speaker's name as a heading followed by their individual AI summary.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Current state
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-- `TranscribeView.tsx` has 5 speaker avatars (RADIN, BEN, VICKY, SAURABEH, KOUROSH) used only as filters
-- Realtime transcription via `useRealtimeTranscribe` hook stores all transcripts in one flat list
-- `PostProcessToolbar` has a "Summarize" button that generates a single PDF for the whole transcript
-- No per-speaker transcript storage or completion tracking exists
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-## Changes
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### File: `src/components/office/TranscribeView.tsx`
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-1. **Add per-speaker state tracking**:
-   - `speakerTranscripts: Record<string, CommittedTranscript[]>` — stores each speaker's committed transcripts
-   - `speakerReports: Record<string, string>` — stores each speaker's AI summary
-   - `completedSpeakers: Set<string>` — tracks which speakers are done
-   - Auto-select the first incomplete speaker on mount
-
-2. **Modify stop-recording behavior**:
-   - When user clicks stop (disconnect), save current `committedTranscripts` into `speakerTranscripts[selectedSpeaker]`
-   - Call the `transcribe-translate` edge function with `postProcess: "summarize"` to generate that speaker's report and store in `speakerReports[selectedSpeaker]`
-   - Add speaker to `completedSpeakers` set
-   - Show a green checkmark overlay on completed speaker avatars
-   - Auto-advance `selectedSpeaker` to the next incomplete speaker
-   - Clear realtime transcripts for the next speaker's session
-
-3. **Add checkmark UI on speaker avatars**:
-   - When a speaker is in `completedSpeakers`, render a small green check icon on their avatar circle
-
-4. **Add "Final Report" button**:
-   - Visible when all 5 speakers are completed (or as a manual trigger)
-   - Calls `transcribe-translate` with all 5 reports combined, asking for a consolidated analysis
-   - Generates a PDF using the existing `jsPDF` pattern with sections per speaker:
-     - Speaker name as heading
-     - Their individual summary underneath
-     - A final "Consolidated Analysis" section at the end
-   - Downloads the PDF automatically
-
-### File: `src/components/transcribe/PostProcessToolbar.tsx`
-
-- Add a "Final Report" button (icon: `ClipboardList`) that is passed via a new prop `onFinalReport` callback
-- The button is enabled only when `allSpeakersComplete` prop is true
-
-### PDF Structure
-
-```text
-FINAL MEETING REPORT
-Date: ...
-Participants: RADIN, BEN, VICKY, SAURABEH, KOUROSH
-─────────────────────────────
-RADIN
-[Radin's individual AI summary]
-
-BEN
-[Ben's individual AI summary]
-
-VICKY
-[Vicky's individual AI summary]
-
-SAURABEH
-[Saurabeh's individual AI summary]
-
-KOUROSH
-[Kourosh's individual AI summary]
-─────────────────────────────
-CONSOLIDATED ANALYSIS
-[AI-generated overall analysis combining all 5 reports]
-
-⚠ AI Disclaimer
-```
-
-## Flow summary
-
-1. Speaker RADIN is auto-selected
-2. User records → stops → checkmark appears on RADIN, auto-advances to BEN
-3. Repeat for BEN, VICKY, SAURABEH, KOUROSH
-4. After all 5 done, "Final Report" button becomes active
-5. Click generates consolidated PDF with all speakers' reports + AI analysis
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
