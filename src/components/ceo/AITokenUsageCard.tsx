@@ -109,15 +109,18 @@ export function AITokenUsageCard() {
     }, {})
   );
 
-  // By model
+  // By model with cost
   const byModel = Object.values(
-    (summary || []).reduce<Record<string, { name: string; tokens: number; calls: number }>>((acc, r) => {
-      if (!acc[r.model]) acc[r.model] = { name: r.model, tokens: 0, calls: 0 };
+    (summary || []).reduce<Record<string, { name: string; tokens: number; calls: number; cost: number }>>((acc, r) => {
+      if (!acc[r.model]) acc[r.model] = { name: r.model, tokens: 0, calls: 0, cost: 0 };
       acc[r.model].tokens += r.total_total_tokens;
       acc[r.model].calls += r.call_count;
+      acc[r.model].cost += estimateCost(r.model, r.total_prompt_tokens, r.total_completion_tokens);
       return acc;
     }, {})
-  ).sort((a, b) => b.tokens - a.tokens);
+  ).sort((a, b) => b.cost - a.cost);
+
+  const totalCost = byModel.reduce((s, m) => s + m.cost, 0);
 
   // By agent
   const byAgent = Object.values(
