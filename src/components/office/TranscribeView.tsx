@@ -770,7 +770,7 @@ export function TranscribeView() {
                 size="lg"
                 variant={realtime.isConnected ? "destructive" : "default"}
                 className="rounded-full h-16 w-16"
-                onClick={realtime.isConnected ? realtime.disconnect : realtime.connect}
+                onClick={realtime.isConnected ? handleStopRecording : realtime.connect}
                 disabled={realtime.isConnecting}
               >
                 {realtime.isConnecting ? (
