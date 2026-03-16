@@ -727,6 +727,7 @@ export async function executeToolCall(
                 model: attempt.model,
                 messages: [{ role: "user", content: contentParts }],
                 modalities: ["image", "text"],
+                ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
               }),
             });
 
