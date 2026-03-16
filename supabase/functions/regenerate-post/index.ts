@@ -343,11 +343,14 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [{ role: "user", content: contentParts }],
-          temperature: 1.0,
         }),
       });
 
-      if (!capRes.ok) throw new Error(`Caption generation failed (${capRes.status})`);
+      if (!capRes.ok) {
+        const errBody = await capRes.text();
+        console.error(`[regenerate-post] Caption-only regen failed (${capRes.status}):`, errBody);
+        throw new Error(`Caption generation failed (${capRes.status})`);
+      }
 
       const capData = await capRes.json();
       const rawCap = capData.choices?.[0]?.message?.content || "";
