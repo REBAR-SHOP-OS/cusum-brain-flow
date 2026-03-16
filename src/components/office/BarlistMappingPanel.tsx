@@ -201,13 +201,13 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       mark: String((row as any)[mapping.mark] ?? ""),
       size: String((row as any)[mapping.size] ?? ""),
       shape: String((row as any)[mapping.shape] ?? ""),
-      length: Number((row as any)[mapping.length] ?? 0),
+      length: Math.round(Number((row as any)[mapping.length] ?? 0) * lengthFactor),
       quantity: Number((row as any)[mapping.quantity] ?? 0),
       dimensions_json: buildDimensionsJson(row),
       dwg: String((row as any)[mapping.dwg] ?? ""),
       grade: String((row as any)[mapping.grade] ?? ""),
     }));
-  }, [rows, mapping]);
+  }, [rows, mapping, lengthFactor]);
 
   const handleConfirm = () => {
     if (!canConfirm) return;
