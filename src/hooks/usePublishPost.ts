@@ -48,26 +48,43 @@ export function usePublishPost() {
         post.hashtags.length > 0 ? "\n\n" + post.hashtags.join(" ") : "",
       ].join("");
 
-      const { data, error } = await supabase.functions.invoke("social-publish", {
-        body: {
+      // Use raw fetch with 120s timeout so client doesn't abort before server-side
+      // video polling completes (Instagram Reels can take 60-90s to process)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 120000);
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-publish`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({
           platform: post.platform,
           message,
           image_url: post.image_url,
           post_id: post.id,
           page_name: post.page_name,
           force_publish: true,
-        },
+        }),
+        signal: controller.signal,
       });
+      clearTimeout(timer);
 
-      if (error) {
-        let serverMsg = error.message;
-        try {
-          if ((error as any).context?.body) {
-            const body = await new Response((error as any).context.body).json();
-            if (body?.error) serverMsg = body.error;
-          }
-        } catch {}
-        throw new Error(serverMsg);
+      let data: any;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(`Server returned non-JSON response (${response.status})`);
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.error || `Publish failed (${response.status})`);
       }
       if (data?.error) throw new Error(data.error);
 
@@ -79,12 +96,20 @@ export function usePublishPost() {
       queryClient.invalidateQueries({ queryKey: ["social_posts"] });
       return true;
     } catch (err: any) {
-      const msg = err?.message || "Failed to publish post";
+      const isTimeout = err?.name === "AbortError";
+      const msg = isTimeout
+        ? "Publishing is taking longer than expected — the post may still publish. Check back shortly."
+        : err?.message || "Failed to publish post";
       toast({
-        title: "Publish failed",
+        title: isTimeout ? "Still processing…" : "Publish failed",
         description: msg,
-        variant: "destructive",
+        variant: isTimeout ? "default" : "destructive",
       });
+      if (isTimeout) {
+        // Server may still succeed — poll for update
+        setTimeout(() => queryClient.invalidateQueries({ queryKey: ["social_posts"] }), 10000);
+        setTimeout(() => queryClient.invalidateQueries({ queryKey: ["social_posts"] }), 30000);
+      }
       return false;
     } finally {
       setPublishing(false);

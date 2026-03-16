@@ -349,19 +349,46 @@ async function publishToInstagram(
 ): Promise<{ id?: string; error?: string }> {
   if (!imageUrl) return { error: "Instagram requires an image" };
   try {
+    // Detect video content
+    let isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
+    if (!isVideo) {
+      try {
+        const head = await fetch(imageUrl, { method: "HEAD" });
+        const ct = head.headers.get("content-type") || "";
+        isVideo = ct.startsWith("video/");
+      } catch { /* ignore HEAD failures */ }
+    }
+
+    const containerBody: Record<string, string> = {
+      caption,
+      access_token: accessToken,
+    };
+    if (isVideo) {
+      containerBody.media_type = "REELS";
+      containerBody.video_url = imageUrl;
+    } else {
+      containerBody.image_url = imageUrl;
+    }
+
     const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image_url: imageUrl, caption, access_token: accessToken }),
+      body: JSON.stringify(containerBody),
     });
     const containerData = await containerRes.json();
-    if (containerData.error) return { error: `Instagram: ${containerData.error.message}` };
+    if (containerData.error) {
+      console.error("[cron-IG] container error:", containerData.error);
+      return { error: `Instagram: ${containerData.error.message}` };
+    }
 
-    // Poll for ready
-    for (let i = 0; i < 10; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
+    // Poll for ready — videos need much longer
+    const maxPolls = isVideo ? 30 : 10;
+    const pollInterval = isVideo ? 3000 : 2000;
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise((r) => setTimeout(r, pollInterval));
       const statusRes = await fetch(`${GRAPH_API}/${containerData.id}?fields=status_code&access_token=${accessToken}`);
       const statusData = await statusRes.json();
+      console.log(`[cron-IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}`);
       if (statusData.status_code === "FINISHED") {
         const publishRes = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {
           method: "POST",
@@ -374,7 +401,7 @@ async function publishToInstagram(
       }
       if (statusData.status_code === "ERROR") return { error: "Instagram media processing failed" };
     }
-    return { error: "Instagram media processing timed out" };
+    return { error: `Instagram media processing timed out after ${maxPolls * pollInterval / 1000}s. Try again.` };
   } catch (err) {
     return { error: `Instagram: ${err instanceof Error ? err.message : "Unknown"}` };
   }
