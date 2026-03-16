@@ -200,6 +200,52 @@ export function TranscribeView() {
     }
   }, [realtime.isConnected, realtime.committedTranscripts.length]);
 
+  // Live translation panel: translate new committed transcripts into selected language
+  useEffect(() => {
+    if (!translationLang || !realtime.committedTranscripts.length) return;
+
+    // If language changed, clear old translations and retranslate all
+    if (translatedForLangRef.current !== translationLang) {
+      translatedForLangRef.current = translationLang;
+      setTranslationMap({});
+      setTranslatingIds(new Set());
+    }
+
+    const toTranslate = realtime.committedTranscripts.filter(
+      (t) => !translationMap[t.id] && !translatingIds.has(t.id)
+    );
+
+    if (toTranslate.length === 0) return;
+
+    const newTranslating = new Set(translatingIds);
+    toTranslate.forEach((t) => newTranslating.add(t.id));
+    setTranslatingIds(newTranslating);
+
+    for (const entry of toTranslate) {
+      supabase.functions
+        .invoke("translate-message", {
+          body: { text: entry.text, sourceLang: "auto", targetLangs: [translationLang] },
+        })
+        .then(({ data: res }) => {
+          const translated = res?.translations?.[translationLang];
+          setTranslationMap((prev) => ({ ...prev, [entry.id]: translated || entry.text }));
+          setTranslatingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(entry.id);
+            return next;
+          });
+        })
+        .catch(() => {
+          setTranslationMap((prev) => ({ ...prev, [entry.id]: entry.text }));
+          setTranslatingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(entry.id);
+            return next;
+          });
+        });
+    }
+  }, [realtime.committedTranscripts, translationLang]);
+
   const callTranslateAPI = async (body: any, isFormData = false) => {
     setIsProcessing(true);
     try {
