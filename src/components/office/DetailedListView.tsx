@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Pencil, ChevronDown, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
 
 export function DetailedListView() {
   const { plans, loading: plansLoading } = useCutPlans();
