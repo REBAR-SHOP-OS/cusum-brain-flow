@@ -5,6 +5,8 @@ interface CommittedTranscript {
   id: string;
   text: string;
   timestamp: number;
+  translatedText?: string;
+  isTranslating?: boolean;
 }
 
 function formatTimestamp(seconds: number) {

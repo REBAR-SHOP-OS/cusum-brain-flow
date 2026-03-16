@@ -97,7 +97,7 @@ export function useRealtimeTranscribe() {
   }, []);
 
   const getFullTranscript = useCallback(() => {
-    return committedTranscripts.map((t) => t.text).join(" ");
+    return committedTranscripts.map((t) => t.translatedText || t.text).join(" ");
   }, [committedTranscripts]);
 
   return {
