@@ -1,46 +1,34 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Instagram Video Publishing Timeout (Root Cause)
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem Analysis
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+The screenshot error "Instagram media processing timed out. Try again." persists despite the previous fix to `social-publish`. Two root causes:
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+1. **`social-cron-publish` was never updated**: It still uses the old hardcoded 10 polls / 2s interval (20s max), which is far too short for video processing on Instagram. This affects all scheduled/automated publishing.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+2. **Client-side timeout**: `usePublishPost.ts` uses `supabase.functions.invoke()` which can time out before the edge function's 90s polling window completes. Need to switch to raw `fetch` with a 120s timeout (matching `useAutoGenerate` pattern).
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+## Changes
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 1. `supabase/functions/social-cron-publish/index.ts` (lines 347-381)
+Update `publishToInstagram` to match `social-publish`:
+- Add video detection via URL extension + HEAD content-type check
+- Set `maxPolls = 30` / `pollInterval = 3000` for videos (90s total)
+- Keep 10/2000 for images
+- Support `media_type: "REELS"` + `video_url` for video containers (currently only sends `image_url`)
+- Add polling progress logging
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. `src/hooks/usePublishPost.ts`
+Replace `supabase.functions.invoke()` with raw `fetch` + `AbortController` with 120s timeout (same pattern as `useAutoGenerate`). This ensures the client waits long enough for video processing to complete on the server.
+
+### 3. Deploy both edge functions
+Explicitly deploy `social-publish` and `social-cron-publish` to ensure latest code is live.
+
+## Technical Detail
+- Instagram video/Reels processing typically takes 30-60s
+- Edge function wall-clock limit is 150s (sufficient for 90s polling)
+- Current client-side SDK timeout causes premature abort before server finishes polling
+- The `social-cron-publish` function currently doesn't distinguish between image and video at all -- sends everything as `image_url` which causes Instagram API to fail silently for videos
+
