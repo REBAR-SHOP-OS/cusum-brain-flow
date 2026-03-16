@@ -77,6 +77,21 @@ export default function Login() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/home" replace />;
+  }
+
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-background p-4 overflow-hidden">
       {/* Dynamic background */}
