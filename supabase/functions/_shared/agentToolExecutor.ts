@@ -613,6 +613,7 @@ export async function executeToolCall(
               "1:1": "CRITICAL: Generate a perfectly SQUARE image with 1:1 aspect ratio. Width and height MUST be equal.",
             };
             imagePrompt += `\n\n${AR_PROMPT_MAP[aspectRatio] || `IMAGE ASPECT RATIO: ${aspectRatio}. Compose the image to fit this ratio perfectly.`}`;
+            imagePrompt += "\n\nLANGUAGE RULE: ALL text rendered on the image MUST be in ENGLISH ONLY. NO Persian, Farsi, Arabic, or any non-Latin script text is allowed in the image.";
 
             // Fetch Brain resource images for multimodal reference
             try {
