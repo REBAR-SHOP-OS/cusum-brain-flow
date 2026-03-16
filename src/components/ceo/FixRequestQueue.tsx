@@ -65,6 +65,9 @@ export function FixRequestQueue() {
   const [lastChecked, setLastChecked] = useState<Date>(new Date());
   const [refreshing, setRefreshing] = useState(false);
   const [fixingAll, setFixingAll] = useState(false);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [generatedPrompt, setGeneratedPrompt] = useState<string | null>(null);
+  const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const prevCountRef = useRef(0);
 
   const loadRequests = useCallback(async () => {
