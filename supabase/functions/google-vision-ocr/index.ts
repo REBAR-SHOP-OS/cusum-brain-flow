@@ -116,6 +116,7 @@ serve(async (req) => {
       const fullResult = await callAI({
         provider: "gemini",
         model: "gemini-2.5-pro",
+        agentName: "estimation",
         messages: [{ role: "user", content: [{ type: "text", text: FULL_SCAN_PROMPT }, imageContent] }],
         maxTokens: 8000,
         temperature: 0.1,
