@@ -172,7 +172,7 @@ export function AITokenUsageCard() {
         ) : (
           <>
             {/* Summary KPIs */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               <div className="rounded-md border p-3 text-center">
                 <p className="text-xs text-muted-foreground">Total Tokens</p>
                 <p className="text-lg font-bold">{formatTokens(totalTokens)}</p>
@@ -188,6 +188,10 @@ export function AITokenUsageCard() {
               <div className="rounded-md border p-3 text-center">
                 <p className="text-xs text-muted-foreground">Completion</p>
                 <p className="text-lg font-bold">{formatTokens(totalCompletion)}</p>
+              </div>
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-center">
+                <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><DollarSign className="h-3 w-3" />Est. Cost</p>
+                <p className="text-lg font-bold text-primary">{formatUSD(totalCost)}</p>
               </div>
             </div>
 
