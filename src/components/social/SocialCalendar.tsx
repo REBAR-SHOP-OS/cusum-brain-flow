@@ -5,9 +5,6 @@ import type { SocialPost } from "@/hooks/useSocialPosts";
 
 const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
 
-const STATUS_PRIORITY: Record<string, number> = {
-  declined: 0, draft: 1, pending: 2, scheduled: 3, published: 4,
-};
 
 function groupByPlatform(posts: SocialPost[]) {
   const map = new Map<string, SocialPost[]>();
