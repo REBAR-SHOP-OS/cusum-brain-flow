@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { AlertTriangle, Brain, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { ExplainPanel } from "./ExplainPanel";
-import { mockAIExplainer } from "./mockData";
+import type { AIExplainerResponse } from "./types";
 
 interface KpiCardProps {
   icon: React.ReactNode;

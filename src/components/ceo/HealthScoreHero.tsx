@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { AnimatedCounter } from "./AnimatedCounter";
 import { useState } from "react";
 import { ExplainPanel } from "./ExplainPanel";
-import { mockAIExplainer } from "./mockData";
+import type { AIExplainerResponse } from "./types";
 
 interface HealthScoreHeroProps {
   score: number;
