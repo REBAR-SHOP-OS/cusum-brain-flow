@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
 import { CutPlan, CutPlanItem, RebarSize, MachineCapability, MachineOption } from "@/hooks/useCutPlans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
