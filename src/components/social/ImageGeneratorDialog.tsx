@@ -372,7 +372,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
                 <CheckCircle2 className="w-5 h-5" />
                 <span className="font-medium">Ad image generated!</span>
                 <div className="flex gap-1 ml-auto">
-                  {brandKit?.logo_url && (
+                  {brandKit?.logo_url && selectedThemes.has("logo") && (
                     <Badge variant="outline" className="text-[10px] gap-1">
                       <Stamp className="w-3 h-3" />
                       Branded
