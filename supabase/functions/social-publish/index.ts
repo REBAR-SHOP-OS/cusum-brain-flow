@@ -326,15 +326,25 @@ async function publishToInstagram(
     }
 
     // Step 1: Create media container
-    const isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
+    // Detect video: check extension first, then HEAD content-type as fallback
+    let isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
+    if (!isVideo) {
+      try {
+        const head = await fetch(imageUrl, { method: "HEAD" });
+        const ct = head.headers.get("content-type") || "";
+        isVideo = ct.startsWith("video/");
+      } catch { /* ignore HEAD failures */ }
+    }
+
     const containerBody: Record<string, string> = {
       caption,
       access_token: accessToken,
-      media_type: isVideo ? "VIDEO" : "IMAGE",
     };
     if (isVideo) {
+      containerBody.media_type = "REELS";
       containerBody.video_url = imageUrl;
     } else {
+      // For single image posts, omit media_type entirely per IG Graph API
       containerBody.image_url = imageUrl;
     }
     const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
