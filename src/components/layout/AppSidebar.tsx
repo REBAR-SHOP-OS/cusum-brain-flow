@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
   LayoutGrid, Brain, Settings, Shield, Plug, DollarSign, Activity,
-  Terminal, Lock, BarChart3, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize,
+  Terminal, Lock, BarChart3, Monitor, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -154,7 +154,7 @@ export function AppSidebar() {
         { name: "Inbox", href: "/inbox-manager", icon: Inbox, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-inbox" },
         { name: "Team Hub", href: "/team-hub", icon: MessageSquare, tourId: "nav-team-hub" },
         { name: "Business Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
-        { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"], lockReason: "Requires Super Admin", tourId: "nav-ceo" },
+        { name: "Live Monitor", href: "/ceo", icon: Monitor, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"], lockReason: "Requires Super Admin", tourId: "nav-ceo" },
         { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-support" },
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], lockReason: "Requires Sales or Office role", tourId: "nav-pipeline" },
         { name: "Lead Scoring", href: "/lead-scoring", icon: Zap, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Admin role", tourId: "nav-lead-scoring" },
