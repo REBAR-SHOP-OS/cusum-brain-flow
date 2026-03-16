@@ -734,7 +734,13 @@ export function TranscribeView() {
         {CONVERSATION_SPEAKERS.map((s) => (
           <button
             key={s.name}
-            onClick={() => setSelectedSpeaker(s.name)}
+            onClick={() => {
+              if (completedSpeakers.has(s.name)) {
+                setViewingReport(s.name);
+              } else {
+                setSelectedSpeaker(s.name);
+              }
+            }}
             className={`flex flex-col items-center gap-0.5 shrink-0 ${selectedSpeaker === s.name ? "scale-110" : "opacity-70"}`}
           >
             <div className="relative">
@@ -750,6 +756,17 @@ export function TranscribeView() {
             <span className="text-[8px] font-medium text-muted-foreground">{s.name}</span>
           </button>
         ))}
+        {/* Mobile Final Report Button */}
+        <button
+          onClick={handleFinalReport}
+          disabled={!allSpeakersComplete || isFinalReportLoading}
+          className={`flex flex-col items-center gap-0.5 shrink-0 ${!allSpeakersComplete ? "opacity-30" : "opacity-70"}`}
+        >
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 border-dashed border-primary/50 ${allSpeakersComplete ? "bg-primary/10" : "bg-muted"}`}>
+            {isFinalReportLoading ? <Loader2 className="w-4 h-4 text-primary animate-spin" /> : <ClipboardList className="w-4 h-4 text-primary" />}
+          </div>
+          <span className="text-[8px] font-medium text-muted-foreground">Report</span>
+        </button>
       </div>
 
       <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto space-y-6 overflow-y-auto">
