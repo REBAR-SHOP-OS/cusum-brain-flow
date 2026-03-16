@@ -215,7 +215,7 @@ serve(async (req) => {
       if (postProcess === "translate") {
         // Use the full translation pipeline below
       } else if (postProcess === "custom" && customPrompt.trim()) {
-        systemPrompt = `You are a helpful AI assistant. The user has provided a transcript and wants you to process it according to their instructions.\n\nUser instruction: ${customPrompt}\n\nRespond with the processed text only, no JSON wrapper.`;
+        systemPrompt = `You are a helpful AI assistant. The user has provided a transcript and wants you to process it according to their instructions.\n\nIMPORTANT: Always respond in English regardless of the transcript language.\n\nUser instruction: ${customPrompt}\n\nRespond with the processed text only, no JSON wrapper.`;
       } else if (POST_PROCESS_PROMPTS[postProcess]) {
         systemPrompt = POST_PROCESS_PROMPTS[postProcess];
       } else {
