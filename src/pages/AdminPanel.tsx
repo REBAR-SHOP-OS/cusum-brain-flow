@@ -18,6 +18,7 @@ import {
   Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch, BarChart3,
 } from "lucide-react";
 import { LiveMonitorView } from "@/components/office/LiveMonitorView";
+import { CEODashboardView } from "@/components/office/CEODashboardView";
 import { CEODashboards } from "@/components/dashboards/CEODashboards";
 import { DiagnosticLogView } from "@/components/office/DiagnosticLogView";
 import { MemberAreaView } from "@/components/office/MemberAreaView";
