@@ -36,6 +36,7 @@ export function CutPlanDetails({
   machines, canWrite, onAddItem, onRemoveItem, onQueued
 }: CutPlanDetailsProps) {
   const [queueOpen, setQueueOpen] = useState(false);
+  const unitSystem = useUnitSystem();
 
   const handleAdd = async (barCode: string, qtyBars: number, cutLengthMm: number, piecesPerBar: number) => {
     await onAddItem({
