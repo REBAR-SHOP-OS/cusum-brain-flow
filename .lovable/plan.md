@@ -1,46 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# UI Redesign: Simpler & More User-Friendly Ad Director
+## Completed: Add All Wan 2.6 Capabilities
 
-## Approach
-Pure visual/CSS changes — no logic or feature changes. Focus on reducing visual clutter, improving spacing, and making the interface feel lighter and more intuitive.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Changes
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. `src/pages/AdDirector.tsx` — Lighter Header
-- Remove the heavy gradient icon box and "Powered by" badge
-- Use a simple clean header with icon + text, less padding
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 2. `src/components/ad-director/AdDirectorSidebar.tsx` — Cleaner Sidebar
-- Softer section labels, better spacing between groups
-- Slightly larger touch targets for items
-- Cleaner history items with less visual noise
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 3. `src/components/ad-director/AdDirectorContent.tsx` — Cleaner Stepper
-- Simplify the step indicator: horizontal pills instead of heavy rounded buttons
-- Reduce spacing and remove unnecessary rings/shadows
-- Cleaner progress bar area
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### 4. `src/components/ad-director/ScriptInput.tsx` — Simplified Script Panel
-- Cleaner Quick Start card (less padding, simpler border)
-- Simpler Reference Assets card — less nested containers
-- Cleaner textarea with subtle background
-- Simpler Recent Projects grid
-- Lighter CTA button (less shadow, cleaner gradient)
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 5. `src/components/ad-director/VideoParameters.tsx` — Cleaner Controls
-- Simpler ratio buttons with less border noise
-- Better label hierarchy
-- Cleaner slider area
-
-### Files to Edit
-| File | What Changes |
-|------|-------------|
-| `src/pages/AdDirector.tsx` | Lighter header |
-| `src/components/ad-director/AdDirectorSidebar.tsx` | Cleaner sidebar styling |
-| `src/components/ad-director/AdDirectorContent.tsx` | Simplified stepper & layout |
-| `src/components/ad-director/ScriptInput.tsx` | Cleaner cards & CTA |
-| `src/components/ad-director/VideoParameters.tsx` | Cleaner controls |
-
-No logic, no features, no database changes — purely visual polish for better usability.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

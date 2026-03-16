@@ -852,49 +852,35 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
       })()}
 
       {/* Step Indicator */}
-      <div className="flex items-center justify-center gap-0">
-        {steps.map((s, idx) => {
-          const stepOrder = ["script", "storyboard", "preview"];
-          const currentIdx = stepOrder.indexOf(step);
-          const thisIdx = stepOrder.indexOf(s.id);
-          const isCompleted = thisIdx < currentIdx;
-          const isActive = s.id === step;
-          const isDisabled = (s.id === "storyboard" && segments.length === 0) || (s.id === "preview" && storyboard.length === 0);
+      <div className="flex items-center justify-center">
+        <div className="inline-flex items-center bg-muted/30 rounded-lg p-1 gap-px">
+          {steps.map((s, idx) => {
+            const stepOrder = ["script", "storyboard", "preview"];
+            const currentIdx = stepOrder.indexOf(step);
+            const thisIdx = stepOrder.indexOf(s.id);
+            const isCompleted = thisIdx < currentIdx;
+            const isActive = s.id === step;
+            const isDisabled = (s.id === "storyboard" && segments.length === 0) || (s.id === "preview" && storyboard.length === 0);
 
-          return (
-            <div key={s.id} className="flex items-center">
+            return (
               <button
+                key={s.id}
                 onClick={() => !isDisabled && setStep(s.id)}
                 disabled={isDisabled}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl transition-all group",
-                  isActive && "bg-primary/10 ring-1 ring-primary/30",
-                  !isActive && !isDisabled && "hover:bg-card/50",
+                  "flex items-center gap-2 px-4 py-2 rounded-md text-xs font-medium transition-all",
+                  isActive && "bg-background text-foreground shadow-sm",
+                  isCompleted && !isActive && "text-emerald-400",
+                  !isActive && !isCompleted && "text-muted-foreground hover:text-foreground",
                   isDisabled && "opacity-30 cursor-not-allowed"
                 )}
               >
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all shrink-0",
-                  isCompleted && "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30",
-                  isActive && "bg-primary text-primary-foreground shadow-md shadow-primary/30",
-                  !isActive && !isCompleted && "bg-card/50 text-muted-foreground ring-1 ring-border/30"
-                )}>
-                  {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
-                </div>
-                <div className="hidden sm:block text-left">
-                  <div className={cn("text-xs font-semibold", isActive ? "text-foreground" : "text-muted-foreground")}>{s.label}</div>
-                  <div className="text-[10px] text-muted-foreground/70">{s.desc}</div>
-                </div>
+                {isCompleted ? <Check className="w-3.5 h-3.5" /> : <span className="w-4 text-center text-[10px]">{idx + 1}</span>}
+                <span className="hidden sm:inline">{s.label}</span>
               </button>
-              {idx < steps.length - 1 && (
-                <div className={cn(
-                  "w-12 h-[2px] mx-1 hidden sm:block rounded-full",
-                  isCompleted ? "bg-emerald-500/40" : "bg-border/30"
-                )} />
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* Floating sidebar panel for non-preview steps */}
