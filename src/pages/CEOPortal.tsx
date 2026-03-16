@@ -39,7 +39,7 @@ export default function CEOPortal() {
         <SLATrackerCard />
         
         <FixRequestQueue />
-        <DailyAssignments />
+        <DailyAssignments exceptions={metrics?.exceptions ?? []} />
         <CEODashboards />
         <CEODashboardView />
 
