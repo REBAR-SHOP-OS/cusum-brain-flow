@@ -87,13 +87,19 @@ export interface SceneIntelligence {
 }
 
 export const AVAILABLE_MODELS = [
-  // GPT: planning, reasoning, creative writing, ad polish
+  // GPT
   { id: "openai/gpt-5", label: "GPT-5", category: "planning" },
   { id: "openai/gpt-5-mini", label: "GPT-5 Mini", category: "copy" },
-  // Google: vision, multimodal, evaluation, classification
+  { id: "openai/gpt-5-nano", label: "GPT-5 Nano", category: "classification" },
+  { id: "openai/gpt-5.2", label: "GPT-5.2", category: "planning" },
+  // Google
   { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", category: "vision" },
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", category: "evaluation" },
   { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", category: "classification" },
+  { id: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", category: "vision" },
+  { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash", category: "evaluation" },
+  { id: "google/gemini-3-pro-image-preview", label: "Gemini 3 Pro Image", category: "vision" },
+  { id: "google/gemini-3.1-flash-image-preview", label: "Gemini 3.1 Flash Image", category: "evaluation" },
 ] as const;
 
 // Provider philosophy: GPT=planning/creative, Google=vision/eval, Alibaba=video (external)

@@ -5,7 +5,35 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
-import { Brain, Zap, TrendingUp } from "lucide-react";
+import { Brain, Zap, TrendingUp, DollarSign } from "lucide-react";
+
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  "google/gemini-2.5-pro":              { input: 1.25,  output: 10.00 },
+  "google/gemini-3.1-pro-preview":      { input: 1.25,  output: 10.00 },
+  "google/gemini-3-flash-preview":      { input: 0.10,  output: 0.40  },
+  "google/gemini-2.5-flash":            { input: 0.15,  output: 0.60  },
+  "google/gemini-2.5-flash-lite":       { input: 0.02,  output: 0.10  },
+  "google/gemini-3-pro-image-preview":  { input: 1.25,  output: 10.00 },
+  "google/gemini-3.1-flash-image-preview": { input: 0.10, output: 0.40 },
+  "openai/gpt-5":                       { input: 10.00, output: 30.00 },
+  "openai/gpt-5-mini":                  { input: 1.10,  output: 4.40  },
+  "openai/gpt-5-nano":                  { input: 0.10,  output: 0.40  },
+  "openai/gpt-5.2":                     { input: 12.00, output: 40.00 },
+  "openai/gpt-4o":                      { input: 2.50,  output: 10.00 },
+};
+const DEFAULT_PRICING = { input: 1.00, output: 4.00 };
+
+function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
+  const p = MODEL_PRICING[model] || DEFAULT_PRICING;
+  return (promptTokens * p.input + completionTokens * p.output) / 1_000_000;
+}
+
+function formatUSD(n: number): string {
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`;
+  if (n >= 1) return `$${n.toFixed(2)}`;
+  if (n >= 0.01) return `$${n.toFixed(2)}`;
+  return `$${n.toFixed(4)}`;
+}
 
 type Period = "30" | "60" | "90";
 
@@ -81,15 +109,18 @@ export function AITokenUsageCard() {
     }, {})
   );
 
-  // By model
+  // By model with cost
   const byModel = Object.values(
-    (summary || []).reduce<Record<string, { name: string; tokens: number; calls: number }>>((acc, r) => {
-      if (!acc[r.model]) acc[r.model] = { name: r.model, tokens: 0, calls: 0 };
+    (summary || []).reduce<Record<string, { name: string; tokens: number; calls: number; cost: number }>>((acc, r) => {
+      if (!acc[r.model]) acc[r.model] = { name: r.model, tokens: 0, calls: 0, cost: 0 };
       acc[r.model].tokens += r.total_total_tokens;
       acc[r.model].calls += r.call_count;
+      acc[r.model].cost += estimateCost(r.model, r.total_prompt_tokens, r.total_completion_tokens);
       return acc;
     }, {})
-  ).sort((a, b) => b.tokens - a.tokens);
+  ).sort((a, b) => b.cost - a.cost);
+
+  const totalCost = byModel.reduce((s, m) => s + m.cost, 0);
 
   // By agent
   const byAgent = Object.values(
@@ -141,7 +172,7 @@ export function AITokenUsageCard() {
         ) : (
           <>
             {/* Summary KPIs */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               <div className="rounded-md border p-3 text-center">
                 <p className="text-xs text-muted-foreground">Total Tokens</p>
                 <p className="text-lg font-bold">{formatTokens(totalTokens)}</p>
@@ -157,6 +188,10 @@ export function AITokenUsageCard() {
               <div className="rounded-md border p-3 text-center">
                 <p className="text-xs text-muted-foreground">Completion</p>
                 <p className="text-lg font-bold">{formatTokens(totalCompletion)}</p>
+              </div>
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-center">
+                <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><DollarSign className="h-3 w-3" />Est. Cost</p>
+                <p className="text-lg font-bold text-primary">{formatUSD(totalCost)}</p>
               </div>
             </div>
 
@@ -201,9 +236,12 @@ export function AITokenUsageCard() {
                   <h4 className="text-sm font-medium mb-2">By Model</h4>
                   <div className="space-y-1 max-h-[140px] overflow-y-auto text-xs">
                     {byModel.map((m) => (
-                      <div key={m.name} className="flex justify-between items-center py-1 border-b border-border/30">
-                        <span className="truncate mr-2 text-muted-foreground">{m.name}</span>
-                        <span className="font-mono font-medium whitespace-nowrap">{formatTokens(m.tokens)}</span>
+                      <div key={m.name} className="flex justify-between items-center py-1 border-b border-border/30 gap-2">
+                        <span className="truncate text-muted-foreground">{m.name}</span>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="font-mono text-muted-foreground">{formatTokens(m.tokens)}</span>
+                          <span className="font-mono font-medium text-primary">{formatUSD(m.cost)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
