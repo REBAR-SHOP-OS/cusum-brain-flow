@@ -66,18 +66,6 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
 
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
 
-  // Auto-enable logo theme when brandKit loads with a logo_url
-  const logoAutoApplied = !!brandKit?.logo_url;
-
-  // Always keep "logo" selected when brand logo exists
-  useEffect(() => {
-    if (brandKit?.logo_url) {
-      setSelectedThemes((prev) => {
-        if (prev.has("logo")) return prev;
-        return new Set([...prev, "logo"]);
-      });
-    }
-  }, [brandKit?.logo_url]);
 
 
   const toggleTheme = (id: string) => {
@@ -95,7 +83,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
     setTimeout(() => {
       setPrompt("");
       setSelectedModel("google/gemini-3-pro-image-preview");
-      setSelectedThemes(brandKit?.logo_url ? new Set(["logo"]) : new Set());
+      setSelectedThemes(new Set());
       setStatus("idle");
       setImageUrl(null);
       setRevisedPrompt(null);
@@ -156,8 +144,8 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
         console.warn("Aspect ratio crop failed, using original:", e);
       }
 
-      // Always apply brand logo overlay when logo exists
-      if (brandKit?.logo_url && finalImageUrl) {
+      // Apply brand logo overlay only when user selected the Logo theme
+      if (brandKit?.logo_url && finalImageUrl && selectedThemes.has("logo")) {
         try {
           setStatus("branding");
           finalImageUrl = await applyLogoToImage(finalImageUrl, brandKit.logo_url);
@@ -182,7 +170,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
     setImageUrl(null);
     setRevisedPrompt(null);
     setPexelsInspired(false);
-    setSelectedThemes(brandKit?.logo_url ? new Set(["logo"]) : new Set());
+    setSelectedThemes(new Set());
     setError(null);
   };
 
@@ -275,13 +263,11 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
                     const chip = (
                       <button
                         key={theme.id}
-                        onClick={() => !logoDisabled && !(isLogo && logoAutoApplied) && toggleTheme(theme.id)}
-                        disabled={logoDisabled || (isLogo && logoAutoApplied)}
+                        onClick={() => !logoDisabled && toggleTheme(theme.id)}
+                        disabled={logoDisabled}
                         className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
                           logoDisabled
                             ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground"
-                            : isLogo && logoAutoApplied
-                              ? "border-primary bg-primary/10 text-primary font-medium cursor-default"
                             : isActive
                               ? "border-primary bg-primary/10 text-primary font-medium"
                               : "bg-card hover:bg-muted text-muted-foreground"
@@ -386,7 +372,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
                 <CheckCircle2 className="w-5 h-5" />
                 <span className="font-medium">Ad image generated!</span>
                 <div className="flex gap-1 ml-auto">
-                  {brandKit?.logo_url && (
+                  {brandKit?.logo_url && selectedThemes.has("logo") && (
                     <Badge variant="outline" className="text-[10px] gap-1">
                       <Stamp className="w-3 h-3" />
                       Branded
