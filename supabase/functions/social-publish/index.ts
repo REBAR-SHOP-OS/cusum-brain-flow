@@ -362,24 +362,28 @@ async function publishToInstagram(
     const containerId = containerData.id;
 
     // Step 2: Wait for container to be ready (poll status)
+    // Videos/Reels need longer processing time on Instagram
+    const maxPolls = isVideo ? 30 : 10;
+    const pollInterval = isVideo ? 3000 : 2000;
     let ready = false;
-    for (let i = 0; i < 10; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise((r) => setTimeout(r, pollInterval));
       const statusRes = await fetch(
         `${GRAPH_API}/${containerId}?fields=status_code&access_token=${accessToken}`
       );
       const statusData = await statusRes.json();
+      console.log(`[IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}`);
       if (statusData.status_code === "FINISHED") {
         ready = true;
         break;
       }
       if (statusData.status_code === "ERROR") {
-        return { error: "Instagram media processing failed. Try a different image." };
+        return { error: "Instagram media processing failed. Try a different image/video." };
       }
     }
 
     if (!ready) {
-      return { error: "Instagram media processing timed out. Try again." };
+      return { error: `Instagram media processing timed out after ${maxPolls * pollInterval / 1000}s. Try again.` };
     }
 
     // Step 3: Publish
