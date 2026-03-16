@@ -158,7 +158,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
 
       const { error: uploadErr } = await supabase.storage
         .from("clearance-photos")
-        .upload(path, file, { upsert: true });
+        .upload(path, compressed, { upsert: true });
       if (uploadErr) throw uploadErr;
 
       // Run AI validation on the uploaded photo
