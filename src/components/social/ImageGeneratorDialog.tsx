@@ -263,13 +263,11 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
                     const chip = (
                       <button
                         key={theme.id}
-                        onClick={() => !logoDisabled && !(isLogo && logoAutoApplied) && toggleTheme(theme.id)}
-                        disabled={logoDisabled || (isLogo && logoAutoApplied)}
+                        onClick={() => !logoDisabled && toggleTheme(theme.id)}
+                        disabled={logoDisabled}
                         className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
                           logoDisabled
                             ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground"
-                            : isLogo && logoAutoApplied
-                              ? "border-primary bg-primary/10 text-primary font-medium cursor-default"
                             : isActive
                               ? "border-primary bg-primary/10 text-primary font-medium"
                               : "bg-card hover:bg-muted text-muted-foreground"
