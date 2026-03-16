@@ -662,7 +662,7 @@ export function TranscribeView() {
   const hasContent = originalText || englishText || processedOutput || realtime.committedTranscripts.length > 0;
 
   return (
-    <div className="flex gap-0 md:gap-2">
+    <div className="flex gap-0 md:gap-2 h-[calc(100vh-4rem)] overflow-hidden">
       {/* Speaker Circles Sidebar */}
       <div className="hidden md:flex flex-col items-center gap-3 pt-6 pl-2 pr-1">
         {CONVERSATION_SPEAKERS.map((s) => (
@@ -715,7 +715,7 @@ export function TranscribeView() {
         ))}
       </div>
 
-      <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto space-y-6">
+      <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto space-y-6 overflow-y-auto">
       {/* Selected speaker banner */}
       {selectedSpeaker && (
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm">
