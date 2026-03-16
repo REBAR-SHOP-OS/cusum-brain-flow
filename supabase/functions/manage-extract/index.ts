@@ -19,6 +19,32 @@ const VALID_BAR_SIZES = [
   "10M", "15M", "20M", "25M", "30M", "35M", "45M", "55M",
 ];
 
+// Imperial (US ASTM) → Metric mapping
+const IMPERIAL_TO_METRIC: Record<string, string> = {
+  "#3": "10M", "#4": "15M", "#5": "15M", "#6": "20M",
+  "#7": "25M", "#8": "25M", "#9": "30M", "#10": "35M",
+  "#11": "35M", "#14": "45M", "#18": "55M",
+  "3": "10M", "4": "15M", "5": "15M", "6": "20M",
+  "7": "25M", "8": "25M", "9": "30M", "10": "35M",
+  "11": "35M", "14": "45M", "18": "55M",
+};
+
+const ALL_VALID_SIZES = [...VALID_BAR_SIZES, ...Object.keys(IMPERIAL_TO_METRIC)];
+
+/** Normalize any bar size to its canonical metric code */
+function normalizeBarSize(raw: string): string | null {
+  const upper = raw.toUpperCase().trim();
+  if (VALID_BAR_SIZES.includes(upper)) return upper;
+  // Try metric regex
+  const mMatch = upper.match(/(\d+)\s*M/i);
+  if (mMatch && VALID_BAR_SIZES.includes(`${mMatch[1]}M`)) return `${mMatch[1]}M`;
+  // Try imperial
+  const cleaned = raw.trim().replace(/^#/, "#");
+  if (IMPERIAL_TO_METRIC[cleaned]) return IMPERIAL_TO_METRIC[cleaned];
+  if (IMPERIAL_TO_METRIC[`#${cleaned}`]) return IMPERIAL_TO_METRIC[`#${cleaned}`];
+  return null;
+}
+
 // Valid grades
 const VALID_GRADES = ["400W", "500W", "300W"];
 
