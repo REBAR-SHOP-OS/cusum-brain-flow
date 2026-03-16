@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, lazy, Suspense } from "react";
+import { useEffect, useState, useRef, useCallback, lazy, Suspense, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -202,6 +202,23 @@ export default function AccountingWorkspace() {
     updateRefreshTimestamp();
   }, [qb.loadAll, updateRefreshTimestamp]);
 
+  // Stable snapshot of QB summary for the agent — only changes when actual data changes,
+  // preventing chat re-renders during QB loading state transitions.
+  const stableQbSummary = useMemo(() => ({
+    totalReceivable: qb.totalReceivable,
+    totalPayable: qb.totalPayable,
+    overdueInvoices: qb.overdueInvoices,
+    overdueBills: qb.overdueBills,
+    invoices: qb.invoices,
+    bills: qb.bills,
+    accounts: qb.accounts,
+    payments: qb.payments,
+  }), [
+    qb.totalReceivable, qb.totalPayable,
+    qb.overdueInvoices, qb.overdueBills,
+    qb.invoices, qb.bills, qb.accounts, qb.payments,
+  ]);
+
   useEffect(() => {
     if (!hasAccess || hasLoadedToday.current) return;
     hasLoadedToday.current = true;
@@ -330,7 +347,7 @@ export default function AccountingWorkspace() {
                 disabled={qb.loading}
               >
                 <RefreshCw className={`w-4 h-4 ${qb.loading ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Refresh</span>
+                <span className="hidden sm:inline">Sync QB</span>
               </Button>
             </div>
           </div>
@@ -434,7 +451,7 @@ export default function AccountingWorkspace() {
                     <AccountingAgent
                       viewMode={agentMode}
                       onViewModeChange={(m) => setAgentMode(m)}
-                      qbSummary={qb}
+                      qbSummary={stableQbSummary}
                       autoGreet
                       webPhoneState={webPhoneState}
                       webPhoneActions={webPhoneActions}
@@ -467,7 +484,7 @@ export default function AccountingWorkspace() {
               <AccountingAgent
                 viewMode={agentMode}
                 onViewModeChange={(m) => setAgentMode(m)}
-                qbSummary={qb}
+                qbSummary={stableQbSummary}
                 autoGreet
                 webPhoneState={webPhoneState}
                 webPhoneActions={webPhoneActions}
