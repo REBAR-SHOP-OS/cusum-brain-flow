@@ -35,8 +35,9 @@ serve(async (req) => {
       });
     }
 
-    const { text, sourceLang, targetLangs } = await req.json();
+    const { text, sourceLang, targetLangs, context } = await req.json();
     // targetLangs is an array of language codes like ["fa", "es", "en"]
+    // context is an optional string of previous translated segments for coherence
 
     if (!text || !targetLangs?.length) {
       return new Response(
@@ -65,6 +66,11 @@ serve(async (req) => {
       .map((l: string) => `"${l}" (${langNames[l] || l})`)
       .join(", ");
 
+    // Build context section for the prompt
+    const contextSection = context
+      ? `\n\nCONVERSATION CONTEXT (previous translated segments from the same session):\n${context}\n\nUse this context to:\n- Maintain topic coherence and consistent terminology\n- Resolve ambiguous phonetic approximations by inferring from conversation flow\n- Prefer semantic coherence over literal phonetic matching`
+      : "";
+
     // Build system prompt — enhanced for noisy speech-to-text input
     const systemPrompt = `You are a speech-to-text post-processor and translator. The input text comes from an automatic speech recognition system that may produce:
 - Phonetic approximations of non-English speech written in English letters (e.g., "biya inja" for Persian "بیا اینجا")
@@ -81,11 +87,12 @@ Your job:
 Return ONLY a JSON object with language codes as keys and clean translations as values. No markdown, no explanation.
 Example: {"fa": "سلام، حالت چطوره؟", "en": "Hello, how are you?"}
 
-IMPORTANT: Each language value must contain text ONLY in that language. The "en" value must be pure English. The "fa" value must be pure Farsi/Persian script. Never mix languages in a single value.`;
+IMPORTANT: Each language value must contain text ONLY in that language. The "en" value must be pure English. The "fa" value must be pure Farsi/Persian script. Never mix languages in a single value.
+IMPORTANT: When the speech is clearly in a non-English language rendered phonetically, prioritize reconstructing the original language meaning over literal English interpretation.${contextSection}`;
 
     const result = await callAI({
       provider: "gemini",
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-pro",
       agentName: "system",
       messages: [
         {
@@ -97,7 +104,7 @@ IMPORTANT: Each language value must contain text ONLY in that language. The "en"
           content: `The source language is "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate into ${targetList}:\n\n${text}`,
         },
       ],
-      temperature: 0.15,
+      temperature: 0.05,
     });
 
     const raw = result.content;
