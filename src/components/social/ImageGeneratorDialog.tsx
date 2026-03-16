@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp, Bird, Building2, HardHat, Landmark, TreePine, Users, Bot, Package, Smartphone, type LucideIcon } from "lucide-react";
+import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2, Search, Stamp, Bird, Building2, HardHat, Landmark, TreePine, Users, Bot, Package, Smartphone, Upload, X, type LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: string }[] = [
