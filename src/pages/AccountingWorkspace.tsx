@@ -202,6 +202,23 @@ export default function AccountingWorkspace() {
     updateRefreshTimestamp();
   }, [qb.loadAll, updateRefreshTimestamp]);
 
+  // Stable snapshot of QB summary for the agent — only changes when actual data changes,
+  // preventing chat re-renders during QB loading state transitions.
+  const stableQbSummary = useMemo(() => ({
+    totalReceivable: qb.totalReceivable,
+    totalPayable: qb.totalPayable,
+    overdueInvoices: qb.overdueInvoices,
+    overdueBills: qb.overdueBills,
+    invoices: qb.invoices,
+    bills: qb.bills,
+    accounts: qb.accounts,
+    payments: qb.payments,
+  }), [
+    qb.totalReceivable, qb.totalPayable,
+    qb.overdueInvoices, qb.overdueBills,
+    qb.invoices, qb.bills, qb.accounts, qb.payments,
+  ]);
+
   useEffect(() => {
     if (!hasAccess || hasLoadedToday.current) return;
     hasLoadedToday.current = true;
