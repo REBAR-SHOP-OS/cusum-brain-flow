@@ -10,12 +10,11 @@ import {
   AlarmClock, Forward,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mockExceptions } from "./mockData";
-import type { ExceptionItem } from "./types";
+import type { CEOException } from "@/hooks/useCEODashboard";
 
 type Priority = "do-now" | "review-today" | "watch-week";
 
-function classifyPriority(exc: ExceptionItem): Priority {
+function classifyPriority(exc: CEOException): Priority {
   if (exc.severity === "critical") return "do-now";
   const ageNum = parseInt(exc.age);
   if (!isNaN(ageNum) && exc.age.includes("d") && ageNum > 30) return "do-now";
@@ -31,10 +30,14 @@ const priorityConfig = {
   "watch-week": { label: "Watch This Week", icon: Calendar, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/30" },
 };
 
-export function DailyAssignments() {
+interface DailyAssignmentsProps {
+  exceptions: CEOException[];
+}
+
+export function DailyAssignments({ exceptions }: DailyAssignmentsProps) {
   const [tab, setTab] = useState<Priority>("do-now");
 
-  const assignments = mockExceptions.map((exc) => ({
+  const assignments = exceptions.map((exc) => ({
     ...exc,
     priority: classifyPriority(exc),
   }));
@@ -132,35 +135,11 @@ export function DailyAssignments() {
                         <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                           <User className="w-2.5 h-2.5" /> {exc.owner}
                         </span>
-                        {exc.customer && (
-                          <span className="text-[10px] text-muted-foreground truncate hidden sm:inline">
-                            {exc.customer}
-                          </span>
-                        )}
-                        {exc.value && (
-                          <span className="text-[10px] font-medium text-foreground">
-                            ${exc.value.toLocaleString()}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </div>
 
-                  {/* One-tap actions */}
                   <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                    {exc.actions[0] && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="h-7 text-[10px] px-2.5"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toast({ title: exc.actions[0].label, description: `Action triggered for: ${exc.title}` });
-                        }}
-                      >
-                        {exc.actions[0].label}
-                      </Button>
-                    )}
                     <Button
                       variant="ghost"
                       size="icon"

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { AnimatedCounter } from "./AnimatedCounter";
 import { useState } from "react";
 import { ExplainPanel } from "./ExplainPanel";
-import { mockAIExplainer } from "./mockData";
+import type { AIExplainerResponse } from "./types";
 
 interface HealthScoreHeroProps {
   score: number;
@@ -105,7 +105,11 @@ export function HealthScoreHero({ score, drivers }: HealthScoreHeroProps) {
       <ExplainPanel
         open={showExplain}
         onClose={() => setShowExplain(false)}
-        data={mockAIExplainer}
+        data={{
+          what_changed: "AI analysis is not yet available for this metric. Connect a live data source to enable real-time explanations.",
+          top_drivers: [],
+          recommended_actions: [],
+        }}
         title="Business Health Score"
       />
     </>

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { AlertTriangle, Brain, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { ExplainPanel } from "./ExplainPanel";
-import { mockAIExplainer } from "./mockData";
+import type { AIExplainerResponse } from "./types";
 
 interface KpiCardProps {
   icon: React.ReactNode;
@@ -72,7 +72,11 @@ export function KpiCard({ icon, label, value, sub, alertActive, index, onClick }
       <ExplainPanel
         open={showExplain}
         onClose={() => setShowExplain(false)}
-        data={mockAIExplainer}
+        data={{
+          what_changed: "AI analysis is not yet available for this metric.",
+          top_drivers: [],
+          recommended_actions: [],
+        }}
         title={label}
       />
     </>
