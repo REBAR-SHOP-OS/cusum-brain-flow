@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users, Volume2, Square, Save, Watch, Globe } from "lucide-react";
+import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users, Volume2, Square, Save, Watch, Globe, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
