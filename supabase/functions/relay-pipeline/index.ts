@@ -139,6 +139,7 @@ serve(async (req) => {
           const priorityResult = await callAI({
             provider: "gpt",
             model: "gpt-4o-mini",
+            agentName: "email",
             messages: [
               { role: "system", content: "You extract priority data from business emails for a rebar manufacturing company. Be concise." },
               { role: "user", content: `Extract priority data.\n\nFrom: ${from}\nSubject: ${subject}\nCategory: ${classification.category}\n\n${emailBody.slice(0, 2000)}` },
