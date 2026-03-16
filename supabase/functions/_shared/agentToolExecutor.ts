@@ -858,6 +858,12 @@ export async function executeToolCall(
                 imageBytes = new Uint8Array(await dl.arrayBuffer());
               }
 
+              // Apply original aspect ratio crop even on 1:1 fallback generation
+              if (aspectRatio && aspectRatio !== "1:1") {
+                imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+                console.log(`[generate_image] Applied ${aspectRatio} crop to 1:1 fallback image`);
+              }
+
               const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
               const { error: uploadError } = await svcClient.storage
                 .from("social-images")
