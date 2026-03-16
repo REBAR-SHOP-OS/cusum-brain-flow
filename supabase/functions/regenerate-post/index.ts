@@ -333,23 +333,34 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 {"title": "...", "caption": "...", "hashtags": "...", "captionFa": "..."}`;
 
       const contentParts: any[] = [{ type: "text", text: captionOnlyPrompt }];
-      if (post.image_url) {
+      // Only attach image if it's NOT a video (AI models can't process MP4/MOV/WebM)
+      if (post.image_url && !isVideoPost) {
         contentParts.push({ type: "image_url", image_url: { url: post.image_url } });
       }
 
-      const capRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [{ role: "user", content: contentParts }],
-        }),
-      });
+      // Retry with backoff for transient 503 errors
+      let capRes: Response | null = null;
+      const maxRetries = 3;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        capRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [{ role: "user", content: contentParts }],
+          }),
+        });
 
-      if (!capRes.ok) {
-        const errBody = await capRes.text();
-        console.error(`[regenerate-post] Caption-only regen failed (${capRes.status}):`, errBody);
-        throw new Error(`Caption generation failed (${capRes.status})`);
+        if (capRes.ok || (capRes.status >= 400 && capRes.status < 500)) break;
+        // 5xx: retry with backoff
+        console.warn(`[regenerate-post] Caption regen attempt ${attempt + 1} failed (${capRes.status}), retrying...`);
+        if (attempt < maxRetries - 1) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+      }
+
+      if (!capRes || !capRes.ok) {
+        const errBody = capRes ? await capRes.text() : "no response";
+        console.error(`[regenerate-post] Caption-only regen failed (${capRes?.status}):`, errBody);
+        throw new Error(`Caption generation failed (${capRes?.status || "unknown"})`);
       }
 
       const capData = await capRes.json();
