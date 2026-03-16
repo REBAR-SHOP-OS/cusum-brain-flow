@@ -153,10 +153,6 @@ export default function AdminPanel() {
             <Users className="w-3.5 h-3.5" />
             Employees
           </TabsTrigger>
-          <TabsTrigger value="ceo-dashboard" className="gap-1.5 text-xs">
-            <Activity className="w-3.5 h-3.5" />
-            CEO Dashboard
-          </TabsTrigger>
           <TabsTrigger value="live-monitor" className="gap-1.5 text-xs">
             <Monitor className="w-3.5 h-3.5" />
             Live Monitor
