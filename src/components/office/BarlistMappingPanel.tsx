@@ -33,6 +33,15 @@ const CANONICAL_FIELDS: CanonicalField[] = [
 
 const DIM_FIELDS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
 
+type LengthUnit = "mm" | "cm" | "m" | "in" | "ft";
+const LENGTH_UNITS: { value: LengthUnit; label: string; factor: number }[] = [
+  { value: "mm", label: "mm", factor: 1 },
+  { value: "cm", label: "cm", factor: 10 },
+  { value: "m",  label: "m",  factor: 1000 },
+  { value: "in", label: "inches", factor: 25.4 },
+  { value: "ft", label: "feet", factor: 304.8 },
+];
+
 // ── Header alias map (lowercase → canonical key) ─────────────
 const HEADER_ALIASES: Record<string, string> = {
   // mark
