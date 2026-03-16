@@ -92,10 +92,10 @@ ${kbContext || "No articles available."}`,
       },
     ];
 
-    // GPT-4o-mini: customer-facing draft suggestion
+    // Gemini Flash: customer-facing draft suggestion
     const result = await callAI({
-      provider: "gpt",
-      model: "gpt-4o-mini",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
       agentName: "support",
       messages: chatMessages,
     });
