@@ -991,9 +991,23 @@ export function PostReviewPanel({
         storyMode
         onImageReady={(url) => {
           setShowStoryGen(false);
-          // Auto-set content_type to story and clear caption
           setLocalContentType("story");
-          updatePost.mutate({ id: post.id, content_type: "story", content: "", title: "", hashtags: [] });
+
+          // Auto-assign Instagram if platform is unassigned (stories need a publishable platform)
+          const needsPlatform = localPlatforms.length === 0 ||
+            (localPlatforms.length === 1 && localPlatforms[0] === "unassigned");
+          if (needsPlatform) {
+            setLocalPlatforms(["instagram"]);
+          }
+
+          updatePost.mutate({
+            id: post.id,
+            content_type: "story",
+            content: "",
+            title: "",
+            hashtags: [],
+            ...(needsPlatform ? { platform: "instagram" } : {}),
+          });
           handleMediaReady(url, "image");
         }}
       />
