@@ -133,6 +133,7 @@ serve(async (req) => {
         const quadResult = await callAI({
           provider: "gemini",
           model: "gemini-2.5-pro",
+          agentName: "estimation",
           messages: [{
             role: "user",
             content: [{ type: "text", text: buildQuadrantPrompt(position) }, imageContent],

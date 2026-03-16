@@ -220,6 +220,7 @@ Rules:
         const aiResult = await callAI({
           provider: "gemini",
           model,
+          agentName: "estimation",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userContent },

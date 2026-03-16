@@ -1095,6 +1095,7 @@ Deno.serve(async (req) => {
         const recoveryResult = await callAI({
           provider: modelConfig.provider,
           model: modelConfig.model,
+          agentName: agent,
           messages: recoveryMessages,
           maxTokens: modelConfig.maxTokens,
           temperature: modelConfig.temperature,

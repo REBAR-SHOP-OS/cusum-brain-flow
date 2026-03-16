@@ -191,6 +191,7 @@ Return your analysis using the provided tool.`;
   const result = await callAI({
     provider: "gemini",
     model: "gemini-2.5-flash",
+    agentName: "system",
     messages: [
       { role: "system", content: systemPrompt },
       {

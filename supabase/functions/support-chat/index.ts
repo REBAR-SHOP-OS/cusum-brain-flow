@@ -658,6 +658,7 @@ async function triggerProactiveGreeting(supabase: any, conversationId: string, c
   try {
     const result = await callAI({
       provider: "gemini", model: "gemini-2.5-flash",
+      agentName: "support",
       messages: [{ role: "user", content: greetingPrompt }],
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });

@@ -70,6 +70,7 @@ Return ONLY valid JSON in this format:
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "shopfloor",
       messages: [
         { role: "system", content: systemPrompt },
         {

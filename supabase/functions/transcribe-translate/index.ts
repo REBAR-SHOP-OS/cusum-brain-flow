@@ -322,6 +322,7 @@ serve(async (req) => {
       const pass2Result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-pro",
+        agentName: "system",
         messages: pass2Messages,
       });
       const pass2Raw = pass2Result.content;

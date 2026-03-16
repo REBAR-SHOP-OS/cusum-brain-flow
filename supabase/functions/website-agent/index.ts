@@ -1032,6 +1032,7 @@ serve(async (req) => {
     const finalResponse = await callAIStream({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "webbuilder",
       messages: followUpMessages,
       stream: true,
     });

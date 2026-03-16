@@ -100,6 +100,7 @@ ${contextData}`;
     const aiResponse = await callAIStream({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "seo",
       messages: [
         { role: "system", content: systemPrompt },
         ...messages,

@@ -1444,6 +1444,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
             followUpResp = await callAIStream({
               provider: "gemini",
               model: "gemini-2.5-flash",
+              agentName: "commander",
               messages: followUpMessages,
               signal: AbortSignal.timeout(25000),
             });

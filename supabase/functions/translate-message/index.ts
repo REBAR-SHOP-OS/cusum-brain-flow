@@ -69,6 +69,7 @@ serve(async (req) => {
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash-lite",
+      agentName: "system",
       messages: [
         {
           role: "system",

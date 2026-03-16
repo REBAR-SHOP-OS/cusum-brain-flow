@@ -59,6 +59,7 @@ serve(async (req) => {
       const result = await callAI({
         provider: "gpt",
         model: "gpt-4o-mini",
+        agentName: "email",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },

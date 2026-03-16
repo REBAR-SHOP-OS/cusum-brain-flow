@@ -51,6 +51,7 @@ Analyze this task and determine if it can be auto-executed.`;
   const aiResult = await callAI({
     provider: "gemini",
     model: "gemini-3-flash-preview",
+    agentName: "seo",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },

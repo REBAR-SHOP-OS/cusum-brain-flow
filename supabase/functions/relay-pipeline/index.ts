@@ -341,6 +341,7 @@ serve(async (req) => {
       const briefResult = await callAI({
         provider: "gpt",
         model: "gpt-4o-mini",
+        agentName: "email",
         messages: [
           { role: "system", content: "Generate a concise daily email brief for a rebar manufacturing company CEO. Use bullet points. Be direct." },
           {

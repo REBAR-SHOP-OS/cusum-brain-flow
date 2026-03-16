@@ -285,6 +285,7 @@ Extract the sender's COMPANY NAME as precisely as possible. Look in email signat
   const result = await callAI({
     provider: "gpt",
     model: "gpt-4o-mini",
+    agentName: "sales",
     messages: [{ role: "user", content: prompt }],
     tools: [
       {

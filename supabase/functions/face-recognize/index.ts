@@ -178,6 +178,7 @@ You MUST call the face_match_result function with your answer.`,
       aiResult = await callAI({
         provider: "gemini",
         model: "gemini-2.5-pro",
+        agentName: "shopfloor",
         messages: [
           {
             role: "user",

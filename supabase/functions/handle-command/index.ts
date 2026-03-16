@@ -145,6 +145,7 @@ serve(async (req) => {
           const aiResult = await callAI({
             provider: "gpt",
             model: "gpt-4o-mini",
+            agentName: "shopfloor",
             messages: [
               {
                 role: "system",

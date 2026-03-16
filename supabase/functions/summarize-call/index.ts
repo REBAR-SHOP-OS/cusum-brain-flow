@@ -99,6 +99,7 @@ ${transcript}`;
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o-mini",
+      agentName: "system",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },

@@ -139,6 +139,7 @@ serve(async (req) => {
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-pro",
+      agentName: "system",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userContent },

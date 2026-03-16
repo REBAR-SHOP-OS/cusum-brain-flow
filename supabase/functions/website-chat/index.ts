@@ -111,6 +111,7 @@ serve(async (req) => {
     const response = await callAIStream({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "webbuilder",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         ...trimmed,
