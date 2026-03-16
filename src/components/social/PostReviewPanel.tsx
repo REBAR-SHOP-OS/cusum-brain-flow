@@ -211,12 +211,24 @@ export function PostReviewPanel({
       if (type === "video" && localContentType !== "story") {
         setRegeneratingCaption(true);
         try {
-          const data = await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: true }, { timeoutMs: 120000 });
+          // Hybrid: try video-to-social first for context-aware caption
+          const videoData = await invokeEdgeFunction("video-to-social", {
+            videoUrl: permanentUrl, platform: post.platform || "instagram", aspectRatio: "1:1"
+          }, { timeoutMs: 60000 });
+          // Apply video-to-social result to the post
+          const fullContent = (videoData.caption || "") + (videoData.hashtags?.length ? "\n\n" + videoData.hashtags.join(" ") : "");
+          updatePost.mutate({ id: post.id, title: videoData.title || post.title, content: fullContent });
           queryClient.invalidateQueries({ queryKey: ["social_posts"] });
-          toast({ title: "Caption generated", description: "A general promotional caption was created for your video." });
-        } catch (err: any) {
-          console.error("Auto caption error:", err);
-          // Non-blocking — video is already saved
+          toast({ title: "Caption generated", description: "Video-aware caption created for your post." });
+        } catch (videoErr: any) {
+          console.warn("video-to-social failed, falling back to regenerate-post:", videoErr?.message);
+          try {
+            await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: true }, { timeoutMs: 120000 });
+            queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+            toast({ title: "Caption generated", description: "A general promotional caption was created for your video." });
+          } catch (err: any) {
+            console.error("Auto caption fallback error:", err);
+          }
         } finally {
           setRegeneratingCaption(false);
         }
@@ -587,9 +599,24 @@ export function PostReviewPanel({
                         onClick={async () => {
                           setRegeneratingCaption(true);
                           try {
-                            const data = await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: !!isVideo }, { timeoutMs: 120000 });
+                            if (isVideo && post.image_url) {
+                              // Hybrid: try video-to-social first
+                              try {
+                                const videoData = await invokeEdgeFunction("video-to-social", {
+                                  videoUrl: post.image_url, platform: post.platform || "instagram", aspectRatio: "1:1"
+                                }, { timeoutMs: 60000 });
+                                const fullContent = (videoData.caption || "") + (videoData.hashtags?.length ? "\n\n" + videoData.hashtags.join(" ") : "");
+                                updatePost.mutate({ id: post.id, title: videoData.title || post.title, content: fullContent });
+                                queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                                toast({ title: "Caption regenerated", description: "Video-aware caption generated." });
+                                return;
+                              } catch {
+                                console.warn("video-to-social failed, falling back to regenerate-post");
+                              }
+                            }
+                            await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: !!isVideo }, { timeoutMs: 120000 });
                             queryClient.invalidateQueries({ queryKey: ["social_posts"] });
-                            toast({ title: "Caption regenerated", description: "New caption generated based on the image." });
+                            toast({ title: "Caption regenerated", description: "New caption generated." });
                           } catch (err: any) {
                             console.error("Caption regen error:", err);
                             toast({ title: "Caption regeneration failed", description: err?.message || "Could not regenerate caption", variant: "destructive" });

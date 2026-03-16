@@ -1,62 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Video Caption Generation 503 Error (Root Cause)
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-When regenerating captions for video posts, the `regenerate-post` edge function fails with a 503 error. The caption-only path uses **only one model** (`google/gemini-2.5-flash`) with no fallback — unlike the full regeneration path which rotates through multiple models.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Root Cause
-Line 349: caption-only mode hardcodes `google/gemini-2.5-flash`. If that model is temporarily unavailable (503), the 3 retries all hit the same unavailable model and fail. The full regen path (line 428) already rotates through `["google/gemini-2.5-flash", "openai/gpt-5-mini"]`.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Solution (Hybrid Approach)
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 1. `supabase/functions/regenerate-post/index.ts` — Caption-only: add model rotation + video context
-- Replace the single-model retry loop (lines 342-364) with a model rotation loop like the full regen path
-- Models: `["google/gemini-2.5-flash", "google/gemini-3-flash-preview", "openai/gpt-5-mini"]`
-- For video posts: use the existing `video-to-social` function's approach — send video metadata to generate a contextual caption, with fallback to general brand caption if all models fail
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 2. `src/components/social/PostReviewPanel.tsx` — Smarter video caption flow
-- For video posts, first attempt `video-to-social` (which already exists and handles video context)
-- If that fails, fall back to `regenerate-post` with `caption_only: true, is_video: true`
-- Apply to both the "Regenerate caption" button (line 590) and the auto-caption on video upload (line 214)
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### Key Changes
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-**`regenerate-post/index.ts`** (caption-only section, ~lines 342-364):
-```typescript
-// Replace single-model with rotation
-const captionModels = ["google/gemini-2.5-flash", "google/gemini-3-flash-preview", "openai/gpt-5-mini"];
-let capRes: Response | null = null;
-for (const model of captionModels) {
-  console.log(`[regenerate-post] Caption-only trying model: ${model}`);
-  capRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages: [{ role: "user", content: contentParts }] }),
-  });
-  if (capRes.ok) break;
-  const errBody = await capRes.text();
-  console.error(`[regenerate-post] Model ${model} failed (${capRes.status}): ${errBody}`);
-  capRes = null;
-}
-if (!capRes) throw new Error("Caption generation failed — all models returned errors");
-```
-
-**`PostReviewPanel.tsx`** — video caption with fallback:
-```typescript
-// Try video-to-social first for context-aware caption, fall back to regenerate-post
-if (isVideo) {
-  try {
-    const videoData = await invokeEdgeFunction("video-to-social", {
-      videoUrl: post.image_url, platform: post.platform, aspectRatio: "1:1"
-    }, { timeoutMs: 60000 });
-    // Use video-to-social result to update post...
-  } catch {
-    // Fall back to regenerate-post caption-only
-    await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: true }, { timeoutMs: 120000 });
-  }
-}
-```
-
-This ensures video captions always succeed by: (a) trying video-specific analysis first, (b) rotating through 3 AI models, (c) falling back to general brand copy as last resort.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
