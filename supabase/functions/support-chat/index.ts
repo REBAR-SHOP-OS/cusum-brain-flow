@@ -619,6 +619,7 @@ async function triggerAiReply(supabase: any, convo: any, _visitorMessage: string
 
       result = await callAI({
         provider: "gemini", model: "gemini-2.5-flash", messages, tools: WIDGET_TOOLS,
+        agentName: "support",
         fallback: { provider: "gemini", model: "gemini-2.5-flash" },
       });
     }
