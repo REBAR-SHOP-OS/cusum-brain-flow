@@ -347,7 +347,7 @@ export default function AccountingWorkspace() {
                 disabled={qb.loading}
               >
                 <RefreshCw className={`w-4 h-4 ${qb.loading ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Refresh</span>
+                <span className="hidden sm:inline">Sync QB</span>
               </Button>
             </div>
           </div>
