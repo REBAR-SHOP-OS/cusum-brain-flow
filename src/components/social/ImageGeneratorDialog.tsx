@@ -66,18 +66,6 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
 
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
 
-  // Auto-enable logo theme when brandKit loads with a logo_url
-  const logoAutoApplied = !!brandKit?.logo_url;
-
-  // Always keep "logo" selected when brand logo exists
-  useEffect(() => {
-    if (brandKit?.logo_url) {
-      setSelectedThemes((prev) => {
-        if (prev.has("logo")) return prev;
-        return new Set([...prev, "logo"]);
-      });
-    }
-  }, [brandKit?.logo_url]);
 
 
   const toggleTheme = (id: string) => {
