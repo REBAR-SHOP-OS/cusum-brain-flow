@@ -211,11 +211,7 @@ export function PostReviewPanel({
       if (type === "video" && localContentType !== "story") {
         setRegeneratingCaption(true);
         try {
-          const { data, error } = await supabase.functions.invoke("regenerate-post", {
-            body: { post_id: post.id, caption_only: true, is_video: true },
-          });
-          if (error) throw error;
-          if (data?.error) throw new Error(data.error);
+          const data = await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: true }, { timeoutMs: 120000 });
           queryClient.invalidateQueries({ queryKey: ["social_posts"] });
           toast({ title: "Caption generated", description: "A general promotional caption was created for your video." });
         } catch (err: any) {
