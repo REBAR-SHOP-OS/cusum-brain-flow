@@ -311,12 +311,6 @@ export default function AdminPanel() {
         </ScrollArea>
       </TabsContent>
 
-      <TabsContent value="ceo-dashboard" className="flex-1 mt-0 overflow-hidden">
-        <ScrollArea className="h-full">
-          <CEODashboardView />
-        </ScrollArea>
-      </TabsContent>
-
       <TabsContent value="live-monitor" className="flex-1 mt-0 overflow-hidden">
         <ScrollArea className="h-full">
           <LiveMonitorView />
