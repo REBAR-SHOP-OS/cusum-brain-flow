@@ -528,7 +528,7 @@ export async function executeToolCall(
           const slot = args.slot || "";
 
           // Inject mandatory style/product overrides from user selections
-          // Double enforcement: from context AND from tool args
+          // Nuclear enforcement: from context AND from tool args
           if (agent === "social") {
             const IMAGE_STYLE_MAP: Record<string, string> = {
               realism: "Hyper-realistic industrial photography with dramatic natural lighting",
@@ -556,7 +556,6 @@ export async function executeToolCall(
             // Collect styles from both context and tool args
             const uStyles = (context?.imageStyles as string[]) || [];
             const uProducts = (context?.selectedProducts as string[]) || [];
-            // Also check tool args (agent may pass style/products explicitly)
             if (args.style && !uStyles.includes(args.style)) uStyles.push(args.style);
             if (args.products) {
               const toolProds = args.products.split(",").map((p: string) => p.trim());
@@ -571,36 +570,82 @@ export async function executeToolCall(
                 mandatoryBlock += `VISUAL STYLE: ${desc}.\n`;
                 if (isNonRealistic) {
                   mandatoryBlock += `CRITICAL: This is NON-PHOTOREALISTIC. Do NOT make it look like a real photograph.\n`;
+                  // Strip conflicting photorealistic terms from LLM prompt
+                  const REALISTIC_TERMS = ["photorealistic", "hyper-realistic", "realistic photography", "professional photography", "real photo", "documentary photography", "photo taken with"];
+                  for (const term of REALISTIC_TERMS) {
+                    imagePrompt = imagePrompt.replace(new RegExp(term, "gi"), "");
+                  }
                 }
               }
+
+              // NUCLEAR PRODUCT OVERRIDE: strip ALL product names, then inject only the selected ones
               if (uProducts.length) {
-                const desc = uProducts.map((k: string) => PRODUCT_PROMPT_MAP[k] || k).join("; ");
-                mandatoryBlock += `PRIMARY SUBJECT: ${desc}. The product MUST be the central focus of the image.\n`;
+                const selectedDesc = uProducts.map((k: string) => PRODUCT_PROMPT_MAP[k] || k).join("; ");
+                mandatoryBlock += `PRIMARY SUBJECT: ${selectedDesc}. The product MUST be the central focus of the image.\n`;
+
+                // Comprehensive list of ALL product names/variants to strip
+                const ALL_PRODUCT_NAMES = [
+                  "rebar stirrup", "rebar stirrups", "steel stirrup", "steel stirrups", "rectangular stirrup", "square stirrup",
+                  "rebar cage", "rebar cages", "assembled cage", "cylindrical cage", "reinforcement cage", "tied cage",
+                  "rebar hook", "rebar hooks", "steel hook", "steel hooks", "bent hook",
+                  "dowel bar", "dowel bars", "steel dowel", "smooth bar", "slab connection",
+                  "wire mesh", "welded mesh", "steel fabric", "welded wire", "mesh panel",
+                  "fiberglass rebar", "fiberglass bar", "fiberglass straight", "gfrp", "composite rebar",
+                  "rebar straight", "straight rebar", "deformed bar", "reinforcing bar", "reinforcing steel",
+                  "stirrup", "stirrups", "cage", "cages", "hook", "hooks", "dowel", "dowels",
+                ];
+                for (const term of ALL_PRODUCT_NAMES) {
+                  imagePrompt = imagePrompt.replace(new RegExp(`\\b${term}s?\\b`, "gi"), "");
+                }
+                // Clean up leftover whitespace from removals
+                imagePrompt = imagePrompt.replace(/\s{2,}/g, " ").trim();
               }
               mandatoryBlock += "=== END MANDATORY REQUIREMENTS ===\n\n";
 
-              // Strip conflicting product names from LLM-generated prompt
-              if (uProducts.length) {
-                const ALL_PRODUCT_VARIANTS: Record<string, string[]> = {
-                  stirrups: ["rebar cage", "rebar cages", "assembled cage", "cylindrical cage", "fiberglass bar", "fiberglass rebar", "dowel bar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
-                  cages: ["rebar stirrup", "rebar stirrups", "rectangular stirrup", "fiberglass bar", "fiberglass rebar", "dowel bar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
-                  fiberglass_straight: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "dowel bar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
-                  hooks: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "fiberglass bar", "fiberglass rebar", "dowel bar", "wire mesh", "welded mesh", "steel fabric"],
-                  dowels: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "fiberglass bar", "fiberglass rebar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
-                  wire_mesh: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "fiberglass bar", "fiberglass rebar", "dowel bar", "rebar hook"],
-                  rebar_straight: ["rebar cage", "rebar cages", "rebar stirrup", "rebar stirrups", "fiberglass bar", "fiberglass rebar", "dowel bar", "wire mesh", "welded mesh", "steel fabric", "rebar hook"],
-                };
-                const selectedKey = uProducts[0];
-                const selectedLabel = PRODUCT_PROMPT_MAP[selectedKey]?.split("—")[0]?.trim() || selectedKey;
-                const conflicting = ALL_PRODUCT_VARIANTS[selectedKey] || [];
-                for (const wrong of conflicting) {
-                  const regex = new RegExp(wrong, "gi");
-                  imagePrompt = imagePrompt.replace(regex, selectedLabel);
-                }
-              }
-
               imagePrompt = mandatoryBlock + imagePrompt;
             }
+
+            // Inject aspect ratio from user selection
+            const aspectRatio = context?.imageAspectRatio as string;
+            if (aspectRatio) {
+              imagePrompt += `\n\nIMAGE ASPECT RATIO: ${aspectRatio}. Compose the image to fit this ratio perfectly.`;
+            }
+
+            // Fetch Brain resource images for multimodal reference
+            try {
+              const { data: brainImages } = await svcClient
+                .from("knowledge")
+                .select("source_url, title")
+                .eq("company_id", companyId)
+                .eq("category", "image")
+                .not("title", "ilike", "%logo%")
+                .not("title", "ilike", "%favicon%")
+                .order("created_at", { ascending: false })
+                .limit(3);
+
+              if (brainImages?.length) {
+                const validUrls: string[] = [];
+                for (const row of brainImages) {
+                  if (!row.source_url) continue;
+                  let url = row.source_url;
+                  if (url.includes("estimation-files/")) {
+                    const path = url.split("/estimation-files/").pop()?.split("?")[0];
+                    if (path) {
+                      const { data: signed } = await svcClient.storage.from("estimation-files").createSignedUrl(path, 600);
+                      if (signed?.signedUrl) url = signed.signedUrl;
+                      else continue;
+                    }
+                  }
+                  try {
+                    const check = await fetch(url, { method: "HEAD" });
+                    if (check.ok) validUrls.push(url);
+                  } catch { /* skip */ }
+                }
+                if (validUrls.length) {
+                  (context as any).__brainImageUrls = validUrls;
+                }
+              }
+            } catch (_) { /* non-fatal */ }
           }
 
           // Resolve logo for social agent (broader search: logo OR favicon)
@@ -659,6 +704,14 @@ export async function executeToolCall(
             if (attempt.useLogo && logoUrl) {
               contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
               contentParts.push({ type: "text", text: "Incorporate the provided company logo as a branded watermark." });
+            }
+            // Attach Brain resource images as visual references
+            const brainUrls = (context as any)?.__brainImageUrls as string[] | undefined;
+            if (brainUrls?.length) {
+              contentParts.push({ type: "text", text: "Use the following product reference images to match the real appearance of the products:" });
+              for (const bUrl of brainUrls) {
+                contentParts.push({ type: "image_url", image_url: { url: bUrl } });
+              }
             }
 
             const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
