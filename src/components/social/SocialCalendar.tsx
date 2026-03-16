@@ -26,12 +26,26 @@ function groupByPlatform(posts: SocialPost[]) {
   });
 }
 
-function worstStatus(posts: SocialPost[]) {
-  let worst = posts[0];
+const STATUS_LABELS: Record<string, string> = {
+  published: "Published ✅",
+  scheduled: "Scheduled 📅",
+  draft: "Draft",
+  pending_approval: "Pending Approval ⏳",
+  declined: "Declined ❌",
+};
+
+function statusSummary(posts: SocialPost[]): { dominant: string; label: string } {
+  const counts: Record<string, number> = {};
   for (const p of posts) {
-    if ((STATUS_PRIORITY[p.status] ?? 2) < (STATUS_PRIORITY[worst.status] ?? 2)) worst = p;
+    counts[p.status] = (counts[p.status] || 0) + 1;
   }
-  return worst.status;
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const dominant = entries[0][0];
+  if (entries.length === 1) {
+    return { dominant, label: STATUS_LABELS[dominant] || dominant };
+  }
+  const parts = entries.map(([s, n]) => `${n} ${STATUS_LABELS[s] || s}`);
+  return { dominant, label: parts.join(" · ") };
 }
 
 const platformIcons: Record<string, { bg: string; icon: JSX.Element }> = {
