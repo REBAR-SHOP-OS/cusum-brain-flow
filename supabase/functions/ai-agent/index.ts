@@ -572,8 +572,10 @@ Deno.serve(async (req) => {
     // return a hardcoded schedule immediately — never let the LLM decide.
     if (agent === "social") {
       const msgLower = message.trim().toLowerCase();
+      // Detect if user wants to CREATE something (not see the schedule)
+      const isCreationIntent = /(بساز|بنویس|درست کن|create|generate|make|build|design|عکس|تصویر|image|photo|video|ویدیو|پست|کپشن|caption)/i.test(msgLower);
       const isScheduleRequest = (
-        history.length === 0 || // new chat
+        (history.length === 0 && !isCreationIntent) || // new chat WITHOUT creation intent
         /\b(content\s*schedule|schedule\s*for\s*today|today|program|برنامه)\b/i.test(msgLower)
       ) && !/^\d$/.test(msgLower) && msgLower !== "all"; // not a slot selection
 
