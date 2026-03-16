@@ -206,8 +206,8 @@ export function PostReviewPanel({
       updatePost.mutate({ id: post.id, image_url: permanentUrl });
       toast({ title: `${type === "image" ? "Image" : "Video"} attached`, description: "Saved to your post permanently." });
 
-      // Auto-generate general caption for video uploads
-      if (type === "video") {
+      // Auto-generate general caption for video uploads (skip for stories)
+      if (type === "video" && localContentType !== "story") {
         setRegeneratingCaption(true);
         try {
           const { data, error } = await supabase.functions.invoke("regenerate-post", {
