@@ -39,8 +39,8 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab, activeTab }: A
   return (
     <div
       className={cn(
-        "h-full bg-card/80 backdrop-blur-sm border-r border-border/30 flex flex-col transition-all duration-200 shrink-0",
-        collapsed ? "w-14" : "w-56"
+        "h-full bg-card/60 border-r border-border/20 flex flex-col transition-all duration-200 shrink-0",
+        collapsed ? "w-12" : "w-52"
       )}
     >
       {/* Collapse toggle */}
