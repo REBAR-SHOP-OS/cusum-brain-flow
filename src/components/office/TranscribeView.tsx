@@ -144,7 +144,7 @@ const TRANSLATION_LANGUAGES = LANGUAGES.filter(l => l.value !== "auto");
 export function TranscribeView() {
   const navigate = useNavigate();
   const [sourceLang, setSourceLang] = useState("auto");
-  const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(null);
+  const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(CONVERSATION_SPEAKERS[0].name);
   const [translationLang, setTranslationLang] = useState("fa");
   const [translationMap, setTranslationMap] = useState<Record<string, string>>({});
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
@@ -153,6 +153,15 @@ export function TranscribeView() {
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Per-speaker tracking
+  const [speakerTranscripts, setSpeakerTranscripts] = useState<Record<string, any[]>>({});
+  const [speakerReports, setSpeakerReports] = useState<Record<string, string>>({});
+  const [completedSpeakers, setCompletedSpeakers] = useState<Set<string>>(new Set());
+  const [generatingReport, setGeneratingReport] = useState<string | null>(null);
+  const [isFinalReportLoading, setIsFinalReportLoading] = useState(false);
+
+  const allSpeakersComplete = CONVERSATION_SPEAKERS.every(s => completedSpeakers.has(s.name));
 
   // Results
   const [originalText, setOriginalText] = useState("");
