@@ -715,7 +715,7 @@ export function TranscribeView() {
         ))}
       </div>
 
-      <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto space-y-6">
+      <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto space-y-6 overflow-y-auto">
       {/* Selected speaker banner */}
       {selectedSpeaker && (
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm">
