@@ -606,8 +606,9 @@ export async function executeToolCall(
               imagePrompt = mandatoryBlock + imagePrompt;
             }
 
-            // Inject aspect ratio from user selection (tool arg takes priority over context)
-            const aspectRatio = args.aspect_ratio || (context?.imageAspectRatio as string) || "1:1";
+            // Inject aspect ratio from user selection (context = user's UI choice, more reliable than AI args)
+            const aspectRatio = (context?.imageAspectRatio as string) || args.aspect_ratio || "1:1";
+            console.log(`[generate_image] aspectRatio resolved: args=${args.aspect_ratio}, context=${context?.imageAspectRatio}, final=${aspectRatio}`);
             const AR_PROMPT_MAP: Record<string, string> = {
               "16:9": "CRITICAL: Generate a LANDSCAPE image with 16:9 aspect ratio. The image MUST be wider than tall.",
               "9:16": "CRITICAL: Generate a PORTRAIT image with 9:16 aspect ratio. The image MUST be taller than wide (suitable for Instagram Stories/Reels).",
