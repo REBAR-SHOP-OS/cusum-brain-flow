@@ -4,7 +4,7 @@ import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
   Sparkles, Loader2, BookOpen, ShieldCheck, CheckSquare, Trash2,
-  CalendarDays,
+  CalendarDays, PlusSquare,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -49,7 +49,7 @@ const statusFilters = [
 export default function SocialMediaManager() {
   const navigate = useNavigate();
   const { generatePosts, generating } = useAutoGenerate();
-  const { posts, isLoading, updatePost, deletePost } = useSocialPosts();
+  const { posts, isLoading, updatePost, deletePost, createPost } = useSocialPosts();
   const { completedChecklist, toggleChecklist } = useStrategyChecklist();
   const { pendingApprovals } = useSocialApprovals();
   const [showApprovals, setShowApprovals] = useState(false);
@@ -324,6 +324,36 @@ export default function SocialMediaManager() {
             <span className="font-medium">Edit your Brand Kit</span>
             <ArrowLeft className="w-4 h-4 rotate-[135deg]" />
           </button>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-sky-600 to-sky-500 text-white hover:opacity-90 transition-opacity">
+                <PlusSquare className="w-5 h-5 shrink-0" />
+                <span className="font-medium">Add Cart</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={undefined}
+                onSelect={(date) => {
+                  if (!date) return;
+                  const user = posts[0]?.user_id;
+                  if (!user) return;
+                  const scheduled = format(date, "yyyy-MM-dd'T'10:00:00");
+                  createPost.mutate(
+                    { platform: "unassigned", status: "draft", qa_status: "needs_review", title: "", content: "", scheduled_date: scheduled, user_id: user, hashtags: [], neel_approved: false },
+                    { onSuccess: (newPost) => {
+                        setWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
+                        if (newPost?.id) setSelectedPostId(newPost.id);
+                      },
+                    }
+                  );
+                }}
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
 
           <div className="flex items-center gap-4 sm:gap-6 sm:ml-auto">
             <div className="flex items-center gap-2">
