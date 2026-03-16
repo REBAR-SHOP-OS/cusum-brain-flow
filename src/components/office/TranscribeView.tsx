@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { addMarkdownToPdf } from "@/lib/pdfMarkdownRenderer";
 import { useRealtimeTranscribe } from "@/hooks/useRealtimeTranscribe";
 import { LiveTranscript } from "@/components/transcribe/LiveTranscript";
 import { PostProcessToolbar } from "@/components/transcribe/PostProcessToolbar";
@@ -626,7 +627,7 @@ export function TranscribeView() {
       for (const speaker of CONVERSATION_SPEAKERS) {
         addText(speaker.name, 16, "bold", [20, 20, 80]);
         addSpacer(3);
-        addText(speakerReports[speaker.name] || "No report available", 10, "normal", [50, 50, 50]);
+        y = addMarkdownToPdf(doc, speakerReports[speaker.name] || "No report available", { margin, maxWidth, pageHeight, startY: y });
         addSpacer(8);
 
         doc.setDrawColor(220, 220, 220);
@@ -637,7 +638,7 @@ export function TranscribeView() {
       // Consolidated Analysis
       addText("CONSOLIDATED ANALYSIS", 16, "bold", [20, 20, 80]);
       addSpacer(3);
-      addText(consolidatedAnalysis, 10, "normal", [30, 30, 30]);
+      y = addMarkdownToPdf(doc, consolidatedAnalysis, { margin, maxWidth, pageHeight, startY: y });
       addSpacer(12);
 
       // Disclaimer
