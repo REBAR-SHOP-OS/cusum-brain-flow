@@ -705,6 +705,14 @@ export async function executeToolCall(
               contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
               contentParts.push({ type: "text", text: "Incorporate the provided company logo as a branded watermark." });
             }
+            // Attach Brain resource images as visual references
+            const brainUrls = (context as any)?.__brainImageUrls as string[] | undefined;
+            if (brainUrls?.length) {
+              contentParts.push({ type: "text", text: "Use the following product reference images to match the real appearance of the products:" });
+              for (const bUrl of brainUrls) {
+                contentParts.push({ type: "image_url", image_url: { url: bUrl } });
+              }
+            }
 
             const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
