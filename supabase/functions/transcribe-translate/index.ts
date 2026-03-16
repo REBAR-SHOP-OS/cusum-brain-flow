@@ -42,11 +42,35 @@ ${DIARIZATION_INSTRUCTION}`;
 
 // ===== Post-processing system prompts =====
 const POST_PROCESS_PROMPTS: Record<string, string> = {
-  summarize: `You are an expert summarizer. Given the following transcript, produce a concise, well-structured summary that captures all key points, decisions, and important details. Use bullet points for clarity. Be thorough but concise.
+  summarize: `You are an expert analyst and report writer. Given the following transcript, produce a comprehensive, highly accurate summary IN ENGLISH.
 
-Respond with the summary text only, no JSON wrapper.`,
+Structure your response as follows:
+
+## Context & Background
+- What is this conversation about? Who are the participants?
+
+## Key Discussion Points
+- Each major topic discussed, with specific details and quotes where relevant
+
+## Decisions & Agreements
+- Any decisions made or agreements reached
+
+## Concerns & Issues Raised
+- Problems, objections, or risks mentioned
+
+## Conclusions
+- Final outcomes and next steps
+
+CRITICAL RULES:
+- ALWAYS write in English, regardless of the transcript language
+- Be extremely precise — do not generalize or omit important details
+- Include specific names, numbers, dates, and facts mentioned
+- Do not add information that was not in the transcript
+- Respond with the summary text only, no JSON wrapper.`,
 
   "action-items": `You are a project management expert. Given the following transcript, extract ALL actionable tasks, to-dos, and commitments made by participants.
+
+IMPORTANT: ALWAYS respond in English regardless of the transcript language.
 
 For each action item, provide:
 - **Task**: What needs to be done
@@ -57,6 +81,8 @@ For each action item, provide:
 Format as a clean markdown list. Respond with the list only, no JSON wrapper.`,
 
   "meeting-notes": `You are a professional meeting notes writer. Given the following transcript, produce structured meeting notes with these sections:
+
+IMPORTANT: ALWAYS respond in English regardless of the transcript language.
 
 ## Key Points
 - Main topics discussed
@@ -82,8 +108,9 @@ Respond with the formatted notes only, no JSON wrapper.`,
 4. Removing false starts and repetitions
 5. Preserving ALL meaning and speaker intent
 6. Maintaining speaker labels if present
+7. ALWAYS translate the output to English if the original is in another language. The final output MUST be in English.
 
-Return the cleaned-up text only, no JSON wrapper.`,
+Return the cleaned-up English text only, no JSON wrapper.`,
 };
 
 function buildInstructions(langInstruction: string, targetInstruction: string, formalityInstruction: string, formatInstruction: string, contextInstruction: string) {
