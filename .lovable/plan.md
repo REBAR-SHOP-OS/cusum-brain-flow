@@ -1,46 +1,54 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
+Issue identified:
+There are still multiple backend image-generation paths, and the previous fix only covered one of them. The unsupported top-level `aspect_ratio` field is still present in direct gateway calls inside:
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/regenerate-post/index.ts`
 
-## Completed: Add All Wan 2.6 Capabilities
+Why the problem keeps coming back:
+- The project has duplicated image generation logic in at least 3 places.
+- One shared path was cleaned earlier, but the older direct paths still send `aspect_ratio` to the AI gateway.
+- That means some chats/regenerations hit the fixed path, while others still hit a broken path, so the error appears “again”.
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+Do I know what the issue is?
+Yes.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+Exact root cause:
+- In `ai-agent/index.ts`, the direct image request still sends:
+  `aspect_ratio: aspectRatio`
+- In `regenerate-post/index.ts`, the regenerate flow still sends:
+  `aspect_ratio: aspectRatio`
+- The gateway image request should rely on prompt instructions plus server-side crop/resize, not a top-level `aspect_ratio` parameter.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+Permanent fix plan:
+1. Remove the unsupported `aspect_ratio` field from every direct AI gateway image request in:
+   - `supabase/functions/ai-agent/index.ts`
+   - `supabase/functions/regenerate-post/index.ts`
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+2. Keep aspect ratio handling only through the safe mechanisms already in the code:
+   - prompt-level orientation instructions
+   - `cropToAspectRatio(...)` after generation
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+3. Make the fix durable by reducing duplication:
+   - either route these paths through the shared executor/helper
+   - or extract a small shared image-request builder so no file can accidentally reintroduce `aspect_ratio`
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+4. Add defensive logging around image generation path selection:
+   - log which path is used (`ai-agent`, shared tool executor, or regenerate-post)
+   - log resolved ratio and whether fallback crop was applied
+   This makes future regressions easy to identify.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+5. Verify all image-related flows after the change:
+   - new Pixel chat image generation
+   - short “بساز” command flow
+   - regenerate image/post flow
+   - 9:16, 16:9, and 1:1 cases
+
+Files to update:
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/regenerate-post/index.ts`
+- optionally a shared helper under `supabase/functions/_shared/` to prevent this class of bug from returning
+
+Expected result:
+- Pixel will stop surfacing aspect-ratio errors to users
+- all generation paths will behave consistently
+- non-square sizes will still work because ratio enforcement remains in prompt guidance + server-side crop, which is the correct supported approach
