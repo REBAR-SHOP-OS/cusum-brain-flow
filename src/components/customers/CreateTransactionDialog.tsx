@@ -110,6 +110,17 @@ export function CreateTransactionDialog({
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
 
+  // Idempotency: unique key per dialog session, regenerated on each open
+  const [dedupKey, setDedupKey] = useState(() => crypto.randomUUID());
+  const [lastCreated, setLastCreated] = useState<{ docNumber: string; at: number } | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setDedupKey(crypto.randomUUID());
+      setLastCreated(null);
+    }
+  }, [open]);
+
   const [lineItems, setLineItems] = useState<LineItem[]>(
     prefill?.lineItems ?? [{ description: "", qty: 1, unitPrice: 0 }]
   );
@@ -287,6 +298,7 @@ export function CreateTransactionDialog({
         customerId: customerQbId,
         customerName,
         memo,
+        dedupKey,
       };
 
       if (needsLineItems(type)) {
@@ -342,7 +354,12 @@ export function CreateTransactionDialog({
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      toast({ title: `${LABELS[type]} created successfully` });
+      if (data?.alreadyExisted) {
+        toast({ title: `${LABELS[type]} #${data.docNumber} already created — duplicate prevented` });
+      } else {
+        toast({ title: `${LABELS[type]} created successfully` });
+        setLastCreated({ docNumber: data?.docNumber || "", at: Date.now() });
+      }
       queryClient.invalidateQueries({ queryKey: ["qb_customer_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["quickbooks-data"] });
       queryClient.invalidateQueries({ queryKey: ["qb_transactions"] });
