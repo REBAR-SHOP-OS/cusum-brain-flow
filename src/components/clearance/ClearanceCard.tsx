@@ -23,8 +23,9 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import type { ClearanceItem } from "@/hooks/useClearanceData";
+import { compressImage } from "@/lib/imageCompressor";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 interface ClearanceCardProps {
   item: ClearanceItem;
