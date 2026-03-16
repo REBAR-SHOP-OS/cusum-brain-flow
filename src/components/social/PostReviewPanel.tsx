@@ -963,6 +963,9 @@ export function PostReviewPanel({
         storyMode
         onImageReady={(url) => {
           setShowStoryGen(false);
+          // Auto-set content_type to story and clear caption
+          setLocalContentType("story");
+          updatePost.mutate({ id: post.id, content_type: "story", content: "", title: "", hashtags: [] });
           handleMediaReady(url, "image");
         }}
       />
