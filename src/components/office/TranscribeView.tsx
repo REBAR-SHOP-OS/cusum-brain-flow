@@ -626,7 +626,7 @@ export function TranscribeView() {
       for (const speaker of CONVERSATION_SPEAKERS) {
         addText(speaker.name, 16, "bold", [20, 20, 80]);
         addSpacer(3);
-        addText(speakerReports[speaker.name] || "No report available", 10, "normal", [50, 50, 50]);
+        y = addMarkdownToPdf(doc, speakerReports[speaker.name] || "No report available", { margin, maxWidth, pageHeight, startY: y });
         addSpacer(8);
 
         doc.setDrawColor(220, 220, 220);
