@@ -965,6 +965,9 @@ export function TranscribeView() {
               transcript={originalText}
               onResult={handlePostProcessResult}
               selectedSpeaker={selectedSpeaker}
+              onFinalReport={handleFinalReport}
+              allSpeakersComplete={allSpeakersComplete}
+              isFinalReportLoading={isFinalReportLoading}
             />
           </CardContent>
         </Card>
