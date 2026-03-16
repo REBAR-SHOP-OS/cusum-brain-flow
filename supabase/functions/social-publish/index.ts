@@ -70,11 +70,12 @@ serve(async (req) => {
 
     const publishSchema = z.object({
       platform: z.enum(["facebook", "instagram", "linkedin", "twitter"]),
-      message: z.string().min(1).max(63206),
+      message: z.string().max(63206).optional().default(""),
       image_url: z.string().url().max(2000).optional(),
       post_id: z.string().uuid().optional(),
       page_name: z.string().optional(),
       force_publish: z.boolean().optional(),
+      content_type: z.enum(["post", "reel", "story"]).optional().default("post"),
     });
     const parsed = publishSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -83,7 +84,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish } = parsed.data;
+    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish, content_type } = parsed.data;
 
     // Strip Persian translation block — server-side safety net
     let message = rawMessage;
