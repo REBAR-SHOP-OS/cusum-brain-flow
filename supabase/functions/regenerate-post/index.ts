@@ -255,7 +255,7 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { post_id, caption_only, selectedProducts, imageStyles } = await req.json();
+    const { post_id, caption_only, is_video, selectedProducts, imageStyles } = await req.json();
     if (!post_id) throw new Error("post_id is required");
 
     // 1. Fetch post
@@ -302,11 +302,17 @@ serve(async (req) => {
       ? `\n\n## MANDATORY BRAIN CONTEXT (YOU MUST USE THIS):\n${brainKnowledge}\n\nCRITICAL: You MUST incorporate the above brain context into your generated content.\n`
       : "";
 
+    const isVideoPost = is_video || (post.image_url && /\.(mp4|mov|webm)(\?|$)/i.test(post.image_url));
+
     // ─── CAPTION-ONLY mode: just regenerate caption based on the image ───
     if (caption_only) {
+      const videoInstruction = isVideoPost
+        ? `This post contains a VIDEO (not an image). Write a GENERAL promotional caption about REBAR.SHOP as a company — our services, reliability, fast delivery, customer satisfaction, construction industry leadership in Ontario. Do NOT focus on any specific product. Write about the company brand, values, and broad services.`
+        : `You are looking at an image from a social media post. Based on what you see in the image, write a NEW short promotional caption.`;
+
       const captionOnlyPrompt = `You are an elite creative advertising copywriter for REBAR.SHOP, a premium rebar and steel reinforcement company in Ontario, Canada.
 
-You are looking at an image from a social media post. Based on what you see in the image, write a NEW short promotional caption.
+${videoInstruction}
 
 Platform: ${post.platform}
 ${brainBlock}
@@ -381,9 +387,9 @@ Current post title: ${post.title}
 Current post content: ${post.content}
 Platform: ${post.platform}
 ${brainBlock}
-YOUR TASK — Generate COMPLETELY NEW and DIFFERENT advertising content. Follow these rules STRICTLY:
+${isVideoPost ? `IMPORTANT: This post contains a VIDEO. Write a GENERAL promotional caption about REBAR.SHOP as a company — services, reliability, delivery, customer satisfaction, construction leadership in Ontario. Do NOT focus on any specific product.\n` : ""}YOUR TASK — Generate COMPLETELY NEW and DIFFERENT advertising content. Follow these rules STRICTLY:
 
-1. Write a compelling, UNIQUE English caption (2-4 sentences) for this product/topic. Use relevant emojis.
+1. Write a compelling, UNIQUE English caption (2-4 sentences) ${isVideoPost ? "about REBAR.SHOP company and services broadly" : "for this product/topic"}. Use relevant emojis.
 2. Write a SHORT English advertising slogan (MAXIMUM 6 words) that will be printed ON the image. It MUST be: simple, catchy, beautiful, and grammatically perfect English. Pure advertising tagline — NO guarantees, NO technical terms, NO scientific claims. Think billboard: short, emotional, memorable. GOOD: "Steel That Builds Dreams", "Your Project, Our Pride". BAD: "Unparalleled Structural Integrity", "Guaranteed Quality Framework".
 3. Write 8-12 relevant hashtags as a single string separated by spaces.
 4. Translate the caption to Farsi (Persian) — this MUST be a premium-quality, natural-sounding Persian translation. Do NOT translate word-by-word. Instead, rewrite the meaning in beautiful, fluent Persian that sounds like it was originally written by a native Persian copywriter. Use elegant vocabulary, proper Persian grammar, and a professional advertising tone.
