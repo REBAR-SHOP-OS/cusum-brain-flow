@@ -187,7 +187,7 @@ export function PostReviewPanel({
       });
   }, [post?.id, localPlatforms]);
 
-  // Sync local state when post changes (navigation or refresh)
+  // Sync local state when post changes (navigation, refresh, or platform/content_type update)
   useEffect(() => {
     if (!post) return;
     setLocalPlatforms([post.platform]);
@@ -197,7 +197,7 @@ export function PostReviewPanel({
       setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
     }
     setLocalContentType(post.content_type || "post");
-  }, [post?.id, groupPages]);
+  }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
