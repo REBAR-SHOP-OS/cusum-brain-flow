@@ -326,14 +326,21 @@ async function publishToInstagram(
     }
 
     // Step 1: Create media container
+    const isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
+    const containerBody: Record<string, string> = {
+      caption,
+      access_token: accessToken,
+      media_type: isVideo ? "VIDEO" : "IMAGE",
+    };
+    if (isVideo) {
+      containerBody.video_url = imageUrl;
+    } else {
+      containerBody.image_url = imageUrl;
+    }
     const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        caption,
-        access_token: accessToken,
-      }),
+      body: JSON.stringify(containerBody),
     });
 
     const containerData = await containerRes.json();
