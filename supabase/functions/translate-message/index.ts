@@ -93,7 +93,7 @@ IMPORTANT: If the input is completely unintelligible gibberish, noise artifacts,
 
     const result = await callAI({
       provider: "gemini",
-      model: "gemini-2.5-pro",
+      model: "gemini-2.5-flash",
       agentName: "system",
       messages: [
         {

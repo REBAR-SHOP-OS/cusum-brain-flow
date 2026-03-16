@@ -38,7 +38,7 @@ export function useRealtimeTranscribe() {
       setPartialText("");
 
       // Send last 5 translated segments as context for better accuracy
-      const contextWindow = contextRef.current.slice(-5).join(" | ");
+      const contextWindow = contextRef.current.slice(-3).join(" | ");
 
       invokeEdgeFunction<{ translations: Record<string, string> }>(
         "translate-message",
