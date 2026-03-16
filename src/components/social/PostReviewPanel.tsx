@@ -187,7 +187,7 @@ export function PostReviewPanel({
       });
   }, [post?.id, localPlatforms]);
 
-  // Sync local state when post changes (navigation or refresh)
+  // Sync local state when post changes (navigation, refresh, or platform/content_type update)
   useEffect(() => {
     if (!post) return;
     setLocalPlatforms([post.platform]);
@@ -197,7 +197,7 @@ export function PostReviewPanel({
       setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
     }
     setLocalContentType(post.content_type || "post");
-  }, [post?.id, groupPages]);
+  }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
@@ -835,12 +835,23 @@ export function PostReviewPanel({
                         toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
                         return;
                       }
-                      if (localPlatforms.length === 0) {
+
+                      // Defensive repair: auto-fix unassigned platform for stories
+                      let currentPlatforms = [...localPlatforms];
+                      const isAllUnassigned = currentPlatforms.length === 0 || currentPlatforms.every(p => p === "unassigned");
+                      if (isAllUnassigned && localContentType === "story") {
+                        currentPlatforms = ["instagram"];
+                        setLocalPlatforms(currentPlatforms);
+                        updatePost.mutate({ id: post.id, platform: "instagram" });
+                        console.log("[PostReviewPanel] Auto-repaired unassigned story platform → instagram");
+                      }
+
+                      if (currentPlatforms.length === 0) {
                         toast({ title: "No platforms selected", description: "Please select at least one platform.", variant: "destructive" });
                         return;
                       }
 
-                      const publishablePlatforms = localPlatforms.filter(p => p !== "unassigned");
+                      const publishablePlatforms = currentPlatforms.filter(p => p !== "unassigned");
                       if (publishablePlatforms.length === 0) {
                         toast({ title: "No publishable platform", description: "Please select a valid platform (not 'unassigned').", variant: "destructive" });
                         return;
@@ -864,6 +875,7 @@ export function PostReviewPanel({
                           hashtags: post.hashtags,
                           image_url: post.image_url,
                           page_name: combo.page,
+                          content_type: localContentType,
                         });
                         if (!ok) allOk = false;
                       }

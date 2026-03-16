@@ -70,11 +70,12 @@ serve(async (req) => {
 
     const publishSchema = z.object({
       platform: z.enum(["facebook", "instagram", "linkedin", "twitter"]),
-      message: z.string().min(1).max(63206),
+      message: z.string().max(63206).optional().default(""),
       image_url: z.string().url().max(2000).optional(),
       post_id: z.string().uuid().optional(),
       page_name: z.string().optional(),
       force_publish: z.boolean().optional(),
+      content_type: z.enum(["post", "reel", "story"]).optional().default("post"),
     });
     const parsed = publishSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -83,7 +84,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish } = parsed.data;
+    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish, content_type } = parsed.data;
 
     // Strip Persian translation block — server-side safety net
     let message = rawMessage;
@@ -235,7 +236,7 @@ serve(async (req) => {
       const matchedIg = igAccounts.find((ig) => ig.pageId === pageId);
       if (matchedIg) selectedIg = matchedIg;
       else if (page_name) console.warn(`No IG account matched pageId ${pageId}. Using first: ${igAccounts[0].username}`);
-      result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url);
+      result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url, content_type);
     } else if (platform === "linkedin") {
       result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url);
     } else if (platform === "twitter") {
@@ -318,12 +319,15 @@ async function publishToInstagram(
   igAccountId: string,
   accessToken: string,
   caption: string,
-  imageUrl?: string
+  imageUrl?: string,
+  contentType: string = "post"
 ): Promise<{ id?: string; error?: string }> {
   try {
     if (!imageUrl) {
       return { error: "Instagram requires an image to publish. Please add an image to your post." };
     }
+
+    const isStory = contentType === "story";
 
     // Step 1: Create media container
     // Detect video: check extension first, then HEAD content-type as fallback
@@ -337,15 +341,27 @@ async function publishToInstagram(
     }
 
     const containerBody: Record<string, string> = {
-      caption,
       access_token: accessToken,
     };
-    if (isVideo) {
+
+    // Stories: media_type = STORIES, no caption allowed by IG API
+    if (isStory) {
+      containerBody.media_type = "STORIES";
+      if (isVideo) {
+        containerBody.video_url = imageUrl;
+      } else {
+        containerBody.image_url = imageUrl;
+      }
+      // Stories don't support captions per Instagram Graph API
+      console.log(`[social-publish] Publishing Instagram Story (video=${isVideo})`);
+    } else if (isVideo) {
       containerBody.media_type = "REELS";
       containerBody.video_url = imageUrl;
+      containerBody.caption = caption;
     } else {
       // For single image posts, omit media_type entirely per IG Graph API
       containerBody.image_url = imageUrl;
+      containerBody.caption = caption;
     }
     const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
       method: "POST",

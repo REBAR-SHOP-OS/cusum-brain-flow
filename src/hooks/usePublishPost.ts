@@ -26,6 +26,7 @@ export function usePublishPost() {
     hashtags: string[];
     image_url: string | null;
     page_name?: string;
+    content_type?: string;
   }) => {
     setPublishing(true);
     try {
@@ -71,6 +72,7 @@ export function usePublishPost() {
           post_id: post.id,
           page_name: post.page_name,
           force_publish: true,
+          content_type: post.content_type || "post",
         }),
         signal: controller.signal,
       });

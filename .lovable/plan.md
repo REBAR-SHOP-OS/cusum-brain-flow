@@ -1,86 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-مشکل را دوباره بررسی کردم.
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-Do I know what the issue is? Yes.
+## Completed: Add All Wan 2.6 Capabilities
 
-## مشکل واقعی چیست
-این خطا فقط یک باگ ساده در دکمه Publish نیست؛ دو ریشه دارد:
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-1. `PostReviewPanel` بعد از اینکه پلتفرم پست از `unassigned` به `instagram` آپدیت می‌شود، همیشه state محلی را از داده جدید sync نمی‌کند.  
-   یعنی رکورد ممکن است آپدیت شده باشد، اما پنل هنوز `unassigned` نشان می‌دهد و همان را برای Publish بررسی می‌کند.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-2. مسیر Publish اصلاً story را به‌صورت واقعی story منتشر نمی‌کند.  
-   در حال حاضر:
-   - فرانت `content_type` را به publish API نمی‌فرستد
-   - بک‌اند در `social-publish` فقط:
-     - تصویر را feed post
-     - ویدئو را reel
-     در نظر می‌گیرد
-   - برای Instagram Story باید `media_type: "STORIES"` استفاده شود
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-بنابراین حتی اگر خطای `unassigned` را موقتاً دور بزنیم، انتشار story هنوز ریشه‌ای کامل نشده است.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-## فایل‌هایی که باید اصلاح شوند
-- `src/components/social/PostReviewPanel.tsx`
-- `src/hooks/usePublishPost.ts`
-- `supabase/functions/social-publish/index.ts`
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-## پلن اصلاح ریشه‌ای
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 1) Sync واقعی state پنل با پست
-در `PostReviewPanel` وابستگی sync محلی فقط روی `post.id` نباشد.  
-باید با تغییر این‌ها هم state تازه شود:
-- `post.platform`
-- `post.page_name`
-- `post.content_type`
-
-این باعث می‌شود اگر داستان بعد از generate به `instagram` تغییر کرد، UI فوراً همان را نشان بدهد و دیگر `unassigned` نماند.
-
-### 2) Repair دفاعی قبل از Publish
-در Publish Now اگر پست `story` باشد و platform هنوز `unassigned` باشد:
-- ابتدا پلتفرم به `instagram` اصلاح شود
-- state محلی هم همان لحظه آپدیت شود
-- بعد ادامه Publish انجام شود
-
-این بخش برای استوری‌های قدیمی یا رکوردهایی که قبل از fix ساخته شده‌اند هم لازم است.
-
-### 3) ارسال `content_type` در مسیر Publish
-در `usePublishPost` باید `content_type` هم همراه درخواست ارسال شود تا بک‌اند بداند این پست:
-- post
-- reel
-- یا story
-
-است.
-
-### 4) پیاده‌سازی واقعی Story Publish در بک‌اند
-در `social-publish`:
-- schema ورودی `content_type` را بپذیرد
-- در مسیر Instagram:
-  - اگر `content_type === "story"` و فایل تصویر است: `media_type = "STORIES"`
-  - اگر story و ویدئو است: story video flow هم با `STORIES`
-  - کپشن برای story اجباری نباشد
-
-این همان چیزی است که الان در سیستم کم است.
-
-### 5) محدود کردن پلتفرم‌های نامعتبر برای Story
-Story نباید مثل یک post عادی برای همه پلتفرم‌ها ارسال شود.  
-برای این پروژه بهترین رفتار این است که:
-- Story فقط روی Instagram (و گزینه‌های map‌شده به Instagram) publish شود
-- اگر کاربر پلتفرم ناسازگار انتخاب کرده باشد، پیام واضح بگیرد
-
-### 6) خطایابی بهتر
-برای اینکه دوباره در حلقه خطا نمانیم:
-- لاگ واضح برای `content_type`, `platform`, `resolvedPlatform`
-- و پیام خطای جدا برای:
-  - stale `unassigned`
-  - unsupported story platform
-  - Instagram Story API failure
-
-## نتیجه بعد از اجرا
-بعد از این اصلاح:
-- پنل دیگر `unassigned` گیر نمی‌کند
-- استوری‌های جدید و قدیمی قبل از Publish خودکار repair می‌شوند
-- Publish Story واقعاً به‌صورت Story در Instagram انجام می‌شود، نه feed post عادی
-
-## نکته فنی
-این مشکل نیاز به تغییر دیتابیس ندارد؛ فقط باید مسیر UI state + publish request + backend publish logic یکپارچه شود.
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
