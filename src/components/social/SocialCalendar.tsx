@@ -5,9 +5,6 @@ import type { SocialPost } from "@/hooks/useSocialPosts";
 
 const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
 
-const STATUS_PRIORITY: Record<string, number> = {
-  declined: 0, draft: 1, pending: 2, scheduled: 3, published: 4,
-};
 
 function groupByPlatform(posts: SocialPost[]) {
   const map = new Map<string, SocialPost[]>();
@@ -26,12 +23,26 @@ function groupByPlatform(posts: SocialPost[]) {
   });
 }
 
-function worstStatus(posts: SocialPost[]) {
-  let worst = posts[0];
+const STATUS_LABELS: Record<string, string> = {
+  published: "Published ✅",
+  scheduled: "Scheduled 📅",
+  draft: "Draft",
+  pending_approval: "Pending Approval ⏳",
+  declined: "Declined ❌",
+};
+
+function statusSummary(posts: SocialPost[]): { dominant: string; label: string } {
+  const counts: Record<string, number> = {};
   for (const p of posts) {
-    if ((STATUS_PRIORITY[p.status] ?? 2) < (STATUS_PRIORITY[worst.status] ?? 2)) worst = p;
+    counts[p.status] = (counts[p.status] || 0) + 1;
   }
-  return worst.status;
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const dominant = entries[0][0];
+  if (entries.length === 1) {
+    return { dominant, label: STATUS_LABELS[dominant] || dominant };
+  }
+  const parts = entries.map(([s, n]) => `${n} ${STATUS_LABELS[s] || s}`);
+  return { dominant, label: parts.join(" · ") };
 }
 
 const platformIcons: Record<string, { bg: string; icon: JSX.Element }> = {
@@ -157,7 +168,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const pIcon = platformIcons[platformName] || platformIcons.twitter;
                 const groupIds = posts.map(p => p.id);
                 const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
-                const status = worstStatus(posts);
+                const { dominant: status, label: statusLabel } = statusSummary(posts);
                 const firstPost = posts[0];
 
                 return (
@@ -218,13 +229,13 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       )}
                       {firstPost.scheduled_date && <span className="text-muted-foreground">·</span>}
                       <span className={cn(
-                        "capitalize",
                         status === "published" ? "text-green-600 font-medium"
                           : status === "scheduled" ? "text-primary"
                           : status === "declined" ? "text-destructive"
+                          : status === "pending_approval" ? "text-yellow-600"
                           : "text-muted-foreground"
                       )}>
-                        {status === "published" ? "Published ✅" : status}
+                        {statusLabel}
                         {status === "scheduled" && firstPost.neel_approved && (
                           <span className="text-green-500 font-medium ml-1">· Approved</span>
                         )}
