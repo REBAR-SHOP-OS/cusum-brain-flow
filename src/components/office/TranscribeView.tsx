@@ -846,6 +846,50 @@ export function TranscribeView() {
         </Card>
       )}
     </div>
+
+      {/* Right: Live Translation Panel */}
+      <div className="hidden lg:flex flex-col w-80 border-l border-border bg-muted/20 shrink-0">
+        {/* Language selector header */}
+        <div className="flex items-center gap-2 p-3 border-b border-border">
+          <Globe className="w-4 h-4 text-primary" />
+          <Select value={translationLang} onValueChange={(v) => { setTranslationLang(v); setTranslationMap({}); setTranslatingIds(new Set()); translatedForLangRef.current = v; }}>
+            <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Select language" /></SelectTrigger>
+            <SelectContent>
+              {TRANSLATION_LANGUAGES.map((l) => (
+                <SelectItem key={l.value} value={l.value} className="text-xs">{l.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Translated segments */}
+        <ScrollArea className="flex-1 p-3">
+          <div className="space-y-2">
+            {realtime.committedTranscripts.length === 0 && (
+              <p className="text-xs text-muted-foreground italic text-center pt-8">
+                Live translation will appear here as you speak…
+              </p>
+            )}
+            {realtime.committedTranscripts.map((t) => {
+              const translated = translationMap[t.id];
+              const isTranslating = translatingIds.has(t.id);
+              return (
+                <div key={t.id} className="space-y-0.5">
+                  <p className="text-sm text-foreground" dir="auto">
+                    {translated || t.text}
+                    {isTranslating && (
+                      <span className="ml-1 text-xs text-muted-foreground italic animate-pulse">translating…</span>
+                    )}
+                  </p>
+                  {translated && translated !== t.text && (
+                    <p className="text-[11px] text-muted-foreground/50 italic">{t.text}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </div>
     </div>
   );
 }
