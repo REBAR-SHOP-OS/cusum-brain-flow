@@ -25,7 +25,7 @@ serve(async (req) => {
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
       _user_id: rateLimitId,
       _function_name: "translate-message",
-      _max_requests: 20,
+      _max_requests: 60,
       _window_seconds: 60,
     });
     if (allowed === false) {
@@ -93,7 +93,7 @@ IMPORTANT: If the input is completely unintelligible gibberish, noise artifacts,
 
     const result = await callAI({
       provider: "gemini",
-      model: "gemini-2.5-pro",
+      model: "gemini-2.5-flash",
       agentName: "system",
       messages: [
         {
