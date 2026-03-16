@@ -1,46 +1,39 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Pixel Agent Must Generate Image on Short Commands Like "بساز"
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+When the user selects a Style and Product via the toolbar pills and types a short command like "بساز" (Farsi for "create/build"), the Pixel agent doesn't recognize this as a command to immediately generate an image using the selected style/product. Instead, it asks clarifying questions (like "which slot?").
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+The style/product selections ARE already being passed correctly to the backend (via `extraContext.imageStyles` and `extraContext.selectedProducts`), and the enforcement logic in both the system prompt override and `agentToolExecutor.ts` is robust. The gap is in the **agent's base prompt** — it only describes slot-based generation and doesn't handle free-form "just create an image" commands.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Fix
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. `supabase/functions/_shared/agents/marketing.ts` — Social (Pixel) agent prompt
+Add a new section after the slot-based instructions (around line 12) that instructs Pixel to:
+- Recognize short creation commands in any language (بساز, create, generate, make, build, etc.)
+- When user has style/product selections active AND sends a short creation command → immediately call `generate_image` using those selections, WITHOUT asking for a slot number
+- Use a random slot theme or the most contextually appropriate one
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+Add after line 11 (after "## WHEN USER SELECTS A SLOT"):
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+```
+## WHEN USER SENDS A SHORT CREATION COMMAND
+If the user types a short message like "بساز", "create", "generate", "build", "make an image", "عکس بساز", or any brief instruction to create content — AND the system context includes imageStyles or selectedProducts — you MUST:
+1. **IMMEDIATELY call `generate_image`** — do NOT ask which slot, do NOT ask for clarification
+2. Use the selected style and product from context as the primary creative direction
+3. Pick a random slot theme for variety (or "Product promotional" as default)
+4. Follow all the same image rules, caption format, and Persian translation requirements
+This applies to ANY short message that implies "create something now" — the user's toolbar selections ARE their specification.
+```
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. `supabase/functions/ai-agent/index.ts` — Enhance the socialStyleOverride (line 964)
+Add an explicit instruction that short messages mean "generate now":
+
+After line 965, add:
+```
+socialStyleOverride += `\nIMPORTANT: If the user's message is short (under 20 words) and implies creation (e.g. "بساز", "create", "generate", "make"), treat it as an IMMEDIATE command to call generate_image with the above style/product selections. Do NOT ask for slot number or any clarification.\n`;
+```
+
+These two changes ensure the AI agent understands that toolbar selections + short creation command = immediate image generation.
+
