@@ -469,13 +469,13 @@ async function validateExtract(sb: any, sessionId: string) {
         error_type: "blocker",
         message: `Row ${row.row_index}: Missing bar size`,
       });
-    } else if (!VALID_BAR_SIZES.includes(barSize.toUpperCase())) {
+    } else if (!VALID_BAR_SIZES.includes(barSize.toUpperCase()) && !normalizeBarSize(barSize)) {
       errors.push({
         session_id: sessionId,
         row_id: row.id,
         field: "bar_size",
         error_type: "blocker",
-        message: `Row ${row.row_index}: Invalid bar size "${barSize}". Expected: ${VALID_BAR_SIZES.join(", ")}`,
+        message: `Row ${row.row_index}: Invalid bar size "${barSize}". Expected metric: ${VALID_BAR_SIZES.join(", ")} or imperial: #3, #4, #5, #6, #8, #9, #11, #14, #18`,
       });
     }
 
