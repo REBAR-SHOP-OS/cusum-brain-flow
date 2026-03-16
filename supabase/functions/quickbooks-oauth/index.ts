@@ -1320,7 +1320,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
 
   await logAuditEvent(supabase, companyId, userId, "qb_invoice_created", "Invoice", data.Invoice?.Id || "", {
-    docNumber: data.Invoice?.DocNumber, customerId, totalAmount: data.Invoice?.TotalAmt, orderId,
+    docNumber: data.Invoice?.DocNumber, customerId, totalAmount: data.Invoice?.TotalAmt, orderId, dedupKey,
   });
 
   return jsonRes({

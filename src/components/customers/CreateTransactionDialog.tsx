@@ -354,7 +354,12 @@ export function CreateTransactionDialog({
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      toast({ title: `${LABELS[type]} created successfully` });
+      if (data?.alreadyExisted) {
+        toast({ title: `${LABELS[type]} #${data.docNumber} already created — duplicate prevented` });
+      } else {
+        toast({ title: `${LABELS[type]} created successfully` });
+        setLastCreated({ docNumber: data?.docNumber || "", at: Date.now() });
+      }
       queryClient.invalidateQueries({ queryKey: ["qb_customer_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["quickbooks-data"] });
       queryClient.invalidateQueries({ queryKey: ["qb_transactions"] });
