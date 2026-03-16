@@ -171,7 +171,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const pIcon = platformIcons[platformName] || platformIcons.twitter;
                 const groupIds = posts.map(p => p.id);
                 const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
-                const status = worstStatus(posts);
+                const { dominant: status, label: statusLabel } = statusSummary(posts);
                 const firstPost = posts[0];
 
                 return (
