@@ -1,46 +1,75 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix Duplicate Invoice Creation — Idempotency Guard
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Root Cause
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+There are two code paths that create QuickBooks invoices:
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+1. **`useOrders.sendToQuickBooks`** — passes `orderId`, server checks for existing `quickbooks_invoice_id` before creating. **Already idempotent.**
+2. **`CreateTransactionDialog`** — creates invoices directly from the customer detail page with NO `orderId` and NO dedup key. Every submit creates a new QB invoice. **This is the source of duplicates like #2253, #2253-1, #2253-2.**
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Solution — Two-layer idempotency
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 1. Frontend: Add submission guard with cooldown (`CreateTransactionDialog.tsx`)
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+- After a successful invoice creation, store a short-lived "last created" fingerprint (customer + amount + timestamp) to prevent identical re-submissions within 60 seconds
+- Show a confirmation dialog if the user tries to create an invoice with the same customer and amount within that window: *"You just created Invoice #XXXX for this customer 30s ago. Create another?"*
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. Backend: Content-based dedup in `handleCreateInvoice` (`quickbooks-oauth/index.ts`)
+
+When no `orderId` is provided (ad-hoc invoice from CreateTransactionDialog):
+- Before creating, query QuickBooks for recent invoices (last 24h) matching the same `CustomerRef` and `TotalAmt`
+- If a match is found and it's less than 5 minutes old, return the existing invoice instead of creating a new one
+- Add a `dedupKey` parameter option: if the frontend generates a unique key per form session (e.g. `crypto.randomUUID()` on dialog open), the server can use it to track and prevent duplicate submissions
+
+### 3. Frontend: Generate a `dedupKey` per dialog session (`CreateTransactionDialog.tsx`)
+
+- On dialog open, generate `dedupKey = crypto.randomUUID()`
+- Pass it in the request body to `quickbooks-oauth`
+- Server stores `dedupKey` in a lightweight cache (or checks `audit_log`) before creating
+
+### Files to Change
+
+| File | Change |
+|------|--------|
+| `src/components/customers/CreateTransactionDialog.tsx` | Generate `dedupKey` on open, pass in body, add recent-creation warning |
+| `supabase/functions/quickbooks-oauth/index.ts` | In `handleCreateInvoice`: when no `orderId`, check `audit_log` for matching `dedupKey` in last 5 min; if found, return existing invoice |
+
+### Implementation Detail
+
+**CreateTransactionDialog.tsx:**
+```ts
+// On dialog open, generate unique session key
+const [dedupKey] = useState(() => crypto.randomUUID());
+
+// In submit handler, add to body:
+body.dedupKey = dedupKey;
+```
+
+**quickbooks-oauth/index.ts — handleCreateInvoice:**
+```ts
+// After orderId check, add dedupKey check:
+if (dedupKey) {
+  const { data: existing } = await supabase
+    .from("audit_log")
+    .select("details")
+    .eq("event_type", "qb_invoice_created")
+    .eq("details->>dedupKey", dedupKey)
+    .maybeSingle();
+  if (existing) {
+    return jsonRes({
+      success: true,
+      alreadyExisted: true,
+      docNumber: existing.details.docNumber,
+      message: "Duplicate prevented — invoice already created for this session",
+    });
+  }
+}
+
+// In audit log call, include dedupKey:
+await logAuditEvent(..., { docNumber, customerId, totalAmount, orderId, dedupKey });
+```
+
+No database schema changes needed — uses existing `audit_log` table.
+
