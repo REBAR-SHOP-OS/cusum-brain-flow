@@ -29,6 +29,7 @@ const yearlyEvents: CalendarEvent[] = [
   // March
   { month: 3, day: 8, name: "International Women's Day", region: "global", contentTheme: "Women in construction & trades", hashtags: ["#IWD", "#WomenInConstruction", "#WomenInTrades"] },
   { month: 3, day: 17, name: "St. Patrick's Day", region: "global", contentTheme: "Lucky to have the best team, green builds", hashtags: ["#StPatricksDay", "#LuckyTeam"] },
+  { month: 3, day: 20, name: "Nowruz (Persian New Year)", region: "global", contentTheme: "New beginnings, fresh builds, celebrating diversity in construction", hashtags: ["#Nowruz", "#PersianNewYear", "#NewBeginnings", "#ConstructionSeason"] },
   { month: 3, day: 20, name: "First Day of Spring", region: "global", contentTheme: "Construction season kickoff, spring projects", hashtags: ["#SpringIsHere", "#ConstructionSeason", "#BuildingSeason"] },
   // April
   { month: 4, day: 18, name: "Good Friday (CA)", region: "CA", contentTheme: "Reflect on safety, rest, team appreciation", hashtags: ["#GoodFriday", "#SafetyFirst"] },

@@ -794,6 +794,88 @@ export async function executeToolCall(
             break;
           }
 
+          // Fallback: if all attempts failed and ratio is not 1:1, retry with square ratio
+          if (!generated && aspectRatio && aspectRatio !== "1:1") {
+            console.log(`[generate_image] All attempts failed with ratio ${aspectRatio}, retrying with 1:1 fallback...`);
+            for (const attempt of attempts) {
+              const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+              if (attempt.useLogo && logoUrl) {
+                contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+                contentParts.push({ type: "text", text: "Incorporate the provided company logo as a branded watermark." });
+              }
+              const brainUrls = (context as any)?.__brainImageUrls as string[] | undefined;
+              if (brainUrls?.length) {
+                contentParts.push({ type: "text", text: "Use the following product reference images to match the real appearance of the products:" });
+                for (const bUrl of brainUrls) {
+                  contentParts.push({ type: "image_url", image_url: { url: bUrl } });
+                }
+              }
+
+              const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: attempt.model,
+                  messages: [{ role: "user", content: contentParts }],
+                  modalities: ["image", "text"],
+                  aspect_ratio: "1:1",
+                }),
+              });
+
+              if (!aiRes.ok) { lastError = `${attempt.model} (1:1 fallback): ${aiRes.status}`; continue; }
+
+              const aiData = await aiRes.json();
+              const msg = aiData?.choices?.[0]?.message;
+              let imageDataUrl: string | null = null;
+              imageDataUrl = msg?.images?.[0]?.image_url?.url || null;
+              if (!imageDataUrl && Array.isArray(msg?.parts)) {
+                for (const part of msg.parts) {
+                  if (part.inline_data?.data) {
+                    imageDataUrl = `data:${part.inline_data.mime_type || "image/png"};base64,${part.inline_data.data}`;
+                    break;
+                  }
+                }
+              }
+              if (!imageDataUrl && Array.isArray(msg?.content)) {
+                for (const block of msg.content) {
+                  if (block.type === "image_url" && block.image_url?.url) { imageDataUrl = block.image_url.url; break; }
+                }
+              }
+
+              if (!imageDataUrl) { lastError = `${attempt.model} (1:1 fallback): no parseable image`; continue; }
+
+              let imageBytes: Uint8Array;
+              if (imageDataUrl.startsWith("data:")) {
+                const b64 = imageDataUrl.replace(/^data:image\/\w+;base64,/, "");
+                imageBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+              } else {
+                const dl = await fetch(imageDataUrl);
+                if (!dl.ok) { lastError = "Failed to download image (1:1 fallback)"; continue; }
+                imageBytes = new Uint8Array(await dl.arrayBuffer());
+              }
+
+              const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+              const { error: uploadError } = await svcClient.storage
+                .from("social-images")
+                .upload(imagePath, imageBytes, { contentType: "image/png" });
+
+              if (uploadError) { lastError = `Upload (1:1 fallback): ${uploadError.message}`; continue; }
+
+              const { data: urlData } = svcClient.storage.from("social-images").getPublicUrl(imagePath);
+              result.result = {
+                success: true,
+                image_url: urlData.publicUrl,
+                slot,
+                message: `Image generated with square fallback for slot ${slot}`,
+              };
+              generated = true;
+              break;
+            }
+          }
+
           if (!generated) {
             result.result = { error: `All attempts failed. Last: ${lastError}` };
           }
