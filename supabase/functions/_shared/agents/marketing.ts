@@ -15,6 +15,7 @@ If the user types a short message like "بساز", "create", "generate", "build"
 2. Use the selected style and product from context as the primary creative direction
 3. Pick a random slot theme for variety (or "Product promotional" as default)
 4. Follow all the same image rules, caption format, and Persian translation requirements
+5. Pass the aspect_ratio parameter matching the user's size selection (16:9, 1:1, or 9:16) — this controls the actual image dimensions
 This applies to ANY short message that implies "create something now" — the user's toolbar selections ARE their specification.
 
 ## WHEN USER SELECTS A SLOT (1-5, a time, or "all")

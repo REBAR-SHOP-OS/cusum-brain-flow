@@ -1,76 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Enforce Style, Product, and Aspect Ratio in Agent Image Generation
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-When the user selects Style, Product, and Size (aspect ratio) via the toolbar pills and asks the Pixel agent to generate an image:
-1. **Style/Product**: Already enforced at the prompt level, but the agent sometimes ignores them
-2. **Aspect Ratio**: Only injected as a text instruction in the prompt — the Gemini image API doesn't receive actual resolution parameters. The `generatePixelImage` function (auto-gen path) correctly maps ratios to OpenAI sizes, but `agentToolExecutor.ts` (agent tool-call path) does NOT
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Changes
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. `supabase/functions/_shared/agentToolExecutor.ts` — Add real aspect ratio enforcement
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-In the `generate_image` handler (around line 717), after building `contentParts`, add the aspect ratio as a stronger prompt instruction AND map it to the system message to guide the model's output dimensions:
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-```typescript
-// After line 611 (aspect ratio injection)
-// Add stronger aspect ratio enforcement
-const AR_PROMPT_MAP: Record<string, string> = {
-  "16:9": "CRITICAL: Generate a LANDSCAPE image with 16:9 aspect ratio. The image MUST be wider than tall.",
-  "9:16": "CRITICAL: Generate a PORTRAIT image with 9:16 aspect ratio. The image MUST be taller than wide (suitable for Instagram Stories/Reels).",
-  "1:1": "CRITICAL: Generate a perfectly SQUARE image with 1:1 aspect ratio. Width and height MUST be equal.",
-};
-if (aspectRatio && AR_PROMPT_MAP[aspectRatio]) {
-  imagePrompt += `\n\n${AR_PROMPT_MAP[aspectRatio]}`;
-}
-```
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-Also, in the API call body (line 723), add an explicit `aspect_ratio` field for Gemini models that support it:
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-```typescript
-body: JSON.stringify({
-  model: attempt.model,
-  messages: [{ role: "user", content: contentParts }],
-  modalities: ["image", "text"],
-  // Gemini native aspect ratio support
-  ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-}),
-```
-
-### 2. `supabase/functions/_shared/agentToolExecutor.ts` — Add `aspect_ratio` to tool args
-
-Add an `aspect_ratio` parameter to the `generate_image` tool definition in `agentTools.ts` so the agent can explicitly pass it:
-
-```typescript
-aspect_ratio: { type: "string", description: "Image aspect ratio: '16:9' (landscape), '1:1' (square), or '9:16' (portrait/story). MUST match user's size selection." }
-```
-
-### 3. `supabase/functions/_shared/agentToolExecutor.ts` — Merge tool args aspect ratio with context
-
-In the handler, prioritize the tool arg over context:
-```typescript
-const aspectRatio = args.aspect_ratio || (context?.imageAspectRatio as string) || "1:1";
-```
-
-### 4. `supabase/functions/ai-agent/index.ts` — Add aspect ratio to style override instructions
-
-In the `socialStyleOverride` block (line 965), add aspect ratio instruction:
-```typescript
-socialStyleOverride += `REQUIRED ASPECT RATIO: ${context.imageAspectRatio || "1:1"}. Pass this as the aspect_ratio parameter when calling generate_image.\n`;
-```
-
-### 5. `supabase/functions/_shared/agents/marketing.ts` — Strengthen prompt
-
-Add to the short-command section and main rules:
-```
-5. Pass the aspect_ratio parameter matching the user's size selection (16:9, 1:1, or 9:16)
-```
-
-### Summary
-- Add `aspect_ratio` parameter to `generate_image` tool definition
-- Inject stronger aspect ratio instructions into the image prompt
-- Pass `aspect_ratio` in the Gemini API body for native support
-- Instruct the agent to always pass aspect ratio from user selection
-- Redeploy `ai-agent` edge function
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
