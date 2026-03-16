@@ -978,6 +978,7 @@ serve(async (req) => {
     const firstResponse = await callAIStream({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "webbuilder",
       messages: [{ role: "system", content: systemPrompt }, ...trimmed],
       tools,
       stream: true,
