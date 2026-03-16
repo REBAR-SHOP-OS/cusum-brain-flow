@@ -73,12 +73,13 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
     if (!isSuperAdmin) return null;
 
-    return (
+    return createPortal(
       <>
         {showVoiceChat && (
           <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
         )}
         <div
+          data-feedback-btn="true"
           className="fixed z-[9999] group"
           style={{ left: pos.x, top: pos.y, touchAction: "none" }}
           onMouseEnter={() => !isMobile && setShowActions(true)}
