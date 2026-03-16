@@ -298,6 +298,7 @@ export function CreateTransactionDialog({
         customerId: customerQbId,
         customerName,
         memo,
+        dedupKey,
       };
 
       if (needsLineItems(type)) {
