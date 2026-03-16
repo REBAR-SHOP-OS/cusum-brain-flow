@@ -79,6 +79,7 @@ serve(async (req) => {
           const classifyResult = await callAI({
             provider: "gpt",
             model: "gpt-4o-mini",
+            agentName: "email",
             messages: [
               { role: "system", content: "You classify inbound business emails for a rebar/steel manufacturing company." },
               { role: "user", content: `Classify this email.\n\nFrom: ${from}\nSubject: ${subject}\n\n${emailBody.slice(0, 2000)}` },
