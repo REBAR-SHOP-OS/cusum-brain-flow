@@ -177,7 +177,7 @@ export function DetailedListView() {
                   <span className="text-xs text-muted-foreground">400W</span>
                   <span className="text-xs font-bold text-primary">{item.mark_number || item.id.slice(0, 5)}</span>
                   <span className="text-xs font-medium">{item.total_pieces}</span>
-                  <span className="text-xs">{item.bar_code}</span>
+                  <span className="text-xs">{barSizeLabel(item.bar_code, unitSystem)}</span>
                   <span>
                     {item.bend_type === "bend" ? (
                       <Badge className="bg-orange-500/20 text-orange-400 text-[9px] px-1">
