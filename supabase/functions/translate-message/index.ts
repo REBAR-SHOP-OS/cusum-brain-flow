@@ -68,28 +68,25 @@ serve(async (req) => {
 
     // Build context section for the prompt
     const contextSection = context
-      ? `\n\nCONVERSATION CONTEXT (previous translated segments from the same session):\n${context}\n\nUse this context to:\n- Maintain topic coherence and consistent terminology\n- Resolve ambiguous phonetic approximations by inferring from conversation flow\n- Prefer semantic coherence over literal phonetic matching`
+      ? `\n\nCONVERSATION CONTEXT (previous translated segments for terminology consistency):\n${context}\n\nUse this context ONLY for consistent terminology — never alter the source meaning.`
       : "";
 
-    // Build system prompt — enhanced for noisy speech-to-text input
-    const systemPrompt = `You are a speech-to-text post-processor and translator. The input text comes from an automatic speech recognition system that may produce:
-- Phonetic approximations of non-English speech written in English letters (e.g., "biya inja" for Persian "بیا اینجا")
-- Garbled or nonsensical English that is actually a phonetic rendering of another language
-- Filler words, hesitations, or background noise artifacts (e.g., "[laughter]", "um", "uh")
-- Mixed language fragments
+    // Build system prompt — faithful translation, no reconstruction
+    const systemPrompt = `You are a faithful translator. The input text comes from an automatic speech recognition system that has already transcribed the audio accurately.
 
 Your job:
-1. First, determine the ACTUAL language that was spoken by analyzing phonetic patterns, context clues, and semantic meaning
-2. Ignore filler words, noise descriptions in brackets, and nonsensical fragments
-3. Reconstruct the intended meaning of what was actually said
-4. Produce clean, accurate translations in ONLY the requested target languages
+1. Translate the text EXACTLY as given into the requested target languages
+2. Do NOT change, rephrase, interpret, or guess at what was "actually meant"
+3. Do NOT reconstruct phonetic approximations into other languages — translate the words as they are
+4. Ignore only pure noise artifacts like "[laughter]", "[background noise]", or replacement characters
+5. Preserve the speaker's actual words faithfully in each translation
 
-Return ONLY a JSON object with language codes as keys and clean translations as values. No markdown, no explanation.
+Return ONLY a JSON object with language codes as keys and translations as values. No markdown, no explanation.
 Example: {"fa": "سلام، حالت چطوره؟", "en": "Hello, how are you?"}
 
 IMPORTANT: Each language value must contain text ONLY in that language. The "en" value must be pure English. The "fa" value must be pure Farsi/Persian script. Never mix languages in a single value.
-IMPORTANT: When the speech is clearly in a non-English language rendered phonetically, prioritize reconstructing the original language meaning over literal English interpretation.
-IMPORTANT: If the input is completely unintelligible gibberish, noise artifacts, meaningless symbols (e.g. Ol Chiki script fragments, replacement characters, random Unicode), or has no recoverable speech content, return empty strings for ALL language keys (e.g., {"en": "", "fa": ""}). Do NOT fabricate or guess content from noise.${contextSection}`;
+IMPORTANT: Translate faithfully — do not add, remove, or change the meaning of what was said.
+IMPORTANT: If the input is completely unintelligible gibberish, noise artifacts, meaningless symbols, or has no recoverable speech content, return empty strings for ALL language keys (e.g., {"en": "", "fa": ""}). Do NOT fabricate content from noise.${contextSection}`;
 
     const result = await callAI({
       provider: "gemini",
