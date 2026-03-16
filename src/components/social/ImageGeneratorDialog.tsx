@@ -61,12 +61,11 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
   const [pexelsInspired, setPexelsInspired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { brandKit } = useBrandKit();
+  const { brandKit, saveBrandKit } = useBrandKit();
   const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
-
-
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const toggleTheme = (id: string) => {
     setSelectedThemes((prev) => {
@@ -75,6 +74,36 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
       else next.add(id);
       return next;
     });
+  };
+
+  const handleLogoUpload = async (file: File) => {
+    setUploadingLogo(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const ext = file.name.split(".").pop() || "png";
+      const fileName = `${user.id}/logo-${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("brand-assets")
+        .upload(fileName, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data: publicData } = supabase.storage.from("brand-assets").getPublicUrl(fileName);
+      saveBrandKit.mutate({
+        business_name: brandKit?.business_name || "",
+        logo_url: publicData.publicUrl,
+        brand_voice: brandKit?.brand_voice || "",
+        description: brandKit?.description || "",
+        value_prop: brandKit?.value_prop || "",
+        colors: brandKit?.colors || { primary: "#000", secondary: "#fff", tertiary: "#888" },
+        media_urls: brandKit?.media_urls || [],
+      } as any);
+      // Auto-select logo theme
+      setSelectedThemes((prev) => new Set(prev).add("logo"));
+    } catch (err: any) {
+      console.error("Logo upload failed:", err);
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   const handleClose = () => {
