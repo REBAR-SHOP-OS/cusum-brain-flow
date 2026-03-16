@@ -5,7 +5,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Loader2, Languages, ListChecks, FileText, Sparkles, Eraser, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
+import type jsPDF from "jspdf";
 
 const TARGET_LANGUAGES = [
   "English", "Spanish", "French", "German", "Portuguese", "Italian", "Dutch",
