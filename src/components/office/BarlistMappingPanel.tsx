@@ -33,6 +33,15 @@ const CANONICAL_FIELDS: CanonicalField[] = [
 
 const DIM_FIELDS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
 
+type LengthUnit = "mm" | "cm" | "m" | "in" | "ft";
+const LENGTH_UNITS: { value: LengthUnit; label: string; factor: number }[] = [
+  { value: "mm", label: "mm", factor: 1 },
+  { value: "cm", label: "cm", factor: 10 },
+  { value: "m",  label: "m",  factor: 1000 },
+  { value: "in", label: "inches", factor: 25.4 },
+  { value: "ft", label: "feet", factor: 304.8 },
+];
+
 // ── Header alias map (lowercase → canonical key) ─────────────
 const HEADER_ALIASES: Record<string, string> = {
   // mark
@@ -171,6 +180,9 @@ export interface MappedRow {
 export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disabled }: BarlistMappingPanelProps) {
   const [mapping, setMapping] = useState<Record<string, string>>(() => autoDetectMapping(rows));
   const [confirmed, setConfirmed] = useState(false);
+  const [lengthUnit, setLengthUnit] = useState<LengthUnit>("mm");
+
+  const lengthFactor = useMemo(() => LENGTH_UNITS.find(u => u.value === lengthUnit)?.factor ?? 1, [lengthUnit]);
 
   const issues = useMemo(() => checkDataCoverage(rows, mapping), [rows, mapping]);
   const blockers = issues.filter(i => i.type === "missing" || i.type === "empty");
@@ -189,13 +201,13 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       mark: String((row as any)[mapping.mark] ?? ""),
       size: String((row as any)[mapping.size] ?? ""),
       shape: String((row as any)[mapping.shape] ?? ""),
-      length: Number((row as any)[mapping.length] ?? 0),
+      length: Math.round(Number((row as any)[mapping.length] ?? 0) * lengthFactor),
       quantity: Number((row as any)[mapping.quantity] ?? 0),
       dimensions_json: buildDimensionsJson(row),
       dwg: String((row as any)[mapping.dwg] ?? ""),
       grade: String((row as any)[mapping.grade] ?? ""),
     }));
-  }, [rows, mapping]);
+  }, [rows, mapping, lengthFactor]);
 
   const handleConfirm = () => {
     if (!canConfirm) return;
@@ -205,7 +217,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       mark: String((row as any)[mapping.mark] ?? ""),
       size: String((row as any)[mapping.size] ?? ""),
       shape: String((row as any)[mapping.shape] ?? ""),
-      length: Number((row as any)[mapping.length] ?? 0),
+      length: Math.round(Number((row as any)[mapping.length] ?? 0) * lengthFactor),
       quantity: Number((row as any)[mapping.quantity] ?? 0),
       dimensions_json: buildDimensionsJson(row),
       dwg: String((row as any)[mapping.dwg] ?? ""),
@@ -242,7 +254,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
               <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border min-w-0">
                 <div className="flex items-center gap-1 min-w-[70px] shrink-0">
                   {field.required && <span className="text-destructive text-[10px]">*</span>}
-                  <span className="text-xs font-medium text-foreground truncate">{field.label}</span>
+                  <span className="text-xs font-medium text-foreground truncate">
+                    {field.key === "length" ? `Cut Length (${lengthUnit})` : field.label}
+                  </span>
                 </div>
                 <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
                 <Select
@@ -261,6 +275,24 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                     ))}
                   </SelectContent>
                 </Select>
+                {field.key === "length" && (
+                  <Select
+                    value={lengthUnit}
+                    onValueChange={(val) => { setLengthUnit(val as LengthUnit); setConfirmed(false); }}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-[80px] shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LENGTH_UNITS.map(u => (
+                        <SelectItem key={u.value} value={u.value} className="text-xs">
+                          {u.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             ))}
           </div>
