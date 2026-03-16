@@ -25,7 +25,7 @@ serve(async (req) => {
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
       _user_id: rateLimitId,
       _function_name: "translate-message",
-      _max_requests: 20,
+      _max_requests: 60,
       _window_seconds: 60,
     });
     if (allowed === false) {
