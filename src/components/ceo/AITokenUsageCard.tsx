@@ -236,9 +236,12 @@ export function AITokenUsageCard() {
                   <h4 className="text-sm font-medium mb-2">By Model</h4>
                   <div className="space-y-1 max-h-[140px] overflow-y-auto text-xs">
                     {byModel.map((m) => (
-                      <div key={m.name} className="flex justify-between items-center py-1 border-b border-border/30">
-                        <span className="truncate mr-2 text-muted-foreground">{m.name}</span>
-                        <span className="font-mono font-medium whitespace-nowrap">{formatTokens(m.tokens)}</span>
+                      <div key={m.name} className="flex justify-between items-center py-1 border-b border-border/30 gap-2">
+                        <span className="truncate text-muted-foreground">{m.name}</span>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="font-mono text-muted-foreground">{formatTokens(m.tokens)}</span>
+                          <span className="font-mono font-medium text-primary">{formatUSD(m.cost)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
