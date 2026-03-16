@@ -338,30 +338,29 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         contentParts.push({ type: "image_url", image_url: { url: post.image_url } });
       }
 
-      // Retry with backoff for transient 503 errors
+      // Model rotation for caption-only (prevents single-model 503 failures)
+      const captionOnlyModels = ["google/gemini-2.5-flash", "google/gemini-3-flash-preview", "openai/gpt-5-mini"];
       let capRes: Response | null = null;
-      const maxRetries = 3;
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
+      for (const model of captionOnlyModels) {
+        console.log(`[regenerate-post] Caption-only trying model: ${model}`);
         capRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model,
             messages: [{ role: "user", content: contentParts }],
+            ...(model.startsWith("google/") ? {} : { temperature: 1.0 }),
           }),
         });
-
-        if (capRes.ok || (capRes.status >= 400 && capRes.status < 500)) break;
-        // 5xx: retry with backoff
-        console.warn(`[regenerate-post] Caption regen attempt ${attempt + 1} failed (${capRes.status}), retrying...`);
-        if (attempt < maxRetries - 1) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        if (capRes.ok) break;
+        const errBody = await capRes.text();
+        console.error(`[regenerate-post] Caption model ${model} failed (${capRes.status}): ${errBody}`);
+        capRes = null;
+        // Small delay before next model
+        await new Promise(r => setTimeout(r, 500));
       }
 
-      if (!capRes || !capRes.ok) {
-        const errBody = capRes ? await capRes.text() : "no response";
-        console.error(`[regenerate-post] Caption-only regen failed (${capRes?.status}):`, errBody);
-        throw new Error(`Caption generation failed (${capRes?.status || "unknown"})`);
-      }
+      if (!capRes) throw new Error("Caption generation failed — all models returned errors");
 
       const capData = await capRes.json();
       const rawCap = capData.choices?.[0]?.message?.content || "";
