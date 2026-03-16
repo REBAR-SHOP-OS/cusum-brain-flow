@@ -55,6 +55,6 @@ export function FloatingMicButton({ onToggleVoice, isListening, isSupported }: F
       ) : (
         <Mic className="w-9 h-9 pointer-events-none" />
       )}
-    </button>
+    </button>,
+    document.body
   );
-}

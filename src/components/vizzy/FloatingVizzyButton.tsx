@@ -127,7 +127,8 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
             <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-background rounded-full" />
           </button>
         </div>
-      </>
+      </>,
+      document.body
     );
   }
 );

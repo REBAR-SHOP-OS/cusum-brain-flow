@@ -276,6 +276,7 @@ export function ScreenshotFeedbackButton() {
           onSpeechStateChange={handleSpeechStateChange}
         />
       )}
-    </>
+    </>,
+    document.body
   );
 }
