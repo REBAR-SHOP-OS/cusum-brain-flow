@@ -7,6 +7,8 @@ interface CommittedTranscript {
   id: string;
   text: string;
   timestamp: number;
+  translatedText?: string;
+  isTranslating?: boolean;
 }
 
 export function useRealtimeTranscribe() {
