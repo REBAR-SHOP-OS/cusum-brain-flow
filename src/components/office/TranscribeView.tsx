@@ -670,9 +670,15 @@ export function TranscribeView() {
         {CONVERSATION_SPEAKERS.map((s) => (
           <button
             key={s.name}
-            onClick={() => setSelectedSpeaker(s.name)}
+            onClick={() => {
+              if (completedSpeakers.has(s.name)) {
+                setViewingReport(s.name);
+              } else {
+                setSelectedSpeaker(s.name);
+              }
+            }}
             className={`flex flex-col items-center gap-0.5 group transition-all ${selectedSpeaker === s.name ? "scale-110" : "opacity-70 hover:opacity-100"}`}
-            title={`${s.name} ↔ NEEL`}
+            title={completedSpeakers.has(s.name) ? `View ${s.name}'s report` : `${s.name} ↔ NEEL`}
           >
             <div className="relative">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-2 ring-primary" : ""}`}>
@@ -692,7 +698,36 @@ export function TranscribeView() {
             <span className="text-[9px] font-medium text-muted-foreground group-hover:text-foreground">{s.name}</span>
           </button>
         ))}
+        {/* Final Report Button */}
+        <button
+          onClick={handleFinalReport}
+          disabled={!allSpeakersComplete || isFinalReportLoading}
+          className={`flex flex-col items-center gap-0.5 group transition-all mt-2 ${!allSpeakersComplete ? "opacity-30 cursor-not-allowed" : "opacity-70 hover:opacity-100"}`}
+          title="Generate Final Report"
+        >
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 border-dashed border-primary/50 ${allSpeakersComplete ? "bg-primary/10" : "bg-muted"}`}>
+            {isFinalReportLoading ? (
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
+            ) : (
+              <ClipboardList className="w-5 h-5 text-primary" />
+            )}
+          </div>
+          <span className="text-[9px] font-medium text-muted-foreground">Report</span>
+        </button>
       </div>
+
+      {/* Speaker Report Dialog */}
+      <Dialog open={!!viewingReport} onOpenChange={(open) => !open && setViewingReport(null)}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewingReport}'s Report</DialogTitle>
+            <DialogDescription>Individual speaker summary</DialogDescription>
+          </DialogHeader>
+          <div className="text-sm whitespace-pre-wrap text-foreground">
+            {viewingReport && (speakerReports[viewingReport] || "No report available.")}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Mobile: horizontal speaker strip */}
       <div className="flex md:hidden gap-2 px-4 pt-4 overflow-x-auto">
