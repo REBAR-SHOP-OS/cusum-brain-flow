@@ -315,6 +315,14 @@ export function FixRequestQueue() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => generateLovableCommand(req)}
+                    disabled={generatingId === req.id}
+                    className="p-1.5 rounded-md hover:bg-muted transition-colors text-primary hover:text-primary/80 disabled:opacity-50"
+                    title="Generate Lovable fix command"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${generatingId === req.id ? "animate-pulse" : ""}`} />
+                  </button>
                   {req.photo_url && (
                     <a href={req.photo_url} target="_blank" rel="noopener noreferrer"
                       className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
