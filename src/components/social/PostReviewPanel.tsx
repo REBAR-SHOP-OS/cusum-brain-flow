@@ -508,8 +508,12 @@ export function PostReviewPanel({
                   </div>
                 </div>
 
-                {/* ── Content Section ── */}
-                {editing ? (
+                {/* ── Content Section (hidden for Stories) ── */}
+                {localContentType === "story" ? (
+                  <div className="mx-4 rounded-lg border bg-muted/30 p-4 text-center">
+                    <p className="text-sm text-muted-foreground">Stories are image/video only — no caption needed.</p>
+                  </div>
+                ) : editing ? (
                   <div className="px-4 pb-4 space-y-3">
                     <div className="space-y-1.5">
                       <Label className="text-sm">Title</Label>
