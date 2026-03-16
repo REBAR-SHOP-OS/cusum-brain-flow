@@ -19,6 +19,7 @@ export function useRealtimeTranscribe() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const startTimeRef = useRef<number>(0);
+  const contextRef = useRef<string[]>([]);
 
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
@@ -36,14 +37,31 @@ export function useRealtimeTranscribe() {
       ]);
       setPartialText("");
 
-      // Fire-and-forget: get clean English + clean original language (e.g. Farsi)
+      // Send last 5 translated segments as context for better accuracy
+      const contextWindow = contextRef.current.slice(-5).join(" | ");
+
       invokeEdgeFunction<{ translations: Record<string, string> }>(
         "translate-message",
-        { text: data.text, sourceLang: "auto", targetLangs: ["en", "fa"] },
+        {
+          text: data.text,
+          sourceLang: "auto",
+          targetLangs: ["en", "fa"],
+          context: contextWindow || undefined,
+        },
       )
         .then((res) => {
           const translatedEn = res?.translations?.en;
           const translatedFa = res?.translations?.fa;
+
+          // Push successful translation to context buffer
+          if (translatedEn) {
+            contextRef.current.push(translatedEn);
+            // Keep buffer bounded
+            if (contextRef.current.length > 10) {
+              contextRef.current = contextRef.current.slice(-5);
+            }
+          }
+
           setCommittedTranscripts((prev) =>
             prev.map((t) =>
               t.id === entryId
@@ -80,10 +98,12 @@ export function useRealtimeTranscribe() {
         microphone: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
         },
       });
 
       startTimeRef.current = Date.now();
+      contextRef.current = [];
       setIsConnected(true);
     } catch (err: any) {
       console.error("Scribe connect error:", err);
@@ -102,6 +122,7 @@ export function useRealtimeTranscribe() {
   const clearTranscripts = useCallback(() => {
     setCommittedTranscripts([]);
     setPartialText("");
+    contextRef.current = [];
   }, []);
 
   const getFullTranscript = useCallback(() => {
