@@ -963,6 +963,7 @@ Deno.serve(async (req) => {
         }
         socialStyleOverride += `FAILURE TO FOLLOW THESE STYLE/PRODUCT SELECTIONS IS A CRITICAL ERROR.\n`;
         socialStyleOverride += `When calling generate_image, you MUST:\n1. Include the style and product descriptions DIRECTLY in the prompt text\n2. Pass the style parameter: "${uStyles.join(",")}"\n3. Pass the products parameter: "${uProducts.join(",")}"\n4. The prompt text itself MUST describe ONLY the selected product(s). Do NOT mention or describe ANY other product in the prompt text. If the user selected "stirrups", the prompt MUST be about stirrups — NEVER about cages, dowels, hooks, mesh, or any other product.\n`;
+        socialStyleOverride += `\nIMPORTANT: If the user's message is short (under 20 words) and implies creation (e.g. "بساز", "create", "generate", "make"), treat it as an IMMEDIATE command to call generate_image with the above style/product selections. Do NOT ask for slot number or any clarification.\n`;
       }
     }
 
