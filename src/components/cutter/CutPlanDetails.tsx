@@ -119,9 +119,9 @@ export function CutPlanDetails({
                     <CardContent className="p-3 flex items-center justify-between gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="font-mono text-xs">{item.bar_code}</Badge>
+                          <Badge variant="outline" className="font-mono text-xs">{barSizeLabel(item.bar_code, unitSystem)}</Badge>
                           <span className="text-sm">
-                            {item.qty_bars} bar{item.qty_bars !== 1 ? "s" : ""} × {item.pieces_per_bar} pc @ {item.cut_length_mm}mm
+                            {item.qty_bars} bar{item.qty_bars !== 1 ? "s" : ""} × {item.pieces_per_bar} pc @ {formatLength(item.cut_length_mm, unitSystem)}
                           </span>
                         </div>
                         {size && (
