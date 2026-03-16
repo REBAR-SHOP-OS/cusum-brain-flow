@@ -730,7 +730,7 @@ export async function executeToolCall(
                 model: attempt.model,
                 messages: [{ role: "user", content: contentParts }],
                 modalities: ["image", "text"],
-                ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+                
               }),
             });
 
@@ -822,7 +822,7 @@ export async function executeToolCall(
                   model: attempt.model,
                   messages: [{ role: "user", content: contentParts }],
                   modalities: ["image", "text"],
-                  aspect_ratio: "1:1",
+                  
                 }),
               });
 
