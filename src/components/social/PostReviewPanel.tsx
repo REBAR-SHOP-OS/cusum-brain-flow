@@ -205,6 +205,25 @@ export function PostReviewPanel({
       const permanentUrl = await uploadSocialMediaAsset(tempUrl, type);
       updatePost.mutate({ id: post.id, image_url: permanentUrl });
       toast({ title: `${type === "image" ? "Image" : "Video"} attached`, description: "Saved to your post permanently." });
+
+      // Auto-generate general caption for video uploads
+      if (type === "video") {
+        setRegeneratingCaption(true);
+        try {
+          const { data, error } = await supabase.functions.invoke("regenerate-post", {
+            body: { post_id: post.id, caption_only: true, is_video: true },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+          toast({ title: "Caption generated", description: "A general promotional caption was created for your video." });
+        } catch (err: any) {
+          console.error("Auto caption error:", err);
+          // Non-blocking — video is already saved
+        } finally {
+          setRegeneratingCaption(false);
+        }
+      }
     } catch (err: any) {
       console.error("Upload error:", err);
       toast({ title: "Upload failed", description: err?.message || "Could not save media", variant: "destructive" });
