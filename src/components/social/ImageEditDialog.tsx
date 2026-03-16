@@ -133,9 +133,19 @@ export function ImageEditDialog({ open, onOpenChange, imageUrl, onImageReady }: 
       // Get the composite image (image + red marks) as base64
       const compositeBase64 = canvasRef.current.toDataURL("image/png");
 
+      // Generate a clean original image (no red strokes) for the AI to use as base
+      const cleanCanvas = document.createElement("canvas");
+      const img = imgRef.current;
+      cleanCanvas.width = canvasRef.current.width;
+      cleanCanvas.height = canvasRef.current.height;
+      const cleanCtx = cleanCanvas.getContext("2d")!;
+      cleanCtx.drawImage(img, 0, 0, cleanCanvas.width, cleanCanvas.height);
+      const originalBase64 = cleanCanvas.toDataURL("image/png");
+
       const data = await invokeEdgeFunction<{ imageUrl: string }>("generate-image", {
         prompt: prompt.trim(),
         editImage: compositeBase64,
+        originalImage: originalBase64,
         model: "google/gemini-3.1-flash-image-preview",
         ...(referenceImage ? { referenceImage } : {}),
       }, { timeoutMs: 90000, retries: 1 });
