@@ -428,7 +428,49 @@ export function TranscribeView() {
   const hasContent = originalText || englishText || processedOutput || realtime.committedTranscripts.length > 0;
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
+    <div className="flex gap-0 md:gap-2">
+      {/* Speaker Circles Sidebar */}
+      <div className="hidden md:flex flex-col items-center gap-3 pt-6 pl-2 pr-1">
+        {CONVERSATION_SPEAKERS.map((s) => (
+          <button
+            key={s.name}
+            onClick={() => setSelectedSpeaker(prev => prev === s.name ? null : s.name)}
+            className={`flex flex-col items-center gap-0.5 group transition-all ${selectedSpeaker === s.name ? "scale-110" : "opacity-70 hover:opacity-100"}`}
+            title={`${s.name} ↔ NEEL`}
+          >
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-2 ring-primary" : ""}`}>
+              {s.name[0]}
+            </div>
+            <span className="text-[9px] font-medium text-muted-foreground group-hover:text-foreground">{s.name}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Mobile: horizontal speaker strip */}
+      <div className="flex md:hidden gap-2 px-4 pt-4 overflow-x-auto">
+        {CONVERSATION_SPEAKERS.map((s) => (
+          <button
+            key={s.name}
+            onClick={() => setSelectedSpeaker(prev => prev === s.name ? null : s.name)}
+            className={`flex flex-col items-center gap-0.5 shrink-0 ${selectedSpeaker === s.name ? "scale-110" : "opacity-70"}`}
+          >
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-1 ring-primary" : ""}`}>
+              {s.name[0]}
+            </div>
+            <span className="text-[8px] font-medium text-muted-foreground">{s.name}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto space-y-6">
+      {/* Selected speaker banner */}
+      {selectedSpeaker && (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm">
+          <Users className="w-4 h-4 text-primary" />
+          <span className="font-medium text-foreground">Showing: {selectedSpeaker} ↔ NEEL</span>
+          <button onClick={() => setSelectedSpeaker(null)} className="ml-auto text-xs text-muted-foreground hover:text-foreground">✕ Clear</button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
