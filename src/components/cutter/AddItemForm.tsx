@@ -103,7 +103,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
 
       {selectedSize && (
         <p className="text-xs text-muted-foreground">
-          {selectedSize.bar_code}: ⌀{selectedSize.diameter_mm}mm • {selectedSize.mass_kg_per_m} kg/m • {selectedSize.area_mm2} mm²
+          {barSizeLabel(selectedSize.bar_code, unitSystem)}: ⌀{selectedSize.diameter_mm}mm • {selectedSize.mass_kg_per_m} kg/m • {selectedSize.area_mm2} mm²
         </p>
       )}
 
