@@ -1221,15 +1221,16 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
 async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
   const companyId = await getUserCompanyId(supabase, userId);
-  const { orderId, customerId, customerName, lineItems, dueDate, memo, taxCodeRef, salesTermRef, discountPercent, shippingAmount, classRef, departmentRef } = body as {
+  const { orderId, customerId, customerName, lineItems, dueDate, memo, taxCodeRef, salesTermRef, discountPercent, shippingAmount, classRef, departmentRef, dedupKey } = body as {
     orderId?: string; customerId: string; customerName: string;
     lineItems: { description: string; amount: number; quantity?: number; serviceId?: string }[];
     dueDate?: string; memo?: string; taxCodeRef?: string; salesTermRef?: string;
     discountPercent?: number; shippingAmount?: number;
     classRef?: string; departmentRef?: string;
+    dedupKey?: string;
   };
 
-  // ── Server-side idempotency guard ──────────────────────────────
+  // ── Server-side idempotency guard: order-based ─────────────────
   if (orderId) {
     const { data: existingOrder } = await supabase
       .from("orders")
@@ -1242,6 +1243,27 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
         alreadyExisted: true,
         docNumber: existingOrder.quickbooks_invoice_id,
         message: `Invoice #${existingOrder.quickbooks_invoice_id} already exists for this order`,
+      });
+    }
+  }
+
+  // ── Server-side idempotency guard: dedupKey-based (ad-hoc invoices) ──
+  if (dedupKey && !orderId) {
+    const { data: existingAudit } = await supabase
+      .from("activity_events")
+      .select("metadata")
+      .eq("company_id", companyId)
+      .eq("event_type", "qb_invoice_created")
+      .eq("source", "quickbooks")
+      .filter("metadata->>dedupKey", "eq", dedupKey)
+      .maybeSingle();
+    if (existingAudit) {
+      const meta = existingAudit.metadata as Record<string, unknown> | null;
+      return jsonRes({
+        success: true,
+        alreadyExisted: true,
+        docNumber: meta?.docNumber || "",
+        message: `Duplicate prevented — invoice already created for this session`,
       });
     }
   }
