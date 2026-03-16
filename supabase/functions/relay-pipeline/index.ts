@@ -181,6 +181,7 @@ serve(async (req) => {
             const draftResult = await callAI({
               provider: "gpt",
               model: "gpt-4o-mini",
+              agentName: "email",
               messages: [
                 {
                   role: "system",
