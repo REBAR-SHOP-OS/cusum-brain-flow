@@ -823,6 +823,11 @@ async function handleIncremental(svc: SvcClient, companyId: string) {
             await normalizeToGL(svc, companyId, entityType, row.id, t, accountLookup, customerLookup, vendorLookup);
           }
         }
+
+        // Mirror to accounting_mirror for dashboards/portal
+        try {
+          await syncToAccountingMirror(svc, companyId, entityType, filteredTxns);
+        } catch (e) { errors.push(`mirror_${entityType}: ${e}`); }
       }
     } catch (e) { errors.push(`${entityType}: ${e}`); }
   }
