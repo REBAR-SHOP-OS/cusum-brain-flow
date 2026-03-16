@@ -662,7 +662,7 @@ export function TranscribeView() {
   const hasContent = originalText || englishText || processedOutput || realtime.committedTranscripts.length > 0;
 
   return (
-    <div className="flex gap-0 md:gap-2">
+    <div className="flex gap-0 md:gap-2 h-[calc(100vh-4rem)] overflow-hidden">
       {/* Speaker Circles Sidebar */}
       <div className="hidden md:flex flex-col items-center gap-3 pt-6 pl-2 pr-1">
         {CONVERSATION_SPEAKERS.map((s) => (
