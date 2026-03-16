@@ -83,7 +83,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
     setTimeout(() => {
       setPrompt("");
       setSelectedModel("google/gemini-3-pro-image-preview");
-      setSelectedThemes(brandKit?.logo_url ? new Set(["logo"]) : new Set());
+      setSelectedThemes(new Set());
       setStatus("idle");
       setImageUrl(null);
       setRevisedPrompt(null);
