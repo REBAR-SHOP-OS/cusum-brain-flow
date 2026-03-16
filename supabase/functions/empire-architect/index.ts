@@ -41,6 +41,7 @@ Return JSON with these exact fields:
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o-mini",
+      agentName: "empire",
       messages: [
         { role: "system", content: "You are a venture analysis AI. Return only valid JSON, no markdown." },
         { role: "user", content: prompt },
