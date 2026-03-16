@@ -155,7 +155,7 @@ export function MemberAreaView() {
             companyName={companyName}
             setCompanyName={setCompanyName}
             measurement={measurement}
-            setMeasurement={setMeasurement}
+            setMeasurement={handleSetMeasurement}
           />
         )}
       </ScrollArea>
