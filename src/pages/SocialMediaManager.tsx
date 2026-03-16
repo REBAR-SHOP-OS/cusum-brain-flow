@@ -329,7 +329,7 @@ export default function SocialMediaManager() {
             <PopoverTrigger asChild>
               <button className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-sky-600 to-sky-500 text-white hover:opacity-90 transition-opacity">
                 <PlusSquare className="w-5 h-5 shrink-0" />
-                <span className="font-medium">Add Cart</span>
+                <span className="font-medium">Add Card</span>
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
