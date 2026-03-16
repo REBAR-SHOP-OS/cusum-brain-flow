@@ -28,7 +28,11 @@ export function useRealtimeTranscribe() {
       setPartialText(data.text);
     },
     onCommittedTranscript: (data) => {
-      if (!data.text.trim()) return;
+      const trimmed = data.text.trim();
+      if (!trimmed) return;
+      // Filter out very short fragments (likely background noise)
+      const wordCount = trimmed.split(/\s+/).length;
+      if (wordCount < 2 || trimmed.length < 5) return;
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       const entryId = crypto.randomUUID();
       setCommittedTranscripts((prev) => [
