@@ -110,6 +110,17 @@ export function CreateTransactionDialog({
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
 
+  // Idempotency: unique key per dialog session, regenerated on each open
+  const [dedupKey, setDedupKey] = useState(() => crypto.randomUUID());
+  const [lastCreated, setLastCreated] = useState<{ docNumber: string; at: number } | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setDedupKey(crypto.randomUUID());
+      setLastCreated(null);
+    }
+  }, [open]);
+
   const [lineItems, setLineItems] = useState<LineItem[]>(
     prefill?.lineItems ?? [{ description: "", qty: 1, unitPrice: 0 }]
   );
