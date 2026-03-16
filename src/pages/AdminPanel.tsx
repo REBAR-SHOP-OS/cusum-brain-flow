@@ -23,7 +23,7 @@ import { MemberAreaView } from "@/components/office/MemberAreaView";
 import { useProfiles, useSalaries, type Profile, type EmployeeSalary } from "@/hooks/useProfiles";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CEODashboardView } from "@/components/office/CEODashboardView";
+
 import { OdooReconciliationReport } from "@/components/admin/OdooReconciliationReport";
 import { FieldAuditTrailView } from "@/components/admin/FieldAuditTrailView";
 
@@ -152,10 +152,6 @@ export default function AdminPanel() {
           <TabsTrigger value="employees" className="gap-1.5 text-xs">
             <Users className="w-3.5 h-3.5" />
             Employees
-          </TabsTrigger>
-          <TabsTrigger value="ceo-dashboard" className="gap-1.5 text-xs">
-            <Activity className="w-3.5 h-3.5" />
-            CEO Dashboard
           </TabsTrigger>
           <TabsTrigger value="live-monitor" className="gap-1.5 text-xs">
             <Monitor className="w-3.5 h-3.5" />
@@ -312,12 +308,6 @@ export default function AdminPanel() {
               }}
             />
           </div>
-        </ScrollArea>
-      </TabsContent>
-
-      <TabsContent value="ceo-dashboard" className="flex-1 mt-0 overflow-hidden">
-        <ScrollArea className="h-full">
-          <CEODashboardView />
         </ScrollArea>
       </TabsContent>
 
