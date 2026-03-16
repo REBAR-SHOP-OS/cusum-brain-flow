@@ -145,13 +145,15 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
     if (!canWrite) return;
 
     if (file.size > MAX_FILE_SIZE) {
-      toast({ title: "File too large", description: "Max 10MB per photo.", variant: "destructive" });
+      toast({ title: "File too large", description: "Max 50MB per photo.", variant: "destructive" });
       return;
     }
 
     setUploading(type);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
+      // Compress image client-side before upload
+      const compressed = await compressImage(file);
+      const ext = compressed.name.split(".").pop() || "jpg";
       const path = `${item.id}/${type}-${Date.now()}.${ext}`;
 
       const { error: uploadErr } = await supabase.storage
