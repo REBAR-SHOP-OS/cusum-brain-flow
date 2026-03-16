@@ -147,7 +147,7 @@ serve(async (req) => {
       );
     }
 
-    const { prompt, model, brandContext, logoUrl, aspectRatio, editImage, referenceImage } = await req.json();
+    const { prompt, model, brandContext, logoUrl, aspectRatio, editImage, originalImage, referenceImage } = await req.json();
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
@@ -173,14 +173,41 @@ serve(async (req) => {
       // ── EDIT MODE: inpainting via annotated image ──
       if (editImage) {
         const hasRef = referenceImage && typeof referenceImage === "string";
-        const editPrompt = hasRef
-          ? `You are an image editor. The user has marked areas in RED on the first image. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". The second image is a reference asset provided by the user. You MUST incorporate/place this exact image into the red-marked area as instructed. Reproduce the reference image as faithfully as possible in the designated area. Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`
-          : `You are an image editor. The user has marked areas in RED on the image below. Edit ONLY the areas highlighted in red according to this instruction: "${prompt}". Keep everything else EXACTLY the same — same composition, colors, lighting, and details. Only change the red-marked regions.`;
+        const hasOriginal = originalImage && typeof originalImage === "string";
+        
+        let editPrompt: string;
+        if (hasRef) {
+          editPrompt = `You are a professional image editor. You will receive images in this order:
+1. An ANNOTATED image with RED marks/highlights showing the areas to edit
+2. The CLEAN ORIGINAL image without any marks (use this as the pristine base)
+3. A REFERENCE image provided by the user
+
+Instructions:
+- The red marks on the first image are ANNOTATIONS ONLY — they indicate WHERE to apply changes. They are NOT part of the image.
+- Apply this edit instruction to the red-marked areas: "${prompt}"
+- You MUST incorporate/place the reference image (image 3) into the red-marked area as instructed. Reproduce it as faithfully as possible.
+- Use the clean original (image 2) as the base. Keep everything outside the red-marked regions EXACTLY the same.
+- The final output MUST contain absolutely NO red marks, highlights, or annotations. Output a clean, natural-looking image.`;
+        } else {
+          editPrompt = `You are a professional image editor. You will receive images in this order:
+1. An ANNOTATED image with RED marks/highlights showing the areas to edit
+2. The CLEAN ORIGINAL image without any marks (use this as the pristine base)
+
+Instructions:
+- The red marks on the first image are ANNOTATIONS ONLY — they indicate WHERE to apply changes. They are NOT part of the image.
+- Apply this edit instruction to the red-marked areas: "${prompt}"
+- Use the clean original (image 2) as the base. Keep everything outside the red-marked regions EXACTLY the same — same composition, colors, lighting, and details.
+- The final output MUST contain absolutely NO red marks, highlights, or annotations. Output a clean, natural-looking image.`;
+        }
 
         const contentParts: any[] = [
           { type: "text", text: editPrompt },
           { type: "image_url", image_url: { url: editImage } },
         ];
+        // Add clean original image as second image
+        if (hasOriginal) {
+          contentParts.push({ type: "image_url", image_url: { url: originalImage } });
+        }
         if (hasRef) {
           contentParts.push({ type: "image_url", image_url: { url: referenceImage } });
         }
