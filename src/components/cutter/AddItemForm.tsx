@@ -62,7 +62,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
         </div>
 
         <div className="space-y-1">
-          <Label className="text-xs">Cut Length (mm)</Label>
+          <Label className="text-xs">Cut Length ({lengthUnit(unitSystem)})</Label>
           <Input
             type="number"
             className="h-9"
