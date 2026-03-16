@@ -484,7 +484,7 @@ export default function AccountingWorkspace() {
               <AccountingAgent
                 viewMode={agentMode}
                 onViewModeChange={(m) => setAgentMode(m)}
-                qbSummary={qb}
+                qbSummary={stableQbSummary}
                 autoGreet
                 webPhoneState={webPhoneState}
                 webPhoneActions={webPhoneActions}
