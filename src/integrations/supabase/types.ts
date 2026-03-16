@@ -2472,6 +2472,7 @@ export type Database = {
           legal_name: string
           normalized_name: string | null
           status: string
+          unit_system: string
           updated_at: string
         }
         Insert: {
@@ -2482,6 +2483,7 @@ export type Database = {
           legal_name: string
           normalized_name?: string | null
           status?: string
+          unit_system?: string
           updated_at?: string
         }
         Update: {
@@ -2492,6 +2494,7 @@ export type Database = {
           legal_name?: string
           normalized_name?: string | null
           status?: string
+          unit_system?: string
           updated_at?: string
         }
         Relationships: []

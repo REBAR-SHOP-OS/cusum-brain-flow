@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,9 +28,10 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { BulkAvatarUploadDialog } from "@/components/settings/BulkAvatarUploadDialog";
 import { AiVisionUploadDialog, type UploadedSchematic } from "@/components/office/AiVisionUploadDialog";
+import { supabase } from "@/integrations/supabase/client";
+import type { UnitSystem } from "@/lib/unitSystem";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
 
 // ── Language options ──
@@ -79,7 +80,41 @@ export function MemberAreaView() {
   const [mainTab, setMainTab] = useState<"my-profile" | "team-access" | "system-config">("team-access");
   const [configTab, setConfigTab] = useState("general");
   const [companyName, setCompanyName] = useState("REBAR.SHOP AI");
-  const [measurement, setMeasurement] = useState<"metric" | "imperial">("metric");
+  const [measurement, setMeasurement] = useState<UnitSystem>("metric");
+  const { user } = useAuth();
+  const companyIdRef = useRef<string | null>(null);
+
+  // Load persisted unit_system from companies table
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data: profile }) => {
+        if (!profile?.company_id) return;
+        companyIdRef.current = profile.company_id;
+        supabase
+          .from("companies")
+          .select("unit_system")
+          .eq("id", profile.company_id)
+          .single()
+          .then(({ data: company }) => {
+            if (company?.unit_system === "imperial") setMeasurement("imperial");
+          });
+      });
+  }, [user]);
+
+  const handleSetMeasurement = useCallback(async (v: UnitSystem) => {
+    setMeasurement(v);
+    if (companyIdRef.current) {
+      await supabase
+        .from("companies")
+        .update({ unit_system: v } as any)
+        .eq("id", companyIdRef.current);
+    }
+  }, []);
 
   return (
     <div className="flex flex-col h-full">
@@ -120,7 +155,7 @@ export function MemberAreaView() {
             companyName={companyName}
             setCompanyName={setCompanyName}
             measurement={measurement}
-            setMeasurement={setMeasurement}
+            setMeasurement={handleSetMeasurement}
           />
         )}
       </ScrollArea>

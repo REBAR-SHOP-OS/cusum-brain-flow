@@ -19,6 +19,32 @@ const VALID_BAR_SIZES = [
   "10M", "15M", "20M", "25M", "30M", "35M", "45M", "55M",
 ];
 
+// Imperial (US ASTM) → Metric mapping
+const IMPERIAL_TO_METRIC: Record<string, string> = {
+  "#3": "10M", "#4": "15M", "#5": "15M", "#6": "20M",
+  "#7": "25M", "#8": "25M", "#9": "30M", "#10": "35M",
+  "#11": "35M", "#14": "45M", "#18": "55M",
+  "3": "10M", "4": "15M", "5": "15M", "6": "20M",
+  "7": "25M", "8": "25M", "9": "30M", "10": "35M",
+  "11": "35M", "14": "45M", "18": "55M",
+};
+
+const ALL_VALID_SIZES = [...VALID_BAR_SIZES, ...Object.keys(IMPERIAL_TO_METRIC)];
+
+/** Normalize any bar size to its canonical metric code */
+function normalizeBarSize(raw: string): string | null {
+  const upper = raw.toUpperCase().trim();
+  if (VALID_BAR_SIZES.includes(upper)) return upper;
+  // Try metric regex
+  const mMatch = upper.match(/(\d+)\s*M/i);
+  if (mMatch && VALID_BAR_SIZES.includes(`${mMatch[1]}M`)) return `${mMatch[1]}M`;
+  // Try imperial
+  const cleaned = raw.trim().replace(/^#/, "#");
+  if (IMPERIAL_TO_METRIC[cleaned]) return IMPERIAL_TO_METRIC[cleaned];
+  if (IMPERIAL_TO_METRIC[`#${cleaned}`]) return IMPERIAL_TO_METRIC[`#${cleaned}`];
+  return null;
+}
+
 // Valid grades
 const VALID_GRADES = ["400W", "500W", "300W"];
 
@@ -312,24 +338,23 @@ async function applyMapping(sb: any, sessionId: string) {
   for (const row of rows) {
     const updates: Record<string, any> = { status: "mapped" };
 
-    // Map bar_size
-    const rawSize = (row.bar_size || "").toUpperCase().trim();
-    if (mappingLookup["bar_size"]?.[rawSize]) {
-      updates.bar_size_mapped = mappingLookup["bar_size"][rawSize];
-    } else if (VALID_BAR_SIZES.includes(rawSize)) {
-      updates.bar_size_mapped = rawSize;
+    // Map bar_size (supports both metric and imperial)
+    const rawSize = (row.bar_size || "").trim();
+    if (mappingLookup["bar_size"]?.[rawSize.toUpperCase()]) {
+      updates.bar_size_mapped = mappingLookup["bar_size"][rawSize.toUpperCase()];
     } else {
-      // Try auto-mapping: extract number + M
-      const sizeMatch = rawSize.match(/(\d+)\s*M/i);
-      if (sizeMatch && VALID_BAR_SIZES.includes(`${sizeMatch[1]}M`)) {
-        updates.bar_size_mapped = `${sizeMatch[1]}M`;
-        autoMappings.push({
-          source_field: "bar_size",
-          source_value: rawSize,
-          mapped_value: updates.bar_size_mapped,
-        });
+      const normalized = normalizeBarSize(rawSize);
+      if (normalized) {
+        updates.bar_size_mapped = normalized;
+        if (normalized !== rawSize.toUpperCase()) {
+          autoMappings.push({
+            source_field: "bar_size",
+            source_value: rawSize,
+            mapped_value: normalized,
+          });
+        }
       } else {
-        updates.bar_size_mapped = rawSize; // Keep raw, will fail validation
+        updates.bar_size_mapped = rawSize.toUpperCase(); // Keep raw, will fail validation
       }
     }
 
@@ -444,13 +469,13 @@ async function validateExtract(sb: any, sessionId: string) {
         error_type: "blocker",
         message: `Row ${row.row_index}: Missing bar size`,
       });
-    } else if (!VALID_BAR_SIZES.includes(barSize.toUpperCase())) {
+    } else if (!VALID_BAR_SIZES.includes(barSize.toUpperCase()) && !normalizeBarSize(barSize)) {
       errors.push({
         session_id: sessionId,
         row_id: row.id,
         field: "bar_size",
         error_type: "blocker",
-        message: `Row ${row.row_index}: Invalid bar size "${barSize}". Expected: ${VALID_BAR_SIZES.join(", ")}`,
+        message: `Row ${row.row_index}: Invalid bar size "${barSize}". Expected metric: ${VALID_BAR_SIZES.join(", ")} or imperial: #3, #4, #5, #6, #8, #9, #11, #14, #18`,
       });
     }
 

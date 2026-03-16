@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Pencil, ChevronDown, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
 
 export function DetailedListView() {
   const { plans, loading: plansLoading } = useCutPlans();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const { items, loading: itemsLoading } = useCutPlanItems(selectedPlanId);
+  const unitSystem = useUnitSystem();
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
@@ -175,7 +177,7 @@ export function DetailedListView() {
                   <span className="text-xs text-muted-foreground">400W</span>
                   <span className="text-xs font-bold text-primary">{item.mark_number || item.id.slice(0, 5)}</span>
                   <span className="text-xs font-medium">{item.total_pieces}</span>
-                  <span className="text-xs">{item.bar_code}</span>
+                  <span className="text-xs">{barSizeLabel(item.bar_code, unitSystem)}</span>
                   <span>
                     {item.bend_type === "bend" ? (
                       <Badge className="bg-orange-500/20 text-orange-400 text-[9px] px-1">
@@ -185,7 +187,7 @@ export function DetailedListView() {
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </span>
-                  <span className="text-xs font-bold">{item.cut_length_mm}</span>
+                  <span className="text-xs font-bold">{formatLength(item.cut_length_mm, unitSystem)}</span>
                   {dimCols.map(c => (
                     <span key={c} className="text-xs text-muted-foreground">
                       {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">MM</sub></span> : ""}

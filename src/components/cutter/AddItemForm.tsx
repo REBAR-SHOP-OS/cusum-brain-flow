@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, Plus } from "lucide-react";
 import { RebarSize, MachineCapability } from "@/hooks/useCutPlans";
+import { useUnitSystem, barSizeLabel, formatLength, lengthUnit } from "@/lib/unitSystem";
 
 interface AddItemFormProps {
   rebarSizes: RebarSize[];
@@ -19,6 +20,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
   const [qtyBars, setQtyBars] = useState(1);
   const [cutLengthMm, setCutLengthMm] = useState(6000);
   const [piecesPerBar, setPiecesPerBar] = useState(1);
+  const unitSystem = useUnitSystem();
 
   const maxAllowed = useMemo(() => {
     if (!barCode) return null;
@@ -52,7 +54,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
             <SelectContent>
               {rebarSizes.map(s => (
                 <SelectItem key={s.bar_code} value={s.bar_code}>
-                  {s.bar_code} — {s.diameter_mm}mm
+                  {barSizeLabel(s.bar_code, unitSystem)} — {s.diameter_mm}mm
                 </SelectItem>
               ))}
             </SelectContent>
@@ -60,7 +62,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
         </div>
 
         <div className="space-y-1">
-          <Label className="text-xs">Cut Length (mm)</Label>
+          <Label className="text-xs">Cut Length ({lengthUnit(unitSystem)})</Label>
           <Input
             type="number"
             className="h-9"
@@ -101,7 +103,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
 
       {selectedSize && (
         <p className="text-xs text-muted-foreground">
-          {selectedSize.bar_code}: ⌀{selectedSize.diameter_mm}mm • {selectedSize.mass_kg_per_m} kg/m • {selectedSize.area_mm2} mm²
+          {barSizeLabel(selectedSize.bar_code, unitSystem)}: ⌀{selectedSize.diameter_mm}mm • {selectedSize.mass_kg_per_m} kg/m • {selectedSize.area_mm2} mm²
         </p>
       )}
 
@@ -109,7 +111,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
         <Alert variant="destructive" className="py-2">
           <AlertTriangle className="w-4 h-4" />
           <AlertDescription className="text-xs">
-            No cutting capability found for <strong>{barCode}</strong> on GENSCO DTX 400. Add it in Admin → Machines first.
+            No cutting capability found for <strong>{barSizeLabel(barCode, unitSystem)}</strong> on this machine. Add it in Admin → Machines first.
           </AlertDescription>
         </Alert>
       )}
@@ -118,7 +120,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
         <Alert variant="destructive" className="py-2">
           <AlertTriangle className="w-4 h-4" />
           <AlertDescription className="text-xs">
-            Qty {qtyBars} exceeds max allowed ({maxAllowed}) for {barCode} on DTX 400.
+            Qty {qtyBars} exceeds max allowed ({maxAllowed}) for {barSizeLabel(barCode, unitSystem)}.
           </AlertDescription>
         </Alert>
       )}

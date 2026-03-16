@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
 import { CutPlan, CutPlanItem, RebarSize, MachineCapability, MachineOption } from "@/hooks/useCutPlans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ export function CutPlanDetails({
   machines, canWrite, onAddItem, onRemoveItem, onQueued
 }: CutPlanDetailsProps) {
   const [queueOpen, setQueueOpen] = useState(false);
+  const unitSystem = useUnitSystem();
 
   const handleAdd = async (barCode: string, qtyBars: number, cutLengthMm: number, piecesPerBar: number) => {
     await onAddItem({
@@ -117,9 +119,9 @@ export function CutPlanDetails({
                     <CardContent className="p-3 flex items-center justify-between gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="font-mono text-xs">{item.bar_code}</Badge>
+                          <Badge variant="outline" className="font-mono text-xs">{barSizeLabel(item.bar_code, unitSystem)}</Badge>
                           <span className="text-sm">
-                            {item.qty_bars} bar{item.qty_bars !== 1 ? "s" : ""} × {item.pieces_per_bar} pc @ {item.cut_length_mm}mm
+                            {item.qty_bars} bar{item.qty_bars !== 1 ? "s" : ""} × {item.pieces_per_bar} pc @ {formatLength(item.cut_length_mm, unitSystem)}
                           </span>
                         </div>
                         {size && (
