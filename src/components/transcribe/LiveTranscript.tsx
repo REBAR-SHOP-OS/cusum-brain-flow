@@ -6,6 +6,7 @@ interface CommittedTranscript {
   text: string;
   timestamp: number;
   translatedText?: string;
+  originalCleanText?: string;
   isTranslating?: boolean;
 }
 
