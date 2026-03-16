@@ -875,6 +875,7 @@ export function PostReviewPanel({
                           hashtags: post.hashtags,
                           image_url: post.image_url,
                           page_name: combo.page,
+                          content_type: localContentType,
                         });
                         if (!ok) allOk = false;
                       }

@@ -319,12 +319,15 @@ async function publishToInstagram(
   igAccountId: string,
   accessToken: string,
   caption: string,
-  imageUrl?: string
+  imageUrl?: string,
+  contentType: string = "post"
 ): Promise<{ id?: string; error?: string }> {
   try {
     if (!imageUrl) {
       return { error: "Instagram requires an image to publish. Please add an image to your post." };
     }
+
+    const isStory = contentType === "story";
 
     // Step 1: Create media container
     // Detect video: check extension first, then HEAD content-type as fallback
@@ -338,15 +341,27 @@ async function publishToInstagram(
     }
 
     const containerBody: Record<string, string> = {
-      caption,
       access_token: accessToken,
     };
-    if (isVideo) {
+
+    // Stories: media_type = STORIES, no caption allowed by IG API
+    if (isStory) {
+      containerBody.media_type = "STORIES";
+      if (isVideo) {
+        containerBody.video_url = imageUrl;
+      } else {
+        containerBody.image_url = imageUrl;
+      }
+      // Stories don't support captions per Instagram Graph API
+      console.log(`[social-publish] Publishing Instagram Story (video=${isVideo})`);
+    } else if (isVideo) {
       containerBody.media_type = "REELS";
       containerBody.video_url = imageUrl;
+      containerBody.caption = caption;
     } else {
       // For single image posts, omit media_type entirely per IG Graph API
       containerBody.image_url = imageUrl;
+      containerBody.caption = caption;
     }
     const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
       method: "POST",
