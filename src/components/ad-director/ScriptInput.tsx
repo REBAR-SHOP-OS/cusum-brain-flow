@@ -51,107 +51,80 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
   const estDuration = estimateDuration(script);
 
   return (
-    <div className="space-y-6">
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* ── Left Column: Creative Brief ── */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Quick Start Card */}
+        <div className="lg:col-span-2 space-y-3">
+          {/* Quick Start */}
           {!script.trim() && (
             <button
               onClick={() => onScriptChange(DEMO_SCRIPT)}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all group"
+              className="w-full flex items-center gap-3 p-3 rounded-lg border border-border/30 hover:border-primary/30 hover:bg-primary/5 transition-all group"
             >
-              <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center group-hover:bg-primary/25 transition-colors shrink-0">
-                <Play className="w-5 h-5 text-primary" />
-              </div>
+              <Play className="w-4 h-4 text-primary shrink-0" />
               <div className="text-left">
-                <p className="text-sm font-semibold text-foreground">Quick start — Load demo script</p>
-                <p className="text-xs text-muted-foreground">See a 30s industrial ad example to understand the workflow</p>
+                <p className="text-sm font-medium text-foreground">Load demo script</p>
+                <p className="text-[11px] text-muted-foreground">30s industrial ad example</p>
               </div>
             </button>
           )}
 
-          {/* Script Label + Demo toggle when script exists */}
+          {/* Label */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-primary" />
-              <Label className="text-base font-semibold">Creative Brief</Label>
-            </div>
+            <Label className="text-sm font-medium flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-primary" />
+              Creative Brief
+            </Label>
             {script.trim() && (
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onScriptChange("")}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Clear
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onScriptChange(DEMO_SCRIPT)}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Load Demo
-                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onScriptChange("")} className="text-[11px] h-7 text-muted-foreground">Clear</Button>
+                <Button variant="ghost" size="sm" onClick={() => onScriptChange(DEMO_SCRIPT)} className="text-[11px] h-7 text-muted-foreground">Demo</Button>
               </div>
             )}
           </div>
 
-          {/* Script Textarea with counters */}
-          <div className="relative rounded-xl bg-card/30 backdrop-blur-xl border border-white/[0.08] p-1">
+          {/* Textarea */}
+          <div className="relative">
             <Textarea
               value={script}
               onChange={(e) => onScriptChange(e.target.value)}
-              placeholder="Paste your ad script here, or load the demo above to get started..."
-              className="min-h-[280px] bg-transparent border-0 font-[Space_Grotesk] text-sm leading-relaxed pr-4 pb-10 focus-visible:ring-0 focus-visible:ring-offset-0"
+              placeholder="Paste your ad script here, or load the demo above..."
+              className="min-h-[260px] text-sm leading-relaxed pb-10 rounded-lg border-border/30 bg-card/20"
             />
             {script.trim() && (
-              <div className="absolute bottom-3 left-3 flex items-center gap-3">
-                <span className="text-[10px] text-muted-foreground/70 bg-black/20 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/[0.08]">
-                  {wordCount} words
-                </span>
-                <span className="text-[10px] text-muted-foreground/70 bg-black/20 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/[0.08]">
-                  ~{estDuration}s
-                </span>
+              <div className="absolute bottom-2 left-2 flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground/60 bg-muted/40 px-2 py-0.5 rounded">{wordCount} words</span>
+                <span className="text-[10px] text-muted-foreground/60 bg-muted/40 px-2 py-0.5 rounded">~{estDuration}s</span>
               </div>
             )}
           </div>
         </div>
 
         {/* ── Right Column: Assets & Video Params ── */}
-        <div className="space-y-4">
-          {/* Reference Assets Card */}
-          <div className="rounded-2xl border border-border/30 bg-card/30 backdrop-blur-sm p-4 ring-1 ring-white/5">
-            <div className="flex items-center gap-2 mb-3">
-              <Upload className="w-4 h-4 text-primary" />
-              <Label className="text-sm font-medium">Reference Assets</Label>
-              <Badge variant="outline" className="text-[9px] ml-auto">Optional</Badge>
+        <div className="space-y-3">
+          {/* Reference Assets */}
+          <div className="rounded-lg border border-border/20 bg-card/20 p-3">
+            <div className="flex items-center gap-2 mb-2.5">
+              <Upload className="w-3.5 h-3.5 text-primary" />
+              <Label className="text-xs font-medium">Reference Assets</Label>
+              <span className="text-[9px] text-muted-foreground/50 ml-auto">Optional</span>
             </div>
             <input type="file" multiple accept="image/*,video/*,audio/*,.pdf" onChange={handleFileUpload} className="hidden" id="asset-upload" />
-            <label htmlFor="asset-upload" className="flex items-center gap-3 p-3 rounded-xl border border-border/20 bg-background/30 hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer group">
-              <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                <div className="flex gap-1">
-                  <ImageIcon className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <Music className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <Mic className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
-                </div>
+            <label htmlFor="asset-upload" className="flex items-center gap-2.5 p-2.5 rounded-md border border-dashed border-border/30 hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer group">
+              <div className="flex gap-1 text-muted-foreground group-hover:text-primary">
+                <ImageIcon className="w-3.5 h-3.5" />
+                <Music className="w-3.5 h-3.5" />
               </div>
-              <div>
-                <p className="text-xs font-medium text-foreground">Upload files</p>
-                <p className="text-[10px] text-muted-foreground">Photos, drawings, voiceover, or music</p>
-              </div>
+              <span className="text-[11px] text-muted-foreground group-hover:text-foreground">Upload photos, audio, or docs</span>
             </label>
             {assets.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
+              <div className="flex flex-wrap gap-1 mt-2">
                 {assets.map((f, i) => (
                   <Badge key={i} variant="secondary" className="text-[10px] gap-1 pr-1">
-                    {f.name.length > 18 ? f.name.slice(0, 18) + "…" : f.name}
+                    {f.name.length > 16 ? f.name.slice(0, 16) + "…" : f.name}
                     <button onClick={() => onAssetsChange(assets.filter((_, j) => j !== i))} className="ml-0.5 text-muted-foreground hover:text-foreground">
-                      <X className="w-3 h-3" />
+                      <X className="w-2.5 h-2.5" />
                     </button>
                   </Badge>
                 ))}
@@ -159,40 +132,34 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
             )}
           </div>
 
-          {/* Video Parameters */}
           <VideoParameters params={videoParams} onChange={onVideoParamsChange} />
         </div>
       </div>
 
       {/* Project History */}
       {projects.data && projects.data.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <History className="w-4 h-4 text-primary" />
-            <Label className="text-sm font-semibold">Recent Projects</Label>
-            <Badge variant="outline" className="text-[9px]">{projects.data.length}</Badge>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[200px] overflow-y-auto">
+        <div className="space-y-2">
+          <Label className="text-xs font-medium flex items-center gap-1.5">
+            <History className="w-3.5 h-3.5 text-primary" />
+            Recent Projects
+            <span className="text-[9px] text-muted-foreground ml-1">({projects.data.length})</span>
+          </Label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-[160px] overflow-y-auto">
             {projects.data.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center gap-2 p-3 rounded-xl border border-border/30 bg-card/30 hover:border-primary/30 hover:bg-primary/5 transition-all group cursor-pointer"
+                className="flex items-center gap-2 px-2.5 py-2 rounded-md border border-border/20 hover:border-primary/20 hover:bg-primary/5 transition-all group cursor-pointer"
                 onClick={() => onLoadProject?.(p)}
               >
-                <FolderOpen className="w-4 h-4 text-muted-foreground group-hover:text-primary shrink-0" />
+                <FolderOpen className="w-3.5 h-3.5 text-muted-foreground/60 group-hover:text-primary shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground">{format(new Date(p.updated_at), "MMM d, HH:mm")}</span>
-                    <Badge variant="outline" className={cn("text-[8px] h-4", p.status === "completed" ? "border-emerald-500/30 text-emerald-400" : "")}>
-                      {p.status}
-                    </Badge>
-                  </div>
+                  <p className="text-[11px] font-medium text-foreground truncate">{p.name}</p>
+                  <span className="text-[9px] text-muted-foreground">{format(new Date(p.updated_at), "MMM d, HH:mm")}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
                   onClick={(e) => { e.stopPropagation(); deleteProject.mutate(p.id); }}
                 >
                   <Trash2 className="w-3 h-3 text-muted-foreground hover:text-destructive" />
@@ -204,31 +171,24 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
       )}
 
       {/* Primary CTA */}
-      <div className="space-y-2">
-        <Button
-          onClick={onAnalyze}
-          disabled={analyzing || !script.trim()}
-          className="w-full h-14 text-base font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20 rounded-2xl"
-          size="lg"
-        >
-          {analyzing ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              {analysisStatus || "Analyzing..."}
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5 mr-2" />
-              Analyze & Build Storyboard
-            </>
-          )}
-        </Button>
-        {!analyzing && (
-          <p className="text-center text-[10px] text-muted-foreground/60">
-            AI will segment, write prompts, and score quality · ~60s
-          </p>
+      <Button
+        onClick={onAnalyze}
+        disabled={analyzing || !script.trim()}
+        className="w-full h-12 text-sm font-semibold rounded-lg"
+        size="lg"
+      >
+        {analyzing ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            {analysisStatus || "Analyzing..."}
+          </>
+        ) : (
+          <>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Analyze & Build Storyboard
+          </>
         )}
-      </div>
+      </Button>
     </div>
   );
 }

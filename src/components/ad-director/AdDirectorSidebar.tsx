@@ -117,17 +117,17 @@ function SidebarItem({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all",
+        "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors",
         active
-          ? "bg-primary/10 text-primary"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
-        disabled && "opacity-40 cursor-not-allowed",
+          ? "bg-primary/10 text-primary font-medium"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/20",
+        disabled && "opacity-30 cursor-not-allowed",
         collapsed && "justify-center px-0"
       )}
       title={collapsed ? label : undefined}
     >
-      <Icon className="w-4 h-4 shrink-0" />
-      {!collapsed && <span className="text-xs truncate">{label}</span>}
+      <Icon className="w-3.5 h-3.5 shrink-0" />
+      {!collapsed && <span className="truncate">{label}</span>}
     </button>
   );
 }
