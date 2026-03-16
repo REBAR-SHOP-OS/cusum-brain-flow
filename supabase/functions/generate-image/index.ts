@@ -161,6 +161,41 @@ serve(async (req) => {
 
     console.log("Generating image with model:", selectedModel, "prompt:", prompt.slice(0, 80), "editMode:", !!editImage);
 
+    // ── Fetch Pixel Brain context (knowledge table) ──
+    let brainInstructions = "";
+    let brainResourceImages: string[] = [];
+    try {
+      const sbUrl = Deno.env.get("SUPABASE_URL")!;
+      const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const sbAdmin = createClient(sbUrl, sbKey);
+      const { data: knowledgeRows } = await sbAdmin
+        .from("knowledge")
+        .select("content, metadata")
+        .or("metadata->>agent.eq.social,metadata->>agent.eq.pixel");
+
+      if (knowledgeRows?.length) {
+        const instructions: string[] = [];
+        const images: string[] = [];
+        for (const row of knowledgeRows) {
+          const meta = (typeof row.metadata === "object" && row.metadata) || {};
+          if ((meta as any).type === "custom_instructions" && row.content) {
+            instructions.push(row.content);
+          }
+          if ((meta as any).resource_images && Array.isArray((meta as any).resource_images)) {
+            images.push(...(meta as any).resource_images);
+          }
+          if ((meta as any).type === "resource_image" && row.content) {
+            images.push(row.content);
+          }
+        }
+        brainInstructions = instructions.join("\n");
+        brainResourceImages = images.filter(Boolean);
+        console.log(`Pixel Brain context: ${instructions.length} instruction(s), ${brainResourceImages.length} resource image(s)`);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch Pixel Brain context:", e);
+    }
+
     // ── Lovable AI (Gemini image models) ──
     if (selectedModel.startsWith("google/gemini")) {
       const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");

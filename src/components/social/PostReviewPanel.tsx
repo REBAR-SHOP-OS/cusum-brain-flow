@@ -633,12 +633,29 @@ export function PostReviewPanel({
                         AI Edit
                       </Button>
                     </div>
+                  </>
+                )}
 
-                    {/* ── Fields Section ── */}
-                    <div className="px-4 pt-4 pb-4 space-y-3">
+                {/* ── Fields Section — always visible (including stories) ── */}
+                {!editing && (
+                  <div className="px-4 pt-4 pb-4 space-y-3">
                     {/* Publish date */}
-                      {isPublished ? (
-                        <div className="w-full rounded-lg border bg-card p-3 opacity-60 cursor-not-allowed">
+                    {isPublished ? (
+                      <div className="w-full rounded-lg border bg-card p-3 opacity-60 cursor-not-allowed">
+                        <p className="text-xs text-muted-foreground mb-1">Publish date</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">
+                            {post.scheduled_date
+                              ? format(new Date(post.scheduled_date), "MMMM d, yyyy 'at' h:mm a")
+                              : "Not scheduled"}
+                          </span>
+                          <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                      </div>
+                    ) : (
+                    <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <button className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors">
                           <p className="text-xs text-muted-foreground mb-1">Publish date</p>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium">
@@ -648,92 +665,77 @@ export function PostReviewPanel({
                             </span>
                             <CalendarDays className="w-4 h-4 text-muted-foreground" />
                           </div>
-                        </div>
-                      ) : (
-                      <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <button className="w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 transition-colors">
-                            <p className="text-xs text-muted-foreground mb-1">Publish date</p>
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">
-                                {post.scheduled_date
-                                  ? format(new Date(post.scheduled_date), "MMMM d, yyyy 'at' h:mm a")
-                                  : "Not scheduled"}
-                              </span>
-                              <CalendarDays className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start" side="left">
-                          <DateSchedulePopover
-                            post={post}
-                           onSetDate={async (date) => {
-                              const originalDay = post.scheduled_date?.substring(0, 10);
-                              console.log(`[PostReviewPanel] Set Date (bulk siblings) — title=${post.title} platform=${post.platform} originalDay=${originalDay} newDate=${date.toISOString()}`);
-                              let query = supabase
-                                .from("social_posts")
-                                .update({ scheduled_date: date.toISOString() })
-                                .eq("platform", post.platform)
-                                .eq("title", post.title);
-                              if (originalDay) {
-                                query = query
-                                  .gte("scheduled_date", `${originalDay}T00:00:00`)
-                                  .lte("scheduled_date", `${originalDay}T23:59:59`);
-                              } else {
-                                query = query.eq("id", post.id);
-                              }
-                              const { error } = await query;
-                              if (error) {
-                                console.error("[PostReviewPanel] Set Date FAILED:", error.message);
-                                toast({ title: "Failed to set date", description: error.message, variant: "destructive" });
-                                return;
-                              }
-                              queryClient.invalidateQueries({ queryKey: ["social_posts"] });
-                              setDatePopoverOpen(false);
-                              toast({ title: "Date updated", description: `All copies moved to ${format(date, "PPP p")}` });
-                            }}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      )}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start" side="left">
+                        <DateSchedulePopover
+                          post={post}
+                         onSetDate={async (date) => {
+                            const originalDay = post.scheduled_date?.substring(0, 10);
+                            console.log(`[PostReviewPanel] Set Date (bulk siblings) — title=${post.title} platform=${post.platform} originalDay=${originalDay} newDate=${date.toISOString()}`);
+                            let query = supabase
+                              .from("social_posts")
+                              .update({ scheduled_date: date.toISOString() })
+                              .eq("platform", post.platform)
+                              .eq("title", post.title);
+                            if (originalDay) {
+                              query = query
+                                .gte("scheduled_date", `${originalDay}T00:00:00`)
+                                .lte("scheduled_date", `${originalDay}T23:59:59`);
+                            } else {
+                              query = query.eq("id", post.id);
+                            }
+                            const { error } = await query;
+                            if (error) {
+                              console.error("[PostReviewPanel] Set Date FAILED:", error.message);
+                              toast({ title: "Failed to set date", description: error.message, variant: "destructive" });
+                              return;
+                            }
+                            queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                            setDatePopoverOpen(false);
+                            toast({ title: "Date updated", description: `All copies moved to ${format(date, "PPP p")}` });
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    )}
 
-                      {/* Content type – clickable */}
-                      <button
-                        onClick={() => !isPublished && setSubPanel("content_type")}
-                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
-                      >
-                        <p className="text-xs text-muted-foreground mb-1">Content type</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{contentTypeDisplay}</span>
-                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                      </button>
+                    {/* Content type – clickable */}
+                    <button
+                      onClick={() => !isPublished && setSubPanel("content_type")}
+                      className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
+                    >
+                      <p className="text-xs text-muted-foreground mb-1">Content type</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{contentTypeDisplay}</span>
+                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </button>
 
-                      {/* Platform – clickable (multi) */}
-                      <button
-                        onClick={() => !isPublished && setSubPanel("platform")}
-                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
-                      >
-                        <p className="text-xs text-muted-foreground mb-1">Platforms ({localPlatforms.length})</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium truncate">{platformsDisplay}</span>
-                          <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        </div>
-                      </button>
+                    {/* Platform – clickable (multi) */}
+                    <button
+                      onClick={() => !isPublished && setSubPanel("platform")}
+                      className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
+                    >
+                      <p className="text-xs text-muted-foreground mb-1">Platforms ({localPlatforms.length})</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium truncate">{platformsDisplay}</span>
+                        <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      </div>
+                    </button>
 
-                      {/* Pages – clickable */}
-                      <button
-                        onClick={() => !isPublished && setSubPanel("pages")}
-                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
-                      >
-                        <p className="text-xs text-muted-foreground mb-1">Pages ({localPages.length})</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium truncate">{localPages.join(", ")}</span>
-                          <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        </div>
-                      </button>
-                    </div>
-                  </>
+                    {/* Pages – clickable */}
+                    <button
+                      onClick={() => !isPublished && setSubPanel("pages")}
+                      className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors", isPublished ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50")}
+                    >
+                      <p className="text-xs text-muted-foreground mb-1">Pages ({localPages.length})</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium truncate">{localPages.join(", ")}</span>
+                        <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      </div>
+                    </button>
+                  </div>
                 )}
               </div>
 
