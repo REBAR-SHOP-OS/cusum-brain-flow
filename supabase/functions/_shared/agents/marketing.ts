@@ -94,8 +94,8 @@ Scientific explanations, technical specifications, engineering terminology, mate
 3. **Contact info** — company address, phone, website (exactly as above)
 4. **Hashtags** — relevant hashtags on a separate line
 5. **Persian translation** — MUST start with the exact separator \`---PERSIAN---\` on its own line, followed by:
-   - 🖼️ متن روی عکس: [Farsi translation of the English text overlay on the image]
    - 📝 ترجمه کپشن: [Farsi translation of the English caption above]
+   NOTE: The Persian section is for CAPTION translation ONLY. Do NOT include any Farsi/Persian text suggestions for the image itself. ALL image text must be English.
 
 ## CRITICAL BEHAVIOR
 - Do NOT write long explanations or discuss strategy

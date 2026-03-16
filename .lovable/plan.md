@@ -1,40 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: No Persian Text in Images, Mandatory Logo, Story = No Caption
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problems Identified
-1. **Persian/Farsi text in images**: The `generate-image` edge function and `agentToolExecutor.ts` prompts don't explicitly forbid non-English text in images. The agent's `marketing.ts` prompt mentions "Farsi image text" which can leak into image generation prompts.
-2. **Logo not always present**: The `generate-image` function passes `logoUrl` but doesn't always enforce it. The `agentToolExecutor.ts` already includes logo logic but the `generate-image` standalone function needs stronger enforcement.
-3. **Story posts should have no caption**: When content_type is "story", the system still generates and displays captions. Stories should be image-only.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Changes
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. `supabase/functions/generate-image/index.ts` — Add "English only" rule to prompt
-In `buildAdPrompt()`, add explicit instruction forbidding non-English text:
-```
-- ALL text on the image MUST be in ENGLISH ONLY. ABSOLUTELY NO Persian, Farsi, Arabic, or any non-Latin script text.
-```
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 2. `supabase/functions/_shared/agentToolExecutor.ts` — Add English-only rule to image prompt
-After the aspect ratio injection (line ~615), add:
-```typescript
-imagePrompt += "\n\nLANGUAGE RULE: ALL text rendered on the image MUST be in ENGLISH ONLY. NO Persian, Farsi, Arabic, or any non-Latin script text is allowed in the image.";
-```
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 3. `supabase/functions/_shared/agents/marketing.ts` — Remove Farsi image text requirement
-Update the prompt to clarify that Persian translations are for captions only, NOT for image text. Remove the `imageTextFa` from image generation context.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### 4. `src/components/social/PostReviewPanel.tsx` — Hide caption for Story content type
-- When `localContentType === "story"`, hide the Content section (title, content, hashtags)
-- When content_type is story and using `handleMediaReady`, skip auto-caption generation
-- In the story gen callback, auto-set content_type to "story"
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 5. `src/components/social/ImageGeneratorDialog.tsx` — Story mode: auto-set content_type
-When `storyMode` and user clicks "Use in Post", pass a signal so the parent knows to set content_type to "story" and clear any caption.
-
-## Summary
-- Add "ENGLISH ONLY" rules to both `generate-image` and `agentToolExecutor` image prompts
-- Hide caption UI for story-type posts in PostReviewPanel
-- Skip caption generation when content_type is "story"
-- Ensure logo is always referenced in prompts
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

@@ -206,8 +206,8 @@ export function PostReviewPanel({
       updatePost.mutate({ id: post.id, image_url: permanentUrl });
       toast({ title: `${type === "image" ? "Image" : "Video"} attached`, description: "Saved to your post permanently." });
 
-      // Auto-generate general caption for video uploads
-      if (type === "video") {
+      // Auto-generate general caption for video uploads (skip for stories)
+      if (type === "video" && localContentType !== "story") {
         setRegeneratingCaption(true);
         try {
           const { data, error } = await supabase.functions.invoke("regenerate-post", {
@@ -508,8 +508,12 @@ export function PostReviewPanel({
                   </div>
                 </div>
 
-                {/* ── Content Section ── */}
-                {editing ? (
+                {/* ── Content Section (hidden for Stories) ── */}
+                {localContentType === "story" ? (
+                  <div className="mx-4 rounded-lg border bg-muted/30 p-4 text-center">
+                    <p className="text-sm text-muted-foreground">Stories are image/video only — no caption needed.</p>
+                  </div>
+                ) : editing ? (
                   <div className="px-4 pb-4 space-y-3">
                     <div className="space-y-1.5">
                       <Label className="text-sm">Title</Label>
@@ -862,7 +866,7 @@ export function PostReviewPanel({
                           return;
                         }
 
-                        if ((post.content || "").length < 20) {
+                        if (localContentType !== "story" && (post.content || "").length < 20) {
                           toast({ title: "Content too short", description: "Post content must be at least 20 characters to schedule.", variant: "destructive" });
                           return;
                         }
@@ -959,6 +963,9 @@ export function PostReviewPanel({
         storyMode
         onImageReady={(url) => {
           setShowStoryGen(false);
+          // Auto-set content_type to story and clear caption
+          setLocalContentType("story");
+          updatePost.mutate({ id: post.id, content_type: "story", content: "", title: "", hashtags: [] });
           handleMediaReady(url, "image");
         }}
       />
