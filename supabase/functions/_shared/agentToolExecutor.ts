@@ -605,11 +605,14 @@ export async function executeToolCall(
               imagePrompt = mandatoryBlock + imagePrompt;
             }
 
-            // Inject aspect ratio from user selection
-            const aspectRatio = context?.imageAspectRatio as string;
-            if (aspectRatio) {
-              imagePrompt += `\n\nIMAGE ASPECT RATIO: ${aspectRatio}. Compose the image to fit this ratio perfectly.`;
-            }
+            // Inject aspect ratio from user selection (tool arg takes priority over context)
+            const aspectRatio = args.aspect_ratio || (context?.imageAspectRatio as string) || "1:1";
+            const AR_PROMPT_MAP: Record<string, string> = {
+              "16:9": "CRITICAL: Generate a LANDSCAPE image with 16:9 aspect ratio. The image MUST be wider than tall.",
+              "9:16": "CRITICAL: Generate a PORTRAIT image with 9:16 aspect ratio. The image MUST be taller than wide (suitable for Instagram Stories/Reels).",
+              "1:1": "CRITICAL: Generate a perfectly SQUARE image with 1:1 aspect ratio. Width and height MUST be equal.",
+            };
+            imagePrompt += `\n\n${AR_PROMPT_MAP[aspectRatio] || `IMAGE ASPECT RATIO: ${aspectRatio}. Compose the image to fit this ratio perfectly.`}`;
 
             // Fetch Brain resource images for multimodal reference
             try {
