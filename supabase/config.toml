@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.camera-ping]
 verify_jwt = false
+
+[functions.regenerate-post]
+verify_jwt = false
