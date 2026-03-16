@@ -1121,13 +1121,35 @@ Rules:
     const aiData = await aiResponse.json();
     const rawContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    // Parse the JSON response (strip markdown fences if present)
+    // Parse the JSON response with robust extraction
     let digest;
     try {
-      const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      digest = JSON.parse(cleaned);
-    } catch {
-      console.error("Failed to parse AI response:", rawContent);
+      // Strip markdown code fences
+      let cleaned = rawContent
+        .replace(/```json\s*/gi, "")
+        .replace(/```\s*/g, "")
+        .trim();
+
+      // Find JSON object boundaries
+      const jsonStart = cleaned.indexOf("{");
+      const jsonEnd = cleaned.lastIndexOf("}");
+      if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+      }
+
+      try {
+        digest = JSON.parse(cleaned);
+      } catch {
+        // Fix common LLM issues: trailing commas, control characters
+        cleaned = cleaned
+          .replace(/,\s*}/g, "}")
+          .replace(/,\s*]/g, "]")
+          .replace(/[\x00-\x1F\x7F]/g, (ch) => ch === "\n" || ch === "\t" ? ch : "");
+        digest = JSON.parse(cleaned);
+      }
+    } catch (parseErr) {
+      console.error("Failed to parse AI response:", rawContent.substring(0, 500));
+      console.error("Parse error:", parseErr);
       throw new Error("Failed to parse AI digest response");
     }
 
