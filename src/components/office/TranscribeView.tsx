@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { addMarkdownToPdf } from "@/lib/pdfMarkdownRenderer";
 import { useRealtimeTranscribe } from "@/hooks/useRealtimeTranscribe";
 import { LiveTranscript } from "@/components/transcribe/LiveTranscript";
 import { PostProcessToolbar } from "@/components/transcribe/PostProcessToolbar";
