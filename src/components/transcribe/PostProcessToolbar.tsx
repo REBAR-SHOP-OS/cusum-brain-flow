@@ -189,6 +189,22 @@ export function PostProcessToolbar({ transcript, onResult, selectedSpeaker, onFi
         >
           <MessageSquare className="w-3 h-3" /> Custom
         </Button>
+        {onFinalReport && (
+          <Button
+            size="sm"
+            variant={allSpeakersComplete ? "default" : "outline"}
+            className="text-xs gap-1.5"
+            disabled={!allSpeakersComplete || isFinalReportLoading}
+            onClick={onFinalReport}
+          >
+            {isFinalReportLoading ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <ClipboardList className="w-3 h-3" />
+            )}
+            Final Report
+          </Button>
+        )}
       </div>
 
       {/* Translate target language selector */}
