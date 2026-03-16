@@ -367,7 +367,6 @@ async function generatePixelImage(
           model: attempt.model,
           messages: [{ role: "user", content: contentParts }],
           modalities: ["image", "text"],
-          aspect_ratio: aspectRatio,
         }),
       });
 
