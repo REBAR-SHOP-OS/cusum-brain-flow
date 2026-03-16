@@ -35,7 +35,7 @@ export function FloatingMicButton({ onToggleVoice, isListening, isSupported }: F
 
   if (!isSupported) return null;
 
-  return (
+  return createPortal(
     <button
       data-feedback-btn="true"
       onPointerDown={handlePointerDown}
