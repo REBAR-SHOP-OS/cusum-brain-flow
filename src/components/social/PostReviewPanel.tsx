@@ -25,6 +25,7 @@ import { uploadSocialMediaAsset } from "@/lib/socialMediaStorage";
 import { useToast } from "@/hooks/use-toast";
 import { usePublishPost } from "@/hooks/usePublishPost";
 import { schedulePost } from "@/lib/schedulePost";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 interface PostReviewPanelProps {
   post: SocialPost | null;
@@ -210,11 +211,7 @@ export function PostReviewPanel({
       if (type === "video" && localContentType !== "story") {
         setRegeneratingCaption(true);
         try {
-          const { data, error } = await supabase.functions.invoke("regenerate-post", {
-            body: { post_id: post.id, caption_only: true, is_video: true },
-          });
-          if (error) throw error;
-          if (data?.error) throw new Error(data.error);
+          const data = await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: true }, { timeoutMs: 120000 });
           queryClient.invalidateQueries({ queryKey: ["social_posts"] });
           toast({ title: "Caption generated", description: "A general promotional caption was created for your video." });
         } catch (err: any) {
@@ -422,11 +419,7 @@ export function PostReviewPanel({
                         onClick={async () => {
                           setRegenerating(true);
                           try {
-                            const { data, error } = await supabase.functions.invoke("regenerate-post", {
-                              body: { post_id: post.id, is_video: !!isVideo },
-                            });
-                            if (error) throw error;
-                            if (data?.error) throw new Error(data.error);
+                            const data = await invokeEdgeFunction("regenerate-post", { post_id: post.id, is_video: !!isVideo }, { timeoutMs: 120000 });
                             queryClient.invalidateQueries({ queryKey: ["social_posts"] });
                             toast({ title: "Post regenerated", description: "New image and caption generated successfully." });
                           } catch (err: any) {
@@ -594,11 +587,7 @@ export function PostReviewPanel({
                         onClick={async () => {
                           setRegeneratingCaption(true);
                           try {
-                            const { data, error } = await supabase.functions.invoke("regenerate-post", {
-                              body: { post_id: post.id, caption_only: true, is_video: !!isVideo },
-                            });
-                            if (error) throw error;
-                            if (data?.error) throw new Error(data.error);
+                            const data = await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: !!isVideo }, { timeoutMs: 120000 });
                             queryClient.invalidateQueries({ queryKey: ["social_posts"] });
                             toast({ title: "Caption regenerated", description: "New caption generated based on the image." });
                           } catch (err: any) {
