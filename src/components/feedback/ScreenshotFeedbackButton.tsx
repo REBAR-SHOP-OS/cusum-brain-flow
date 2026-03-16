@@ -238,7 +238,7 @@ export function ScreenshotFeedbackButton() {
     setSpeechState(state);
   }, []);
 
-  return (
+  return createPortal(
     <>
       {overlayOpen && (
         <FloatingMicButton
