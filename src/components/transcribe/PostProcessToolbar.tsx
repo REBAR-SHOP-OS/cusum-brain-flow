@@ -83,7 +83,7 @@ async function generatePdfReport(transcript: string, summary: string, selectedSp
   // Summary section
   addText("AI Summary", 14, "bold", [20, 20, 80]);
   addSpacer(3);
-  addText(summary, 10, "normal", [30, 30, 30]);
+  y = addMarkdownToPdf(doc, summary, { margin, maxWidth, pageHeight, startY: y });
   addSpacer(12);
 
   // Disclaimer

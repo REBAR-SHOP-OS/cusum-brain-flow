@@ -637,7 +637,7 @@ export function TranscribeView() {
       // Consolidated Analysis
       addText("CONSOLIDATED ANALYSIS", 16, "bold", [20, 20, 80]);
       addSpacer(3);
-      addText(consolidatedAnalysis, 10, "normal", [30, 30, 30]);
+      y = addMarkdownToPdf(doc, consolidatedAnalysis, { margin, maxWidth, pageHeight, startY: y });
       addSpacer(12);
 
       // Disclaimer
