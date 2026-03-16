@@ -1,46 +1,37 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Floating Buttons Always Draggable Over Overlays
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+The three floating buttons (Vizzy avatar, camera feedback, mic) have `z-[9999]` but when a Radix overlay (Dialog, Sheet, Drawer) opens, its overlay element (`fixed inset-0 z-50`) captures pointer events and blocks dragging. Even though the buttons are visually on top, the Radix portal's event handling intercepts pointer interactions.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Solution
+Add a global CSS rule that ensures elements with `z-[9999]` always receive pointer events, regardless of Radix overlays. This is done by:
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. `src/index.css` — Add global pointer-events override
+Add a CSS rule that targets `[data-feedback-btn]` elements and the floating Vizzy container to ensure they always have `pointer-events: auto` and sit above Radix portals:
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+```css
+/* Ensure floating buttons remain interactive over Radix overlays */
+[data-radix-portal] ~ .fixed.z-\[9999\],
+[data-feedback-btn="true"] {
+  pointer-events: auto !important;
+}
+```
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 2. `src/components/vizzy/FloatingVizzyButton.tsx` — Add `data-feedback-btn` attribute
+Add `data-feedback-btn="true"` to the Vizzy wrapper `<div>` so it's also covered by the CSS rule, matching the pattern already used by the camera button.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 3. `src/components/feedback/FloatingMicButton.tsx` — Already has `data-feedback-btn`
+Already correct — no changes needed.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 4. Move floating buttons to render via a **top-level portal**
+The real fix: render all three floating buttons via `ReactDOM.createPortal(…, document.body)` so they sit **outside** and **after** any Radix portal in the DOM. This ensures they naturally receive pointer events since they're later siblings in the DOM tree with higher z-index.
+
+Changes:
+- **`FloatingVizzyButton.tsx`**: Wrap the return JSX in `createPortal(…, document.body)`
+- **`ScreenshotFeedbackButton.tsx`**: Wrap the button (not the overlay) in `createPortal(…, document.body)`
+- **`FloatingMicButton.tsx`**: Wrap in `createPortal(…, document.body)`
+
+This is the cleanest approach — it avoids CSS hacks and ensures the buttons are always in the topmost DOM layer, above all Radix portals.
+
