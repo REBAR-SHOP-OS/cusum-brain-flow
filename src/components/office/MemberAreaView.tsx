@@ -32,7 +32,6 @@ import { supabase } from "@/integrations/supabase/client";
 import type { UnitSystem } from "@/lib/unitSystem";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
 
 // ── Language options ──
