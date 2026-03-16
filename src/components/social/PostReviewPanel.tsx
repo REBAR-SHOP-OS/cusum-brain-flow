@@ -587,11 +587,7 @@ export function PostReviewPanel({
                         onClick={async () => {
                           setRegeneratingCaption(true);
                           try {
-                            const { data, error } = await supabase.functions.invoke("regenerate-post", {
-                              body: { post_id: post.id, caption_only: true, is_video: !!isVideo },
-                            });
-                            if (error) throw error;
-                            if (data?.error) throw new Error(data.error);
+                            const data = await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: !!isVideo }, { timeoutMs: 120000 });
                             queryClient.invalidateQueries({ queryKey: ["social_posts"] });
                             toast({ title: "Caption regenerated", description: "New caption generated based on the image." });
                           } catch (err: any) {
