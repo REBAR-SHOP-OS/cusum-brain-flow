@@ -296,6 +296,72 @@ async function upsertTransactions(
   return synced;
 }
 
+// ─── Accounting Mirror Sync ────────────────────────────────────────
+// Writes Invoice/Bill/Payment/Estimate/CreditMemo/SalesReceipt to accounting_mirror
+// so dashboards, customer portal, AR aging, and agents stay current.
+
+const MIRROR_ENTITY_TYPES = new Set([
+  "Invoice", "Bill", "Payment", "Estimate", "CreditMemo", "SalesReceipt",
+]);
+
+async function syncToAccountingMirror(
+  svc: SvcClient,
+  companyId: string,
+  entityType: string,
+  txns: Record<string, unknown>[],
+) {
+  if (!MIRROR_ENTITY_TYPES.has(entityType) || txns.length === 0) return 0;
+
+  // Build customer quickbooks_id -> local UUID lookup
+  const custMap = new Map<string, string>();
+  let page = 0;
+  const PAGE_SIZE = 1000;
+  while (true) {
+    const { data } = await svc
+      .from("customers")
+      .select("id, quickbooks_id")
+      .eq("company_id", companyId)
+      .not("quickbooks_id", "is", null)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    const rows = data || [];
+    for (const r of rows) {
+      if (r.quickbooks_id) custMap.set(r.quickbooks_id, r.id);
+    }
+    if (rows.length < PAGE_SIZE) break;
+    page++;
+  }
+
+  const BATCH = 100;
+  let synced = 0;
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < txns.length; i += BATCH) {
+    const batch = txns.slice(i, i + BATCH).map(t => {
+      const custRef = t.CustomerRef as { value?: string; name?: string } | undefined;
+      const customerId = custRef?.value ? custMap.get(custRef.value) || null : null;
+
+      return {
+        quickbooks_id: String(t.Id),
+        entity_type: entityType,
+        company_id: companyId,
+        customer_id: customerId,
+        balance: Number(t.Balance ?? t.TotalAmt ?? 0),
+        data: t,
+        last_synced_at: now,
+      };
+    });
+
+    const { error, count } = await svc
+      .from("accounting_mirror")
+      .upsert(batch, { onConflict: "quickbooks_id,entity_type,company_id", count: "exact" });
+    if (error) console.error(`accounting_mirror (${entityType}) upsert err:`, error.message);
+    synced += count || batch.length;
+  }
+
+  console.log(`[mirror-sync] ${entityType}: ${synced} rows mirrored`);
+  return synced;
+}
+
 // ─── GL Normalization ──────────────────────────────────────────────
 
 async function normalizeToGL(
