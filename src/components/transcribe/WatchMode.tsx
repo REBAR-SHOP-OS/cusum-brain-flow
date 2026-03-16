@@ -96,9 +96,8 @@ export function WatchMode() {
           </p>
         ))}
         {partialText && (
-          <p className="text-lg text-white/60 italic">
-            {partialText}
-            <span className="animate-pulse">▊</span>
+          <p className="text-lg text-white/60 italic animate-pulse">
+            Listening…
           </p>
         )}
         {!isConnected && committedTranscripts.length === 0 && (

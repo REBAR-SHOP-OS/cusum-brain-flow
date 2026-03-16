@@ -57,9 +57,8 @@ export function LiveTranscript({
             <span className="text-[10px] font-mono text-muted-foreground shrink-0 pt-0.5 min-w-[3rem]">
               …
             </span>
-            <span className="text-sm text-muted-foreground italic">
-              {partial}
-              <span className="animate-pulse">▊</span>
+            <span className="text-sm text-muted-foreground italic animate-pulse">
+              Listening…
             </span>
           </div>
         )}

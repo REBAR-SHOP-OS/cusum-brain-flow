@@ -891,7 +891,7 @@ export function TranscribeView() {
               return (
                 <div key={t.id} className="space-y-0.5">
                   <p className="text-sm text-foreground" dir="auto">
-                    {displayText || t.translatedText || t.text}
+                    {displayText || t.translatedText || ""}
                     {isTranslating && !displayText && (
                       <span className="ml-1 text-xs text-muted-foreground italic animate-pulse">translating…</span>
                     )}
