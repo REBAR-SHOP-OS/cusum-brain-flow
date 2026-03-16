@@ -1,58 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Clearance Photo Upload: Increase Limit, Add Compression, Speed Up
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problems
-1. **10MB limit too small** — shop floor photos from modern phones often exceed 10MB
-2. **No image optimization** — raw full-res photos are uploaded as-is, wasting storage and slowing upload
-3. **Slow upload flow** — photo uploads, then AI validation runs sequentially; no client-side compression
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Solution
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. `src/components/clearance/ClearanceCard.tsx` — Increase limit + client-side compression
-- Raise `MAX_FILE_SIZE` from 10MB to **50MB** (matches server-side `upload-validation.ts` limit)
-- Add a `compressImage()` utility that uses `<canvas>` to resize large photos to max 2048px on longest side and compress to JPEG ~80% quality before uploading
-- This typically reduces a 15MB phone photo to ~500KB-1MB, making uploads much faster
-- Update the toast message to reflect the new 50MB limit
-- Update the `accept` attribute hint text
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 2. `src/lib/imageCompressor.ts` — New shared utility
-Create a reusable image compressor:
-```typescript
-export async function compressImage(
-  file: File, 
-  maxDimension = 2048, 
-  quality = 0.8
-): Promise<File> {
-  // Skip non-images or already small files
-  if (!file.type.startsWith("image/") || file.size < 500_000) return file;
-  
-  // Load into canvas, resize, export as JPEG
-  const img = await createImageBitmap(file);
-  const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
-  const canvas = new OffscreenCanvas(img.width * scale, img.height * scale);
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
-  return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
-}
-```
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 3. `src/components/clearance/ClearanceCard.tsx` — Apply compression in upload flow
-- In `handleUpload`, compress the file before uploading:
-```typescript
-const compressed = await compressImage(file);
-// Then upload `compressed` instead of `file`
-```
-- This makes uploads dramatically faster (smaller file) and AI validation faster (smaller image to process)
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### 4. Speed: Run upload and show progress
-- Add a brief "Compressing..." state before "Uploading..." for UX clarity
-- The compression + smaller file size will inherently speed up both upload and AI validation
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-## Summary of Changes
-| File | Change |
-|------|--------|
-| `src/lib/imageCompressor.ts` | New — canvas-based image compressor |
-| `src/components/clearance/ClearanceCard.tsx` | Raise limit to 50MB, compress before upload, update messages |
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
