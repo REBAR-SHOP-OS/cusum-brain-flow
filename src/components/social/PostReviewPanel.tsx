@@ -641,11 +641,21 @@ export function PostReviewPanel({
                           <DateSchedulePopover
                             post={post}
                            onSetDate={async (date) => {
-                              console.log(`[PostReviewPanel] Set Date only — post=${post.id} date=${date.toISOString()}`);
-                              const { error } = await supabase
+                              const originalDay = post.scheduled_date?.substring(0, 10);
+                              console.log(`[PostReviewPanel] Set Date (bulk siblings) — title=${post.title} platform=${post.platform} originalDay=${originalDay} newDate=${date.toISOString()}`);
+                              let query = supabase
                                 .from("social_posts")
                                 .update({ scheduled_date: date.toISOString() })
-                                .eq("id", post.id);
+                                .eq("platform", post.platform)
+                                .eq("title", post.title);
+                              if (originalDay) {
+                                query = query
+                                  .gte("scheduled_date", `${originalDay}T00:00:00`)
+                                  .lte("scheduled_date", `${originalDay}T23:59:59`);
+                              } else {
+                                query = query.eq("id", post.id);
+                              }
+                              const { error } = await query;
                               if (error) {
                                 console.error("[PostReviewPanel] Set Date FAILED:", error.message);
                                 toast({ title: "Failed to set date", description: error.message, variant: "destructive" });
@@ -653,7 +663,7 @@ export function PostReviewPanel({
                               }
                               queryClient.invalidateQueries({ queryKey: ["social_posts"] });
                               setDatePopoverOpen(false);
-                              toast({ title: "Date set", description: format(date, "PPP p") });
+                              toast({ title: "Date updated", description: `All copies moved to ${format(date, "PPP p")}` });
                             }}
                           />
                         </PopoverContent>
