@@ -302,11 +302,17 @@ serve(async (req) => {
       ? `\n\n## MANDATORY BRAIN CONTEXT (YOU MUST USE THIS):\n${brainKnowledge}\n\nCRITICAL: You MUST incorporate the above brain context into your generated content.\n`
       : "";
 
+    const isVideoPost = is_video || (post.image_url && /\.(mp4|mov|webm)(\?|$)/i.test(post.image_url));
+
     // ─── CAPTION-ONLY mode: just regenerate caption based on the image ───
     if (caption_only) {
+      const videoInstruction = isVideoPost
+        ? `This post contains a VIDEO (not an image). Write a GENERAL promotional caption about REBAR.SHOP as a company — our services, reliability, fast delivery, customer satisfaction, construction industry leadership in Ontario. Do NOT focus on any specific product. Write about the company brand, values, and broad services.`
+        : `You are looking at an image from a social media post. Based on what you see in the image, write a NEW short promotional caption.`;
+
       const captionOnlyPrompt = `You are an elite creative advertising copywriter for REBAR.SHOP, a premium rebar and steel reinforcement company in Ontario, Canada.
 
-You are looking at an image from a social media post. Based on what you see in the image, write a NEW short promotional caption.
+${videoInstruction}
 
 Platform: ${post.platform}
 ${brainBlock}
