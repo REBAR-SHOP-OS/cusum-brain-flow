@@ -23,7 +23,7 @@ import { MemberAreaView } from "@/components/office/MemberAreaView";
 import { useProfiles, useSalaries, type Profile, type EmployeeSalary } from "@/hooks/useProfiles";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CEODashboardView } from "@/components/office/CEODashboardView";
+
 import { OdooReconciliationReport } from "@/components/admin/OdooReconciliationReport";
 import { FieldAuditTrailView } from "@/components/admin/FieldAuditTrailView";
 
