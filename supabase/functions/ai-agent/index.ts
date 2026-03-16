@@ -1066,6 +1066,7 @@ Deno.serve(async (req) => {
       aiResult = await callAI({
         provider: modelConfig.provider,
         model: modelConfig.model,
+        agentName: agent,
         messages: nextMessages as AIMessage[],
         maxTokens: modelConfig.maxTokens,
         temperature: modelConfig.temperature,
