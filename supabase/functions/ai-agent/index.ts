@@ -6,6 +6,7 @@ import { executeToolCall } from "../_shared/agentToolExecutor.ts";
 import { selectModel, AIError, callAI, type AIMessage, type AIProvider } from "../_shared/aiRouter.ts";
 import { analyzeDocumentWithGemini, convertPdfToImages, performOCR, performOCROnBase64, performMultiPassAnalysis, detectZones, extractRebarData } from "../_shared/agentDocumentUtils.ts";
 import { agentPrompts } from "../_shared/agentPrompts.ts";
+import { cropToAspectRatio } from "../_shared/imageResize.ts";
 import { reviewAgentOutput } from "../_shared/agentQA.ts";
 import { 
   ONTARIO_CONTEXT, 
