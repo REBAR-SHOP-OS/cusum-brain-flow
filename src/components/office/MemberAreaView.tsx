@@ -28,6 +28,8 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { BulkAvatarUploadDialog } from "@/components/settings/BulkAvatarUploadDialog";
 import { AiVisionUploadDialog, type UploadedSchematic } from "@/components/office/AiVisionUploadDialog";
+import { supabase } from "@/integrations/supabase/client";
+import type { UnitSystem } from "@/lib/unitSystem";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
