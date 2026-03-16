@@ -280,6 +280,7 @@ serve(async (req) => {
       pass1Result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-pro",
+        agentName: "system",
         messages,
       });
     } catch (aiErr) {
