@@ -1,46 +1,41 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
+
+
+# Fix: Invoice #2277 Missing — Sync Gap Between QB Systems
+
+## Root Cause
+
+There are **two independent sync systems** that don't communicate:
+
+| System | Target Table | Last Synced | Status |
+|--------|-------------|-------------|--------|
+| `quickbooks-oauth` (sync-invoices) | `accounting_mirror` | **Feb 13** (1+ month stale) | Used by customer portal, CEO dashboard, agents |
+| `qb-sync-engine` (backfill/incremental) | `qb_transactions` | **Today** (current) | Used for GL normalization, trial balance |
+
+The `qb-sync-engine` runs regularly and keeps `qb_transactions` up to date, but it **never writes to `accounting_mirror`**. Meanwhile, `accounting_mirror` is the table read by 14+ components across the app (customer portal, invoices, AR aging, CEO dashboard, etc.).
+
+Invoice #2277 specifically doesn't exist in either table — it may not have been created in QuickBooks at all (there's a gap: 2276 → 2278 in `qb_transactions`). But the broader problem is that invoices 2231–2285 exist in `qb_transactions` but are completely missing from `accounting_mirror`.
+
+## Solution
+
+Add a **mirror sync step** to the `qb-sync-engine` that writes Invoice and Bill data to `accounting_mirror` after upserting to `qb_transactions`. This ensures both tables stay in sync from a single source of truth.
 
 ### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+**File: `supabase/functions/qb-sync-engine/index.ts`**
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+1. Add a new helper function `syncToAccountingMirror(svc, companyId, entityType, transactions)` that:
+   - Filters for entity types used by `accounting_mirror` (Invoice, Bill, Payment, Estimate, CreditMemo)
+   - Maps QB transaction data to the `accounting_mirror` schema (quickbooks_id, entity_type, balance, customer_id, data JSONB, last_synced_at)
+   - Resolves `customer_id` by looking up `customers.quickbooks_id` from the QB CustomerRef
+   - Upserts in batches to `accounting_mirror` using `onConflict: "quickbooks_id"`
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+2. Call `syncToAccountingMirror` at the end of both `handleBackfill` and `handleIncremental` after the transaction upsert loop completes.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+3. The `data` JSONB will include the same fields the old `quickbooks-oauth` sync stored: `DocNumber`, `TotalAmt`, `DueDate`, `TxnDate`, `CustomerName`, `EmailStatus`, `Balance`, `Line`, `BillEmail`, `CustomerRef`.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+This is a non-breaking addition — the existing `qb_transactions` flow is untouched. It simply adds a secondary write to keep `accounting_mirror` current.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### Why Not Just Fix the Old Sync?
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+The `quickbooks-oauth` sync-invoices function requires a user-initiated call with auth. The `qb-sync-engine` runs automatically (cron/backfill). Adding the mirror write to the engine that already runs ensures continuous freshness without manual intervention.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
