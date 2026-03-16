@@ -42,31 +42,15 @@ ${DIARIZATION_INSTRUCTION}`;
 
 // ===== Post-processing system prompts =====
 const POST_PROCESS_PROMPTS: Record<string, string> = {
-  summarize: `You are an expert analyst and report writer. Given the following transcript, produce a comprehensive, highly accurate summary IN ENGLISH.
-
-Structure your response as follows:
-
-## Context & Background
-- What is this conversation about? Who are the participants?
-
-## Key Discussion Points
-- Each major topic discussed, with specific details and quotes where relevant
-
-## Decisions & Agreements
-- Any decisions made or agreements reached
-
-## Concerns & Issues Raised
-- Problems, objections, or risks mentioned
-
-## Conclusions
-- Final outcomes and next steps
+  summarize: `You are an expert analyst and report writer. Given the following transcript, produce a clean, concise summary IN ENGLISH as plain prose paragraphs.
 
 CRITICAL RULES:
-- ALWAYS write in English, regardless of the transcript language
-- Be extremely precise — do not generalize or omit important details
-- Include specific names, numbers, dates, and facts mentioned
-- Do not add information that was not in the transcript
-- Respond with the summary text only, no JSON wrapper.`,
+- Write ONLY in English, regardless of the transcript language.
+- Do NOT use any markdown formatting: no ##, no **, no -, no bullet points, no headers.
+- Write clean flowing paragraphs covering: context and participants, key discussion points, decisions made, concerns raised, and conclusions/next steps.
+- Be precise — include specific names, numbers, dates, and facts mentioned.
+- Do not add information not in the transcript.
+- Keep it concise but thorough. Return plain text only, no JSON wrapper.`,
 
   "action-items": `You are a project management expert. Given the following transcript, extract ALL actionable tasks, to-dos, and commitments made by participants.
 

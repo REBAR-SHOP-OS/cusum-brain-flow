@@ -725,7 +725,7 @@ export function TranscribeView() {
             <DialogDescription>Individual speaker summary</DialogDescription>
           </DialogHeader>
           <div className="text-sm whitespace-pre-wrap text-foreground">
-            {viewingReport && (speakerReports[viewingReport] || "No report available.")}
+            {viewingReport && ((speakerReports[viewingReport] || "No report available.").replace(/#{1,6}\s?/g, "").replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1").replace(/^[-•]\s*/gm, ""))}
           </div>
         </DialogContent>
       </Dialog>
