@@ -111,7 +111,7 @@ export function AddItemForm({ rebarSizes, capabilities, getMaxBars, onAdd }: Add
         <Alert variant="destructive" className="py-2">
           <AlertTriangle className="w-4 h-4" />
           <AlertDescription className="text-xs">
-            No cutting capability found for <strong>{barCode}</strong> on GENSCO DTX 400. Add it in Admin → Machines first.
+            No cutting capability found for <strong>{barSizeLabel(barCode, unitSystem)}</strong> on this machine. Add it in Admin → Machines first.
           </AlertDescription>
         </Alert>
       )}
