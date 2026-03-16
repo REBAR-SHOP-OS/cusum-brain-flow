@@ -103,9 +103,16 @@ export function DetailedListView() {
               <button
                 key={plan.id}
                 onClick={() => setSelectedPlanId(plan.id)}
-                className="w-full text-left pl-4 pr-3 py-2.5 rounded-r-lg hover:bg-muted/30 transition-colors flex items-center justify-between"
+                className={`w-full text-left pl-4 pr-3 py-2.5 rounded-r-lg hover:bg-muted/30 transition-colors flex items-center justify-between ${plan.name.endsWith("(Small)") ? "opacity-60" : ""}`}
               >
-                <span className="font-medium text-sm text-foreground">{plan.name}</span>
+                <span className="font-medium text-sm text-foreground flex items-center gap-2">
+                  {plan.name}
+                  {plan.name.endsWith("(Small)") && (
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-orange-500/40 text-orange-400">
+                      AUTO-SPLIT
+                    </Badge>
+                  )}
+                </span>
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{plan.status}</span>
               </button>
             ))}
