@@ -572,7 +572,7 @@ export function PostReviewPanel({
                           setRegeneratingCaption(true);
                           try {
                             const { data, error } = await supabase.functions.invoke("regenerate-post", {
-                              body: { post_id: post.id, caption_only: true },
+                              body: { post_id: post.id, caption_only: true, is_video: !!isVideo },
                             });
                             if (error) throw error;
                             if (data?.error) throw new Error(data.error);
