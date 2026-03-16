@@ -1,46 +1,43 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Add Estimated Cost per Model to AI Token Usage Card
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## What
+Enhance the `AITokenUsageCard` to show estimated USD cost for each model based on token usage, plus a total estimated spend KPI.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Pricing Table (per 1M tokens, Lovable AI gateway rates)
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+| Model | Input $/1M | Output $/1M |
+|-------|-----------|-------------|
+| google/gemini-2.5-pro | $1.25 | $10.00 |
+| google/gemini-3.1-pro-preview | $1.25 | $10.00 |
+| google/gemini-3-flash-preview | $0.10 | $0.40 |
+| google/gemini-2.5-flash | $0.15 | $0.60 |
+| google/gemini-2.5-flash-lite | $0.02 | $0.10 |
+| openai/gpt-5 | $10.00 | $30.00 |
+| openai/gpt-5-mini | $1.10 | $4.40 |
+| openai/gpt-5-nano | $0.10 | $0.40 |
+| openai/gpt-5.2 | $12.00 | $40.00 |
+| openai/gpt-4o | $2.50 | $10.00 |
+| google/gemini-2.5-flash-image | $0.15 | $0.60 |
+| google/gemini-3-pro-image-preview | $1.25 | $10.00 |
+| google/gemini-3.1-flash-image-preview | $0.10 | $0.40 |
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Changes
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 1. Modify `src/components/ceo/AITokenUsageCard.tsx`
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+- Add a `MODEL_PRICING` constant map with input/output cost per 1M tokens for all models
+- Compute `estimatedCost` per model row using: `(prompt_tokens * input_rate + completion_tokens * output_rate) / 1_000_000`
+- Add a new KPI card in the summary row: **"Est. Cost"** showing total USD
+- Update the "By Model" list to show cost next to token count (e.g. `Gemini 2.5 Flash — 1.2M — $0.84`)
+- Add a cost column to the model breakdown sorted by cost descending
+- Unknown models default to a mid-tier rate ($1.00/$4.00) as fallback
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. Update `src/types/adDirector.ts` AVAILABLE_MODELS
+
+- Add all missing models (gpt-5-nano, gpt-5.2, gemini-3-flash-preview, gemini-3.1-pro-preview, image models) so the Ad Director model selector also shows the full list
+
+## Result
+The CEO portal shows estimated dollar spend per model and total, giving clear visibility into AI costs across the platform.
+
