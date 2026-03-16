@@ -338,24 +338,23 @@ async function applyMapping(sb: any, sessionId: string) {
   for (const row of rows) {
     const updates: Record<string, any> = { status: "mapped" };
 
-    // Map bar_size
-    const rawSize = (row.bar_size || "").toUpperCase().trim();
-    if (mappingLookup["bar_size"]?.[rawSize]) {
-      updates.bar_size_mapped = mappingLookup["bar_size"][rawSize];
-    } else if (VALID_BAR_SIZES.includes(rawSize)) {
-      updates.bar_size_mapped = rawSize;
+    // Map bar_size (supports both metric and imperial)
+    const rawSize = (row.bar_size || "").trim();
+    if (mappingLookup["bar_size"]?.[rawSize.toUpperCase()]) {
+      updates.bar_size_mapped = mappingLookup["bar_size"][rawSize.toUpperCase()];
     } else {
-      // Try auto-mapping: extract number + M
-      const sizeMatch = rawSize.match(/(\d+)\s*M/i);
-      if (sizeMatch && VALID_BAR_SIZES.includes(`${sizeMatch[1]}M`)) {
-        updates.bar_size_mapped = `${sizeMatch[1]}M`;
-        autoMappings.push({
-          source_field: "bar_size",
-          source_value: rawSize,
-          mapped_value: updates.bar_size_mapped,
-        });
+      const normalized = normalizeBarSize(rawSize);
+      if (normalized) {
+        updates.bar_size_mapped = normalized;
+        if (normalized !== rawSize.toUpperCase()) {
+          autoMappings.push({
+            source_field: "bar_size",
+            source_value: rawSize,
+            mapped_value: normalized,
+          });
+        }
       } else {
-        updates.bar_size_mapped = rawSize; // Keep raw, will fail validation
+        updates.bar_size_mapped = rawSize.toUpperCase(); // Keep raw, will fail validation
       }
     }
 
