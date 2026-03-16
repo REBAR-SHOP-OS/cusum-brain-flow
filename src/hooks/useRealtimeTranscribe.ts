@@ -36,17 +36,23 @@ export function useRealtimeTranscribe() {
       ]);
       setPartialText("");
 
-      // Fire-and-forget translation to English via direct fetch (faster)
+      // Fire-and-forget: get clean English + clean original language (e.g. Farsi)
       invokeEdgeFunction<{ translations: Record<string, string> }>(
         "translate-message",
-        { text: data.text, sourceLang: "auto", targetLangs: ["en"] },
+        { text: data.text, sourceLang: "auto", targetLangs: ["en", "fa"] },
       )
         .then((res) => {
-          const translated = res?.translations?.en;
+          const translatedEn = res?.translations?.en;
+          const translatedFa = res?.translations?.fa;
           setCommittedTranscripts((prev) =>
             prev.map((t) =>
               t.id === entryId
-                ? { ...t, translatedText: translated || t.text, isTranslating: false }
+                ? {
+                    ...t,
+                    translatedText: translatedEn || t.text,
+                    originalCleanText: translatedFa || undefined,
+                    isTranslating: false,
+                  }
                 : t
             )
           );
