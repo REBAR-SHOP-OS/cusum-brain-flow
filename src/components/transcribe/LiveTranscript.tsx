@@ -42,14 +42,11 @@ export function LiveTranscript({
             </span>
             <div className="flex flex-col gap-0.5">
               <span className="text-sm text-foreground">
-                {t.translatedText || t.text}
+              {t.translatedText || t.text}
                 {t.isTranslating && (
                   <span className="ml-1 text-xs text-muted-foreground italic animate-pulse">translating…</span>
                 )}
               </span>
-              {t.translatedText && t.translatedText !== t.text && (
-                <span className="text-[11px] text-muted-foreground/60 italic">{t.text}</span>
-              )}
             </div>
           </div>
         ))}

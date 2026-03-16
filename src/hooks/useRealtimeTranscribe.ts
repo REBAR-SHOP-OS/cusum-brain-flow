@@ -35,12 +35,12 @@ export function useRealtimeTranscribe() {
       ]);
       setPartialText("");
 
-      // Fire-and-forget translation to English
-      supabase.functions
-        .invoke("translate-message", {
-          body: { text: data.text, sourceLang: "auto", targetLangs: ["en"] },
-        })
-        .then(({ data: res }) => {
+      // Fire-and-forget translation to English via direct fetch (faster)
+      invokeEdgeFunction<{ translations: Record<string, string> }>(
+        "translate-message",
+        { text: data.text, sourceLang: "auto", targetLangs: ["en"] },
+      )
+        .then((res) => {
           const translated = res?.translations?.en;
           setCommittedTranscripts((prev) =>
             prev.map((t) =>

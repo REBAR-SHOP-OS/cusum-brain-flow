@@ -221,29 +221,38 @@ export function TranscribeView() {
     toTranslate.forEach((t) => newTranslating.add(t.id));
     setTranslatingIds(newTranslating);
 
-    for (const entry of toTranslate) {
-      supabase.functions
-        .invoke("translate-message", {
-          body: { text: entry.text, sourceLang: "auto", targetLangs: [translationLang] },
-        })
-        .then(({ data: res }) => {
-          const translated = res?.translations?.[translationLang];
-          setTranslationMap((prev) => ({ ...prev, [entry.id]: translated || entry.text }));
-          setTranslatingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(entry.id);
-            return next;
-          });
-        })
-        .catch(() => {
-          setTranslationMap((prev) => ({ ...prev, [entry.id]: entry.text }));
-          setTranslatingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(entry.id);
-            return next;
-          });
+    // Batch all untranslated segments into a single API call
+    const combinedText = toTranslate.map(t => t.text).join("\n---SEG---\n");
+    const ids = toTranslate.map(t => t.id);
+
+    supabase.functions
+      .invoke("translate-message", {
+        body: { text: combinedText, sourceLang: "auto", targetLangs: [translationLang] },
+      })
+      .then(({ data: res }) => {
+        const translated = res?.translations?.[translationLang] || "";
+        const parts = translated.split("\n---SEG---\n");
+        const newMap: Record<string, string> = {};
+        ids.forEach((id, i) => {
+          newMap[id] = (parts[i] || toTranslate[i].text).trim();
         });
-    }
+        setTranslationMap((prev) => ({ ...prev, ...newMap }));
+        setTranslatingIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach(id => next.delete(id));
+          return next;
+        });
+      })
+      .catch(() => {
+        const newMap: Record<string, string> = {};
+        ids.forEach((id, i) => { newMap[id] = toTranslate[i].text; });
+        setTranslationMap((prev) => ({ ...prev, ...newMap }));
+        setTranslatingIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach(id => next.delete(id));
+          return next;
+        });
+      });
   }, [realtime.committedTranscripts, translationLang]);
 
   const callTranslateAPI = async (body: any, isFormData = false) => {
