@@ -697,11 +697,18 @@ export function TranscribeView() {
         {CONVERSATION_SPEAKERS.map((s) => (
           <button
             key={s.name}
-            onClick={() => setSelectedSpeaker(prev => prev === s.name ? null : s.name)}
+            onClick={() => setSelectedSpeaker(s.name)}
             className={`flex flex-col items-center gap-0.5 shrink-0 ${selectedSpeaker === s.name ? "scale-110" : "opacity-70"}`}
           >
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-1 ring-primary" : ""}`}>
-              {s.name[0]}
+            <div className="relative">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs ${s.color} ${selectedSpeaker === s.name ? "ring-2 ring-offset-1 ring-primary" : ""}`}>
+                {s.name[0]}
+              </div>
+              {completedSpeakers.has(s.name) && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center ring-2 ring-background">
+                  <Check className="w-2.5 h-2.5 text-white" />
+                </div>
+              )}
             </div>
             <span className="text-[8px] font-medium text-muted-foreground">{s.name}</span>
           </button>
