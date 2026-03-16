@@ -487,20 +487,18 @@ export default function SocialMediaManager() {
           </div>
         )}
 
-        {/* Date Navigation — hidden when viewing pending approval list */}
-        {statusFilter !== "pending_approval" && (
-          <div className="flex items-center gap-4 mb-4">
-            <Button variant="ghost" size="icon" onClick={handlePrevWeek}>
-              <ChevronLeft className="w-5 h-5" />
-            </Button>
-            <span className="font-medium">
-              {format(weekStart, "MMM d")} - {format(weekEnd, "MMM d")}
-            </span>
-            <Button variant="ghost" size="icon" onClick={handleNextWeek}>
-              <ChevronRight className="w-5 h-5" />
-            </Button>
-          </div>
-        )}
+        {/* Date Navigation */}
+        <div className="flex items-center gap-4 mb-4">
+          <Button variant="ghost" size="icon" onClick={handlePrevWeek}>
+            <ChevronLeft className="w-5 h-5" />
+          </Button>
+          <span className="font-medium">
+            {format(weekStart, "MMM d")} - {format(weekEnd, "MMM d")}
+          </span>
+          <Button variant="ghost" size="icon" onClick={handleNextWeek}>
+            <ChevronRight className="w-5 h-5" />
+          </Button>
+        </div>
 
         {/* Calendar Grid, Pending List, or Loading */}
         {isLoading ? (
