@@ -285,6 +285,7 @@ serve(async (req) => {
       const summaryResult = await callAI({
         provider: "gpt",
         model: "gpt-4o-mini",
+        agentName: "email",
         messages: [
           { role: "system", content: "Summarize this email thread in 2 concise sentences. Focus on what was discussed and the outcome." },
           { role: "user", content: `Subject: ${comm.subject}\nFrom: ${comm.from_address}\n\n${threadContext || emailBody.slice(0, 2000)}` },
