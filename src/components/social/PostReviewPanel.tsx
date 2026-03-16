@@ -404,7 +404,7 @@ export function PostReviewPanel({
                           setRegenerating(true);
                           try {
                             const { data, error } = await supabase.functions.invoke("regenerate-post", {
-                              body: { post_id: post.id },
+                              body: { post_id: post.id, is_video: !!isVideo },
                             });
                             if (error) throw error;
                             if (data?.error) throw new Error(data.error);
