@@ -835,12 +835,23 @@ export function PostReviewPanel({
                         toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
                         return;
                       }
-                      if (localPlatforms.length === 0) {
+
+                      // Defensive repair: auto-fix unassigned platform for stories
+                      let currentPlatforms = [...localPlatforms];
+                      const isAllUnassigned = currentPlatforms.length === 0 || currentPlatforms.every(p => p === "unassigned");
+                      if (isAllUnassigned && localContentType === "story") {
+                        currentPlatforms = ["instagram"];
+                        setLocalPlatforms(currentPlatforms);
+                        updatePost.mutate({ id: post.id, platform: "instagram" });
+                        console.log("[PostReviewPanel] Auto-repaired unassigned story platform → instagram");
+                      }
+
+                      if (currentPlatforms.length === 0) {
                         toast({ title: "No platforms selected", description: "Please select at least one platform.", variant: "destructive" });
                         return;
                       }
 
-                      const publishablePlatforms = localPlatforms.filter(p => p !== "unassigned");
+                      const publishablePlatforms = currentPlatforms.filter(p => p !== "unassigned");
                       if (publishablePlatforms.length === 0) {
                         toast({ title: "No publishable platform", description: "Please select a valid platform (not 'unassigned').", variant: "destructive" });
                         return;
