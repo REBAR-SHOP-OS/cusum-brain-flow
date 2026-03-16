@@ -353,7 +353,7 @@ async function syncToAccountingMirror(
 
     const { error, count } = await svc
       .from("accounting_mirror")
-      .upsert(batch, { onConflict: "quickbooks_id,entity_type,company_id", count: "exact" });
+      .upsert(batch, { onConflict: "entity_type,quickbooks_id", count: "exact" });
     if (error) console.error(`accounting_mirror (${entityType}) upsert err:`, error.message);
     synced += count || batch.length;
   }
