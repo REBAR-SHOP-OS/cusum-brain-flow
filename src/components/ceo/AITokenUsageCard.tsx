@@ -5,7 +5,35 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
-import { Brain, Zap, TrendingUp } from "lucide-react";
+import { Brain, Zap, TrendingUp, DollarSign } from "lucide-react";
+
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  "google/gemini-2.5-pro":              { input: 1.25,  output: 10.00 },
+  "google/gemini-3.1-pro-preview":      { input: 1.25,  output: 10.00 },
+  "google/gemini-3-flash-preview":      { input: 0.10,  output: 0.40  },
+  "google/gemini-2.5-flash":            { input: 0.15,  output: 0.60  },
+  "google/gemini-2.5-flash-lite":       { input: 0.02,  output: 0.10  },
+  "google/gemini-3-pro-image-preview":  { input: 1.25,  output: 10.00 },
+  "google/gemini-3.1-flash-image-preview": { input: 0.10, output: 0.40 },
+  "openai/gpt-5":                       { input: 10.00, output: 30.00 },
+  "openai/gpt-5-mini":                  { input: 1.10,  output: 4.40  },
+  "openai/gpt-5-nano":                  { input: 0.10,  output: 0.40  },
+  "openai/gpt-5.2":                     { input: 12.00, output: 40.00 },
+  "openai/gpt-4o":                      { input: 2.50,  output: 10.00 },
+};
+const DEFAULT_PRICING = { input: 1.00, output: 4.00 };
+
+function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
+  const p = MODEL_PRICING[model] || DEFAULT_PRICING;
+  return (promptTokens * p.input + completionTokens * p.output) / 1_000_000;
+}
+
+function formatUSD(n: number): string {
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`;
+  if (n >= 1) return `$${n.toFixed(2)}`;
+  if (n >= 0.01) return `$${n.toFixed(2)}`;
+  return `$${n.toFixed(4)}`;
+}
 
 type Period = "30" | "60" | "90";
 
