@@ -1,0 +1,1 @@
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS unit_system text NOT NULL DEFAULT 'metric';
