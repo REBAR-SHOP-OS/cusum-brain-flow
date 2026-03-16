@@ -15,7 +15,7 @@ import { Shield } from "lucide-react";
 
 export default function CEOPortal() {
   const { isSuperAdmin } = useSuperAdmin();
-  const { metrics } = useCEODashboard();
+  const { data: metrics } = useCEODashboard();
 
   if (!isSuperAdmin) {
     return (
