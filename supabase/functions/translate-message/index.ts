@@ -65,22 +65,39 @@ serve(async (req) => {
       .map((l: string) => `"${l}" (${langNames[l] || l})`)
       .join(", ");
 
-    // GPT: strict JSON translation output
+    // Build system prompt — enhanced for noisy speech-to-text input
+    const systemPrompt = `You are a speech-to-text post-processor and translator. The input text comes from an automatic speech recognition system that may produce:
+- Phonetic approximations of non-English speech written in English letters (e.g., "biya inja" for Persian "بیا اینجا")
+- Garbled or nonsensical English that is actually a phonetic rendering of another language
+- Filler words, hesitations, or background noise artifacts (e.g., "[laughter]", "um", "uh")
+- Mixed language fragments
+
+Your job:
+1. First, determine the ACTUAL language that was spoken by analyzing phonetic patterns, context clues, and semantic meaning
+2. Ignore filler words, noise descriptions in brackets, and nonsensical fragments
+3. Reconstruct the intended meaning of what was actually said
+4. Produce clean, accurate translations in ONLY the requested target languages
+
+Return ONLY a JSON object with language codes as keys and clean translations as values. No markdown, no explanation.
+Example: {"fa": "سلام، حالت چطوره؟", "en": "Hello, how are you?"}
+
+IMPORTANT: Each language value must contain text ONLY in that language. The "en" value must be pure English. The "fa" value must be pure Farsi/Persian script. Never mix languages in a single value.`;
+
     const result = await callAI({
       provider: "gemini",
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-2.5-flash",
       agentName: "system",
       messages: [
         {
           role: "system",
-          content: `You are a translation engine. Translate the user's message into the requested languages. Return ONLY a JSON object with language codes as keys and translations as values. No markdown, no explanation. Example: {"fa": "سلام", "es": "hola"}`,
+          content: systemPrompt,
         },
         {
           role: "user",
-          content: `Translate this from ${langNames[sourceLang] || sourceLang} into ${targetList}:\n\n${text}`,
+          content: `The source language is "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate into ${targetList}:\n\n${text}`,
         },
       ],
-      temperature: 0.1,
+      temperature: 0.15,
     });
 
     const raw = result.content;
