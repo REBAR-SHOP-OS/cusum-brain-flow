@@ -282,24 +282,19 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Visual Themes</Label>
                 <div className="flex flex-wrap gap-1.5">
-                  <TooltipProvider delayDuration={300}>
                   {VISUAL_THEMES.map((theme) => {
                     const Icon = theme.icon;
                     const isActive = selectedThemes.has(theme.id);
                     const isLogo = theme.id === "logo";
-                    const logoDisabled = isLogo && !brandKit?.logo_url;
 
-                    const chip = (
+                    return (
                       <button
                         key={theme.id}
-                        onClick={() => !logoDisabled && toggleTheme(theme.id)}
-                        disabled={logoDisabled}
+                        onClick={() => toggleTheme(theme.id)}
                         className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
-                          logoDisabled
-                            ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground"
-                            : isActive
-                              ? "border-primary bg-primary/10 text-primary font-medium"
-                              : "bg-card hover:bg-muted text-muted-foreground"
+                          isActive
+                            ? "border-primary bg-primary/10 text-primary font-medium"
+                            : "bg-card hover:bg-muted text-muted-foreground"
                         }`}
                       >
                         {isLogo && brandKit?.logo_url ? (
@@ -311,19 +306,59 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
                         {isActive && <CheckCircle2 className="w-3 h-3" />}
                       </button>
                     );
-
-                    if (logoDisabled) {
-                      return (
-                        <Tooltip key={theme.id}>
-                          <TooltipTrigger asChild>{chip}</TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs">Upload a logo in Brand Kit first</TooltipContent>
-                        </Tooltip>
-                      );
-                    }
-
-                    return chip;
                   })}
-                  </TooltipProvider>
+                </div>
+              </div>
+
+              {/* Company Logo Upload */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Company Logo</Label>
+                <div className="flex items-center gap-2 p-2 rounded-lg border border-border/50 bg-muted/30">
+                  {brandKit?.logo_url ? (
+                    <>
+                      <img src={brandKit.logo_url} alt="Logo" className="h-8 w-auto rounded border border-border/30 object-contain" />
+                      <span className="text-xs text-muted-foreground flex-1 truncate">Logo uploaded</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          saveBrandKit.mutate({
+                            business_name: brandKit?.business_name || "",
+                            logo_url: null,
+                            brand_voice: brandKit?.brand_voice || "",
+                            description: brandKit?.description || "",
+                            value_prop: brandKit?.value_prop || "",
+                            colors: brandKit?.colors || { primary: "#000", secondary: "#fff", tertiary: "#888" },
+                            media_urls: brandKit?.media_urls || [],
+                          } as any);
+                        }}
+                      >
+                        <X className="w-3 h-3 text-muted-foreground" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        id="dialog-logo-upload"
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); }}
+                      />
+                      <label
+                        htmlFor="dialog-logo-upload"
+                        className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {uploadingLogo ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5" />
+                        )}
+                        <span>{uploadingLogo ? "Uploading…" : "Upload logo for AI to use in image generation"}</span>
+                      </label>
+                    </>
+                  )}
                 </div>
               </div>
 
