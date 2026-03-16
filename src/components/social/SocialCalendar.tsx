@@ -232,13 +232,13 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       )}
                       {firstPost.scheduled_date && <span className="text-muted-foreground">·</span>}
                       <span className={cn(
-                        "capitalize",
                         status === "published" ? "text-green-600 font-medium"
                           : status === "scheduled" ? "text-primary"
                           : status === "declined" ? "text-destructive"
+                          : status === "pending_approval" ? "text-yellow-600"
                           : "text-muted-foreground"
                       )}>
-                        {status === "published" ? "Published ✅" : status}
+                        {statusLabel}
                         {status === "scheduled" && firstPost.neel_approved && (
                           <span className="text-green-500 font-medium ml-1">· Approved</span>
                         )}
