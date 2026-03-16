@@ -94,6 +94,7 @@ serve(async (req) => {
       const result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-flash",
+        agentName: "estimation",
         messages: [{ role: "user", content: [{ type: "text", text: STANDARD_PROMPT }, imageContent] }],
       });
 
