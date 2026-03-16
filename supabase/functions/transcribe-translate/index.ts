@@ -205,6 +205,7 @@ serve(async (req) => {
           const ppResult = await callAI({
             provider: "gpt",
             model: "gpt-4o-mini",
+            agentName: "system",
             messages: ppMessages,
           });
           const result = ppResult.content || "";
