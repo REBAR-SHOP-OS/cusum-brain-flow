@@ -105,7 +105,11 @@ export function HealthScoreHero({ score, drivers }: HealthScoreHeroProps) {
       <ExplainPanel
         open={showExplain}
         onClose={() => setShowExplain(false)}
-        data={mockAIExplainer}
+        data={{
+          what_changed: "AI analysis is not yet available for this metric. Connect a live data source to enable real-time explanations.",
+          top_drivers: [],
+          recommended_actions: [],
+        }}
         title="Business Health Score"
       />
     </>

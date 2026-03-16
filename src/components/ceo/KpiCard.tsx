@@ -72,7 +72,11 @@ export function KpiCard({ icon, label, value, sub, alertActive, index, onClick }
       <ExplainPanel
         open={showExplain}
         onClose={() => setShowExplain(false)}
-        data={mockAIExplainer}
+        data={{
+          what_changed: "AI analysis is not yet available for this metric.",
+          top_drivers: [],
+          recommended_actions: [],
+        }}
         title={label}
       />
     </>

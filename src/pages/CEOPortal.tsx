@@ -10,10 +10,12 @@ import { AITokenUsageCard } from "@/components/ceo/AITokenUsageCard";
 import { OdooMigrationStatusCard } from "@/components/admin/OdooMigrationStatusCard";
 import { SLATrackerCard } from "@/components/ceo/SLATrackerCard";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { useCEODashboard } from "@/hooks/useCEODashboard";
 import { Shield } from "lucide-react";
 
 export default function CEOPortal() {
   const { isSuperAdmin } = useSuperAdmin();
+  const { metrics } = useCEODashboard();
 
   if (!isSuperAdmin) {
     return (
