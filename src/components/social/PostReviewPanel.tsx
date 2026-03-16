@@ -25,6 +25,7 @@ import { uploadSocialMediaAsset } from "@/lib/socialMediaStorage";
 import { useToast } from "@/hooks/use-toast";
 import { usePublishPost } from "@/hooks/usePublishPost";
 import { schedulePost } from "@/lib/schedulePost";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 interface PostReviewPanelProps {
   post: SocialPost | null;
