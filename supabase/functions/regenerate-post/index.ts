@@ -411,17 +411,26 @@ ${brainKnowledge ? "- You MUST follow any brand guidelines from the Brain Contex
 Respond with ONLY a valid JSON object (no markdown, no code fences):
 {"title": "...", "caption": "...", "hashtags": "...", "imageText": "...", "imageTextFa": "...", "captionFa": "..."}`;
 
-    const captionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: captionPrompt }],
-        temperature: 1.0,
-      }),
-    });
+    const captionModels = ["google/gemini-2.5-flash", "openai/gpt-5-mini"];
+    let captionRes: Response | null = null;
+    for (const model of captionModels) {
+      console.log(`[regenerate-post] Trying caption model: ${model}`);
+      captionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: captionPrompt }],
+          ...(model.startsWith("google/") ? {} : { temperature: 1.0 }),
+        }),
+      });
+      if (captionRes.ok) break;
+      const errBody = await captionRes.text();
+      console.error(`[regenerate-post] Model ${model} failed (${captionRes.status}): ${errBody}`);
+      captionRes = null;
+    }
 
-    if (!captionRes.ok) throw new Error(`Caption generation failed (${captionRes.status})`);
+    if (!captionRes) throw new Error("Caption generation failed — all models returned errors");
 
     const captionData = await captionRes.json();
     const rawContent = captionData.choices?.[0]?.message?.content || "";
