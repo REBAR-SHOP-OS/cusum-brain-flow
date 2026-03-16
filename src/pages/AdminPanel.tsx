@@ -340,6 +340,12 @@ export default function AdminPanel() {
         </ScrollArea>
       </TabsContent>
 
+      <TabsContent value="ceo-portal" className="flex-1 mt-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <CEODashboards />
+        </ScrollArea>
+      </TabsContent>
+
       <TabsContent value="audit-trail" className="flex-1 mt-0 overflow-hidden">
         <ScrollArea className="h-full">
           <FieldAuditTrailView />
