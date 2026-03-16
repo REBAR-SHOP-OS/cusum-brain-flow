@@ -342,7 +342,7 @@ export default function AdminPanel() {
 
       <TabsContent value="ceo-portal" className="flex-1 mt-0 overflow-hidden">
         <ScrollArea className="h-full">
-          <CEODashboards />
+          <LiveMonitorView />
         </ScrollArea>
       </TabsContent>
 
