@@ -794,5 +794,6 @@ export function TranscribeView() {
         </Card>
       )}
     </div>
+    </div>
   );
 }
