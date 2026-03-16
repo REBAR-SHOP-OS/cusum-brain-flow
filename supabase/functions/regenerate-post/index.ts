@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cropToAspectRatio } from "../_shared/imageResize.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -116,6 +117,9 @@ async function generatePixelImage(
           }
 
           if (imageBytes) {
+            // Enforce aspect ratio via server-side crop/resize
+            imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+
             const styleTag = options?.styleIndex ?? "x";
             const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
             const { error: uploadError } = await svcClient.storage
@@ -218,6 +222,9 @@ async function generatePixelImage(
         if (!imgResp.ok) { lastError = "Failed to download generated image"; continue; }
         imageBytes = new Uint8Array(await imgResp.arrayBuffer());
       }
+
+      // Enforce aspect ratio via server-side crop/resize
+      imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
 
       const styleTag = options?.styleIndex ?? "x";
       const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;

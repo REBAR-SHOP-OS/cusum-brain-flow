@@ -6,6 +6,7 @@ import { executeToolCall } from "../_shared/agentToolExecutor.ts";
 import { selectModel, AIError, callAI, type AIMessage, type AIProvider } from "../_shared/aiRouter.ts";
 import { analyzeDocumentWithGemini, convertPdfToImages, performOCR, performOCROnBase64, performMultiPassAnalysis, detectZones, extractRebarData } from "../_shared/agentDocumentUtils.ts";
 import { agentPrompts } from "../_shared/agentPrompts.ts";
+import { cropToAspectRatio } from "../_shared/imageResize.ts";
 import { reviewAgentOutput } from "../_shared/agentQA.ts";
 import { 
   ONTARIO_CONTEXT, 
@@ -283,6 +284,9 @@ async function generatePixelImage(
           }
 
           if (imageBytes) {
+            // Enforce aspect ratio via server-side crop/resize
+            imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+
             const styleTag = options?.styleIndex ?? "x";
             const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
             const { error: uploadError } = await svcClient.storage
@@ -395,6 +399,9 @@ async function generatePixelImage(
         const buf = await imgResp.arrayBuffer();
         imageBytes = new Uint8Array(buf);
       }
+
+      // Enforce aspect ratio via server-side crop/resize
+      imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
 
       // Encode styleIndex in filename for dedup tracking (set by caller via options)
       const styleTag = options?.styleIndex ?? "x";

@@ -1,5 +1,6 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cropToAspectRatio } from "./imageResize.ts";
 
 export async function executeToolCall(
   toolCall: any, 
@@ -768,6 +769,11 @@ export async function executeToolCall(
               const dl = await fetch(imageDataUrl);
               if (!dl.ok) { lastError = "Failed to download image"; continue; }
               imageBytes = new Uint8Array(await dl.arrayBuffer());
+            }
+
+            // Enforce aspect ratio via server-side crop/resize
+            if (aspectRatio) {
+              imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
             }
 
             const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
