@@ -275,8 +275,8 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
                     const chip = (
                       <button
                         key={theme.id}
-                        onClick={() => !logoDisabled && toggleTheme(theme.id)}
-                        disabled={logoDisabled}
+                        onClick={() => !logoDisabled && !(isLogo && logoAutoApplied) && toggleTheme(theme.id)}
+                        disabled={logoDisabled || (isLogo && logoAutoApplied)}
                         className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
                           logoDisabled
                             ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground"
