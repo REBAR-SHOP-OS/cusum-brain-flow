@@ -7,19 +7,41 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 import { Brain, Zap, TrendingUp, DollarSign } from "lucide-react";
 
+// Pricing per 1M tokens — includes both prefixed and short model names
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // Gemini (full & short)
   "google/gemini-2.5-pro":              { input: 1.25,  output: 10.00 },
+  "gemini-2.5-pro":                     { input: 1.25,  output: 10.00 },
   "google/gemini-3.1-pro-preview":      { input: 1.25,  output: 10.00 },
+  "gemini-3.1-pro-preview":             { input: 1.25,  output: 10.00 },
   "google/gemini-3-flash-preview":      { input: 0.10,  output: 0.40  },
+  "gemini-3-flash-preview":             { input: 0.10,  output: 0.40  },
   "google/gemini-2.5-flash":            { input: 0.15,  output: 0.60  },
+  "gemini-2.5-flash":                   { input: 0.15,  output: 0.60  },
   "google/gemini-2.5-flash-lite":       { input: 0.02,  output: 0.10  },
+  "gemini-2.5-flash-lite":              { input: 0.02,  output: 0.10  },
   "google/gemini-3-pro-image-preview":  { input: 1.25,  output: 10.00 },
+  "gemini-3-pro-image-preview":         { input: 1.25,  output: 10.00 },
   "google/gemini-3.1-flash-image-preview": { input: 0.10, output: 0.40 },
+  "gemini-3.1-flash-image-preview":     { input: 0.10,  output: 0.40  },
+  // OpenAI (full & short)
   "openai/gpt-5":                       { input: 10.00, output: 30.00 },
+  "gpt-5":                              { input: 10.00, output: 30.00 },
   "openai/gpt-5-mini":                  { input: 1.10,  output: 4.40  },
+  "gpt-5-mini":                         { input: 1.10,  output: 4.40  },
   "openai/gpt-5-nano":                  { input: 0.10,  output: 0.40  },
+  "gpt-5-nano":                         { input: 0.10,  output: 0.40  },
   "openai/gpt-5.2":                     { input: 12.00, output: 40.00 },
+  "gpt-5.2":                            { input: 12.00, output: 40.00 },
   "openai/gpt-4o":                      { input: 2.50,  output: 10.00 },
+  "gpt-4o":                             { input: 2.50,  output: 10.00 },
+  "openai/gpt-4o-mini":                 { input: 0.15,  output: 0.60  },
+  "gpt-4o-mini":                        { input: 0.15,  output: 0.60  },
+  // Alibaba / DashScope — billed externally, track at $0
+  "wan2.6-t2v":                         { input: 0, output: 0 },
+  "wan2.6-i2v":                         { input: 0, output: 0 },
+  "qwen-vl-max":                        { input: 0.60,  output: 2.40  },
+  "qwen-turbo":                         { input: 0.03,  output: 0.12  },
 };
 const DEFAULT_PRICING = { input: 1.00, output: 4.00 };
 
