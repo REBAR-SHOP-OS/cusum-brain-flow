@@ -1,36 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Caption Edit Blocked by Database Trigger
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The database trigger `block_social_publish_without_qa` fires on **every UPDATE** to `social_posts`. If a post already has `status = 'scheduled'` or `'published'`, editing the caption triggers the 20-character validation — even though the user isn't trying to publish, just editing text. This blocks caption edits with the error "Cannot schedule/publish: content must be at least 20 characters".
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Fix
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### Database migration — Update trigger function
-Modify the trigger to only validate when the status is **transitioning to** `scheduled` or `published` (i.e., `OLD.status` was different), not when it already is one of those statuses and other fields are being updated.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-```sql
-CREATE OR REPLACE FUNCTION public.block_social_publish_without_qa()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SET search_path TO 'public'
-AS $$
-BEGIN
-  -- Only validate when status is CHANGING to scheduled/published
-  IF NEW.status IN ('scheduled', 'published')
-     AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
-    IF NEW.qa_status NOT IN ('approved', 'scheduled', 'published') THEN
-      RAISE EXCEPTION 'Cannot schedule/publish: QA status must be approved first';
-    END IF;
-    IF length(NEW.content) < 20 THEN
-      RAISE EXCEPTION 'Cannot schedule/publish: content must be at least 20 characters';
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-```
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-This single change allows editing captions freely on already-published/scheduled posts while still enforcing validation when someone tries to **set** the status to published/scheduled.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
