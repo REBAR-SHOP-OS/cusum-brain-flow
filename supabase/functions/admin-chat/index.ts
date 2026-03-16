@@ -1272,6 +1272,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
       aiResponse = await callAIStream({
         provider: mainProvider,
         model: mainModel,
+        agentName: "commander",
         messages: [{ role: "system", content: systemPrompt }, ...buildMultimodalMessages(messages, imageUrls)],
         tools: JARVIS_TOOLS,
         signal: AbortSignal.timeout(55000),
