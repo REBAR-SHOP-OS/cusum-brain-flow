@@ -255,7 +255,7 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { post_id, caption_only, selectedProducts, imageStyles } = await req.json();
+    const { post_id, caption_only, is_video, selectedProducts, imageStyles } = await req.json();
     if (!post_id) throw new Error("post_id is required");
 
     // 1. Fetch post
