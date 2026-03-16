@@ -1,5 +1,5 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LiveMonitorView } from "@/components/office/LiveMonitorView";
+import { CEODashboardView } from "@/components/office/CEODashboardView";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { Shield } from "lucide-react";
 
@@ -20,7 +20,7 @@ export default function CEOPortal() {
 
   return (
     <ScrollArea className="h-full">
-      <LiveMonitorView />
+      <CEODashboardView />
     </ScrollArea>
   );
 }

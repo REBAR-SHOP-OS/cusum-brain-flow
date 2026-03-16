@@ -18,6 +18,7 @@ import {
   Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch, BarChart3,
 } from "lucide-react";
 import { LiveMonitorView } from "@/components/office/LiveMonitorView";
+import { CEODashboardView } from "@/components/office/CEODashboardView";
 import { CEODashboards } from "@/components/dashboards/CEODashboards";
 import { DiagnosticLogView } from "@/components/office/DiagnosticLogView";
 import { MemberAreaView } from "@/components/office/MemberAreaView";
@@ -342,7 +343,7 @@ export default function AdminPanel() {
 
       <TabsContent value="ceo-portal" className="flex-1 mt-0 overflow-hidden">
         <ScrollArea className="h-full">
-          <LiveMonitorView />
+          <CEODashboardView />
         </ScrollArea>
       </TabsContent>
 
