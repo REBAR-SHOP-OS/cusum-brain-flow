@@ -303,10 +303,13 @@ Instructions:
       const pexelsUrl = await searchPexelsReference(prompt);
       console.log("Pexels reference:", pexelsUrl ? "found" : "none");
 
-      // Step 2: Build advertising-optimized prompt
-      const adPrompt = buildAdPrompt(prompt, brandContext, !!pexelsUrl, aspectRatio);
+      // Step 2: Build advertising-optimized prompt with Pixel Brain context
+      let adPrompt = buildAdPrompt(prompt, brandContext, !!pexelsUrl, aspectRatio);
+      if (brainInstructions) {
+        adPrompt = `PRIORITY BRAND INSTRUCTIONS (from Pixel Brain):\n${brainInstructions}\n\n${adPrompt}`;
+      }
 
-      // Step 3: Build message content (multi-modal with reference + logo)
+      // Step 3: Build message content (multi-modal with reference + logo + brain resources)
       const contentParts: any[] = [{ type: "text", text: adPrompt }];
       if (pexelsUrl) {
         contentParts.push({ type: "image_url", image_url: { url: pexelsUrl } });
@@ -314,6 +317,13 @@ Instructions:
       if (logoUrl) {
         contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
         contentParts.push({ type: "text", text: "Render this company logo prominently and clearly in the image — make it a visible, professional part of the design. Preserve its exact colors, shape, and design. Do NOT shrink it to a tiny corner watermark." });
+      }
+      // Add Pixel Brain resource images as visual references
+      for (const resImg of brainResourceImages.slice(0, 3)) {
+        contentParts.push({ type: "image_url", image_url: { url: resImg } });
+      }
+      if (brainResourceImages.length > 0) {
+        contentParts.push({ type: "text", text: "The above resource images show real products and brand assets — use them as visual references for the generated image. Match the real product appearance." });
       }
       const messageContent = contentParts.length === 1 ? adPrompt : contentParts;
 
