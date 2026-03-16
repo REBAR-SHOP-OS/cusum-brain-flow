@@ -58,3 +58,4 @@ export function FloatingMicButton({ onToggleVoice, isListening, isSupported }: F
     </button>,
     document.body
   );
+}
