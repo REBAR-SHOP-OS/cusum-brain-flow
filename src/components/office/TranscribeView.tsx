@@ -139,10 +139,16 @@ const CONVERSATION_SPEAKERS = [
   { name: "KOUROSH", color: "bg-rose-600" },
 ];
 
+const TRANSLATION_LANGUAGES = LANGUAGES.filter(l => l.value !== "auto");
+
 export function TranscribeView() {
   const navigate = useNavigate();
   const [sourceLang, setSourceLang] = useState("auto");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(null);
+  const [translationLang, setTranslationLang] = useState("fa");
+  const [translationMap, setTranslationMap] = useState<Record<string, string>>({});
+  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
+  const translatedForLangRef = useRef<string>("fa");
   const [formality, setFormality] = useState("neutral");
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
