@@ -347,6 +347,27 @@ export function FixRequestQueue() {
       <p className="text-[10px] text-muted-foreground text-right">
         Last checked: {lastChecked.toLocaleTimeString()} · Auto-refreshes every 5 min
       </p>
+
+      <Dialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Lovable Fix Command
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh] rounded-lg bg-muted p-4">
+            <pre className="text-sm whitespace-pre-wrap font-mono text-foreground">{generatedPrompt}</pre>
+          </div>
+          <button
+            onClick={copyPrompt}
+            className="w-full flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground py-2 px-4 text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Copy className="w-4 h-4" />
+            Copy to Clipboard
+          </button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
