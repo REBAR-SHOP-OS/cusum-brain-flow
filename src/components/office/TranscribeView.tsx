@@ -131,9 +131,18 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+const CONVERSATION_SPEAKERS = [
+  { name: "RADIN", color: "bg-blue-600" },
+  { name: "BEN", color: "bg-emerald-600" },
+  { name: "VICKY", color: "bg-purple-600" },
+  { name: "SAURABEH", color: "bg-amber-600" },
+  { name: "KOUROSH", color: "bg-rose-600" },
+];
+
 export function TranscribeView() {
   const navigate = useNavigate();
   const [sourceLang, setSourceLang] = useState("auto");
+  const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(null);
   const [formality, setFormality] = useState("neutral");
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
