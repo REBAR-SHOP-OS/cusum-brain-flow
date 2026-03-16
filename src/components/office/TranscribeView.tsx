@@ -495,6 +495,170 @@ export function TranscribeView() {
     realtime.clearTranscripts();
   };
 
+  // Handle stop recording: save speaker transcript, generate report, auto-advance
+  const handleStopRecording = async () => {
+    if (!selectedSpeaker) {
+      realtime.disconnect();
+      return;
+    }
+
+    const transcripts = [...realtime.committedTranscripts];
+    const fullText = realtime.getFullTranscript();
+    realtime.disconnect();
+
+    if (!fullText.trim()) return;
+
+    // Save transcripts for this speaker
+    setSpeakerTranscripts(prev => ({ ...prev, [selectedSpeaker]: transcripts }));
+    setOriginalText(fullText);
+
+    // Generate individual summary
+    setGeneratingReport(selectedSpeaker);
+    try {
+      const { data, error } = await supabase.functions.invoke("transcribe-translate", {
+        body: {
+          mode: "text",
+          text: fullText,
+          postProcess: "summarize",
+        },
+      });
+      if (error) throw new Error(error.message);
+      const summary = data?.result || data?.english || data?.original || JSON.stringify(data);
+      setSpeakerReports(prev => ({ ...prev, [selectedSpeaker]: summary }));
+      toast.success(`${selectedSpeaker}'s report saved ✓`);
+    } catch (err: any) {
+      // Save raw transcript as fallback
+      setSpeakerReports(prev => ({ ...prev, [selectedSpeaker]: fullText }));
+      toast.error(`Failed to generate ${selectedSpeaker}'s report`);
+    } finally {
+      setGeneratingReport(null);
+    }
+
+    // Mark completed
+    setCompletedSpeakers(prev => new Set([...prev, selectedSpeaker]));
+
+    // Auto-advance to next incomplete speaker
+    const currentIdx = CONVERSATION_SPEAKERS.findIndex(s => s.name === selectedSpeaker);
+    const nextSpeaker = CONVERSATION_SPEAKERS.find((s, i) => i > currentIdx && !completedSpeakers.has(s.name))
+      || CONVERSATION_SPEAKERS.find(s => !completedSpeakers.has(s.name) && s.name !== selectedSpeaker);
+    if (nextSpeaker) {
+      setSelectedSpeaker(nextSpeaker.name);
+    }
+
+    // Clear realtime for next speaker
+    realtime.clearTranscripts();
+    setOriginalText("");
+    setProcessedOutput("");
+    setProcessedType("");
+  };
+
+  // Generate final consolidated PDF report
+  const handleFinalReport = async () => {
+    if (!allSpeakersComplete) return;
+    setIsFinalReportLoading(true);
+
+    try {
+      // Build combined text for consolidated analysis
+      const combinedReports = CONVERSATION_SPEAKERS.map(s =>
+        `${s.name}:\n${speakerReports[s.name] || "No report available"}`
+      ).join("\n\n---\n\n");
+
+      // Get AI consolidated analysis
+      let consolidatedAnalysis = "";
+      try {
+        const { data, error } = await supabase.functions.invoke("transcribe-translate", {
+          body: {
+            mode: "text",
+            text: combinedReports,
+            postProcess: "custom",
+            customPrompt: "Analyze all the individual speaker reports below and provide a consolidated meeting analysis. Include: key themes discussed, decisions made, action items, and overall meeting assessment. Be concise and structured.",
+          },
+        });
+        if (error) throw error;
+        consolidatedAnalysis = data?.result || data?.english || "";
+      } catch {
+        consolidatedAnalysis = "Consolidated analysis could not be generated.";
+      }
+
+      // Generate PDF
+      const { default: jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const maxWidth = pageWidth - margin * 2;
+      let y = margin;
+
+      const addText = (text: string, fontSize: number, style: "normal" | "bold" = "normal", color: [number, number, number] = [30, 30, 30]) => {
+        doc.setFontSize(fontSize);
+        doc.setFont("helvetica", style);
+        doc.setTextColor(...color);
+        const lines = doc.splitTextToSize(text, maxWidth);
+        for (const line of lines) {
+          if (y + fontSize * 0.5 > pageHeight - 25) {
+            doc.addPage();
+            y = margin;
+          }
+          doc.text(line, margin, y);
+          y += fontSize * 0.45;
+        }
+      };
+      const addSpacer = (h = 6) => { y += h; };
+
+      // Title
+      addText("FINAL MEETING REPORT", 22, "bold", [20, 20, 80]);
+      addSpacer(4);
+
+      const now = new Date();
+      addText(`Date: ${now.toLocaleDateString()} — ${now.toLocaleTimeString()}`, 10, "normal", [100, 100, 100]);
+      addSpacer(2);
+      addText(`Participants: ${CONVERSATION_SPEAKERS.map(s => s.name).join(", ")}`, 11, "bold");
+      addSpacer(4);
+
+      // Separator
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, y, pageWidth - margin, y);
+      addSpacer(6);
+
+      // Individual speaker sections
+      for (const speaker of CONVERSATION_SPEAKERS) {
+        addText(speaker.name, 16, "bold", [20, 20, 80]);
+        addSpacer(3);
+        addText(speakerReports[speaker.name] || "No report available", 10, "normal", [50, 50, 50]);
+        addSpacer(8);
+
+        doc.setDrawColor(220, 220, 220);
+        doc.line(margin, y, pageWidth - margin, y);
+        addSpacer(6);
+      }
+
+      // Consolidated Analysis
+      addText("CONSOLIDATED ANALYSIS", 16, "bold", [20, 20, 80]);
+      addSpacer(3);
+      addText(consolidatedAnalysis, 10, "normal", [30, 30, 30]);
+      addSpacer(12);
+
+      // Disclaimer
+      doc.setDrawColor(220, 180, 50);
+      doc.setFillColor(255, 250, 230);
+      const disclaimerY = Math.min(y, pageHeight - 30);
+      if (disclaimerY < margin) doc.addPage();
+      const finalY = disclaimerY < margin ? margin : disclaimerY;
+      doc.roundedRect(margin, finalY, maxWidth, 14, 2, 2, "FD");
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(140, 100, 0);
+      doc.text("This report was generated by Artificial Intelligence and may contain inaccuracies.", pageWidth / 2, finalY + 8, { align: "center" });
+
+      doc.save(`final-meeting-report-${now.toISOString().slice(0, 10)}.pdf`);
+      toast.success("Final report PDF downloaded");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate final report");
+    } finally {
+      setIsFinalReportLoading(false);
+    }
+  };
+
   const hasContent = originalText || englishText || processedOutput || realtime.committedTranscripts.length > 0;
 
   return (
