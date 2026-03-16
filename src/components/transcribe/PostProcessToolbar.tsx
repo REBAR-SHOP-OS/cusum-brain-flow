@@ -5,7 +5,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Loader2, Languages, ListChecks, FileText, Sparkles, Eraser, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
+
 
 const TARGET_LANGUAGES = [
   "English", "Spanish", "French", "German", "Portuguese", "Italian", "Dutch",
@@ -20,7 +20,8 @@ interface PostProcessToolbarProps {
   selectedSpeaker?: string | null;
 }
 
-function generatePdfReport(transcript: string, summary: string, selectedSpeaker: string | null) {
+async function generatePdfReport(transcript: string, summary: string, selectedSpeaker: string | null) {
+  const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
