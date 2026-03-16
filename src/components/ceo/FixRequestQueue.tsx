@@ -232,6 +232,32 @@ export function FixRequestQueue() {
     toast.success("Marked as resolved");
   };
 
+  const generateLovableCommand = async (req: FixRequest) => {
+    setGeneratingId(req.id);
+    try {
+      const result = await invokeEdgeFunction<{ prompt: string }>("generate-fix-prompt", {
+        title: req.affected_area || "Fix Request",
+        description: req.description,
+        screenshots: req.photo_url ? [req.photo_url] : [],
+        priority: classifySeverity(req.description),
+        source: "vizzy_fix_request",
+      });
+      setGeneratedPrompt(result.prompt);
+      setPromptDialogOpen(true);
+    } catch (err: any) {
+      toast.error("Failed to generate command", { description: err.message });
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const copyPrompt = () => {
+    if (generatedPrompt) {
+      navigator.clipboard.writeText(generatedPrompt);
+      toast.success("Lovable command copied — paste it in chat");
+    }
+  };
+
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-3">
       <div className="flex items-center gap-2">
