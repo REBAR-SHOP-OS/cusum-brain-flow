@@ -220,6 +220,9 @@ async function generatePixelImage(
         imageBytes = new Uint8Array(await imgResp.arrayBuffer());
       }
 
+      // Enforce aspect ratio via server-side crop/resize
+      imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+
       const styleTag = options?.styleIndex ?? "x";
       const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
       const { error: uploadError } = await svcClient.storage
