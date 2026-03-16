@@ -1,46 +1,65 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Unit System: Metric (MM) vs Imperial (FT-IN) Throughout the App
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Current State
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+The system is **entirely hardcoded to metric (mm)** with Canadian bar sizes (10M, 15M, 20M...). The "System of Measurement" toggle in Member Area → System Config is **purely cosmetic** — local React state that isn't persisted or consumed anywhere.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+The scope of a full unit system implementation is very large. Here's what's involved:
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Affected Areas
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+1. **Bar size naming**: Metric uses `10M, 15M, 20M...` (Canadian RSIC). Imperial uses `#3, #4, #5, #6, #7, #8, #9, #10, #11, #14, #18` (US ASTM).
+2. **Length fields**: `total_length_mm`, `cut_length_mm`, `stock_length_mm` — all stored in mm. Imperial would display as feet-inches (e.g., `4'-2"`).
+3. **AI extraction**: The `manage-extract` edge function validates against `VALID_BAR_SIZES = ["10M", "15M", ...]` only.
+4. **Machine registry**: Capacity tables keyed by `10M`, `15M`, etc.
+5. **Optimization engine**: `cutOptimizer.ts` and `foremanBrain.ts` — all internal math in mm.
+6. **Display across 40+ components**: Tags, labels, cut plan details, production queue, slot tracker, pickup station, packing slips, etc.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+## Proposed Approach
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### Phase 1 — Persist the setting & create conversion utilities
+
+1. **Database**: Add a `unit_system` column (`metric` | `imperial`) to the `companies` table (default `metric`).
+2. **Shared utility** (`src/lib/unitSystem.ts`):
+   - `useUnitSystem()` hook — reads from company settings
+   - `formatLength(mm, system)` → `"1200 mm"` or `"3'-11¼"`
+   - `parseLength(input, system)` → mm (always store mm internally)
+   - `barSizeLabel(metricCode, system)` → `"20M"` or `"#6"`
+   - `BAR_SIZE_MAP`: bidirectional mapping `10M↔#3, 15M↔#4, 20M↔#5, 25M↔#8, 30M↔#9, 35M↔#11, 45M↔#14, 55M↔#18`
+3. **Persist the toggle**: Wire MemberAreaView's toggle to actually save to the `companies` table.
+
+### Phase 2 — Display layer conversion
+
+4. **Update display components** to use `formatLength()` and `barSizeLabel()` instead of raw mm values:
+   - `TagsExportView.tsx` — tag labels, CSV/ZPL export
+   - `DetailedListView.tsx` — cut length column
+   - `OptimizationView.tsx` — stock length, kerf, remnants
+   - `CutPlanDetails.tsx` — item display
+   - `SlotTracker.tsx`, `PickupStation.tsx`, `PackingSlips` — all length displays
+   - `BarlistMappingPanel.tsx` — column headers
+
+### Phase 3 — Input & extraction
+
+5. **AI extraction** (`manage-extract`): Accept both metric and imperial bar sizes in validation. Auto-detect from the document format and map to the canonical metric code for storage.
+6. **Input fields**: Length inputs accept mm or ft-in based on setting. Convert to mm before storing.
+7. **Machine registry**: Display capacity using `barSizeLabel()`.
+
+### Key Principle
+**Store everything in mm internally. Convert only at display and input boundaries.**
+
+### Changes Summary
+
+| File | Change |
+|------|--------|
+| `companies` table | Add `unit_system` column |
+| New `src/lib/unitSystem.ts` | Conversion utilities + hook |
+| `src/components/office/MemberAreaView.tsx` | Persist toggle to DB |
+| `supabase/functions/manage-extract/index.ts` | Accept imperial bar sizes |
+| ~15 display components | Use `formatLength()` / `barSizeLabel()` |
+| `src/components/office/OptimizationView.tsx` | Unit-aware inputs/displays |
+| `src/components/shopfloor/machineRegistry.ts` | Display-only mapping |
+
+This is a large but systematic change. The conversion utility makes it mechanical — each component just wraps its mm values with `formatLength()` and bar codes with `barSizeLabel()`.
+
