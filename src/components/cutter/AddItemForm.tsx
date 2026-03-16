@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, Plus } from "lucide-react";
 import { RebarSize, MachineCapability } from "@/hooks/useCutPlans";
+import { useUnitSystem, barSizeLabel, formatLength, lengthUnit } from "@/lib/unitSystem";
 
 interface AddItemFormProps {
   rebarSizes: RebarSize[];
