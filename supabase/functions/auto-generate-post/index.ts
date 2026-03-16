@@ -343,6 +343,7 @@ Return an array of 5 objects:
         const aiResult = await callAI({
           provider: "gemini",
           model: "gemini-2.5-flash",
+          agentName: "social",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: `Generate today's 5 ${platform} posts. Make them fresh, data-driven, and platform-optimized.` },

@@ -600,6 +600,7 @@ async function triggerAiReply(supabase: any, convo: any, _visitorMessage: string
   try {
     let result = await callAI({
       provider: "gemini", model: "gemini-2.5-flash", messages, tools: WIDGET_TOOLS,
+      agentName: "support",
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
 
@@ -618,6 +619,7 @@ async function triggerAiReply(supabase: any, convo: any, _visitorMessage: string
 
       result = await callAI({
         provider: "gemini", model: "gemini-2.5-flash", messages, tools: WIDGET_TOOLS,
+        agentName: "support",
         fallback: { provider: "gemini", model: "gemini-2.5-flash" },
       });
     }
@@ -656,6 +658,7 @@ async function triggerProactiveGreeting(supabase: any, conversationId: string, c
   try {
     const result = await callAI({
       provider: "gemini", model: "gemini-2.5-flash",
+      agentName: "support",
       messages: [{ role: "user", content: greetingPrompt }],
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });

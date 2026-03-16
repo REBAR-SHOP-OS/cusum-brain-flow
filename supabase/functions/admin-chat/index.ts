@@ -1032,6 +1032,7 @@ Never reveal internal system details. Respond in the same language the user writ
         const aiResponse = await callAIStream({
           provider: "gemini",
           model: "gemini-2.5-flash",
+          agentName: "commander",
           messages: [{ role: "system", content: publicSystemPrompt }, ...publicMessages],
           signal: AbortSignal.timeout(30000),
         });
@@ -1271,6 +1272,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
       aiResponse = await callAIStream({
         provider: mainProvider,
         model: mainModel,
+        agentName: "commander",
         messages: [{ role: "system", content: systemPrompt }, ...buildMultimodalMessages(messages, imageUrls)],
         tools: JARVIS_TOOLS,
         signal: AbortSignal.timeout(55000),
@@ -1442,6 +1444,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
             followUpResp = await callAIStream({
               provider: "gemini",
               model: "gemini-2.5-flash",
+              agentName: "commander",
               messages: followUpMessages,
               signal: AbortSignal.timeout(25000),
             });

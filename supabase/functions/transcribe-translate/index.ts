@@ -205,6 +205,7 @@ serve(async (req) => {
           const ppResult = await callAI({
             provider: "gpt",
             model: "gpt-4o-mini",
+            agentName: "system",
             messages: ppMessages,
           });
           const result = ppResult.content || "";
@@ -279,6 +280,7 @@ serve(async (req) => {
       pass1Result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-pro",
+        agentName: "system",
         messages,
       });
     } catch (aiErr) {
@@ -320,6 +322,7 @@ serve(async (req) => {
       const pass2Result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-pro",
+        agentName: "system",
         messages: pass2Messages,
       });
       const pass2Raw = pass2Result.content;

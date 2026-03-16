@@ -53,6 +53,7 @@ If the user included a specific question, answer it directly.`;
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "vizzy",
       messages: [
         { role: "system", content: systemPrompt },
         {

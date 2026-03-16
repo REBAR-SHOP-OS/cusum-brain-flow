@@ -60,6 +60,7 @@ Output ONLY the email body text, no meta-commentary.`,
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash-lite",
+      agentName: "system",
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
       messages: [
         { role: "system", content: systemPrompt },

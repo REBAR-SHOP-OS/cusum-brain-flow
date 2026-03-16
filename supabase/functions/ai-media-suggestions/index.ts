@@ -53,6 +53,7 @@ ${brandInfo}`;
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash-lite",
+      agentName: "social",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Generate 4 ${type} prompt suggestions.` },

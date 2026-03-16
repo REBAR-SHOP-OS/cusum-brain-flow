@@ -101,6 +101,7 @@ Generate a complete email campaign draft.`;
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o",
+      agentName: "email",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

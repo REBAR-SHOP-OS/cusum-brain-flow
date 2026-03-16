@@ -202,6 +202,7 @@ Deno.serve(async (req) => {
         const aiResult = await callAI({
           provider: "gemini",
           model: "gemini-2.5-flash-lite",
+          agentName: "accounting",
           messages: [
             {
               role: "system",

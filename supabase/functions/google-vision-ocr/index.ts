@@ -94,6 +94,7 @@ serve(async (req) => {
       const result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-flash",
+        agentName: "estimation",
         messages: [{ role: "user", content: [{ type: "text", text: STANDARD_PROMPT }, imageContent] }],
       });
 
@@ -115,6 +116,7 @@ serve(async (req) => {
       const fullResult = await callAI({
         provider: "gemini",
         model: "gemini-2.5-pro",
+        agentName: "estimation",
         messages: [{ role: "user", content: [{ type: "text", text: FULL_SCAN_PROMPT }, imageContent] }],
         maxTokens: 8000,
         temperature: 0.1,
@@ -131,6 +133,7 @@ serve(async (req) => {
         const quadResult = await callAI({
           provider: "gemini",
           model: "gemini-2.5-pro",
+          agentName: "estimation",
           messages: [{
             role: "user",
             content: [{ type: "text", text: buildQuadrantPrompt(position) }, imageContent],

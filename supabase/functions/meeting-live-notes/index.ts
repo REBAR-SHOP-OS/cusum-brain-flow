@@ -20,6 +20,7 @@ serve(async (req) => {
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o-mini",
+      agentName: "system",
       messages: [
         {
           role: "system",

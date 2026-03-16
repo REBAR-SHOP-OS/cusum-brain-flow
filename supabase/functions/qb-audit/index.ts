@@ -44,6 +44,7 @@ Rules:
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "accounting",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

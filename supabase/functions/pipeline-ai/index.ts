@@ -35,6 +35,7 @@ async function callAI(messages: any[], tools?: any[], toolChoice?: any): Promise
   const result = await routerCallAI({
     provider: "gemini",
     model: "gemini-2.5-flash",
+    agentName: "sales",
     messages,
     temperature: 0.7,
     tools,

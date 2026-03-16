@@ -76,6 +76,7 @@ Make prospects diverse across industries, cities, and company sizes. Include bot
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "sales",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Generate exactly 50 lead prospects for rebar fabrication services in ${targetRegion}. Return them using the tool.` },

@@ -64,6 +64,7 @@ async function extractRebarFromText(ocrText: string): Promise<any> {
   const result = await callAI({
     provider: "gemini",
     model: "gemini-2.5-pro",
+    agentName: "estimation",
     messages: [
       {
         role: "user",

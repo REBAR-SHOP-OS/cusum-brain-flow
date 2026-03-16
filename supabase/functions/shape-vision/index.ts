@@ -59,6 +59,7 @@ serve(async (req) => {
       const result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-flash",
+        agentName: "shopfloor",
         messages: [
           {
             role: "system",
@@ -108,6 +109,7 @@ Respond with ONLY a JSON object: {"shape_code": "CODE", "confidence": 0.0-1.0, "
       const result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-flash",
+        agentName: "shopfloor",
         messages: [
           {
             role: "system",

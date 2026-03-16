@@ -134,6 +134,7 @@ ${fullContext || "No transcript or chat data available."}
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o",
+      agentName: "system",
       messages: [
         {
           role: "system",

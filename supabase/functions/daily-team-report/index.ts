@@ -168,6 +168,7 @@ ${meetings.map((m: any) => `- ${m.title} (${Math.round((m.duration_seconds || 0)
       const aiResult = await callAI({
         provider: "gpt",
         model: "gpt-4o-mini",
+        agentName: "briefing",
         messages: [
           {
             role: "system",

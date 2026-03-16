@@ -96,6 +96,7 @@ ${kbContext || "No articles available."}`,
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o-mini",
+      agentName: "support",
       messages: chatMessages,
     });
 

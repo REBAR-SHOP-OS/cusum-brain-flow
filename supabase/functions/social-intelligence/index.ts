@@ -293,6 +293,7 @@ Focus on what content topics would resonate most and what products/services to h
       const aiResult = await callAI({
         provider: "gpt",
         model: "gpt-4o-mini",
+        agentName: "social",
         messages: [{ role: "user", content: summaryPrompt }],
         maxTokens: 300,
       });

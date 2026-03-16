@@ -978,6 +978,7 @@ serve(async (req) => {
     const firstResponse = await callAIStream({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "webbuilder",
       messages: [{ role: "system", content: systemPrompt }, ...trimmed],
       tools,
       stream: true,
@@ -990,6 +991,7 @@ serve(async (req) => {
       const streamResponse = await callAIStream({
         provider: "gemini",
         model: "gemini-2.5-flash",
+        agentName: "webbuilder",
         messages: [{ role: "system", content: systemPrompt }, ...trimmed],
         stream: true,
       });
@@ -1030,6 +1032,7 @@ serve(async (req) => {
     const finalResponse = await callAIStream({
       provider: "gemini",
       model: "gemini-2.5-flash",
+      agentName: "webbuilder",
       messages: followUpMessages,
       stream: true,
     });

@@ -79,6 +79,7 @@ serve(async (req) => {
           const classifyResult = await callAI({
             provider: "gpt",
             model: "gpt-4o-mini",
+            agentName: "email",
             messages: [
               { role: "system", content: "You classify inbound business emails for a rebar/steel manufacturing company." },
               { role: "user", content: `Classify this email.\n\nFrom: ${from}\nSubject: ${subject}\n\n${emailBody.slice(0, 2000)}` },
@@ -138,6 +139,7 @@ serve(async (req) => {
           const priorityResult = await callAI({
             provider: "gpt",
             model: "gpt-4o-mini",
+            agentName: "email",
             messages: [
               { role: "system", content: "You extract priority data from business emails for a rebar manufacturing company. Be concise." },
               { role: "user", content: `Extract priority data.\n\nFrom: ${from}\nSubject: ${subject}\nCategory: ${classification.category}\n\n${emailBody.slice(0, 2000)}` },
@@ -179,6 +181,7 @@ serve(async (req) => {
             const draftResult = await callAI({
               provider: "gpt",
               model: "gpt-4o-mini",
+              agentName: "email",
               messages: [
                 {
                   role: "system",
@@ -282,6 +285,7 @@ serve(async (req) => {
       const summaryResult = await callAI({
         provider: "gpt",
         model: "gpt-4o-mini",
+        agentName: "email",
         messages: [
           { role: "system", content: "Summarize this email thread in 2 concise sentences. Focus on what was discussed and the outcome." },
           { role: "user", content: `Subject: ${comm.subject}\nFrom: ${comm.from_address}\n\n${threadContext || emailBody.slice(0, 2000)}` },
@@ -337,6 +341,7 @@ serve(async (req) => {
       const briefResult = await callAI({
         provider: "gpt",
         model: "gpt-4o-mini",
+        agentName: "email",
         messages: [
           { role: "system", content: "Generate a concise daily email brief for a rebar manufacturing company CEO. Use bullet points. Be direct." },
           {

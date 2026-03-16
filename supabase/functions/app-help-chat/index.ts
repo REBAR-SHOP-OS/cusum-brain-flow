@@ -58,6 +58,7 @@ serve(async (req) => {
     const response = await callAIStream({
       provider: "gpt",
       model: "gpt-4o-mini",
+      agentName: "system",
       messages: [
         { role: "system", content: SYSTEM_PROMPT + "\n\n" + pageContext },
         ...messages,
