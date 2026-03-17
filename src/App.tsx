@@ -89,6 +89,12 @@ import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspac
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
 
+// Sales Department (new isolated workspace)
+const SalesPipeline = React.lazy(() => import("./pages/sales/SalesPipeline"));
+const SalesQuotations = React.lazy(() => import("./pages/sales/SalesQuotations"));
+const SalesInvoices = React.lazy(() => import("./pages/sales/SalesInvoices"));
+const SalesContacts = React.lazy(() => import("./pages/sales/SalesContacts"));
+
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
 import Unsubscribe from "./pages/Unsubscribe";
@@ -150,12 +156,18 @@ const App = () => (
                     <Route path="/autopilot" element={<P><AutopilotDashboard /></P>} />
                     <Route path="/support-inbox" element={<P><SupportInbox /></P>} />
 
-                    {/* Sales */}
+                    {/* Legacy Sales / CRM */}
                     <Route path="/pipeline" element={<P><Pipeline /></P>} />
                     <Route path="/lead-scoring" element={<P><LeadScoring /></P>} />
                     <Route path="/pipeline/intelligence" element={<P><PipelineIntelligence /></P>} />
                     <Route path="/prospecting" element={<P><Prospecting /></P>} />
                     <Route path="/customers" element={<P><Customers /></P>} />
+
+                    {/* New Sales Department */}
+                    <Route path="/sales/pipeline" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SalesPipeline /></Suspense></P>} />
+                    <Route path="/sales/quotations" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SalesQuotations /></Suspense></P>} />
+                    <Route path="/sales/invoices" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SalesInvoices /></Suspense></P>} />
+                    <Route path="/sales/contacts" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SalesContacts /></Suspense></P>} />
 
                     {/* Accounting */}
                     <Route path="/accounting" element={<P><AccountingWorkspace /></P>} />

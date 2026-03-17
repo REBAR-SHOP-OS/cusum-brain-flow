@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home, Phone, Shield } from "lucide-react";
+import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home, Phone, Shield, FileText, Receipt, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
 import { ThemeToggle } from "./ThemeToggle";
@@ -16,6 +16,13 @@ const crmNav = [
   { name: "Phonecalls", href: "/phonecalls", icon: Phone },
   { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Customers", href: "/customers", icon: Users },
+];
+
+const salesNav = [
+  { name: "Sales Pipeline", href: "/sales/pipeline", icon: Kanban },
+  { name: "Quotations", href: "/sales/quotations", icon: FileText },
+  { name: "Invoices", href: "/sales/invoices", icon: Receipt },
+  { name: "Contacts", href: "/sales/contacts", icon: UserPlus },
 ];
 
 const operationsNav = [
@@ -101,6 +108,23 @@ export function Sidebar() {
         <nav className="flex-1 flex flex-col items-center py-4 gap-1 overflow-y-auto">
           {/* CRM Group */}
           {crmNav.map((item) => {
+            const isActive = location.pathname === item.href;
+            return (
+              <Link key={item.name} to={item.href} className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
+                "hover:bg-sidebar-accent",
+                isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+              )} title={item.name}>
+                <item.icon className="w-5 h-5" />
+              </Link>
+            );
+          })}
+
+          {/* Separator */}
+          <div className="w-6 h-px bg-sidebar-border my-1" />
+
+          {/* Sales Department Group */}
+          {salesNav.map((item) => {
             const isActive = location.pathname === item.href;
             return (
               <Link key={item.name} to={item.href} className={cn(

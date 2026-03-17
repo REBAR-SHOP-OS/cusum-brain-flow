@@ -1,115 +1,74 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## New Sales Department — Parallel Workspace
+## Completed: Add All Wan 2.6 Capabilities
 
-### Overview
-Create a completely isolated "Sales Department" section with its own tables, pages, and sidebar group. The existing pipeline (`/pipeline`) stays untouched.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
----
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. Database — 4 New Tables
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-**`sales_leads`** — New pipeline leads (isolated from `leads`)
-- `id`, `company_id`, `title`, `description`, `stage` (default `'new'`), `probability`, `expected_value`, `expected_close_date`, `source`, `assigned_to`, `priority`, `notes`, `contact_name`, `contact_email`, `contact_phone`, `contact_company`, `metadata` (jsonb), `created_at`, `updated_at`
-- RLS: company_id scoped, authenticated only
-- Add to `supabase_realtime`
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-**`sales_quotations`**
-- `id`, `company_id`, `quotation_number` (text, unique), `customer_name`, `customer_company`, `sales_lead_id` (FK → sales_leads), `status` (draft/sent/accepted/declined/expired), `amount`, `notes`, `created_at`, `expiry_date`
-- RLS: company_id scoped
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-**`sales_invoices`**
-- `id`, `company_id`, `invoice_number` (text, unique), `customer_name`, `customer_company`, `quotation_id` (FK → sales_quotations nullable), `sales_lead_id` (FK → sales_leads nullable), `amount`, `status` (draft/sent/paid/overdue/cancelled), `due_date`, `issued_date`, `notes`, `created_at`
-- RLS: company_id scoped
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-**`sales_contacts`**
-- `id`, `company_id`, `name`, `company_name`, `email`, `phone`, `source`, `notes`, `created_at`, `updated_at`
-- RLS: company_id scoped
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
 
----
+## Completed: Pipeline Unified Timeline & Data Quality Patch
 
-### 2. Sidebar — New "Sales" Group
+### Changes
 
-Add a new nav group between CRM and Operations in `Sidebar.tsx`:
+**Backend — Sync Fixes:**
+- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
+- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
+- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
 
-```text
-── CRM (existing) ──
-  Home, Tasks, Phonecalls, Pipeline, Customers
-── Sales Department (NEW) ──
-  Sales Pipeline   → /sales/pipeline
-  Quotations       → /sales/quotations
-  Invoices         → /sales/invoices
-  Contacts         → /sales/contacts
-── Operations (existing) ──
-```
+**Frontend — Lead Detail:**
+- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
 
-Icons: `Kanban`, `FileText`, `Receipt`, `UserPlus`
+**Frontend — Pipeline Board:**
+- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
 
----
+**Migration:**
+- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
+- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
 
-### 3. Routes — 4 New Routes in `App.tsx`
+### Known Risks
+- Priority re-mapping changes existing lead priorities on next sync (intentional)
+- File linkage fix uses both int/string ID matching — monitor results after next sync
+- Stage group filter is additive/safe — "Show all" restores full board
 
-```
-/sales/pipeline    → SalesPipeline
-/sales/quotations  → SalesQuotations
-/sales/invoices    → SalesInvoices
-/sales/contacts    → SalesContacts
-```
-
-All wrapped in `<ProtectedRoute>`.
-
----
-
-### 4. Pages — 4 New Files
-
-**`src/pages/sales/SalesPipeline.tsx`**
-- Reuses `PipelineBoard` and `PipelineColumn` components
-- Own sales-focused stages: New → Contacted → Qualified → Estimating → Quote Sent → Follow Up → Won → Lost
-- Queries `sales_leads` table (not `leads`)
-- Lead create/edit modal, drag-drop stage changes, detail drawer
-- Realtime subscription on `sales_leads`
-
-**`src/pages/sales/SalesQuotations.tsx`**
-- Table view with columns: number, customer, linked lead, status, amount, created, expiry
-- Empty state with "Create Quotation" button
-- CRUD modals
-
-**`src/pages/sales/SalesInvoices.tsx`**
-- Table view: number, customer, linked quotation/lead, amount, status, due date, issued date
-- Empty state with "Create Invoice" button
-- CRUD modals
-
-**`src/pages/sales/SalesContacts.tsx`**
-- Table view: name, company, email, phone, source, notes, linked leads count, last activity
-- Empty state with "Add Contact" button
-- CRUD modals
-
----
-
-### 5. Hooks — New Data Hooks
-
-- `useSalesLeads` — fetch/mutate `sales_leads`, realtime subscription
-- `useSalesQuotations` — fetch/mutate `sales_quotations`
-- `useSalesInvoices` — fetch/mutate `sales_invoices`
-- `useSalesContacts` — fetch/mutate `sales_contacts`
-
----
-
-### 6. Old Pipeline Preservation
-
-- Zero changes to `/pipeline`, `leads` table, or any existing pipeline components
-- The existing "Pipeline" link in sidebar CRM group stays as-is
-- Optionally rename sidebar label to "Pipeline (Legacy)" only if explicitly requested later
-
----
-
-### 7. Files Summary
-
-| Action | Files |
-|--------|-------|
-| **New DB tables** | `sales_leads`, `sales_quotations`, `sales_invoices`, `sales_contacts` (migration) |
-| **New pages** | `src/pages/sales/SalesPipeline.tsx`, `SalesQuotations.tsx`, `SalesInvoices.tsx`, `SalesContacts.tsx` |
-| **New hooks** | `src/hooks/useSalesLeads.ts`, `useSalesQuotations.ts`, `useSalesInvoices.ts`, `useSalesContacts.ts` |
-| **Modified** | `src/App.tsx` (routes), `src/components/layout/Sidebar.tsx` (nav group) |
-| **Untouched** | All existing pipeline code, `leads` table, current CRM pages |
-
+### Follow-up
+- Run a full Odoo sync to apply priority and revenue fixes to existing data
+- Monitor file linkage stats in chatter sync response after deployment

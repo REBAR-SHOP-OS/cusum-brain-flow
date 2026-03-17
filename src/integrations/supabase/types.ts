@@ -11352,6 +11352,254 @@ export type Database = {
           },
         ]
       }
+      sales_contacts: {
+        Row: {
+          company_id: string
+          company_name: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          company_name?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          company_name?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_invoices: {
+        Row: {
+          amount: number | null
+          company_id: string
+          created_at: string
+          customer_company: string | null
+          customer_name: string | null
+          due_date: string | null
+          id: string
+          invoice_number: string
+          issued_date: string | null
+          notes: string | null
+          quotation_id: string | null
+          sales_lead_id: string | null
+          status: string
+        }
+        Insert: {
+          amount?: number | null
+          company_id: string
+          created_at?: string
+          customer_company?: string | null
+          customer_name?: string | null
+          due_date?: string | null
+          id?: string
+          invoice_number: string
+          issued_date?: string | null
+          notes?: string | null
+          quotation_id?: string | null
+          sales_lead_id?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number | null
+          company_id?: string
+          created_at?: string
+          customer_company?: string | null
+          customer_name?: string | null
+          due_date?: string | null
+          id?: string
+          invoice_number?: string
+          issued_date?: string | null
+          notes?: string | null
+          quotation_id?: string | null
+          sales_lead_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_invoices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_invoices_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: false
+            referencedRelation: "sales_quotations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_invoices_sales_lead_id_fkey"
+            columns: ["sales_lead_id"]
+            isOneToOne: false
+            referencedRelation: "sales_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_leads: {
+        Row: {
+          assigned_to: string | null
+          company_id: string
+          contact_company: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          description: string | null
+          expected_close_date: string | null
+          expected_value: number | null
+          id: string
+          metadata: Json | null
+          notes: string | null
+          priority: string | null
+          probability: number | null
+          source: string | null
+          stage: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          company_id: string
+          contact_company?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          description?: string | null
+          expected_close_date?: string | null
+          expected_value?: number | null
+          id?: string
+          metadata?: Json | null
+          notes?: string | null
+          priority?: string | null
+          probability?: number | null
+          source?: string | null
+          stage?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          company_id?: string
+          contact_company?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          description?: string | null
+          expected_close_date?: string | null
+          expected_value?: number | null
+          id?: string
+          metadata?: Json | null
+          notes?: string | null
+          priority?: string | null
+          probability?: number | null
+          source?: string | null
+          stage?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_leads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_quotations: {
+        Row: {
+          amount: number | null
+          company_id: string
+          created_at: string
+          customer_company: string | null
+          customer_name: string | null
+          expiry_date: string | null
+          id: string
+          notes: string | null
+          quotation_number: string
+          sales_lead_id: string | null
+          status: string
+        }
+        Insert: {
+          amount?: number | null
+          company_id: string
+          created_at?: string
+          customer_company?: string | null
+          customer_name?: string | null
+          expiry_date?: string | null
+          id?: string
+          notes?: string | null
+          quotation_number: string
+          sales_lead_id?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number | null
+          company_id?: string
+          created_at?: string
+          customer_company?: string | null
+          customer_name?: string | null
+          expiry_date?: string | null
+          id?: string
+          notes?: string | null
+          quotation_number?: string
+          sales_lead_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_quotations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quotations_sales_lead_id_fkey"
+            columns: ["sales_lead_id"]
+            isOneToOne: false
+            referencedRelation: "sales_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_activities: {
         Row: {
           activity_type: string
