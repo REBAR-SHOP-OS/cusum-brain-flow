@@ -708,7 +708,7 @@ export default function Pipeline() {
             <span className="text-[11px] text-muted-foreground">
               ({filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""})
             </span>
-            {isAdmin && lastSyncedAt && (
+            {lastSyncedAt && (
               <span className={`hidden sm:flex items-center gap-1 text-[10px] font-medium ${syncStatusColor}`}>
                 <span className={`w-1.5 h-1.5 rounded-full inline-block ${
                   differenceInMinutes(new Date(), lastSyncedAt) < 30 ? "bg-emerald-500" :
@@ -737,6 +737,18 @@ export default function Pipeline() {
               )}
             </div>
           </div>
+
+          {/* Prominent Sync button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={handleOdooSync}
+            disabled={isSyncingOdoo}
+          >
+            {isSyncingOdoo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Sync</span>
+          </Button>
 
           {/* Overflow actions menu */}
           <DropdownMenu>

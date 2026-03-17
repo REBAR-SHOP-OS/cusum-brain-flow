@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
   LayoutGrid, Brain, Settings, Shield, Plug, DollarSign, Activity,
-  Terminal, Lock, BarChart3, Monitor, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize,
+  Terminal, Lock, BarChart3, Monitor, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize, PanelLeftClose, PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -36,6 +37,7 @@ export function AppSidebar() {
   const { roles, isAdmin } = useUserRole();
   const { unreadCount } = useNotifications();
   const { user } = useAuth();
+  const [pinned, setPinned] = useState(() => localStorage.getItem("sidebar_pinned") === "true");
   const email = user?.email || "";
   const isInternal = email.endsWith("@rebar.shop");
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
@@ -211,8 +213,17 @@ export function AppSidebar() {
     });
   };
 
+  const togglePin = () => {
+    const next = !pinned;
+    setPinned(next);
+    localStorage.setItem("sidebar_pinned", String(next));
+  };
+
   return (
-    <aside data-tour="sidebar" className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
+    <aside data-tour="sidebar" className={cn(
+      "group/sidebar shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden",
+      pinned ? "w-48" : "w-14 hover:w-48"
+    )}>
       <ScrollArea className="flex-1 py-2">
         {navGroups.map((group) => {
           // Show group if at least one item exists (locked or not)
@@ -293,6 +304,24 @@ export function AppSidebar() {
           );
         })}
       </ScrollArea>
+      <div className="px-2 py-2 border-t border-sidebar-border">
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              onClick={togglePin}
+              className="h-10 w-full rounded-lg flex items-center gap-3 px-2 transition-colors hover:bg-sidebar-accent text-sidebar-foreground"
+            >
+              {pinned ? <PanelLeftClose className="w-[18px] h-[18px] shrink-0" /> : <PanelLeft className="w-[18px] h-[18px] shrink-0" />}
+              <span className={cn("text-sm overflow-hidden transition-opacity duration-200", pinned ? "opacity-100" : "opacity-0 group-hover/sidebar:opacity-100")}>
+                {pinned ? "Collapse" : "Pin open"}
+              </span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="text-xs group-hover/sidebar:hidden">
+            {pinned ? "Collapse" : "Pin open"}
+          </TooltipContent>
+        </Tooltip>
+      </div>
     </aside>
   );
 }

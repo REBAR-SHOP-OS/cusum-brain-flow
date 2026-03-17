@@ -191,6 +191,28 @@ function decodeBase64Url(data: string): string {
   }
 }
 
+/** Decode HTML entities in Gmail snippets (e.g. &#39; &hellip; &amp;) */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&hellip;/g, "…")
+    .replace(/&ndash;/g, "–")
+    .replace(/&mdash;/g, "—")
+    .replace(/&lsquo;/g, "\u2018")
+    .replace(/&rsquo;/g, "\u2019")
+    .replace(/&ldquo;/g, "\u201C")
+    .replace(/&rdquo;/g, "\u201D")
+    .replace(/&bull;/g, "•")
+    .replace(/&nbsp;/g, " ");
+}
+
 function getHeader(headers: Array<{ name: string; value: string }>, name: string): string {
   return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
 }
@@ -343,7 +365,7 @@ serve(async (req) => {
           to: getHeader(headers, "To"),
           subject: getHeader(headers, "Subject"),
           date: getHeader(headers, "Date"),
-          snippet: msgData.snippet,
+          snippet: decodeHtmlEntities(msgData.snippet || ""),
           body: sanitizeHtmlServerSide(getBodyContent(msgData)),
           internalDate: parseInt(msgData.internalDate),
           isUnread: msgData.labelIds?.includes("UNREAD") || false,

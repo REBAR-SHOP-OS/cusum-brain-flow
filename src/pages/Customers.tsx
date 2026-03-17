@@ -269,7 +269,7 @@ export default function Customers() {
         <div>
           <h1 className="text-xl font-semibold">Customers</h1>
           <p className="text-sm text-muted-foreground">
-            {customers.length} customer{customers.length !== 1 ? "s" : ""}
+            {isLoading ? "Loading…" : `${customers.length} customer${customers.length !== 1 ? "s" : ""}`}
           </p>
         </div>
         <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
