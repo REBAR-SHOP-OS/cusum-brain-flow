@@ -81,16 +81,16 @@ function DefaultRow({
   def,
   dbMatch,
   onMarkPurchased,
-  onUnmarkPurchased,
   onMarkRejected,
-  onUnmarkRejected,
+  onTogglePurchased,
+  onToggleRejected,
 }: {
   def: DefaultItem;
   dbMatch: PurchasingItem | undefined;
   onMarkPurchased: (title: string, category: string) => void;
-  onUnmarkPurchased: (itemId: string) => void;
   onMarkRejected: (title: string, category: string) => void;
-  onUnmarkRejected: (itemId: string) => void;
+  onTogglePurchased?: (itemId: string, current: boolean) => void;
+  onToggleRejected?: (itemId: string, current: boolean) => void;
 }) {
   const isPurchased = dbMatch?.is_purchased ?? false;
   const isRejected = dbMatch?.is_rejected ?? false;
@@ -114,12 +114,9 @@ function DefaultRow({
             : "text-muted-foreground hover:text-green-500"
         )}
         onClick={() => {
-          if (isPurchased && dbMatch) {
-            onUnmarkPurchased(dbMatch.id);
+          if (dbMatch) {
+            onTogglePurchased?.(dbMatch.id, isPurchased);
           } else {
-            if (isRejected && dbMatch) {
-              onUnmarkRejected(dbMatch.id);
-            }
             onMarkPurchased(def.title, def.category);
           }
         }}
@@ -137,12 +134,9 @@ function DefaultRow({
             : "text-muted-foreground hover:text-red-500"
         )}
         onClick={() => {
-          if (isRejected && dbMatch) {
-            onUnmarkRejected(dbMatch.id);
+          if (dbMatch) {
+            onToggleRejected?.(dbMatch.id, isRejected);
           } else {
-            if (isPurchased && dbMatch) {
-              onUnmarkPurchased(dbMatch.id);
-            }
             onMarkRejected(def.title, def.category);
           }
         }}
@@ -208,9 +202,9 @@ export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased
             def={def}
             dbMatch={findDbMatch(def, dbItems)}
             onMarkPurchased={onMarkPurchased}
-            onUnmarkPurchased={onUnmarkPurchased}
             onMarkRejected={onMarkRejected}
-            onUnmarkRejected={onUnmarkRejected}
+            onTogglePurchased={onTogglePurchased}
+            onToggleRejected={onToggleRejected}
           />
         ))}
         {groupCustom.map(item => renderCustomRow(item))}
