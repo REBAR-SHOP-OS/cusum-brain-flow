@@ -1035,7 +1035,7 @@ export default function Tasks() {
                                   "text-[10px]",
                                   isOverdue(task) ? "text-destructive" : "text-muted-foreground"
                                 )}>
-                                  · {format(new Date(task.due_date), "MMM d")}
+                                  · {format(parseDateString(task.due_date), "MMM d")}
                                 </span>
                               )}
                             </div>
