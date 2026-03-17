@@ -73,6 +73,30 @@ export const PIPELINE_STAGES = [
   { id: "archived_orphan", label: "Archived / Orphan", color: "bg-zinc-700" },
 ];
 
+/** Stage groups for quick-filtering the board width */
+export const STAGE_GROUPS: Record<string, { label: string; stages: Set<string> }> = {
+  sales: {
+    label: "Sales",
+    stages: new Set(["prospecting", "new", "telephonic_enquiries", "qualified", "hot_enquiries", "rfi", "addendums"]),
+  },
+  estimation: {
+    label: "Estimation",
+    stages: new Set(["estimation_ben", "estimation_karthick", "estimation_others", "estimation_partha", "qc_ben"]),
+  },
+  quotation: {
+    label: "Quotation",
+    stages: new Set(["quotation_priority", "quotation_bids"]),
+  },
+  operations: {
+    label: "Operations",
+    stages: new Set(["shop_drawing", "shop_drawing_approval", "fabrication_in_shop", "ready_to_dispatch", "out_for_delivery", "delivered_pickup_done"]),
+  },
+  terminal: {
+    label: "Terminal",
+    stages: new Set(["won", "lost", "loss", "merged", "no_rebars_out_of_scope", "temp_ir_vam", "migration_others", "dreamers", "archived_orphan"]),
+  },
+};
+
 function getDateCutoff(rangeId: string): Date | null {
   const now = new Date();
   switch (rangeId) {
