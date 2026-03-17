@@ -610,8 +610,7 @@ export async function executeToolCall(
             }
 
             // Inject aspect ratio as soft composition guidance (final dimensions enforced by server-side crop)
-            const aspectRatio = (context?.imageAspectRatio as string) || args.aspect_ratio || "1:1";
-            console.log(`[generate_image] aspectRatio resolved: args=${args.aspect_ratio}, context=${context?.imageAspectRatio}, final=${aspectRatio}`);
+            // aspectRatio already declared at top of generate_image handler
             const AR_COMPOSITION_MAP: Record<string, string> = {
               "16:9": "Compose the scene as a LANDSCAPE layout — wider than tall, with important elements spread horizontally.",
               "9:16": "Compose the scene as a PORTRAIT/VERTICAL layout — taller than wide, with important elements arranged vertically (suitable for Stories/Reels).",
