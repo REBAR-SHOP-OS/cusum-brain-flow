@@ -21,7 +21,8 @@ type TaskType =
   | "generate-voiceover"
   | "classify-scene"
   | "quality-review"
-  | "optimize-ad";
+  | "optimize-ad"
+  | "write-script";
 
 interface ModelRoute {
   model: string;
