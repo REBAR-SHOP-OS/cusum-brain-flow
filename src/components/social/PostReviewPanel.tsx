@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth";
 import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -253,6 +253,17 @@ export function PostReviewPanel({
     });
   }, [localPlatforms]);
 
+  // Auto-save ref to avoid hook ordering issues
+  const saveEditRef = useRef<(() => void) | null>(null);
+  const prevPostIdRef = useRef(post?.id);
+
+  useEffect(() => {
+    if (prevPostIdRef.current && prevPostIdRef.current !== post?.id && editing) {
+      saveEditRef.current?.();
+    }
+    prevPostIdRef.current = post?.id;
+  }, [post?.id, editing]);
+
   if (!post) return null;
 
   const startEdit = () => {
@@ -277,6 +288,9 @@ export function PostReviewPanel({
     });
     setEditing(false);
   };
+
+  // Keep ref in sync
+  saveEditRef.current = saveEdit;
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -341,7 +355,7 @@ export function PostReviewPanel({
 
   return (
     <>
-      <Sheet open={!!post} onOpenChange={(open) => { if (!open) { setEditing(false); setSubPanel(null); onClose(); } }}>
+      <Sheet open={!!post} onOpenChange={(open) => { if (!open) { if (editing) saveEdit(); setSubPanel(null); onClose(); } }}>
         <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">
 
           {/* ── Sub-panel views ── */}
