@@ -22,6 +22,7 @@ import { SocialCalendar } from "@/components/social/SocialCalendar";
 import { ContentStrategyPanel } from "@/components/social/ContentStrategyPanel";
 import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { supabase } from "@/integrations/supabase/client";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
@@ -216,8 +217,11 @@ export default function SocialMediaManager() {
     setSelectedPost(null);
   };
 
-  const handleDecline = (post: SocialPost) => {
-    updatePost.mutate({ id: post.id, status: "declined" });
+  const handleDecline = async (post: SocialPost) => {
+    // Get current user email to record who declined
+    const { data: { user } } = await supabase.auth.getUser();
+    const declinedBy = user?.email || "unknown";
+    updatePost.mutate({ id: post.id, status: "declined", neel_approved: false, declined_by: declinedBy } as any);
     setSelectedPost(null);
   };
 

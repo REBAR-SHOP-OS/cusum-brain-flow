@@ -101,31 +101,35 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Guard: prevent duplicate publishing
+    // Guard: prevent duplicate publishing + declined + approval gate
     if (post_id) {
       const { data: existing } = await supabaseAdmin
         .from("social_posts")
-        .select("status")
+        .select("status, neel_approved, declined_by")
         .eq("id", post_id)
         .single();
+
       if (existing?.status === "published") {
         return new Response(
           JSON.stringify({ error: "This post has already been published." }),
           { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-    }
 
-    // Server-side Neel approval guard (skipped for manual "Publish Now" via force_publish)
-    if (post_id && !force_publish) {
-      const { data: postCheck } = await supabaseAdmin
-        .from("social_posts")
-        .select("neel_approved")
-        .eq("id", post_id)
-        .single();
-      if (!postCheck?.neel_approved) {
+      // HARD GATE: declined posts can NEVER be published
+      if (existing?.status === "declined") {
+        console.warn(`[social-publish] BLOCKED — post ${post_id} was declined by ${existing.declined_by}`);
         return new Response(
-          JSON.stringify({ error: "This post requires Neel's approval before publishing." }),
+          JSON.stringify({ error: `This post was declined${existing.declined_by ? ` by ${existing.declined_by}` : ''} and cannot be published.` }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // HARD GATE: ALL publishes (manual or cron) require neel_approved = true
+      if (!existing?.neel_approved) {
+        console.warn(`[social-publish] BLOCKED — post ${post_id} not approved by Neel/Sattar`);
+        return new Response(
+          JSON.stringify({ error: "This post requires approval from Neel or Sattar before publishing." }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
