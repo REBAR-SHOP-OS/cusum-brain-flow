@@ -182,5 +182,24 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     }
   }, []);
 
-  return { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, refetch: fetchItems };
+  // Confirm list: set due_date on all items without one for the current company
+  const confirmList = useCallback(async (date: string) => {
+    if (!user) return;
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    if (!profile?.company_id) return;
+
+    const { error } = await supabase
+      .from("purchasing_list_items" as any)
+      .update({ due_date: date })
+      .eq("company_id", profile.company_id)
+      .is("due_date", null);
+    if (error) {
+      toast.error("Error confirming list");
+      console.error(error);
+    } else {
+      toast.success(`List confirmed for ${date}`);
+    }
+  }, [user]);
+
+  return { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, confirmList, refetch: fetchItems };
 }
