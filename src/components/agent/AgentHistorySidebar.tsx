@@ -109,6 +109,48 @@ export function AgentHistorySidebar({
         {/* Session list */}
         <ScrollArea className="flex-1">
           <div className="px-2 pb-2">
+            {isPurchasing && purchasingDates ? (
+              <>
+                {/* "All items" entry */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelectPurchasingDate?.(null)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') onSelectPurchasingDate?.(null); }}
+                  className={cn(
+                    "w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-colors cursor-pointer",
+                    activePurchasingDate === null
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-foreground/80 hover:bg-muted"
+                  )}
+                >
+                  <span className="text-xs">📋 All Items</span>
+                </div>
+                {purchasingDates.map((dateStr) => (
+                  <div
+                    key={dateStr}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onSelectPurchasingDate?.(dateStr)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') onSelectPurchasingDate?.(dateStr); }}
+                    className={cn(
+                      "w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-colors cursor-pointer",
+                      activePurchasingDate === dateStr
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-foreground/80 hover:bg-muted"
+                    )}
+                  >
+                    <span className="text-xs">📅 {dateStr}</span>
+                  </div>
+                ))}
+                {purchasingDates.length === 0 && (
+                  <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                    No dated items yet
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
             {loading && (
               <div className="px-2 py-4 text-xs text-muted-foreground text-center">
                 Loading...
@@ -155,6 +197,8 @@ export function AgentHistorySidebar({
                 </button>
               </div>
             ))}
+              </>
+            )}
           </div>
         </ScrollArea>
       </div>
