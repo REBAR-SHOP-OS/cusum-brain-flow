@@ -43,6 +43,8 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const customItems = items.filter(item =>
     !COMPANY_DEFAULTS.some(d => d.title === item.title && d.category === item.category)
   );
+  const categorizedCustom = customItems.filter(i => i.category === "Office" || i.category === "Workshop");
+  const otherCustom = customItems.filter(i => i.category !== "Office" && i.category !== "Workshop");
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
