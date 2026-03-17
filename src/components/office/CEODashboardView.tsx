@@ -508,6 +508,9 @@ export function CEODashboardView() {
       {/* ─── Meeting Intelligence ─── */}
       <MeetingIntelligence />
 
+      {/* ─── AI Token Usage ─── */}
+      <AITokenUsageCard />
+
       {/* ─── Drilldown Drawers ─── */}
       <ARWorkbenchDrawer open={openDrawer === "ar"} onClose={() => setOpenDrawer(null)} outstandingAR={m.outstandingAR} unpaidInvoices={m.unpaidInvoices} arAgingBuckets={m.arAgingBuckets} />
       <JobRiskDrawer open={openDrawer === "risk"} onClose={() => setOpenDrawer(null)} atRiskJobs={m.atRiskJobs} />
