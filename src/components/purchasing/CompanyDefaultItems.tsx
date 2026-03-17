@@ -1,7 +1,13 @@
-import { Check, X } from "lucide-react";
+import { Check, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PurchasingItem } from "@/hooks/usePurchasingList";
+
+const PRIORITY_COLORS: Record<string, string> = {
+  high: "text-red-500",
+  medium: "text-yellow-500",
+  low: "text-green-500",
+};
 
 export interface DefaultItem {
   title: string;
