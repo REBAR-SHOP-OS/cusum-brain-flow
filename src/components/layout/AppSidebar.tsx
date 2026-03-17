@@ -37,6 +37,7 @@ export function AppSidebar() {
   const { roles, isAdmin } = useUserRole();
   const { unreadCount } = useNotifications();
   const { user } = useAuth();
+  const [pinned, setPinned] = useState(() => localStorage.getItem("sidebar_pinned") === "true");
   const email = user?.email || "";
   const isInternal = email.endsWith("@rebar.shop");
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
