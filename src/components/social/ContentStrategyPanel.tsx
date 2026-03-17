@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   Calendar, Target, BarChart3, Clock, CheckCircle2,
   ChevronRight, Smartphone, Globe, Flag, Sparkles,
