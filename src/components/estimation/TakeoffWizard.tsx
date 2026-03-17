@@ -268,7 +268,7 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
                   <SelectTrigger><SelectValue placeholder="Select customer..." /></SelectTrigger>
                   <SelectContent>
                     {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      <SelectItem key={c.customer_id} value={c.customer_id}>{c.display_name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
