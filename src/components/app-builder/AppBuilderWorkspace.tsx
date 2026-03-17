@@ -10,7 +10,11 @@ import { AppBuilderDataModel } from "./AppBuilderDataModel";
 import { AppBuilderPreviewPanel } from "./AppBuilderPreviewPanel";
 import { AppBuilderVersions } from "./AppBuilderVersions";
 import { AppBuilderExport } from "./AppBuilderExport";
+import { AppBuilderChat } from "./AppBuilderChat";
+import { AppBuilderConnectors } from "./AppBuilderConnectors";
+import { AppBuilderKnowledge } from "./AppBuilderKnowledge";
 import { Badge } from "@/components/ui/badge";
+import { useCallback } from "react";
 
 function OverviewSection({ project }: { project: ReturnType<typeof useAppBuilderProject>["project"] }) {
   if (!project.plan) {
@@ -75,7 +79,27 @@ export function AppBuilderWorkspace() {
     generatePlan,
     selectedPreviewPage,
     setSelectedPreviewPage,
+    // Chat
+    messages,
+    isChatLoading,
+    sendMessage,
+    // Mode
+    mode,
+    setMode,
+    // Files
+    pendingFiles,
+    addFiles,
+    removeFile,
   } = useAppBuilderProject(projectId);
+
+  const handleDiagnose = useCallback(
+    (prompt: string) => {
+      setMode("chat");
+      setActiveSection("chat");
+      sendMessage(prompt);
+    },
+    [setMode, setActiveSection, sendMessage]
+  );
 
   const renderCenter = () => {
     if (isGenerating) {
@@ -110,6 +134,12 @@ export function AppBuilderWorkspace() {
         return <AppBuilderExport />;
       case "settings":
         return <SettingsSection />;
+      case "chat":
+        return <AppBuilderChat messages={messages} isLoading={isChatLoading} />;
+      case "connectors":
+        return <AppBuilderConnectors onDiagnose={handleDiagnose} />;
+      case "knowledge":
+        return <AppBuilderKnowledge />;
       default:
         return null;
     }
@@ -132,7 +162,17 @@ export function AppBuilderWorkspace() {
           </div>
 
           {/* Prompt bar */}
-          <AppBuilderPromptBar onGenerate={generatePlan} isGenerating={isGenerating} />
+          <AppBuilderPromptBar
+            onGenerate={generatePlan}
+            onSendMessage={sendMessage}
+            isGenerating={isGenerating}
+            isChatLoading={isChatLoading}
+            mode={mode}
+            onModeChange={setMode}
+            pendingFiles={pendingFiles}
+            onAddFiles={addFiles}
+            onRemoveFile={removeFile}
+          />
 
           {/* Content */}
           {renderCenter()}
