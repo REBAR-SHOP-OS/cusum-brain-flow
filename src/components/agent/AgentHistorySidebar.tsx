@@ -36,6 +36,9 @@ export function AgentHistorySidebar({
   sessions,
   loading,
   deleteSession,
+  purchasingDates,
+  activePurchasingDate,
+  onSelectPurchasingDate,
 }: AgentHistorySidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [teamReportOpen, setTeamReportOpen] = useState(false);

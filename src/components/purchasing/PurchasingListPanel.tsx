@@ -21,8 +21,15 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: "text-green-500",
 };
 
-export function PurchasingListPanel() {
-  const [filterDate, setFilterDate] = useState<Date | undefined>();
+interface PurchasingListPanelProps {
+  filterDate?: Date;
+  onFilterDateChange?: (date: Date | undefined) => void;
+}
+
+export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange }: PurchasingListPanelProps = {}) {
+  const [internalDate, setInternalDate] = useState<Date | undefined>();
+  const filterDate = externalDate !== undefined ? externalDate : internalDate;
+  const setFilterDate = onFilterDateChange || setInternalDate;
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "purchased">("all");
   const [newTitle, setNewTitle] = useState("");
   const [newQty, setNewQty] = useState("1");
