@@ -203,6 +203,9 @@ export function CEODashboardView() {
         )}
       </AnimatePresence>
 
+      {/* ─── Daily Briefing ─── */}
+      <DailyBriefingCard />
+
       {/* ─── Health Score Hero ─── */}
       <HealthScoreHero score={m.healthScore} drivers={healthDrivers} />
 
