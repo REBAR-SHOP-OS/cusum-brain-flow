@@ -1269,7 +1269,7 @@ export default function Tasks() {
                           isOverdue(selectedTask) && "text-destructive font-medium"
                         )}>
                           <CalendarDays className="h-3.5 w-3.5 opacity-60" />
-                          {selectedTask.due_date ? format(new Date(selectedTask.due_date), "MMM d, yyyy") : <span className="text-muted-foreground">Set date</span>}
+                          {selectedTask.due_date ? format(parseDateString(selectedTask.due_date), "MMM d, yyyy") : <span className="text-muted-foreground">Set date</span>}
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
