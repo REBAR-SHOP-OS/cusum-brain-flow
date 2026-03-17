@@ -9,7 +9,7 @@ import {
 
 const FIELDS = [
   "id", "name", "stage_id", "email_from", "phone", "contact_name",
-  "user_id", "probability", "expected_revenue", "planned_revenue", "type", "partner_name",
+  "user_id", "probability", "expected_revenue", "type", "partner_name",
   "city", "create_date", "write_date", "priority",
   "date_deadline",
 ];
@@ -381,7 +381,7 @@ Deno.serve(async (req) => {
             title: ol.name || "Untitled",
             stage: erpStage,
             probability: normalizedProb,
-            expected_value: Number(ol.expected_revenue) || Number(ol.planned_revenue) || 0,
+            expected_value: Number(ol.expected_revenue) || 0,
             expected_close_date: dateDeadline,
             priority: mapOdooPriority(ol.priority),
             metadata,
@@ -469,7 +469,7 @@ Deno.serve(async (req) => {
               title: ol.name || "Untitled",
               stage: erpStage,
               probability: normalizedProb,
-              expected_value: Number(ol.expected_revenue) || Number(ol.planned_revenue) || 0,
+              expected_value: Number(ol.expected_revenue) || 0,
               expected_close_date: dateDeadline,
               source: "odoo_sync",
               customer_id: customerId,
