@@ -1,121 +1,113 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Audit & Max-Tech Upgrade: All 4 Sales Department Modules
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Current State Assessment
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+| Module | Current State | Missing Tech |
+|--------|--------------|-------------|
+| **Pipeline** | Basic kanban, simple cards, no filters, no analytics, no detail drawer, no AI, no realtime, no search, no bulk actions | Everything the legacy /pipeline has |
+| **Quotations** | Basic table + TakeoffWizard drop zone, no row click detail, no status transitions, no inline edit, no line items, no PDF generation from table, no search/filter | Detail view, status workflow, line items, search |
+| **Invoices** | Bare table, create dialog only, no edit/delete, no status transitions, no payment tracking, no aging, no realtime, no search | Almost everything |
+| **Contacts** | Merged view (system + manual), table only, no click-to-detail, no edit/delete, no search, no tags/labels, no activity history | Detail drawer, edit, search, enrichment |
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Upgrade Plan
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. Sales Pipeline — Full Feature Parity with Legacy Pipeline
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+**SalesPipeline.tsx** — Complete rewrite:
+- **Rich lead cards**: Show priority stars, expected value, source badge, contact name, days-in-stage indicator, color-coded stage bar
+- **Detail drawer** (new `SalesLeadDrawer.tsx`): Full lead detail with editable fields (stage, value, priority, contact info, notes), activity timeline, and delete action — slide-in sheet like the legacy `LeadDetailDrawer`
+- **Analytics bar**: Pipeline value, weighted forecast, win rate, avg deal size (reuse pattern from `PipelineAnalytics`)
+- **Search & filters**: Text search across title/contact/company, filter by stage/priority/source, "My Pipeline" toggle using `assigned_to`
+- **Bulk actions**: Multi-select cards, bulk move stage, bulk delete
+- **Drag-and-drop**: Use the same edge-scroll pattern from `PipelineBoard` for smooth horizontal scrolling
+- **Realtime**: Already has realtime subscription in the hook — wire it properly
+- **Activity status bar** per column (planned/today/overdue segments like legacy `PipelineColumn`)
+- **Keyboard shortcuts**: `n` for new lead, `/` for search, `Esc` to close drawer
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+**DB migration**: Add columns to `sales_leads`:
+- `last_activity_date timestamptz` — track staleness
+- `tags text[]` — flexible tagging
+- `lost_reason text` — capture why deals are lost
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 2. Quotations — Professional Quotation Management
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+**SalesQuotations.tsx** — Major upgrade:
+- **Row click → Detail drawer** (`SalesQuotationDrawer.tsx`): View/edit all fields, change status with workflow buttons (Draft → Sent → Accepted/Declined/Expired), notes editor
+- **Status workflow buttons**: "Mark as Sent", "Mark Accepted", "Mark Declined" — contextual based on current status
+- **Line items table** (new `sales_quotation_items` DB table): item description, quantity, unit, unit price, total — editable inline
+- **Search bar**: Filter by quotation number, customer name, status
+- **Summary cards**: Total draft value, total sent value, conversion rate, average quote size
+- **PDF preview**: Click to open `QuotationTemplate` preview (already imported in TakeoffWizard)
+- **Duplicate quotation**: One-click to copy an existing quote as a new draft
+- **Auto-number**: Already works, keep it
+- **Link to lead**: Show linked sales_lead_id as a clickable badge
 
-### Changes
+**DB migration**: Create `sales_quotation_items` table:
+- `id uuid PK`, `quotation_id uuid FK`, `company_id uuid`, `description text`, `quantity numeric`, `unit text`, `unit_price numeric`, `total numeric`, `sort_order int`
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+### 3. Invoices — Full Invoice Lifecycle
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+**SalesInvoices.tsx** — Major upgrade:
+- **Row click → Detail drawer** (`SalesInvoiceDrawer.tsx`): Edit all fields, status workflow (Draft → Sent → Paid/Overdue/Cancelled), payment date tracking, notes
+- **Status workflow**: Context-sensitive action buttons per status
+- **Auto-number generation**: Like quotations, auto-generate `INV-{YYYY}{0001}`
+- **Summary cards**: Total outstanding, total paid, overdue count, average days to pay
+- **Overdue detection**: Auto-flag invoices past due_date as "overdue" visually (client-side, no DB change needed)
+- **Search & filter**: By invoice number, customer, status, date range
+- **Link to quotation/lead**: Show linked `quotation_id` and `sales_lead_id` as clickable badges
+- **Realtime**: Add realtime subscription to hook
+- **Line items**: Reference same pattern as quotations — new `sales_invoice_items` table
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+**DB migration**: Create `sales_invoice_items` table (same structure as quotation items but with `invoice_id` FK). Add `paid_date date` and `payment_method text` to `sales_invoices`.
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+### 4. Contacts — CRM Contact Hub
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+**SalesContacts.tsx** — Major upgrade:
+- **Click-to-detail drawer** (`SalesContactDrawer.tsx`): View all info, edit fields, see linked leads & quotations, notes, activity history
+- **Search bar**: Filter by name, company, email, phone
+- **Tags/labels**: Add `tags text[]` column — filter by tag
+- **Edit & delete**: Inline edit for manual contacts, delete with confirmation
+- **Contact card view** toggle: Switch between table and card grid view
+- **Link indicators**: Show badge count of linked leads/quotes per contact
+- **Quick actions**: Click email to open mailto, click phone to open tel:
+- **Import from lead**: When creating a lead, auto-suggest creating a contact from the lead's contact info
+- **Realtime**: Add realtime subscription
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+**DB migration**: Add `tags text[]`, `title text` (job title), `address text` to `sales_contacts`.
 
-## Completed: Odoo Mirror Pipeline + Sales Department Patch
+### 5. Sales Hub — Live KPIs
 
-### Assessment
-Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+**SalesHub.tsx** — Enhance:
+- Add live KPI badges on each card: Pipeline count, Quotation count, Invoice outstanding, Contact count
+- Pulse indicator on cards with pending items (overdue invoices, stale leads)
 
-### Changes Implemented
+### Implementation Order
+1. DB migrations (all tables/columns at once)
+2. Sales Pipeline (largest, most complex)
+3. Quotations (line items, detail drawer)
+4. Invoices (detail drawer, status workflow)
+5. Contacts (detail drawer, search)
+6. Sales Hub (KPI badges)
 
-**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
-- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
-- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
-- 30s cooldown per lead to prevent API rate limiting
-- Shows "Syncing…" indicator in header during refresh
-- Invalidates all lead-related query keys on completion
+### Files to Create
+- `src/components/sales/SalesLeadDrawer.tsx`
+- `src/components/sales/SalesLeadCard.tsx`
+- `src/components/sales/SalesQuotationDrawer.tsx`
+- `src/components/sales/SalesInvoiceDrawer.tsx`
+- `src/components/sales/SalesContactDrawer.tsx`
+- `src/components/sales/SalesSearchBar.tsx`
+- `src/components/sales/SalesSummaryCards.tsx`
 
-**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
-- New `mode: "single"` + `odoo_id` parameter
-- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
-- Logs stage change events if stage differs
-- Returns fast without touching other leads
+### Files to Modify
+- `src/pages/sales/SalesPipeline.tsx` — Full rewrite
+- `src/pages/sales/SalesQuotations.tsx` — Major upgrade
+- `src/pages/sales/SalesInvoices.tsx` — Major upgrade
+- `src/pages/sales/SalesContacts.tsx` — Major upgrade
+- `src/pages/sales/SalesHub.tsx` — Add KPIs
+- `src/hooks/useSalesLeads.ts` — Add search/filter params
+- `src/hooks/useSalesInvoices.ts` — Add realtime, auto-number
+- `src/hooks/useSalesContacts.ts` — Add realtime, update/delete for system contacts
+- `src/hooks/useSalesQuotations.ts` — Add line items support
 
-**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
-- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
-- Logs reconciliation events with reason
-- Only archives non-terminal leads (skips already won/lost)
-
-**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
-- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
-- Improves timeline readability
-
-**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
-- Footer shows "Synced X minutes ago" with color-coded status dot
-- Green: <5min, Yellow: <30min, Red: >30min
-
-### Files Changed
-- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
-- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
-- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
-
-### No Changes Needed (Already Existed)
-- Sales Department sidebar, routes, pages, tables, hooks
-- Odoo chatter sync single mode (already existed)
-- OdooChatter unified timeline (already existed)
-
-### Risks
-- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
-- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
