@@ -749,7 +749,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
                 <div key={key} className="border-b border-border last:border-b-0">
                   {showDateSep && <DateSeparator date={item.date} />}
                   {item.kind === "file_group" ? (
-                    <FileGroupThreadItem files={item.files} />
+                    <FileGroupThreadItem files={item.files} label={item.label} />
                   ) : item.kind === "comm" ? (
                     <CommThreadItem comm={item.data} />
                   ) : item.kind === "system_group" ? (
