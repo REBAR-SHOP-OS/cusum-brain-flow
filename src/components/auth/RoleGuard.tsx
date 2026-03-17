@@ -2,6 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
 /** Routes accessible to workshop-only users (no admin/office/sales roles) */
 const WORKSHOP_ALLOWED = [
@@ -48,7 +49,11 @@ interface RoleGuardProps {
 export function RoleGuard({ children }: RoleGuardProps) {
   const { roles, isLoading, isAdmin, isShopSupervisor, isCustomer } = useUserRole();
   const { user } = useAuth();
+  const { isSuperAdmin } = useSuperAdmin();
   const location = useLocation();
+
+  // Super admins bypass all route restrictions
+  if (isSuperAdmin) return <>{children}</>;
 
   const email = user?.email || "";
   const isInternal = email.endsWith("@rebar.shop");

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/lib/auth";
 import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
@@ -191,7 +192,10 @@ export function AppSidebar() {
     },
   ];
 
+  const { isSuperAdmin } = useSuperAdmin();
+
   const hasAccess = (item: NavItem) => {
+    if (isSuperAdmin) return true;
     if (item.blockedEmails?.includes(email.toLowerCase())) return false;
     if (item.allowedEmails) {
       return item.allowedEmails.includes(email.toLowerCase());
