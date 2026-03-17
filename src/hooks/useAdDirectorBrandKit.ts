@@ -47,7 +47,7 @@ export function useAdDirectorBrandKit() {
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase
-        .from("brand_kit" as any)
+        .from("brand_kit")
         .upsert({
           user_id: user.id,
           business_name: brand.name,
@@ -63,7 +63,7 @@ export function useAdDirectorBrandKit() {
           value_prop: brand.tagline,
           brand_voice: "",
           media_urls: [],
-        } as any, { onConflict: "user_id" });
+        }, { onConflict: "user_id" });
 
       if (error) throw error;
     },
