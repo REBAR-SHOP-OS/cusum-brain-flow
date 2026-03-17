@@ -720,19 +720,31 @@ export async function executeToolCall(
               }
             }
 
-            const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model: attempt.model,
-                messages: [{ role: "user", content: contentParts }],
-                modalities: ["image", "text"],
-                
-              }),
-            });
+            const imgController = new AbortController();
+            const imgTimeout = setTimeout(() => imgController.abort(), 60000);
+            let aiRes: Response;
+            try {
+              aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                signal: imgController.signal,
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: attempt.model,
+                  messages: [{ role: "user", content: contentParts }],
+                  modalities: ["image", "text"],
+                }),
+              });
+            } catch (fetchErr: any) {
+              const isTimeout = fetchErr?.name === "AbortError";
+              console.warn(`[generate_image] ${attempt.model} ${isTimeout ? "TIMEOUT (60s)" : "FETCH ERROR"}: ${fetchErr?.message || fetchErr}`);
+              lastError = `${attempt.model}: ${isTimeout ? "timeout" : fetchErr?.message}`;
+              continue;
+            } finally {
+              clearTimeout(imgTimeout);
+            }
 
             if (!aiRes.ok) { lastError = `${attempt.model}: ${aiRes.status}`; continue; }
 

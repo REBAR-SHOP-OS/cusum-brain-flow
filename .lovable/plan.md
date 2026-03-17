@@ -1,59 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Image Generation Silently Fails — Permanent Solution
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem Identified
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-After extensive investigation, the `aspect_ratio` parameter has already been removed from the API request body in previous fixes. However, image generation **still fails** for two interconnected reasons:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### Root Cause 1: Prompt Instructions Still Reference `aspect_ratio` Parameter
-The marketing agent prompt (`supabase/functions/_shared/agents/marketing.ts`) and the social style override block (`supabase/functions/ai-agent/index.ts`) both instruct the AI to "Pass the `aspect_ratio` parameter" when calling `generate_image`. The AI model faithfully reports errors about this parameter to the user in Persian, even though the backend now handles ratios correctly without it.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-**Evidence from logs:**
-- The AI calls `generate_image` with `args.aspect_ratio = "9:16"` or `"1:1"` — this is harmless since the executor reads it from `context.imageAspectRatio` anyway.
-- But the AI's TEXT reply after the tool loop is EMPTY, triggering the recovery path which generates a generic apology mentioning "aspect ratio".
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### Root Cause 2: Image Generation Silently Fails (No Logs After Tool Call)
-The edge function logs show `[generate_image] aspectRatio resolved: ...` but NO subsequent success (`✓`) or failure (`✗`) logs. This means the Lovable AI gateway image call is timing out or failing without proper error capture. The `console.warn` inside the retry loop never fires, suggesting the `fetch` call itself hangs until the edge function shuts down.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-### Root Cause 3: Marketing Prompt Tells AI to Apologize About Aspect Ratio
-Line 55 of `marketing.ts`: "If image generation fails with one aspect ratio, automatically retry with 1:1 (square) as fallback. NEVER tell the user there's a problem with a specific ratio — just produce the image."
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-Despite this instruction, the AI still mentions aspect ratio errors because:
-- The prompt on lines 18 and 972-973 (`ai-agent/index.ts`) explicitly say "Pass the `aspect_ratio` parameter" — this conflicting instruction causes the AI to fixate on the parameter.
-
-## Solution: 4 Changes
-
-### 1. Remove `aspect_ratio` from Tool Definition (`agentTools.ts`)
-Remove the `aspect_ratio` property from the `generate_image` tool parameters. The backend already reads the ratio from `context.imageAspectRatio` (which comes from the UI). The AI model should NOT be responsible for passing this parameter.
-
-**File:** `supabase/functions/_shared/agentTools.ts` (line 73)
-- Delete the `aspect_ratio` property from the `generate_image` function parameters
-
-### 2. Remove `aspect_ratio` Instructions from Marketing Prompt (`marketing.ts`)
-Remove all lines instructing the AI to "pass the `aspect_ratio` parameter". The ratio is handled automatically by the system.
-
-**File:** `supabase/functions/_shared/agents/marketing.ts` (lines 18, 55)
-- Line 18: Remove "Pass the aspect_ratio parameter matching the user's size selection..."
-- Line 55: Remove the instruction about retrying with different ratios
-
-### 3. Remove `aspect_ratio` Instructions from Social Style Override (`ai-agent/index.ts`)
-The style override block at lines 972-973 tells the AI to "Pass the `aspect_ratio` parameter". Remove these lines.
-
-**File:** `supabase/functions/ai-agent/index.ts` (lines 972-973)
-- Remove the two lines that instruct the AI to pass `aspect_ratio`
-
-### 4. Add Timeout + Better Error Logging to Image Generation (`agentToolExecutor.ts`)
-Add a 60-second `AbortController` timeout to the image generation `fetch` call so it doesn't hang indefinitely and add explicit logging when the fetch fails or times out.
-
-**File:** `supabase/functions/_shared/agentToolExecutor.ts` (around line 723)
-- Wrap the `fetch` call with a 60-second timeout using `AbortController`
-- Add explicit error logging for timeout vs. other failures
-- Ensure the retry loop continues to the next model on timeout
-
-## Expected Result
-- The AI will no longer mention "aspect ratio" errors to users
-- Image generation will either succeed or fail cleanly with proper error messages
-- All aspect ratios (16:9, 9:16, 1:1) will work because the system reads the ratio from context and handles it via prompt instructions + server-side cropping
-- Timeouts won't silently kill the function — they'll be caught and the next model will be tried
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
