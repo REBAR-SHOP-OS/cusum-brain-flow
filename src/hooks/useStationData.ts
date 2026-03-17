@@ -104,9 +104,9 @@ export function useStationData(machineId: string | null, machineType?: string, p
         .from("cut_plan_items")
         .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, status, optimization_mode, projects(status, customers(name)))")
         .in("bar_code", allowedBarCodes)
-        .or("phase.eq.queued,phase.eq.cutting")
+        .or("phase.eq.queued,phase.eq.cutting,phase.eq.complete,phase.eq.clearance,phase.eq.cut_done")
         .eq("cut_plans.company_id", companyId!)
-        .in("cut_plans.status", ["draft", "queued", "running"]);
+        .in("cut_plans.status", ["draft", "queued", "running", "completed"]);
 
       if (projectId) {
         cutterQuery = cutterQuery.eq("cut_plans.project_id", projectId);
