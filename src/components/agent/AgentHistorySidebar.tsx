@@ -44,6 +44,7 @@ export function AgentHistorySidebar({
   const [teamReportOpen, setTeamReportOpen] = useState(false);
   const { isAdmin } = useUserRole();
   const isEisenhower = agentId === "eisenhower";
+  const isPurchasing = agentId === "purchasing";
 
   // Sessions are pre-filtered by parent
   const agentSessions = sessions;
