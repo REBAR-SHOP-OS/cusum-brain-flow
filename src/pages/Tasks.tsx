@@ -157,7 +157,7 @@ function sortTasks(tasks: TaskRow[]): TaskRow[] {
     const bOver = isOverdue(b) ? 0 : 1;
     if (aOver !== bOver) return aOver - bOver;
     if (a.due_date && b.due_date) {
-      const diff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      const diff = parseDateString(a.due_date).getTime() - parseDateString(b.due_date).getTime();
       if (diff !== 0) return diff;
     } else if (a.due_date && !b.due_date) return -1;
     else if (!a.due_date && b.due_date) return 1;
