@@ -108,14 +108,88 @@ Deno.serve(async (req) => {
 
     // Parse mode from request body
     let mode = "incremental";
+    let singleOdooId: string | null = null;
     try {
       const body = await req.json();
       if (body?.mode === "full") mode = "full";
+      if (body?.mode === "single" && body?.odoo_id) {
+        mode = "single";
+        singleOdooId = String(body.odoo_id);
+      }
     } catch { /* no body = incremental */ }
 
     const odooUrl = Deno.env.get("ODOO_URL")!.trim();
     const odooKey = Deno.env.get("ODOO_API_KEY")!;
     const odooDB = Deno.env.get("ODOO_DATABASE")!;
+
+    // ── SINGLE-LEAD MODE: fast path for on-open refresh ──
+    if (mode === "single" && singleOdooId) {
+      console.log(`Single-lead refresh for odoo_id=${singleOdooId}`);
+      const leads = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_read", [
+        [[["type", "=", "opportunity"], ["id", "=", Number(singleOdooId)]]],
+        { fields: FIELDS },
+      ]);
+      if (!leads || leads.length === 0) {
+        return json({ mode: "single", odoo_id: singleOdooId, found: false, message: "Lead not found in Odoo" });
+      }
+      const ol = leads[0];
+      const stageName = Array.isArray(ol.stage_id) ? ol.stage_id[1] : String(ol.stage_id || "");
+      const erpStage = STAGE_MAP[stageName] || "new";
+      const odooCreatedAt = ol.create_date ? new Date(String(ol.create_date).replace(" ", "T") + (String(ol.create_date).includes("+") ? "" : "Z")).toISOString() : null;
+      const odooUpdatedAt = ol.write_date ? new Date(String(ol.write_date).replace(" ", "T") + (String(ol.write_date).includes("+") ? "" : "Z")).toISOString() : null;
+      const now = new Date().toISOString();
+      const salesperson = Array.isArray(ol.user_id) ? ol.user_id[1] : null;
+      const normalizedProb = erpStage === "won" ? 100 : erpStage === "lost" || erpStage === "loss" ? 0 : Math.round(Number(ol.probability) || 0);
+
+      // Find local lead
+      const { data: localLeads } = await serviceClient
+        .from("leads").select("id, metadata, stage").eq("source", "odoo_sync");
+      const localLead = (localLeads || []).find((l: any) => String((l.metadata as any)?.odoo_id) === singleOdooId);
+      if (!localLead) {
+        return json({ mode: "single", odoo_id: singleOdooId, found: true, local: false, message: "Odoo lead exists but not mirrored locally yet" });
+      }
+
+      const prevStage = localLead.stage;
+      const metadata = {
+        ...((localLead.metadata as Record<string, unknown>) || {}),
+        odoo_stage: stageName,
+        odoo_salesperson: salesperson,
+        odoo_email: ol.email_from || null,
+        odoo_phone: ol.phone || null,
+        odoo_contact: ol.contact_name || null,
+        odoo_probability: ol.probability || 0,
+        odoo_revenue: ol.expected_revenue || 0,
+        odoo_partner: ol.partner_name || null,
+        odoo_city: ol.city || null,
+        odoo_priority: ol.priority || "0",
+        odoo_date_deadline: ol.date_deadline || null,
+        odoo_created_at: odooCreatedAt,
+        odoo_updated_at: odooUpdatedAt,
+        synced_at: now,
+      };
+
+      await serviceClient.from("leads").update({
+        title: ol.name || "Untitled",
+        stage: erpStage,
+        probability: normalizedProb,
+        expected_value: Number(ol.expected_revenue) || 0,
+        expected_close_date: ol.date_deadline || null,
+        priority: mapOdooPriority(ol.priority),
+        metadata,
+        updated_at: now,
+        odoo_created_at: odooCreatedAt,
+        odoo_updated_at: odooUpdatedAt,
+      }).eq("id", localLead.id);
+
+      // Log stage change if different
+      if (prevStage && prevStage !== erpStage) {
+        await insertLeadEvent(serviceClient, localLead.id, "stage_changed", {
+          from: prevStage, to: erpStage, odoo_stage: stageName, source: "single_refresh",
+        });
+      }
+
+      return json({ mode: "single", odoo_id: singleOdooId, found: true, updated: true, stage: erpStage, prev_stage: prevStage });
+    }
 
     // Build domain: full mode fetches ALL, incremental fetches last 5 days
     const domain: unknown[][] = [["type", "=", "opportunity"]];
@@ -539,15 +613,28 @@ Deno.serve(async (req) => {
 
     let reconciled = 0;
     if (staleLeads.length > 0 && mode === "full") {
-      console.log(`Reconciliation: ${staleLeads.length} ERP leads not found in Odoo full fetch`);
-      // Log stale leads as validation warnings
+      console.log(`Reconciliation: ${staleLeads.length} ERP leads not found in Odoo full fetch — marking as archived_orphan`);
       for (const sl of staleLeads) {
         const meta = sl.metadata as Record<string, unknown> | null;
+        const oid = (meta?.odoo_id as string) || "unknown";
+        // Only archive if not already in a terminal stage
+        if (sl.stage !== "lost" && sl.stage !== "won" && sl.stage !== "archived_orphan") {
+          await serviceClient.from("leads").update({
+            stage: "lost",
+            updated_at: new Date().toISOString(),
+            metadata: { ...meta, archived_reason: "not_found_in_odoo_full_sync", archived_at: new Date().toISOString() },
+          }).eq("id", sl.id);
+          await insertLeadEvent(serviceClient, sl.id, "stage_changed", {
+            from: sl.stage, to: "lost", source: "reconciliation_archive",
+            reason: "Lead not found in Odoo full fetch",
+          });
+          reconciled++;
+        }
         allValidationWarnings.push({
-          odoo_id: (meta?.odoo_id as string) || "unknown",
+          odoo_id: oid,
           severity: "warning", validation_type: "stale_lead",
-          message: "ERP lead not found in Odoo full fetch — may be deleted or type-changed",
-          auto_fixed: false,
+          message: "ERP lead not found in Odoo full fetch — archived",
+          auto_fixed: true, fix_applied: "Stage set to lost (archived)",
         });
       }
     } else if (staleLeads.length > 0) {

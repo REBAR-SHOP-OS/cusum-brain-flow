@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   Sparkles, Loader2, Plus, MessageSquare, FileOutput,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,50 @@ export function LeadDetailDrawer({
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const { data: recommendation, isLoading: recLoading } = useLeadRecommendation(lead, open);
   const [convertingToQuote, setConvertingToQuote] = useState(false);
+  const [odooRefreshing, setOdooRefreshing] = useState(false);
+  const lastRefreshRef = useRef<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // ── On-open: targeted Odoo refresh for this lead ──
+  const isOdooLead = lead?.source === "odoo_sync";
+  const odooId = isOdooLead ? ((lead?.metadata as any)?.odoo_id as string) : null;
+
+  useEffect(() => {
+    if (!open || !odooId || !lead?.id) return;
+    // Cooldown: skip if refreshed this same lead within 30s
+    const key = `${lead.id}:${Date.now()}`;
+    if (lastRefreshRef.current === lead.id) return;
+    lastRefreshRef.current = lead.id;
+
+    let cancelled = false;
+    const refresh = async () => {
+      setOdooRefreshing(true);
+      try {
+        // Fire both syncs in parallel
+        const [crmRes, chatterRes] = await Promise.allSettled([
+          supabase.functions.invoke("odoo-crm-sync", { body: { mode: "single", odoo_id: odooId } }),
+          supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "single", odoo_id: odooId } }),
+        ]);
+        if (!cancelled) {
+          // Invalidate all lead-related queries
+          queryClient.invalidateQueries({ queryKey: ["lead-activities", lead.id] });
+          queryClient.invalidateQueries({ queryKey: ["lead-files-timeline", lead.id] });
+          queryClient.invalidateQueries({ queryKey: ["lead-events", lead.id] });
+          queryClient.invalidateQueries({ queryKey: ["lead-communications-chatter", lead.id] });
+          queryClient.invalidateQueries({ queryKey: ["leads"] });
+        }
+      } catch (e) {
+        console.warn("On-open Odoo refresh failed:", e);
+      } finally {
+        if (!cancelled) setOdooRefreshing(false);
+      }
+    };
+    refresh();
+
+    // Reset cooldown after 30s
+    const timer = setTimeout(() => { lastRefreshRef.current = null; }, 30_000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [open, odooId, lead?.id]);
 
   if (!lead) return null;
 
@@ -171,6 +216,12 @@ export function LeadDetailDrawer({
               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { onOpenChange(false); onEdit(lead); }}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
+              {odooRefreshing && (
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Syncing…
+                </div>
+              )}
               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onOpenChange(false)}>
                 <X className="w-3.5 h-3.5" />
               </Button>
@@ -418,7 +469,30 @@ export function LeadDetailDrawer({
 
         {/* Footer */}
         <div className="border-t border-border p-3 text-[11px] text-muted-foreground flex items-center justify-between bg-muted/30">
-          <span>Created {format(new Date(lead.created_at), "MMM d, yyyy")}</span>
+          <span>
+            Created {format(new Date(lead.created_at), "MMM d, yyyy")}
+            {isOdooLead && meta.synced_at && (
+              <>
+                {" · "}
+                <span className={cn(
+                  "inline-flex items-center gap-1",
+                  (() => {
+                    const mins = (Date.now() - new Date(meta.synced_at as string).getTime()) / 60000;
+                    return mins < 5 ? "text-emerald-600 dark:text-emerald-400" : mins < 30 ? "text-yellow-600 dark:text-yellow-400" : "text-destructive";
+                  })()
+                )}>
+                  <span className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    (() => {
+                      const mins = (Date.now() - new Date(meta.synced_at as string).getTime()) / 60000;
+                      return mins < 5 ? "bg-emerald-500" : mins < 30 ? "bg-yellow-500" : "bg-destructive";
+                    })()
+                  )} />
+                  Synced {formatDistanceToNow(new Date(meta.synced_at as string), { addSuffix: true })}
+                </span>
+              </>
+            )}
+          </span>
           {isAdmin ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
