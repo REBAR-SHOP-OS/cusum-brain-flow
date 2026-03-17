@@ -219,6 +219,9 @@ export function CEODashboardView() {
         <KpiCard index={5} icon={<AlertTriangle className="w-4 h-4 text-destructive" />} label="SLA Breaches" value={String(m.slaBreach.total)} sub={`${m.slaBreach.leads} leads · ${m.slaBreach.orders} orders`} alertActive={m.slaBreach.total > 0} />
       </div>
 
+      {/* ─── SLA Tracker ─── */}
+      <SLATrackerCard />
+
       {/* ─── Production + Financial Row ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Production Pulse */}
