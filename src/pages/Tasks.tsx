@@ -73,6 +73,8 @@ interface TaskRow {
   source?: string | null;
   attachment_url?: string | null;
   metadata?: any;
+  review_status?: string | null;
+  reviewed_by?: string | null;
   created_by_profile?: { id: string; full_name: string | null } | null;
 }
 
@@ -792,6 +794,18 @@ export default function Tasks() {
     loadData();
   };
 
+  const reviewTask = async (taskId: string, status: "approved" | "rejected") => {
+    const { error } = await supabase.from("tasks").update({
+      review_status: status,
+      reviewed_by: currentProfileId,
+      ...(status === "rejected" ? { status: "open", completed_at: null } : {}),
+    } as any).eq("id", taskId);
+    if (error) { toast.error(error.message); return; }
+    await writeAudit(taskId, "review", "review_status", null, status);
+    toast.success(status === "approved" ? "Task approved ✅" : "Task rejected — reopened");
+    loadData();
+  };
+
   const createTask = async () => {
     if (!newTitle.trim() || !createForEmployee) { toast.error("Title is required"); return; }
     if (newDueDate && newDueDate < new Date().toISOString().split("T")[0]) { toast.error("Due date cannot be in the past"); return; }
@@ -1092,6 +1106,31 @@ export default function Tasks() {
                                   ) : null;
                                 })()}
                               </button>
+                              {/* Review icons for Neel on Radin's completed tasks */}
+                              {task.review_status === "approved" && (
+                                <Badge variant="outline" className="text-[10px] shrink-0 text-green-600 border-green-600/30">✅ Approved</Badge>
+                              )}
+                              {task.review_status === "rejected" && (
+                                <Badge variant="outline" className="text-[10px] shrink-0 text-destructive border-destructive/30">❌ Rejected</Badge>
+                              )}
+                              {!task.review_status && task.assigned_to === RADIN_PROFILE_ID && currentProfileId === NEEL_PROFILE_ID && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); reviewTask(task.id, "approved"); }}
+                                    className="p-0.5 rounded hover:bg-green-500/20 text-green-600 transition-colors"
+                                    title="Approve"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); reviewTask(task.id, "rejected"); }}
+                                    className="p-0.5 rounded hover:bg-destructive/20 text-destructive transition-colors"
+                                    title="Reject — reopen task"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
                               <button
                                 onClick={() => deleteTask(task.id)}
                                 className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 text-muted-foreground hover:text-destructive"
