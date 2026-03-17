@@ -1043,6 +1043,7 @@ Deno.serve(async (req) => {
 
     // Main Loop
     while (toolCalls && toolCalls.length > 0 && toolLoopIterations < MAX_TOOL_ITERATIONS) {
+      console.log(`🔧 Tool loop #${toolLoopIterations + 1}: ${toolCalls.map((tc: any) => tc.function?.name).join(", ")}`);
       const toolResults = [];
       
       // Parallel execution
