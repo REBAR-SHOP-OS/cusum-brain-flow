@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useSupabaseWorkOrders } from "@/hooks/useSupabaseWorkOrders";
 import { useProductionQueues } from "@/hooks/useProductionQueues";
@@ -8,15 +8,18 @@ import { MaterialFlowDiagram } from "@/components/shopfloor/MaterialFlowDiagram"
 import { ShopFloorProductionQueue } from "@/components/shopfloor/ShopFloorProductionQueue";
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
 import { WorkOrderQueueSection } from "@/components/shopfloor/WorkOrderQueueSection";
+import { DowntimeAlertBanner } from "@/components/shopfloor/DowntimeAlertBanner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle, Sun, Moon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useTabletPin } from "@/hooks/useTabletPin";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
+import type { MachineType, MachineStatus } from "@/types/machine";
+import { getCurrentShift, getShiftLabel, type ShiftType } from "@/lib/shiftUtils";
 
 export default function StationDashboard() {
   const { machines, isLoading, error } = useLiveMonitorData();
@@ -28,6 +31,28 @@ export default function StationDashboard() {
   const navigate = useNavigate();
   const { pinnedMachineId } = useTabletPin();
   const queryClient = useQueryClient();
+
+  // Filter state
+  const [typeFilter, setTypeFilter] = useState<MachineType | "all">("all");
+  const [statusFilters, setStatusFilters] = useState<Set<MachineStatus>>(new Set());
+  const [shiftFilter, setShiftFilter] = useState<ShiftType>(getCurrentShift());
+
+  const filteredMachines = useMemo(() => {
+    return machines.filter((m) => {
+      if (typeFilter !== "all" && m.type !== typeFilter) return false;
+      if (statusFilters.size > 0 && !statusFilters.has(m.status)) return false;
+      return true;
+    });
+  }, [machines, typeFilter, statusFilters]);
+
+  const toggleStatus = (s: MachineStatus) => {
+    setStatusFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  };
 
   // Realtime subscription for work_orders table
   useEffect(() => {
