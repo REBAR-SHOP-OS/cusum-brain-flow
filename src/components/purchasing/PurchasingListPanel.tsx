@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePurchasingList } from "@/hooks/usePurchasingList";
+import { CompanyDefaultItems } from "./CompanyDefaultItems";
 
 const STATUS_TABS = [
   { value: "all" as const, label: "All" },
@@ -37,7 +38,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [newPriority, setNewPriority] = useState("medium");
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const { items, loading, addItem, togglePurchased, deleteItem } = usePurchasingList(filterDate, filterStatus);
+  const { items, loading, addItem, addItemAsPurchased, togglePurchased, deleteItem } = usePurchasingList(filterDate, filterStatus);
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
@@ -149,10 +150,19 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
 
       {/* Items list */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {/* Company Defaults */}
+        <CompanyDefaultItems
+          dbItems={items}
+          onMarkPurchased={(title, category) => addItemAsPurchased(title, category)}
+          onUnmarkPurchased={(itemId) => togglePurchased(itemId, true)}
+        />
+
+        <div className="border-t border-border my-2" />
+
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading...</div>
         ) : items.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8">List is empty</div>
+          <div className="text-center text-muted-foreground py-4 text-sm">No additional items</div>
         ) : (
           items.map((item) => (
             <div
