@@ -30,6 +30,10 @@ import { JobRiskDrawer } from "@/components/ceo/drawers/JobRiskDrawer";
 import { CapacityDrawer } from "@/components/ceo/drawers/CapacityDrawer";
 import { MeetingIntelligence } from "@/components/ceo/MeetingIntelligence";
 import { AITokenUsageCard } from "@/components/ceo/AITokenUsageCard";
+import { DailyBriefingCard } from "@/components/ceo/DailyBriefingCard";
+import { SLATrackerCard } from "@/components/ceo/SLATrackerCard";
+import { DailyAssignments } from "@/components/ceo/DailyAssignments";
+import { FixRequestQueue } from "@/components/ceo/FixRequestQueue";
 
 /* ─── Helpers ─── */
 
