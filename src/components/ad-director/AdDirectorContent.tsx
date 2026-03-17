@@ -344,7 +344,17 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
 
   // ─── Prompt Edit ──────────────────────────────────────
   const handlePromptChange = (id: string, prompt: string) => {
+    const current = storyboard.find(s => s.id === id);
+    if (current) promptHistory.push(id, current.prompt);
     setStoryboard(prev => prev.map(s => s.id === id ? { ...s, prompt, promptQuality: undefined } : s));
+  };
+
+  const handlePromptUndo = (id: string) => {
+    const prev = promptHistory.undo(id);
+    if (prev) {
+      setStoryboard(st => st.map(s => s.id === id ? { ...s, prompt: prev, promptQuality: undefined } : s));
+      toast({ title: "Prompt reverted" });
+    }
   };
 
   const handleContinuityToggle = (id: string) => {
