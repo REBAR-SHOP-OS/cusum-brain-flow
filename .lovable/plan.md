@@ -1,75 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# New Agent: Purchasing List ("Kala" — خرید)
+## Completed: Add All Wan 2.6 Capabilities
 
-## Overview
-Create a new **purchasing** agent with a dedicated list-based UI (not just chat). Users can add company items, check them off as purchased, and the list persists in the database with calendar-based history.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Database
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### New table: `purchasing_list_items`
-| Column | Type | Notes |
-|--------|------|-------|
-| id | uuid PK | |
-| company_id | uuid FK | |
-| title | text | Item name |
-| description | text | Optional notes |
-| quantity | integer | Default 1 |
-| is_purchased | boolean | Default false |
-| purchased_by | uuid | Who checked it off |
-| purchased_at | timestamptz | When checked |
-| due_date | date | Target purchase date |
-| priority | text | low/medium/high |
-| category | text | Optional grouping |
-| created_by | uuid | |
-| created_at | timestamptz | |
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-RLS: company_id-based access for authenticated users.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-## Agent Registration (6 files to touch)
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-1. **`src/lib/agent.ts`** — Add `"purchasing"` to `AgentType` union
-2. **`src/components/agent/agentConfigs.ts`** — Add `purchasing` config (name: "Kala", role: "Purchasing & Procurement"). Will reuse `accounting-helper.png` as placeholder image since no dedicated helper exists
-3. **`src/lib/agentRouter.ts`** — Add purchasing keywords (buy, purchase, خرید, procurement, shopping list, supplies)
-4. **`src/pages/Home.tsx`** — Add Kala to the helpers grid
-5. **`supabase/functions/_shared/agentPrompts.ts`** — Import purchasing prompts
-6. **`supabase/functions/_shared/agents/operations.ts`** (or new file) — Add purchasing agent system prompt
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-## Dedicated Purchasing List UI
-
-### New component: `src/components/purchasing/PurchasingListPanel.tsx`
-A full-page panel (rendered inside `AgentWorkspace` when `agentId === "purchasing"`) showing:
-- **Header**: Title + "Add Item" button + calendar date picker
-- **Columnar list**: Each row = item name, quantity, category, due date, checkbox (purchased ✓ / not purchased)
-- **Filter tabs**: All | Pending | Purchased
-- **Calendar memory**: Pick a date → see what was on the list for that date
-
-### New hook: `src/hooks/usePurchasingList.ts`
-- CRUD operations on `purchasing_list_items`
-- Realtime subscription for live updates
-- Filter by date range and status
-
-### Integration in `AgentWorkspace.tsx`
-When `agentId === "purchasing"`, render `PurchasingListPanel` alongside (or instead of) the chat area. The agent chat can still be used to add items via natural language (e.g., "add 50 bags of cement").
-
-## Agent Tools (Edge Function)
-Register `list_items`, `add_item`, `toggle_purchased`, `delete_item` tools so the AI agent can manage the list through chat commands too.
-
-## Files Changed
-
-| File | Action |
-|------|--------|
-| DB migration | Create `purchasing_list_items` table + RLS |
-| `src/lib/agent.ts` | Add `"purchasing"` type |
-| `src/components/agent/agentConfigs.ts` | Add Kala config |
-| `src/lib/agentRouter.ts` | Add purchasing keywords |
-| `src/pages/Home.tsx` | Add to helpers grid |
-| `src/hooks/usePurchasingList.ts` | New — CRUD + realtime hook |
-| `src/components/purchasing/PurchasingListPanel.tsx` | New — list UI with checkboxes + calendar |
-| `src/pages/AgentWorkspace.tsx` | Render PurchasingListPanel for purchasing agent |
-| `supabase/functions/_shared/agents/operations.ts` | Add purchasing prompt |
-| `supabase/functions/_shared/agentPrompts.ts` | Import purchasing prompts |
-| `supabase/functions/_shared/agentTools.ts` | Add purchasing tools |
-| `supabase/functions/_shared/agentToolExecutor.ts` | Add purchasing tool execution |
-| Redeploy `ai-agent` | |
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

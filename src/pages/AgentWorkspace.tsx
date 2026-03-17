@@ -25,6 +25,7 @@ import { useUserRole, AppRole } from "@/hooks/useUserRole";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { PurchasingListPanel } from "@/components/purchasing/PurchasingListPanel";
 
 // Agents restricted to specific roles (all others are open)
 const RESTRICTED_AGENTS: Record<string, AppRole[]> = {
@@ -507,6 +508,21 @@ export default function AgentWorkspace() {
       )}
 
       {/* Main Chat Panel */}
+      {agentId === "purchasing" ? (
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Top bar for purchasing */}
+          <div className="flex items-center gap-2 p-3 border-b border-border">
+            <Button variant="ghost" size="icon" className="h-8 w-8 hidden md:flex" onClick={() => setSidebarOpen(!sidebarOpen)}>
+              {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
+            </Button>
+            <img src={config.image} alt={config.name} className="w-6 h-6 rounded-full object-cover" />
+            <span className="text-sm font-medium">{config.name}</span>
+            <span className="text-xs text-muted-foreground">— {config.role}</span>
+            <div className="flex-1" />
+          </div>
+          <PurchasingListPanel />
+        </div>
+      ) : (
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
         <div className="flex items-center gap-2 p-3 border-b border-border">
@@ -669,6 +685,7 @@ export default function AgentWorkspace() {
           </>
         )}
       </div>
+      )}
 
 
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />

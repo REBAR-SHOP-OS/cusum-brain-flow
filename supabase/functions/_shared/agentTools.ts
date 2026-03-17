@@ -521,5 +521,72 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     });
   }
 
+  // Purchasing agent tools
+  if (agent === "purchasing") {
+    tools.push(
+      {
+        type: "function" as const,
+        function: {
+          name: "purchasing_add_item",
+          description: "Add an item to the purchasing list.",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Item name" },
+              quantity: { type: "number", description: "Quantity needed (default 1)" },
+              category: { type: "string", description: "Category: مصالح, ابزار, لوازم اداری, ایمنی, متفرقه" },
+              priority: { type: "string", enum: ["low", "medium", "high"] },
+              due_date: { type: "string", description: "Target date YYYY-MM-DD" },
+            },
+            required: ["title"],
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "purchasing_list_items",
+          description: "List purchasing items. Optionally filter by status or date.",
+          parameters: {
+            type: "object",
+            properties: {
+              status: { type: "string", enum: ["all", "pending", "purchased"] },
+              due_date: { type: "string", description: "Filter by date YYYY-MM-DD" },
+            },
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "purchasing_toggle_item",
+          description: "Toggle an item's purchased status.",
+          parameters: {
+            type: "object",
+            properties: {
+              item_id: { type: "string", description: "UUID of the item" },
+              is_purchased: { type: "boolean", description: "New purchased status" },
+            },
+            required: ["item_id", "is_purchased"],
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "purchasing_delete_item",
+          description: "Delete an item from the purchasing list.",
+          parameters: {
+            type: "object",
+            properties: {
+              item_id: { type: "string", description: "UUID of the item" },
+            },
+            required: ["item_id"],
+          },
+        },
+      }
+    );
+  }
+
   return tools;
 }

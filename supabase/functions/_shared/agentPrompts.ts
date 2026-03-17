@@ -7,6 +7,7 @@ import { marketingPrompts } from "./agents/marketing.ts";
 import { growthPrompts } from "./agents/growth.ts";
 import { specialistsPrompts } from "./agents/specialists.ts";
 import { empirePrompts } from "./agents/empire.ts";
+import { purchasingPrompts } from "./agents/purchasing.ts";
 
 export const agentPrompts: Record<string, string> = {
   ...salesPrompts,
@@ -17,4 +18,5 @@ export const agentPrompts: Record<string, string> = {
   ...growthPrompts,
   ...specialistsPrompts,
   ...empirePrompts,
+  ...purchasingPrompts,
 };

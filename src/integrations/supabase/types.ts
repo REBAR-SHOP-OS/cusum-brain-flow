@@ -9785,6 +9785,65 @@ export type Database = {
         }
         Relationships: []
       }
+      purchasing_list_items: {
+        Row: {
+          category: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          is_purchased: boolean
+          priority: string
+          purchased_at: string | null
+          purchased_by: string | null
+          quantity: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_purchased?: boolean
+          priority?: string
+          purchased_at?: string | null
+          purchased_by?: string | null
+          quantity?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_purchased?: boolean
+          priority?: string
+          purchased_at?: string | null
+          purchased_by?: string | null
+          quantity?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchasing_list_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       push_subscriptions: {
         Row: {
           auth: string
