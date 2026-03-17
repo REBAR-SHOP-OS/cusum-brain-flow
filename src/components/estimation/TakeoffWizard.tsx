@@ -30,6 +30,7 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
   const [uploading, setUploading] = useState(false);
   const [pipelineStage, setPipelineStage] = useState<string | null>(null);
   const [resultData, setResultData] = useState<any>(null);
+  const [showPdf, setShowPdf] = useState(false);
 
   // Auto-scope state
   const [scopeLoading, setScopeLoading] = useState(false);
