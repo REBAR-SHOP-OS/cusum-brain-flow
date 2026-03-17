@@ -253,6 +253,15 @@ export function PostReviewPanel({
     });
   }, [localPlatforms]);
 
+  // Auto-save when switching to a different card while editing
+  const prevPostIdRef = useRef(post?.id);
+  useEffect(() => {
+    if (prevPostIdRef.current && prevPostIdRef.current !== post?.id && editing) {
+      saveEdit();
+    }
+    prevPostIdRef.current = post?.id;
+  }, [post?.id]);
+
   if (!post) return null;
 
   const startEdit = () => {
