@@ -912,7 +912,13 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
         </div>
       )}
       {step !== "preview" && externalActiveTab && (
-        <div className="fixed left-60 top-20 z-40 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-border/40 bg-card/95 backdrop-blur-md shadow-xl p-4 animate-in slide-in-from-left-4 duration-200">
+        <>
+          {/* Mobile backdrop */}
+          <div
+            className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+            onClick={() => onActiveTabChanged?.(null)}
+          />
+          <div className="fixed left-60 top-20 z-40 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-border/40 bg-card/95 backdrop-blur-md shadow-xl p-4 animate-in slide-in-from-left-4 duration-200">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold capitalize">{externalActiveTab.replace("-", " ")}</h3>
             <button
