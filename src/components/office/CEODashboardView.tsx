@@ -109,10 +109,10 @@ export function CEODashboardView() {
   }
 
   const pipelineStages = Object.entries(m.pipelineByStage)
-    .filter(([stage]) => stage !== "closed_lost")
+    .filter(([stage]) => !["lost", "loss", "archived_orphan", "merged", "no_rebars_out_of_scope"].includes(stage))
     .map(([stage, data]) => ({
       stage,
-      label: stageLabels[stage]?.label || stage,
+      label: stageLabels[stage]?.label || stage.replace(/_/g, " "),
       color: stageLabels[stage]?.color || "hsl(var(--muted-foreground))",
       ...data,
     }));
