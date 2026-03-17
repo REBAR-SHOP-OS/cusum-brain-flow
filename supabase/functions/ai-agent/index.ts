@@ -244,12 +244,15 @@ async function generatePixelImage(
       "Do NOT add text-based watermarks."
     : prompt;
 
-  // Inject aspect ratio instruction at the START of prompt for maximum priority
+  // Soft composition guidance — final dimensions enforced by server-side crop/resize
   const aspectRatio = options?.imageAspectRatio || "1:1";
-  const dimensionMap: Record<string, string> = { "16:9": "1536×1024", "9:16": "1024×1536", "1:1": "1024×1024" };
-  const orientationMap: Record<string, string> = { "16:9": "LANDSCAPE (wider than tall)", "9:16": "PORTRAIT/VERTICAL (taller than wide)", "1:1": "SQUARE (equal width and height)" };
-  const aspectInstruction = `MANDATORY IMAGE DIMENSIONS: Generate in ${orientationMap[aspectRatio] || orientationMap["1:1"]} format (${dimensionMap[aspectRatio] || dimensionMap["1:1"]} pixels, ${aspectRatio} ratio). The output MUST strictly follow this aspect ratio.`;
-  const finalPrompt = aspectInstruction + "\n\n" + fullPrompt;
+  const compositionMap: Record<string, string> = {
+    "16:9": "Compose the scene as a LANDSCAPE layout — wider than tall, with important elements spread horizontally.",
+    "9:16": "Compose the scene as a PORTRAIT/VERTICAL layout — taller than wide, with important elements arranged vertically.",
+    "1:1": "Compose the scene as a SQUARE layout — balanced, with the main subject centered.",
+  };
+  const aspectHint = compositionMap[aspectRatio] || `Compose the image for a ${aspectRatio} layout.`;
+  const finalPrompt = aspectHint + "\n\n" + fullPrompt;
 
   const openaiSizeMap: Record<string, string> = { "16:9": "1536x1024", "9:16": "1024x1536", "1:1": "1024x1024" };
 
@@ -825,9 +828,9 @@ Deno.serve(async (req) => {
               `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n`;
 
           const qualitySuffix = userWantsNonRealistic
-            ? `- Ultra high resolution, 1:1 square aspect ratio, perfect for Instagram\n` +
+            ? `- Ultra high resolution, perfect for social media\n` +
               `- Follow the "${effectiveStyle}" style with professional quality`
-            : `- Ultra high resolution, PHOTOREALISTIC ONLY, 1:1 square aspect ratio, perfect for Instagram\n` +
+            : `- Ultra high resolution, PHOTOREALISTIC ONLY, perfect for social media\n` +
               `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
           const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
