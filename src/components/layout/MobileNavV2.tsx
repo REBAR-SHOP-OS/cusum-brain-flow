@@ -22,6 +22,7 @@ const moreItems = [
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
   { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"] },
   { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop"] },
+  { name: "Live Monitor", href: "/live-monitor", icon: Monitor, roles: ["admin", "office", "sales"] },
   
   { name: "Calls", href: "/phonecalls", icon: Phone },
   { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
