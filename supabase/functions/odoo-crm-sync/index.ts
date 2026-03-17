@@ -383,6 +383,7 @@ Deno.serve(async (req) => {
             probability: normalizedProb,
             expected_value: Number(ol.expected_revenue) || Number(ol.planned_revenue) || 0,
             expected_close_date: dateDeadline,
+            priority: mapOdooPriority(ol.priority),
             metadata,
             updated_at: now,
             odoo_created_at: odooCreatedAt,
