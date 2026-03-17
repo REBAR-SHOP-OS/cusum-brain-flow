@@ -72,6 +72,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const { saveProject } = useAdProjectHistory();
   const projectIdRef = useRef<string | null>(null);
+  const promptHistory = usePromptHistory();
   const [step, setStep] = useState<WorkflowStep>("script");
   const [script, setScript] = useState("");
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
