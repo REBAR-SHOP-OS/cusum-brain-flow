@@ -24,7 +24,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
   const { user } = useAuth();
 
   const fetchItems = useCallback(async () => {
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
     // Get company_id from profile
     const { data: profile } = await supabase
       .from("profiles")
