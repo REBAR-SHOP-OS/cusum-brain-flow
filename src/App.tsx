@@ -89,6 +89,12 @@ import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspac
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
 
+// Sales Department (new isolated workspace)
+const SalesPipeline = React.lazy(() => import("./pages/sales/SalesPipeline"));
+const SalesQuotations = React.lazy(() => import("./pages/sales/SalesQuotations"));
+const SalesInvoices = React.lazy(() => import("./pages/sales/SalesInvoices"));
+const SalesContacts = React.lazy(() => import("./pages/sales/SalesContacts"));
+
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
 import Unsubscribe from "./pages/Unsubscribe";
