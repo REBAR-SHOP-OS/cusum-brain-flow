@@ -141,7 +141,10 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ─── Helpers ────────────────────────────────────────────
 function parseDateString(dateStr: string): Date {
-  const [year, month, day] = dateStr.split("-").map(Number);
+  // Handle full ISO timestamps and plain yyyy-MM-dd
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d;
+  const [year, month, day] = dateStr.slice(0, 10).split("-").map(Number);
   return new Date(year, month - 1, day);
 }
 
