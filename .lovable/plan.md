@@ -72,3 +72,50 @@ To enable server-side video assembly:
 ### Follow-up
 - Run a full Odoo sync to apply priority and revenue fixes to existing data
 - Monitor file linkage stats in chatter sync response after deployment
+
+## Completed: Odoo Mirror Pipeline + Sales Department Patch
+
+### Assessment
+Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+
+### Changes Implemented
+
+**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
+- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
+- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
+- 30s cooldown per lead to prevent API rate limiting
+- Shows "Syncing…" indicator in header during refresh
+- Invalidates all lead-related query keys on completion
+
+**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
+- New `mode: "single"` + `odoo_id` parameter
+- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
+- Logs stage change events if stage differs
+- Returns fast without touching other leads
+
+**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
+- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
+- Logs reconciliation events with reason
+- Only archives non-terminal leads (skips already won/lost)
+
+**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
+- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
+- Improves timeline readability
+
+**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
+- Footer shows "Synced X minutes ago" with color-coded status dot
+- Green: <5min, Yellow: <30min, Red: >30min
+
+### Files Changed
+- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
+- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
+- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+
+### No Changes Needed (Already Existed)
+- Sales Department sidebar, routes, pages, tables, hooks
+- Odoo chatter sync single mode (already existed)
+- OdooChatter unified timeline (already existed)
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
+- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
