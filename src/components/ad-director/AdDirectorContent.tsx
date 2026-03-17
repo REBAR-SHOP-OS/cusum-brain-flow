@@ -10,6 +10,7 @@ import { ExportDialog } from "./ExportDialog";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
 import { FileText, Layers, Film, Loader2, ArrowLeft, X } from "lucide-react";
+import { StepIndicator } from "./StepIndicator";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
   type ContinuityProfile, type ClipOutput, type ModelOverrides,
