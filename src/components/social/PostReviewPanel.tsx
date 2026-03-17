@@ -768,7 +768,7 @@ export function PostReviewPanel({
 
               {/* ── Footer Actions ── */}
               {/* Failed status banner + retry */}
-              {!editing && (post.status as string) === "failed" && (
+              {(post.status as string) === "failed" && (
                 <div className="p-4 border-t space-y-2">
                   <div className="w-full rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-center space-y-1">
                     <span className="text-sm font-medium text-destructive">Publishing Failed ❌</span>
