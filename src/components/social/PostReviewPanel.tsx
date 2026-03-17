@@ -137,13 +137,15 @@ export function PostReviewPanel({
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canPublish = user?.email === "radin@rebar.shop";
-  const [editing, setEditing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regeneratingCaption, setRegeneratingCaption] = useState(false);
   const [approvingNeel, setApprovingNeel] = useState(false);
-  const [editTitle, setEditTitle] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [editHashtags, setEditHashtags] = useState("");
+  // Always-editable local state for auto-save
+  const [localTitle, setLocalTitle] = useState(post?.title || "");
+  const [localContent, setLocalContent] = useState(post?.content || "");
+  const [localHashtags, setLocalHashtags] = useState(post?.hashtags?.join(", ") || "");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
