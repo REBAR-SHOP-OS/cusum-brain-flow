@@ -45,6 +45,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
   const [aiWriting, setAiWriting] = useState(false);
   const [productDescription, setProductDescription] = useState("");
   const [showAiWriter, setShowAiWriter] = useState(false);
+  const [showTextarea, setShowTextarea] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
