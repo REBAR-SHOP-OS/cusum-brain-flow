@@ -278,6 +278,6 @@ export function ScreenshotFeedbackButton() {
         />
       )}
     </>,
-    document.body
+    getFloatingPortalContainer()
   );
 }
