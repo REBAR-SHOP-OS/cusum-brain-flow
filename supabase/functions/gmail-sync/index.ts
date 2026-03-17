@@ -365,7 +365,7 @@ serve(async (req) => {
           to: getHeader(headers, "To"),
           subject: getHeader(headers, "Subject"),
           date: getHeader(headers, "Date"),
-          snippet: msgData.snippet,
+          snippet: decodeHtmlEntities(msgData.snippet || ""),
           body: sanitizeHtmlServerSide(getBodyContent(msgData)),
           internalDate: parseInt(msgData.internalDate),
           isUnread: msgData.labelIds?.includes("UNREAD") || false,
