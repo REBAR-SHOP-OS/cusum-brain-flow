@@ -970,7 +970,10 @@ Deno.serve(async (req) => {
         }
         socialStyleOverride += `FAILURE TO FOLLOW THESE STYLE/PRODUCT SELECTIONS IS A CRITICAL ERROR.\n`;
         socialStyleOverride += `When calling generate_image, you MUST:\n1. Include the style and product descriptions DIRECTLY in the prompt text\n2. Pass the style parameter: "${uStyles.join(",")}"\n3. Pass the products parameter: "${uProducts.join(",")}"\n4. The prompt text itself MUST describe ONLY the selected product(s). Do NOT mention or describe ANY other product in the prompt text. If the user selected "stirrups", the prompt MUST be about stirrups — NEVER about cages, dowels, hooks, mesh, or any other product.\n5. The image dimensions/aspect ratio are handled AUTOMATICALLY by the system — do NOT pass any aspect_ratio parameter.\n`;
-        socialStyleOverride += `\nIMPORTANT: If the user's message is short (under 20 words) and implies creation (e.g. "بساز", "create", "generate", "make"), treat it as an IMMEDIATE command to call generate_image with the above style/product selections. Do NOT ask for slot number or any clarification.\n`;
+        // Inject aspect ratio from context
+        const aspectRatio = (context?.imageAspectRatio as string) || "1:1";
+        socialStyleOverride += `SELECTED ASPECT RATIO: ${aspectRatio} — this was chosen by the user in the toolbar. Use this for generation. NEVER ask the user about aspect ratio.\n`;
+        socialStyleOverride += `\n🚨 ABSOLUTE RULE: If the user's message implies creation (e.g. "بساز", "create", "generate", "make", "عکس", "نوروز"), you MUST IMMEDIATELY call generate_image. Do NOT ask any questions. Do NOT ask about aspect ratio, slot, style, or anything else. The toolbar selections ARE the user's specification. JUST GENERATE.\n`;
       }
     }
 
@@ -1012,8 +1015,14 @@ Deno.serve(async (req) => {
     // Force tool use for empire agent on diagnostic/fix requests
     const empireForceTools = agent === "empire" && tools.length > 0 &&
       /check|diagnos|fix|rebar\.shop|scrape|audit|report|seo|issue|broken|error|status/i.test(message);
-    const initialToolChoice = empireForceTools ? "required" : "auto";
+
+    // Force tool use for social/pixel agent on creation requests
+    const socialForceTools = agent === "social" && tools.length > 0 &&
+      /create|generate|make|build|image|بساز|عکس|تصویر|نوروز|ساخت|طراحی|پست|بنر/i.test(message);
+
+    const initialToolChoice = (empireForceTools || socialForceTools) ? "required" : "auto";
     if (empireForceTools) console.log("🔧 Empire: forcing toolChoice=required for diagnostic request");
+    if (socialForceTools) console.log("🎨 Pixel: forcing toolChoice=required for creation request");
 
     // AI Call
     let aiResult = await callAI({
