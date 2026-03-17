@@ -73,6 +73,8 @@ interface TaskRow {
   source?: string | null;
   attachment_url?: string | null;
   metadata?: any;
+  review_status?: string | null;
+  reviewed_by?: string | null;
   created_by_profile?: { id: string; full_name: string | null } | null;
 }
 
