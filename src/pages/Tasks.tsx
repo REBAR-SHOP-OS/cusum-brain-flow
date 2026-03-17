@@ -806,6 +806,7 @@ export default function Tasks() {
     loadData();
   };
 
+  const createTask = async () => {
     if (!newTitle.trim() || !createForEmployee) { toast.error("Title is required"); return; }
     if (newDueDate && newDueDate < new Date().toISOString().split("T")[0]) { toast.error("Due date cannot be in the past"); return; }
     setCreating(true);
