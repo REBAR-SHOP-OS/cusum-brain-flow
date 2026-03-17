@@ -358,7 +358,7 @@ export function LeadDetailDrawer({
 
         <div className="border-b border-border bg-background">
           <div className="flex">
-          {(["chatter", "activities", "files", "notes"] as const).map((tab) => (
+          {(["timeline", "details"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -369,7 +369,7 @@ export function LeadDetailDrawer({
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {tab}
+                {tab === "timeline" ? "Timeline" : "Details"}
                 {activeTab === tab && (
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary" />
                 )}
@@ -380,7 +380,11 @@ export function LeadDetailDrawer({
 
         {/* Tab Content */}
         <div className="bg-background min-h-[200px]">
-          {activeTab === "notes" && (
+          {activeTab === "timeline" && (
+            <OdooChatter lead={lead} />
+          )}
+
+          {activeTab === "details" && (
             <div className="p-4 space-y-3">
               {lead.description && (
                 <div className="border border-border rounded-sm p-3">
@@ -394,29 +398,20 @@ export function LeadDetailDrawer({
                   <p className="text-[13px] whitespace-pre-wrap">{lead.notes}</p>
                 </div>
               )}
+              <div className="border border-border rounded-sm p-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Activities</h4>
+                <ScheduledActivities entityType="lead" entityId={lead.id} />
+              </div>
+              <div className="border border-border rounded-sm p-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Files</h4>
+                <LeadFiles metadata={lead.metadata} leadId={lead.id} />
+              </div>
               {!lead.description && !lead.notes && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <ClipboardList className="w-16 h-16 text-muted-foreground/20 mb-3" />
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <ClipboardList className="w-12 h-12 text-muted-foreground/20 mb-2" />
                   <p className="text-[13px] text-muted-foreground">No notes yet.</p>
-                  <p className="text-[13px] text-muted-foreground">Add a description or internal note using the edit button above.</p>
                 </div>
               )}
-            </div>
-          )}
-
-          {activeTab === "chatter" && (
-            <OdooChatter lead={lead} />
-          )}
-
-          {activeTab === "activities" && (
-            <div className="p-4">
-              <ScheduledActivities entityType="lead" entityId={lead.id} />
-            </div>
-          )}
-
-          {activeTab === "files" && (
-            <div className="p-4">
-              <LeadFiles metadata={lead.metadata} leadId={lead.id} />
             </div>
           )}
         </div>
