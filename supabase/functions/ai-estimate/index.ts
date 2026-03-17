@@ -292,7 +292,7 @@ Return ONLY a valid JSON array of items.`;
             messages: [
               { role: "user", content: contentParts },
             ],
-            max_tokens: 8000,
+            max_tokens: 16000,
             temperature: 0.1,
           }),
         });
