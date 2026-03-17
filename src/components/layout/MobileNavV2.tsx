@@ -38,6 +38,7 @@ export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV
   const [showMore, setShowMore] = useState(false);
   const { roles, isAdmin, isCustomer } = useUserRole();
   const { user } = useAuth();
+  const { isSuperAdmin } = useSuperAdmin();
   const email = user?.email || "";
   const isInternal = email.endsWith("@rebar.shop");
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
