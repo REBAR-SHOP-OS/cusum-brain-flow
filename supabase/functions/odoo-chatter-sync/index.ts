@@ -256,12 +256,19 @@ Deno.serve(async (req) => {
           (existing || []).forEach((e: any) => existingMsgIds.add(e.odoo_message_id));
         }
 
-        // For re-sync: update existing rows that are missing body_html
-        const updateRows = rows.filter(r => existingMsgIds.has(r.odoo_message_id) && r.body_html);
+        // For re-sync: always update existing rows with body_html, description, and metadata
+        const updateRows = rows.filter(r => existingMsgIds.has(r.odoo_message_id));
         for (const ur of updateRows) {
-          await serviceClient.from("lead_activities")
-            .update({ body_html: ur.body_html, metadata: ur.metadata })
-            .eq("odoo_message_id", ur.odoo_message_id);
+          const updates: Record<string, any> = {};
+          if (ur.body_html) updates.body_html = ur.body_html;
+          if (ur.description) updates.description = ur.description;
+          if (ur.metadata) updates.metadata = ur.metadata;
+          if (ur.created_by) updates.created_by = ur.created_by;
+          if (Object.keys(updates).length > 0) {
+            await serviceClient.from("lead_activities")
+              .update(updates)
+              .eq("odoo_message_id", ur.odoo_message_id);
+          }
         }
 
         const newRows = rows.filter(r => !existingMsgIds.has(r.odoo_message_id));
