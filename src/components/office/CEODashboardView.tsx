@@ -30,6 +30,10 @@ import { JobRiskDrawer } from "@/components/ceo/drawers/JobRiskDrawer";
 import { CapacityDrawer } from "@/components/ceo/drawers/CapacityDrawer";
 import { MeetingIntelligence } from "@/components/ceo/MeetingIntelligence";
 import { AITokenUsageCard } from "@/components/ceo/AITokenUsageCard";
+import { DailyBriefingCard } from "@/components/ceo/DailyBriefingCard";
+import { SLATrackerCard } from "@/components/ceo/SLATrackerCard";
+import { DailyAssignments } from "@/components/ceo/DailyAssignments";
+import { FixRequestQueue } from "@/components/ceo/FixRequestQueue";
 
 /* ─── Helpers ─── */
 
@@ -199,6 +203,9 @@ export function CEODashboardView() {
         )}
       </AnimatePresence>
 
+      {/* ─── Daily Briefing ─── */}
+      <DailyBriefingCard />
+
       {/* ─── Health Score Hero ─── */}
       <HealthScoreHero score={m.healthScore} drivers={healthDrivers} />
 
@@ -211,6 +218,9 @@ export function CEODashboardView() {
         <KpiCard index={4} icon={<Target className="w-4 h-4 text-blue-500" />} label="Revenue Held" value={formatCurrency(m.revenueHeld)} sub="pending QC evidence" alertActive={m.revenueHeld > 0} />
         <KpiCard index={5} icon={<AlertTriangle className="w-4 h-4 text-destructive" />} label="SLA Breaches" value={String(m.slaBreach.total)} sub={`${m.slaBreach.leads} leads · ${m.slaBreach.orders} orders`} alertActive={m.slaBreach.total > 0} />
       </div>
+
+      {/* ─── SLA Tracker ─── */}
+      <SLATrackerCard />
 
       {/* ─── Production + Financial Row ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -396,64 +406,9 @@ export function CEODashboardView() {
         </motion.div>
       </div>
 
-      {/* ─── Phase Counters ─── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Queued", value: m.queuedItems, color: "border-amber-500/30 bg-amber-500/5", dot: "bg-amber-500" },
-          { label: "In Progress", value: m.inProgressItems, color: "border-blue-500/30 bg-blue-500/5", dot: "bg-blue-500" },
-          { label: "Completed", value: m.completedToday, color: "border-green-500/30 bg-green-500/5", dot: "bg-green-500" },
-          { label: "Machines Running", value: `${m.machinesRunning}/${m.totalMachines}`, color: "border-primary/30 bg-primary/5", dot: "bg-primary" },
-        ].map((item, i) => (
-          <motion.div
-            key={item.label}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.48 + i * 0.04 }}
-          >
-            <Card className={cn("rounded-xl border", item.color)}>
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className={cn("w-3 h-3 rounded-full shrink-0", item.dot)} />
-                <div>
-                  <p className="text-xl font-black tabular-nums leading-tight">{item.value}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{item.label}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
+      {/* ─── Daily Assignments ─── */}
+      <DailyAssignments exceptions={m.exceptions} />
 
-      {/* ─── Operations Strip ─── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {[
-          { icon: Truck, label: "Deliveries", value: m.pendingDeliveries, sub: "pending" },
-          { icon: ShoppingCart, label: "Pickups", value: m.pickupsReady, sub: "ready" },
-          { icon: Mail, label: "Comms Today", value: m.commsToday, sub: "messages" },
-          { icon: Hash, label: "Social Posts", value: m.publishedPosts + m.scheduledPosts, sub: `${m.publishedPosts} published` },
-          { icon: Users, label: "Team", value: m.totalTeam, sub: m.teamActiveToday > 0 ? `${m.teamActiveToday} active` : "members" },
-          { icon: Boxes, label: "Inventory", value: m.totalStockBars, sub: `${m.inventoryLotsActive} lots` },
-        ].map((item, i) => (
-          <motion.div
-            key={item.label}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 + i * 0.04 }}
-          >
-            <Card className="bg-card/80 backdrop-blur-sm border-border/50 rounded-xl">
-              <CardContent className="p-3 flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-muted/50">
-                  <item.icon className="w-4 h-4 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-lg font-bold tabular-nums leading-tight">{item.value}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{item.label}</p>
-                  <p className="text-[10px] text-muted-foreground/70">{item.sub}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
 
       {/* ─── Exceptions Workbench ─── */}
       <ExceptionsWorkbench exceptions={m.exceptions} />
@@ -510,6 +465,9 @@ export function CEODashboardView() {
 
       {/* ─── AI Token Usage ─── */}
       <AITokenUsageCard />
+
+      {/* ─── Fix Request Queue ─── */}
+      <FixRequestQueue />
 
       {/* ─── Drilldown Drawers ─── */}
       <ARWorkbenchDrawer open={openDrawer === "ar"} onClose={() => setOpenDrawer(null)} outstandingAR={m.outstandingAR} unpaidInvoices={m.unpaidInvoices} arAgingBuckets={m.arAgingBuckets} />
