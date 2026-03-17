@@ -166,7 +166,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         {/* Custom Items */}
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading...</div>
-        ) : customItems.length === 0 ? (
+        ) : otherCustom.length === 0 ? (
           <div className="text-center text-muted-foreground py-4 text-sm">No custom items</div>
         ) : (
           <>
