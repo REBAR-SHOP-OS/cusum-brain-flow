@@ -95,34 +95,10 @@ function PulseStrip({ heartbeat, machines, totalPcs, totalTonnage }: {
       pulse: false,
       color: "text-blue-400",
     },
-    {
-      label: "Team Active",
-      value: heartbeat ? `${heartbeat.team.clockedIn.length}` : "—",
-      sub: heartbeat ? `of ${heartbeat.team.totalStaff}` : "",
-      icon: Users,
-      pulse: false,
-      color: "text-violet-400",
-    },
-    {
-      label: "Visitors",
-      value: heartbeat ? `${heartbeat.visitors.online.length}` : "—",
-      sub: heartbeat ? `${heartbeat.visitors.away.length} away` : "",
-      icon: Globe,
-      pulse: heartbeat ? heartbeat.visitors.online.length > 0 : false,
-      color: "text-cyan-400",
-    },
-    {
-      label: "Leads Today",
-      value: heartbeat ? `${heartbeat.leadsToday}` : "—",
-      sub: "captured",
-      icon: Target,
-      pulse: false,
-      color: "text-rose-400",
-    },
   ];
 
   return (
-    <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+    <div className="grid grid-cols-3 gap-2">
       {items.map((item) => (
         <div key={item.label} className="relative rounded-lg border border-border/40 bg-card/40 backdrop-blur-sm p-3 overflow-hidden">
           <div className="flex items-center gap-1.5 mb-1">
