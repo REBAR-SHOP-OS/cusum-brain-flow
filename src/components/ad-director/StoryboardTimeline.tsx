@@ -160,6 +160,7 @@ export function StoryboardTimeline({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </div>
       </div>
 
       {/* Timeline */}
