@@ -1,74 +1,125 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
+## Root-cause findings
 
-## Completed: Add All Wan 2.6 Capabilities
+I traced the Pixel image flow and found this is not a single bug; it is a mismatch across 3 image paths:
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+1. `supabase/functions/_shared/agentToolExecutor.ts`
+   - The social agent tool path still tells the model to generate in a strict ratio first.
+   - If non-square generation fails, it falls back to square and crops server-side, but only after the tool path is already stressed by the ratio-specific prompt.
+   - When the tool ultimately fails, the assistant can reply with an apology like the screenshot.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+2. `supabase/functions/ai-agent/index.ts`
+   - There is a second image-generation path (`generatePixelImage`) with its own strict ratio instructions.
+   - This means Pixel behavior is inconsistent depending on how the agent routes the request.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+3. `supabase/functions/generate-image/index.ts`
+   - The direct image dialog path also has separate ratio handling and does not share the same resilient fallback logic.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+So the real fix is to unify ratio handling at the backend and make aspect ratio an output-processing concern, not something that can block generation.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+## Implementation plan
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 1) Create one shared “ratio normalization + output sizing” layer
+Add a shared utility for image generation that:
+- accepts current ratios (`1:1`, `16:9`, `9:16`)
+- also accepts future arbitrary values like `4:5`, `3:2`, `1024x1536`
+- normalizes them into:
+  - a safe generation strategy
+  - a target output width/height
+  - a crop/resize policy
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+This removes fragile hardcoded ratio logic scattered across multiple files.
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+### 2) Stop telling the AI model that ratio is a blocking constraint
+Patch the social agent prompts so they no longer imply:
+- “I can’t generate because of aspect ratio”
+- or “the model must directly support this ratio”
 
-### Changes
+Instead:
+- the prompt should treat ratio as composition guidance only
+- the backend should guarantee final dimensions by crop/resize after generation
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+This applies to:
+- `supabase/functions/_shared/agents/marketing.ts`
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/_shared/agentToolExecutor.ts`
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+### 3) Make image generation always succeed through a safe fallback chain
+For all image-generation routes, use the same strategy:
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+```text
+Requested ratio
+→ try model with soft composition hint
+→ if model fails / refuses / returns no image
+→ retry with minimal prompt payload
+→ if still needed, generate square-safe image
+→ server-side crop/resize to requested dimensions
+→ upload final processed asset
+```
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+Important behavior:
+- non-square requests must never fail just because the model prefers square
+- final uploaded image must match requested ratio
+- the user should receive a real image unless there is a true upstream outage/rate-limit
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+### 4) Unify the 3 backend image paths
+Patch these files to use the same ratio-safe behavior:
+- `supabase/functions/_shared/agentToolExecutor.ts`
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/generate-image/index.ts`
+- `supabase/functions/_shared/imageResize.ts`
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+This is the surgical fix that solves the problem “root-level” instead of patching only one screen.
+
+### 5) Strengthen server-side crop/resize so it supports future dimensions
+Upgrade `_shared/imageResize.ts` so it can:
+- parse named ratios and generic ratios
+- output deterministic dimensions
+- preserve center composition safely
+- avoid silently skipping unknown ratios
+
+Result:
+- today’s toolbar ratios work reliably
+- future custom dimensions can be added without rewriting backend logic
+
+### 6) Prevent the assistant from replying with misleading ratio excuses
+If generation fails after retries:
+- surface the real backend reason (`429`, `402`, timeout, upstream model failure)
+- do not let the assistant invent “can’t because of aspect ratio”
+
+This is especially important for the Pixel chat flow, since the screenshot shows the user is getting a false explanation.
+
+### 7) Keep UI changes minimal
+Frontend changes should stay small and low-risk:
+- keep the current ratio selector UI
+- ensure selected ratio continues to pass through `AgentWorkspace` / `ChatInput`
+- no redesign needed
+
+If useful, I would only add lightweight logging/toast improvements so failures show the actual reason.
+
+## Files to patch
+
+### Backend
+- `supabase/functions/_shared/imageResize.ts`
+- `supabase/functions/_shared/agentToolExecutor.ts`
+- `supabase/functions/_shared/agents/marketing.ts`
+- `supabase/functions/ai-agent/index.ts`
+- `supabase/functions/generate-image/index.ts`
+
+### Frontend
+- likely no structural UI rewrite needed
+- possible small touch-ups in:
+  - `src/pages/AgentWorkspace.tsx`
+  - `src/components/chat/ChatInput.tsx`
+
+## Expected outcome
+
+After this patch:
+- Pixel can generate images reliably for portrait, landscape, and square
+- ratio selection no longer causes refusal-style replies
+- final image dimensions are enforced by backend processing
+- chat flow and dialog flow behave consistently
+- the fix is additive and production-safe, without redesigning the app
+
+## Known low-risk follow-up
+If you want true “any custom dimensions” in the UI later, I can add a custom ratio input after this root fix. But the backend should be made ratio-agnostic first so the current problem is actually solved cleanly.
