@@ -35,7 +35,8 @@ import { MusicTab } from "./editor/MusicTab";
 import { BrandKitSidePanel } from "./editor/BrandKitSidePanel";
 import { DEFAULT_VIDEO_PARAMS, type VideoParams } from "./VideoParameters";
 
-import { Check } from "lucide-react";
+import { Check, Loader2 as Loader2Icon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type WorkflowStep = "script" | "storyboard" | "preview";
 
