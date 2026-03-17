@@ -1086,7 +1086,7 @@ function InlineFileAttachments({ files }: { files: any[] }) {
   );
 }
 
-function FileGroupThreadItem({ files }: { files: any[] }) {
+function FileGroupThreadItem({ files, label }: { files: any[]; label?: string }) {
   return (
     <div className="flex gap-3 p-3 hover:bg-accent/50 rounded-md transition-colors">
       <Avatar className="w-8 h-8 shrink-0 text-[11px]">
@@ -1097,12 +1097,15 @@ function FileGroupThreadItem({ files }: { files: any[] }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[13px] font-semibold truncate">
-            {files.length} file{files.length > 1 ? "s" : ""} attached
+            {label ? `${label} (${files.length})` : `${files.length} file${files.length > 1 ? "s" : ""} attached`}
           </span>
           <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
             {format(new Date(files[0].created_at), "h:mm a")}
           </span>
         </div>
+        {label && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">These files could not be linked to a specific message</p>
+        )}
         <InlineFileAttachments files={files} />
       </div>
     </div>
