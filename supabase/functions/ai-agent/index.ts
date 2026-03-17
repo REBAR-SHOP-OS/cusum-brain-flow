@@ -1012,8 +1012,14 @@ Deno.serve(async (req) => {
     // Force tool use for empire agent on diagnostic/fix requests
     const empireForceTools = agent === "empire" && tools.length > 0 &&
       /check|diagnos|fix|rebar\.shop|scrape|audit|report|seo|issue|broken|error|status/i.test(message);
-    const initialToolChoice = empireForceTools ? "required" : "auto";
+
+    // Force tool use for social/pixel agent on creation requests
+    const socialForceTools = agent === "social" && tools.length > 0 &&
+      /create|generate|make|build|image|بساز|عکس|تصویر|نوروز|ساخت|طراحی|پست|بنر/i.test(message);
+
+    const initialToolChoice = (empireForceTools || socialForceTools) ? "required" : "auto";
     if (empireForceTools) console.log("🔧 Empire: forcing toolChoice=required for diagnostic request");
+    if (socialForceTools) console.log("🎨 Pixel: forcing toolChoice=required for creation request");
 
     // AI Call
     let aiResult = await callAI({
