@@ -60,6 +60,8 @@ interface SceneCardProps {
   onImprovePrompt?: (id: string) => void;
   improvingSceneId?: string | null;
   logoUrl?: string | null;
+  onPromptUndo?: (id: string) => void;
+  canUndoPrompt?: boolean;
 }
 
 export function SceneCard({
