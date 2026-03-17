@@ -485,6 +485,16 @@ export default function AgentWorkspace() {
             sessions={sessions.filter((s) => s.agent_name === config.name)}
             loading={sessionsLoading}
             deleteSession={deleteSession}
+            purchasingDates={agentId === "purchasing" ? purchasingDates : undefined}
+            activePurchasingDate={agentId === "purchasing" ? activePurchasingDateStr : undefined}
+            onSelectPurchasingDate={agentId === "purchasing" ? (dateStr) => {
+              setActivePurchasingDateStr(dateStr);
+              if (dateStr) {
+                setPurchasingDate(new Date(dateStr + "T00:00:00"));
+              } else {
+                setPurchasingDate(undefined);
+              }
+            } : undefined}
           />
         </div>
       )}
