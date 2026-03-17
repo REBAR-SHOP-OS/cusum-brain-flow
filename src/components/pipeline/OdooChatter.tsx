@@ -331,7 +331,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   // Unified thread — files linked to their parent activity via odoo_message_id
   type ThreadItem =
     | { kind: "activity"; data: LeadActivity; matchedFiles?: any[]; date: Date }
-    | { kind: "file_group"; files: any[]; date: Date }
+    | { kind: "file_group"; files: any[]; label?: string; date: Date }
     | { kind: "comm"; data: (typeof communications)[0]; date: Date }
     | { kind: "system_group"; items: LeadActivity[]; date: Date };
 
