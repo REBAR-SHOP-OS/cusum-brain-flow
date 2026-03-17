@@ -149,10 +149,10 @@ serve(async (req) => {
 
         // Strip Persian translation block — never publish Persian text
         const cleanContent = stripPersianBlock(post.content || "");
-        const message = [
-          cleanContent,
-          (post.hashtags || []).length > 0 ? "\n\n" + (post.hashtags || []).join(" ") : "",
-        ].join("");
+        const contentHasHashtags = /#[a-zA-Z]\w/.test(cleanContent);
+        const message = contentHasHashtags
+          ? cleanContent
+          : [cleanContent, (post.hashtags || []).length > 0 ? "\n\n" + (post.hashtags || []).join(" ") : ""].join("");
 
         let publishResult: { id?: string; error?: string } = { error: "Unsupported platform" };
 
