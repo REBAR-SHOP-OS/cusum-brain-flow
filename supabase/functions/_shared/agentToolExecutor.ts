@@ -695,9 +695,8 @@ export async function executeToolCall(
           const fullPrompt = imagePrompt +
             "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image.";
 
-          // Retry pipeline: try multiple models
+          // Retry pipeline: try multiple models (2 primary + 2 fallback max = 4 total)
           const attempts = [
-            { model: "google/gemini-2.5-flash-image", useLogo: true },
             { model: "google/gemini-2.5-flash-image", useLogo: true },
             { model: "google/gemini-3-pro-image-preview", useLogo: true },
           ];
