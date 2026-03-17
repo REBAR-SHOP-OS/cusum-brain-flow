@@ -34,10 +34,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
           return;
         }
-        // Skip INITIAL_SESSION — let getSession+getUser below handle
-        // initial validation. Trusting INITIAL_SESSION with a stale JWT
-        // triggers auto-refresh loops before we can invalidate the token.
-        if (event === 'INITIAL_SESSION') return;
+        // Skip INITIAL_SESSION for normal loads — let getSession+getUser
+        // validate. But allow it through for OAuth callbacks where the
+        // session from hash tokens is fresh and trustworthy.
+        if (event === 'INITIAL_SESSION' && !isOAuthCallback) return;
 
         setSession(session);
         setUser(session?.user ?? null);
