@@ -527,6 +527,9 @@ export async function executeToolCall(
         try {
           let imagePrompt = args.prompt || "A professional rebar construction image";
           const slot = args.slot || "";
+          // Hoist aspectRatio to outer scope so ALL paths (OpenAI, Gemini, fallback) can access it
+          const aspectRatio: string = (context?.imageAspectRatio as string) || args.aspect_ratio || "1:1";
+          console.log(`[generate_image] aspectRatio resolved (hoisted): args=${args.aspect_ratio}, context=${context?.imageAspectRatio}, final=${aspectRatio}`);
 
           // Inject mandatory style/product overrides from user selections
           // Nuclear enforcement: from context AND from tool args
@@ -607,8 +610,7 @@ export async function executeToolCall(
             }
 
             // Inject aspect ratio as soft composition guidance (final dimensions enforced by server-side crop)
-            const aspectRatio = (context?.imageAspectRatio as string) || args.aspect_ratio || "1:1";
-            console.log(`[generate_image] aspectRatio resolved: args=${args.aspect_ratio}, context=${context?.imageAspectRatio}, final=${aspectRatio}`);
+            // aspectRatio already declared at top of generate_image handler
             const AR_COMPOSITION_MAP: Record<string, string> = {
               "16:9": "Compose the scene as a LANDSCAPE layout — wider than tall, with important elements spread horizontally.",
               "9:16": "Compose the scene as a PORTRAIT/VERTICAL layout — taller than wide, with important elements arranged vertically (suitable for Stories/Reels).",
@@ -729,7 +731,7 @@ export async function executeToolCall(
                     if (dlRes.ok) imageBytes = new Uint8Array(await dlRes.arrayBuffer());
                   }
                   if (imageBytes) {
-                    if (aspectRatio) imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+                    try { if (aspectRatio) imageBytes = await cropToAspectRatio(imageBytes, aspectRatio); } catch (cropErr) { console.warn("[generate_image] OpenAI crop failed, using original:", cropErr); }
                     const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
                     const { error: uploadError } = await svcClient.storage
                       .from("social-images")
@@ -836,9 +838,9 @@ export async function executeToolCall(
             }
 
             // Enforce aspect ratio via server-side crop/resize
-            if (aspectRatio) {
-              imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
-            }
+            try {
+              if (aspectRatio) { imageBytes = await cropToAspectRatio(imageBytes, aspectRatio); }
+            } catch (cropErr) { console.warn("[generate_image] Gemini crop failed, using original:", cropErr); }
 
             const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
             const { error: uploadError } = await svcClient.storage
