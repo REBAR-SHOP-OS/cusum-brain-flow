@@ -866,38 +866,21 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
       })()}
 
       {/* Step Indicator */}
-      <div className="flex items-center justify-center">
-        <div className="inline-flex items-center bg-muted/30 rounded-lg p-1 gap-px">
-          {steps.map((s, idx) => {
-            const stepOrder = ["script", "storyboard", "preview"];
-            const currentIdx = stepOrder.indexOf(step);
-            const thisIdx = stepOrder.indexOf(s.id);
-            const isCompleted = thisIdx < currentIdx;
-            const isActive = s.id === step;
-            const isDisabled = (s.id === "storyboard" && segments.length === 0) || (s.id === "preview" && storyboard.length === 0);
+      <StepIndicator
+        step={step}
+        onStepChange={setStep}
+        segments={segments}
+        storyboard={storyboard}
+        clips={clips}
+      />
 
-            return (
-              <button
-                key={s.id}
-                onClick={() => !isDisabled && setStep(s.id)}
-                disabled={isDisabled}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-md text-xs font-medium transition-all",
-                  isActive && "bg-background text-foreground shadow-sm",
-                  isCompleted && !isActive && "text-emerald-400",
-                  !isActive && !isCompleted && "text-muted-foreground hover:text-foreground",
-                  isDisabled && "opacity-30 cursor-not-allowed"
-                )}
-              >
-                {isCompleted ? <Check className="w-3.5 h-3.5" /> : <span className="w-4 text-center text-[10px]">{idx + 1}</span>}
-                <span className="hidden sm:inline">{s.label}</span>
-              </button>
-            );
-          })}
+      {/* Loading skeleton while brand kit loads */}
+      {brandLoading && step === "script" && (
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-[260px] w-full" />
         </div>
-      </div>
-
-      {/* Floating sidebar panel for non-preview steps */}
+      )}
       {step !== "preview" && externalActiveTab && (
         <div className="fixed left-60 top-20 z-40 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-border/40 bg-card/95 backdrop-blur-md shadow-xl p-4 animate-in slide-in-from-left-4 duration-200">
           <div className="flex items-center justify-between mb-3">
