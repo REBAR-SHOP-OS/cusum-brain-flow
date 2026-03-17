@@ -367,7 +367,7 @@ export function PostReviewPanel({
 
   return (
     <>
-      <Sheet open={!!post} onOpenChange={(open) => { if (!open) { if (editing) saveEdit(); setSubPanel(null); onClose(); } }}>
+      <Sheet open={!!post} onOpenChange={(open) => { if (!open) { flushRef.current(); setSubPanel(null); onClose(); } }}>
         <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">
 
           {/* ── Sub-panel views ── */}
