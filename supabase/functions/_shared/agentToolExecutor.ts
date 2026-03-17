@@ -606,15 +606,15 @@ export async function executeToolCall(
               imagePrompt = mandatoryBlock + imagePrompt;
             }
 
-            // Inject aspect ratio from user selection (context = user's UI choice, more reliable than AI args)
+            // Inject aspect ratio as soft composition guidance (final dimensions enforced by server-side crop)
             const aspectRatio = (context?.imageAspectRatio as string) || args.aspect_ratio || "1:1";
             console.log(`[generate_image] aspectRatio resolved: args=${args.aspect_ratio}, context=${context?.imageAspectRatio}, final=${aspectRatio}`);
-            const AR_PROMPT_MAP: Record<string, string> = {
-              "16:9": "CRITICAL: Generate a LANDSCAPE image with 16:9 aspect ratio. The image MUST be wider than tall.",
-              "9:16": "CRITICAL: Generate a PORTRAIT image with 9:16 aspect ratio. The image MUST be taller than wide (suitable for Instagram Stories/Reels).",
-              "1:1": "CRITICAL: Generate a perfectly SQUARE image with 1:1 aspect ratio. Width and height MUST be equal.",
+            const AR_COMPOSITION_MAP: Record<string, string> = {
+              "16:9": "Compose the scene as a LANDSCAPE layout — wider than tall, with important elements spread horizontally.",
+              "9:16": "Compose the scene as a PORTRAIT/VERTICAL layout — taller than wide, with important elements arranged vertically (suitable for Stories/Reels).",
+              "1:1": "Compose the scene as a SQUARE layout — balanced, with the main subject centered.",
             };
-            imagePrompt += `\n\n${AR_PROMPT_MAP[aspectRatio] || `IMAGE ASPECT RATIO: ${aspectRatio}. Compose the image to fit this ratio perfectly.`}`;
+            imagePrompt += `\n\n${AR_COMPOSITION_MAP[aspectRatio] || `Compose the image for a ${aspectRatio} layout.`}`;
             imagePrompt += "\n\nLANGUAGE RULE: ALL text rendered on the image MUST be in ENGLISH ONLY. NO Persian, Farsi, Arabic, or any non-Latin script text is allowed in the image.";
 
             // Fetch Brain resource images for multimodal reference

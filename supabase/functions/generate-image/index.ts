@@ -88,10 +88,13 @@ function buildAdPrompt(
   parts.push("- Natural lighting, real textures, real materials, real environments.");
   parts.push("- ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, clip-art.");
 
+  // Soft composition hint — final dimensions enforced by server-side crop/resize
   if (aspectRatio === "9:16") {
-    parts.push("- The image MUST be VERTICAL (9:16 portrait aspect ratio), suitable for Instagram/Facebook Stories.");
+    parts.push("- Compose the scene as a VERTICAL/PORTRAIT layout — taller than wide, suitable for Instagram/Facebook Stories.");
+  } else if (aspectRatio === "16:9") {
+    parts.push("- Compose the scene as a LANDSCAPE layout — wider than tall, suitable for social media banners.");
   } else {
-    parts.push("- The image MUST be perfectly SQUARE (1:1 aspect ratio), suitable for Instagram feed posts.");
+    parts.push("- Compose the scene as a SQUARE layout — balanced composition, suitable for Instagram feed posts.");
   }
 
   parts.push(`- Feature ${brandName} products (rebar stirrups, ties, cut & bent rebar, accessories) prominently in the scene.`);
