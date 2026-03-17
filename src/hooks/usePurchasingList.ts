@@ -35,7 +35,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     if (!profile?.company_id) { setLoading(false); return; }
 
     let query = supabase
-      .from("purchasing_list_items" as any)
+      .from("purchasing_list_items")
       .select("*")
       .eq("company_id", profile.company_id)
       .order("created_at", { ascending: false });
@@ -80,7 +80,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
 
-    const { error } = await supabase.from("purchasing_list_items" as any).insert({
+    const { error } = await supabase.from("purchasing_list_items").insert({
       company_id: profile.company_id,
       title,
       quantity,
@@ -91,10 +91,11 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     });
     if (error) {
       toast.error("Error adding item");
-      console.error(error);
-    } else {
-      toast.success("Item added");
+      console.error("addItem error:", error);
+      return false;
     }
+    toast.success("Item added");
+    return true;
   }, [user]);
 
   const addItemAsRejected = useCallback(async (title: string, category: string, dueDate?: string) => {
@@ -102,7 +103,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
 
-    const { error } = await supabase.from("purchasing_list_items" as any).insert({
+    const { error } = await supabase.from("purchasing_list_items").insert({
       company_id: profile.company_id,
       title,
       quantity: 1,
@@ -124,7 +125,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
 
-    const { error } = await supabase.from("purchasing_list_items" as any).insert({
+    const { error } = await supabase.from("purchasing_list_items").insert({
       company_id: profile.company_id,
       title,
       quantity: 1,
@@ -150,7 +151,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       purchased_by: !currentValue ? user.id : null,
       purchased_at: !currentValue ? new Date().toISOString() : null,
     };
-    const { error } = await supabase.from("purchasing_list_items" as any).update(updateData).eq("id", itemId);
+    const { error } = await (supabase.from("purchasing_list_items") as any).update(updateData).eq("id", itemId);
     if (error) {
       toast.error("Error updating");
       console.error(error);
@@ -165,7 +166,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       purchased_by: null,
       purchased_at: null,
     };
-    const { error } = await supabase.from("purchasing_list_items" as any).update(updateData).eq("id", itemId);
+    const { error } = await (supabase.from("purchasing_list_items") as any).update(updateData).eq("id", itemId);
     if (error) {
       toast.error("Error updating");
       console.error(error);
@@ -173,7 +174,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
   }, [user]);
 
   const deleteItem = useCallback(async (itemId: string) => {
-    const { error } = await supabase.from("purchasing_list_items" as any).delete().eq("id", itemId);
+    const { error } = await supabase.from("purchasing_list_items").delete().eq("id", itemId);
     if (error) {
       toast.error("Error deleting");
       console.error(error);
@@ -188,8 +189,8 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
 
-    const { error } = await supabase
-      .from("purchasing_list_items" as any)
+    const { error } = await (supabase
+      .from("purchasing_list_items") as any)
       .update({ due_date: date })
       .eq("company_id", profile.company_id)
       .is("due_date", null);

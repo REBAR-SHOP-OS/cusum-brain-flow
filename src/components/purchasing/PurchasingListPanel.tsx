@@ -51,12 +51,16 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
-    await addItem(newTitle.trim(), parseInt(newQty) || 1, newCategory || undefined, newPriority, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined);
+    const success = await addItem(newTitle.trim(), parseInt(newQty) || 1, newCategory || undefined, newPriority, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined);
+    if (success === false) {
+      toast.error("Failed to add item – check console for details");
+      return;
+    }
     setNewTitle("");
     setNewQty("1");
     setNewCategory("");
     setNewPriority("medium");
-    refetch();
+    await refetch();
   };
 
   return (

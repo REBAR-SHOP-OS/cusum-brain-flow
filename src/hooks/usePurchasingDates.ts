@@ -17,7 +17,7 @@ export function usePurchasingDates() {
     if (!profile?.company_id) { setLoading(false); return; }
 
     const { data, error } = await supabase
-      .from("purchasing_list_items" as any)
+      .from("purchasing_list_items")
       .select("due_date")
       .eq("company_id", profile.company_id)
       .not("due_date", "is", null)
