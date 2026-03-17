@@ -49,22 +49,30 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       }
     }, []);
 
-    const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const handleContainerPointerDown = useCallback((e: React.PointerEvent) => {
+      handlers.onPointerDown(e);
+    }, [handlers]);
+
+    const handleContainerPointerMove = useCallback((e: React.PointerEvent) => {
+      handlers.onPointerMove(e);
+    }, [handlers]);
+
+    const handleContainerPointerUp = useCallback((e: React.PointerEvent) => {
       handlers.onPointerUp(e);
-      if (!wasDragged.current) {
-        // Tap → navigate to text chat
-        if (location.pathname === "/chat") {
-          navigate(-1);
-        } else {
-          navigate("/chat");
-        }
-      }
-      // Hide tooltip after first interaction
+    }, [handlers]);
+
+    const handleAvatarClick = useCallback(() => {
+      if (wasDragged.current) return;
       if (showTooltip) {
         setShowTooltip(false);
         localStorage.setItem(TOOLTIP_KEY, "1");
       }
-    }, [handlers, wasDragged, location.pathname, navigate, showTooltip]);
+      if (location.pathname === "/chat") {
+        navigate(-1);
+      } else {
+        navigate("/chat");
+      }
+    }, [wasDragged, location.pathname, navigate, showTooltip]);
 
     const onMicClick = useCallback((e: React.MouseEvent) => {
       e.stopPropagation();
