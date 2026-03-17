@@ -30,6 +30,7 @@ const moreItems = [
   { name: "Social", href: "/social", icon: Share2, roles: ["admin", "office"] },
   { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"] },
   { name: "Summarizer", href: "/daily-summarizer", icon: FileText, roles: ["admin", "sales", "office"] },
+  { name: "Sales", href: "/sales", icon: TrendingUp, roles: ["admin", "sales", "office"] },
   { name: "Admin", href: "/admin", icon: Shield, roles: ["admin"] },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

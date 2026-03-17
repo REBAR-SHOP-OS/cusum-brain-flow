@@ -46,6 +46,11 @@ const navCommands: NavCommand[] = [
   { label: "Phone Calls", icon: Phone, href: "/phonecalls", group: "System" },
   { label: "Admin Panel", icon: Shield, href: "/admin", roles: ["admin"], group: "System" },
   { label: "Settings", icon: Settings, href: "/settings", group: "System" },
+  { label: "Sales Department", icon: TrendingUp, href: "/sales", roles: ["admin", "sales", "office"], group: "Navigate" },
+  { label: "Sales Pipeline", icon: Kanban, href: "/sales/pipeline", roles: ["admin", "sales", "office"], group: "Navigate" },
+  { label: "Sales Quotations", icon: FileText, href: "/sales/quotations", roles: ["admin", "sales", "office"], group: "Navigate" },
+  { label: "Sales Invoices", icon: Receipt, href: "/sales/invoices", roles: ["admin", "sales", "office"], group: "Navigate" },
+  { label: "Sales Contacts", icon: Users, href: "/sales/contacts", roles: ["admin", "sales", "office"], group: "Navigate" },
 ];
 
 export function CommandBar({ open, onOpenChange }: CommandBarProps) {
