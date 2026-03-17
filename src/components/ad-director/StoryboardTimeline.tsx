@@ -82,6 +82,18 @@ export function StoryboardTimeline({
           )}
         </div>
 
+        <div className="flex items-center gap-2">
+          {failedCount > 0 && !generatingAny && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs h-8 gap-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+              onClick={handleRetryAllFailed}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Retry {failedCount} failed
+            </Button>
+          )}
         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
           <AlertDialogTrigger asChild>
             <Button
