@@ -202,9 +202,9 @@ export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased
             def={def}
             dbMatch={findDbMatch(def, dbItems)}
             onMarkPurchased={onMarkPurchased}
-            onUnmarkPurchased={onUnmarkPurchased}
             onMarkRejected={onMarkRejected}
-            onUnmarkRejected={onUnmarkRejected}
+            onTogglePurchased={onTogglePurchased}
+            onToggleRejected={onToggleRejected}
           />
         ))}
         {groupCustom.map(item => renderCustomRow(item))}
