@@ -1,46 +1,39 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Separate Live Monitor from CEO Portal
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+The sidebar item "Live Monitor" links to `/ceo`, which is the super-admin-only CEO Portal. The actual `LiveMonitorView` component (Shop Floor HUD with machine status, tonnage, production jobs) exists but is only accessible as a tab inside the Admin Panel. Sales managers and office staff can't access it.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Plan
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. Create `/live-monitor` route and page
+Create `src/pages/LiveMonitor.tsx` — a simple page wrapper that renders `LiveMonitorView`. Access gated to `admin`, `office`, `sales` roles (not super-admin-only).
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 2. Update sidebar link
+In `AppSidebar.tsx` line 160, change:
+- `"Live Monitor"` → keep name, change `href: "/ceo"` to `href: "/live-monitor"`, change `allowedEmails` to `roles: ["admin", "office", "sales"]`
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 3. Add separate CEO Portal sidebar entry
+Add a new sidebar item for the CEO Portal:
+- Name: "CEO Portal", href: `/ceo`, icon: `BarChart3`, `allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop"]`
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 4. Register the new route in `App.tsx`
+Add `<Route path="/live-monitor" element={<P><LiveMonitor /></P>} />` alongside the existing `/ceo` route.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 5. Update MobileNavV2
+In `MobileNavV2.tsx`, keep "CEO Portal" entry for super admins and add "Live Monitor" for office/sales roles.
+
+### 6. Update RoleGuard
+Add `/live-monitor` to the `SALES_ALLOWED` and `WORKSHOP_ALLOWED` arrays as appropriate (sales managers need access).
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/pages/LiveMonitor.tsx` | **New** — page wrapper for `LiveMonitorView` with role check |
+| `src/App.tsx` | Add `/live-monitor` route |
+| `src/components/layout/AppSidebar.tsx` | Split into two entries: "Live Monitor" → `/live-monitor` (roles), "CEO Portal" → `/ceo` (super admin emails) |
+| `src/components/layout/MobileNavV2.tsx` | Add "Live Monitor" nav item for office/sales |
+| `src/components/auth/RoleGuard.tsx` | Add `/live-monitor` to `SALES_ALLOWED` |
+
