@@ -1,0 +1,1 @@
+ALTER TABLE public.purchasing_list_items ADD COLUMN is_rejected boolean NOT NULL DEFAULT false;

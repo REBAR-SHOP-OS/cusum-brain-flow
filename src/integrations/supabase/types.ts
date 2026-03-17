@@ -9795,6 +9795,7 @@ export type Database = {
           due_date: string | null
           id: string
           is_purchased: boolean
+          is_rejected: boolean
           priority: string
           purchased_at: string | null
           purchased_by: string | null
@@ -9811,6 +9812,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_purchased?: boolean
+          is_rejected?: boolean
           priority?: string
           purchased_at?: string | null
           purchased_by?: string | null
@@ -9827,6 +9829,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_purchased?: boolean
+          is_rejected?: boolean
           priority?: string
           purchased_at?: string | null
           purchased_by?: string | null
