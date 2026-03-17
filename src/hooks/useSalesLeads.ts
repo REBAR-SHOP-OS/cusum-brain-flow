@@ -37,6 +37,25 @@ export type SalesLead = {
   updated_at: string;
 };
 
+type SalesLeadInsert = {
+  title: string;
+  description?: string | null;
+  stage?: string;
+  probability?: number | null;
+  expected_value?: number | null;
+  expected_close_date?: string | null;
+  source?: string | null;
+  assigned_to?: string | null;
+  priority?: string | null;
+  notes?: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  contact_company?: string | null;
+};
+
+type SalesLeadUpdate = Partial<SalesLeadInsert> & { id: string };
+
 export function useSalesLeads() {
   const { companyId } = useCompanyId();
   const qc = useQueryClient();
