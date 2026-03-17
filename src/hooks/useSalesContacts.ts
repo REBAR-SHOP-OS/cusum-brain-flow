@@ -72,6 +72,18 @@ export function useSalesContacts() {
     },
   });
 
+  // Realtime
+  useEffect(() => {
+    if (!companyId) return;
+    const channel = supabase
+      .channel("sales_contacts_rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales_contacts" }, () => {
+        qc.invalidateQueries({ queryKey: ["sales_contacts", companyId] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [companyId, qc]);
+
   const create = useMutation({
     mutationFn: async (item: Partial<SalesContact> & { name: string }) => {
       const { data, error } = await supabase
