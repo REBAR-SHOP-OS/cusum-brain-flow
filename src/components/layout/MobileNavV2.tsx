@@ -128,7 +128,7 @@ export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV
   const isMoreActive = moreItems.some((item) => location.pathname === item.href);
 
   const isVisible = (item: { roles?: string[]; allowedEmails?: string[]; blockedEmails?: string[] }) => {
-    if (item.blockedEmails?.includes(email.toLowerCase())) return false;
+    if (isSuperAdmin) return true;
     if (item.allowedEmails) {
       return item.allowedEmails.includes(email.toLowerCase());
     }
