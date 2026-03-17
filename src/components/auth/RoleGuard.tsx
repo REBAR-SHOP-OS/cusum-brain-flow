@@ -49,7 +49,11 @@ interface RoleGuardProps {
 export function RoleGuard({ children }: RoleGuardProps) {
   const { roles, isLoading, isAdmin, isShopSupervisor, isCustomer } = useUserRole();
   const { user } = useAuth();
+  const { isSuperAdmin } = useSuperAdmin();
   const location = useLocation();
+
+  // Super admins bypass all route restrictions
+  if (isSuperAdmin) return <>{children}</>;
 
   const email = user?.email || "";
   const isInternal = email.endsWith("@rebar.shop");

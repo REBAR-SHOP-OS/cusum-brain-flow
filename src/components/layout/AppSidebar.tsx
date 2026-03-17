@@ -192,7 +192,10 @@ export function AppSidebar() {
     },
   ];
 
+  const { isSuperAdmin } = useSuperAdmin();
+
   const hasAccess = (item: NavItem) => {
+    if (isSuperAdmin) return true;
     if (item.blockedEmails?.includes(email.toLowerCase())) return false;
     if (item.allowedEmails) {
       return item.allowedEmails.includes(email.toLowerCase());
