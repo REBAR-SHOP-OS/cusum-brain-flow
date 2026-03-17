@@ -117,6 +117,7 @@ Output ONLY a valid JSON object with this structure:
       "F": number or null,
       "G": number or null,
       "H": number or null,
+      "I": null,
       "J": number or null,
       "K": number or null,
       "O": number or null,
@@ -136,6 +137,12 @@ Output ONLY a valid JSON object with this structure:
     "project": "detected project name"
   }
 }
+
+CRITICAL DIMENSION MAPPING RULE:
+Rebar dimension columns SKIP the letter "I". The correct sequence is: A, B, C, D, E, F, G, H, J, K, O, R.
+There is NO "I" dimension in rebar standards. The "I" field in the schema above is a placeholder — always set it to null.
+If the source document has a column labeled "I", IGNORE its values completely. Do NOT shift dimension values.
+Each dimension value MUST go into its EXACT matching letter field: the value under column "H" in the source goes into "H", the value under "J" goes into "J", etc. NEVER shift values from one letter to another.
 
 Rules:
 - Extract ALL rows/items from the document
