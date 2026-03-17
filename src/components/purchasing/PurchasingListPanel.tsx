@@ -32,6 +32,7 @@ interface PurchasingListPanelProps {
 
 export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange }: PurchasingListPanelProps = {}) {
   const [internalDate, setInternalDate] = useState<Date | undefined>();
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const filterDate = externalDate !== undefined ? externalDate : internalDate;
   const setFilterDate = onFilterDateChange || setInternalDate;
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "purchased">("all");
