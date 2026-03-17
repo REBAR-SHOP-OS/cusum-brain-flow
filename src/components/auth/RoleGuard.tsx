@@ -2,6 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
 /** Routes accessible to workshop-only users (no admin/office/sales roles) */
 const WORKSHOP_ALLOWED = [
