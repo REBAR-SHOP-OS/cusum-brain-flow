@@ -135,6 +135,8 @@ export function PostReviewPanel({
   const { toast } = useToast();
   const { publishPost, publishing } = usePublishPost();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canPublish = user?.email === "radin@rebar.shop";
   const [editing, setEditing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regeneratingCaption, setRegeneratingCaption] = useState(false);
