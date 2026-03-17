@@ -797,7 +797,7 @@ export async function executeToolCall(
               clearTimeout(imgTimeout);
             }
 
-            if (!aiRes.ok) { lastError = `${attempt.model}: ${aiRes.status}`; continue; }
+            if (!aiRes.ok) { const errBody = await aiRes.text().catch(() => ""); console.warn(`[generate_image] ${attempt.model} returned ${aiRes.status}: ${errBody.slice(0, 200)}`); lastError = `${attempt.model}: ${aiRes.status}`; continue; }
 
             const aiData = await aiRes.json();
 
