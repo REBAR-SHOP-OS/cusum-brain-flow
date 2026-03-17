@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Video, Image as ImageIcon, Link2, FileText, Layers,
-  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight, Download
+  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight, Download, Undo2
 } from "lucide-react";
 import { downloadFile } from "@/lib/downloadUtils";
 import { type StoryboardScene, type ClipOutput, type GenerationMode } from "@/types/adDirector";
