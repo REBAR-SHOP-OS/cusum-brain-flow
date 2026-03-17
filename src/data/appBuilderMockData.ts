@@ -223,3 +223,39 @@ export const TEMPLATE_PROJECTS: { name: string; description: string; icon: strin
   { name: "E-Commerce Store", description: "Product catalog, cart, and checkout flow", icon: "🛒" },
   { name: "Project Tracker", description: "Team task management with boards and timelines", icon: "📋" },
 ];
+
+export interface ConnectorDef {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  status: "connected" | "disconnected" | "error";
+  diagnosticPrompt: string;
+}
+
+export const CONNECTORS: ConnectorDef[] = [
+  {
+    id: "rebar-shop",
+    name: "rebar.shop",
+    description: "WordPress storefront — product catalog, orders, and frontend",
+    icon: "🌐",
+    status: "connected",
+    diagnosticPrompt: "Run a full diagnostic on rebar.shop — check homepage, products, header, footer, and report any issues.",
+  },
+  {
+    id: "erp",
+    name: "ERP System",
+    description: "Rebar Shop OS — production, sales, accounting, and operations",
+    icon: "🏭",
+    status: "connected",
+    diagnosticPrompt: "Check the ERP system health — verify database connectivity, recent activity, and any outstanding errors.",
+  },
+  {
+    id: "odoo",
+    name: "Odoo",
+    description: "Inventory, purchasing, and warehouse management",
+    icon: "📦",
+    status: "disconnected",
+    diagnosticPrompt: "Check Odoo connection status and verify inventory sync is working.",
+  },
+];
