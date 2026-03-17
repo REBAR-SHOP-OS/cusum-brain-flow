@@ -172,7 +172,7 @@ async function fetchCEOMetrics(companyId: string): Promise<CEOMetrics> {
     phaseItemsRes,
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }).eq("status", "active").eq("company_id", companyId),
-    supabase.from("orders").select("id", { count: "exact", head: true }).in("status", ["active", "pending"]).eq("company_id", companyId),
+    supabase.from("orders").select("id", { count: "exact", head: true }).in("status", ["active", "pending", "needs_pricing", "confirmed", "in_production"]).eq("company_id", companyId),
     supabase.from("cut_plan_items").select("total_pieces, completed_pieces, cut_plans!inner(company_id)").eq("cut_plans.company_id", companyId!),
     supabase.from("machines").select("id, name, type, status").eq("company_id", companyId),
     supabase.from("deliveries").select("id", { count: "exact", head: true }).in("status", ["pending", "in-transit", "loading"]).eq("company_id", companyId),
