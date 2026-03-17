@@ -1203,6 +1203,40 @@ export async function executeToolCall(
       }
     }
 
+    // ─── Purchasing tools ───
+    else if (name === "purchasing_add_item") {
+      const { error } = await svcClient.from("purchasing_list_items").insert({
+        company_id: companyId,
+        title: args.title,
+        quantity: args.quantity || 1,
+        category: args.category || null,
+        priority: args.priority || "medium",
+        due_date: args.due_date || null,
+        created_by: user.id,
+      });
+      result.result = error ? { error: error.message } : { success: true, message: `Added "${args.title}" to purchasing list` };
+    }
+    else if (name === "purchasing_list_items") {
+      let query = svcClient.from("purchasing_list_items").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50);
+      if (args.status === "pending") query = query.eq("is_purchased", false);
+      else if (args.status === "purchased") query = query.eq("is_purchased", true);
+      if (args.due_date) query = query.eq("due_date", args.due_date);
+      const { data, error } = await query;
+      result.result = error ? { error: error.message } : { items: data, count: data?.length || 0 };
+    }
+    else if (name === "purchasing_toggle_item") {
+      const { error } = await svcClient.from("purchasing_list_items").update({
+        is_purchased: args.is_purchased,
+        purchased_by: args.is_purchased ? user.id : null,
+        purchased_at: args.is_purchased ? new Date().toISOString() : null,
+      }).eq("id", args.item_id).eq("company_id", companyId);
+      result.result = error ? { error: error.message } : { success: true, message: `Item ${args.is_purchased ? "marked as purchased" : "unmarked"}` };
+    }
+    else if (name === "purchasing_delete_item") {
+      const { error } = await svcClient.from("purchasing_list_items").delete().eq("id", args.item_id).eq("company_id", companyId);
+      result.result = error ? { error: error.message } : { success: true, message: "Item deleted" };
+    }
+
     // Default fallback
     else {
       result.result = { success: true, message: "Tool executed (simulated)" };

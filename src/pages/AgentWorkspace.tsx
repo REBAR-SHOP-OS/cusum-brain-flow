@@ -685,6 +685,7 @@ export default function AgentWorkspace() {
           </>
         )}
       </div>
+      )}
 
 
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
