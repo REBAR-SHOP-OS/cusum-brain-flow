@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSalesQuotations, SalesQuotation } from "@/hooks/useSalesQuotations";
 import { Button } from "@/components/ui/button";
 import { Plus, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
@@ -19,9 +18,16 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function SalesQuotations() {
-  const { quotations, isLoading, create, update, remove } = useSalesQuotations();
+  const { quotations, isLoading, create, update, remove, generateNumber } = useSalesQuotations();
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ quotation_number: "", customer_name: "", customer_company: "", amount: "", expiry_date: "", notes: "" });
+
+  // Auto-generate quotation number when dialog opens
+  useEffect(() => {
+    if (createOpen) {
+      generateNumber().then((num) => setForm((p) => ({ ...p, quotation_number: num })));
+    }
+  }, [createOpen]);
 
   const handleCreate = () => {
     if (!form.quotation_number.trim()) return;
@@ -85,7 +91,7 @@ export default function SalesQuotations() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>New Quotation</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Quotation Number *</Label><Input value={form.quotation_number} onChange={e => setForm(p => ({ ...p, quotation_number: e.target.value }))} placeholder="Q-001" /></div>
+            <div><Label>Quotation Number *</Label><Input value={form.quotation_number} onChange={e => setForm(p => ({ ...p, quotation_number: e.target.value }))} placeholder="Q20260001" className="font-mono" /></div>
             <div className="grid grid-cols-2 gap-2">
               <div><Label>Customer Name</Label><Input value={form.customer_name} onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))} /></div>
               <div><Label>Company</Label><Input value={form.customer_company} onChange={e => setForm(p => ({ ...p, customer_company: e.target.value }))} /></div>

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "./useCompanyId";
+import { getCompanyId } from "./useCompanyId";
 import { toast } from "sonner";
 
 export type SalesQuotation = {
@@ -16,6 +17,31 @@ export type SalesQuotation = {
   created_at: string;
   expiry_date: string | null;
 };
+
+/**
+ * Generate next quotation number in format Q{YYYY}{0001}.
+ * Can be used inside or outside React components.
+ */
+export async function generateQuotationNumber(companyId?: string | null): Promise<string> {
+  const cid = companyId ?? (await getCompanyId());
+  const year = new Date().getFullYear();
+  const prefix = `Q${year}`;
+
+  if (!cid) return `${prefix}0001`;
+
+  const { data } = await supabase
+    .from("sales_quotations")
+    .select("quotation_number")
+    .eq("company_id", cid)
+    .like("quotation_number", `${prefix}%`)
+    .order("quotation_number", { ascending: false })
+    .limit(1);
+
+  if (!data?.length) return `${prefix}0001`;
+
+  const lastNum = parseInt(data[0].quotation_number.slice(prefix.length), 10) || 0;
+  return `${prefix}${String(lastNum + 1).padStart(4, "0")}`;
+}
 
 export function useSalesQuotations() {
   const { companyId } = useCompanyId();
@@ -67,5 +93,5 @@ export function useSalesQuotations() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  return { quotations: query.data ?? [], isLoading: query.isLoading, create, update, remove };
+  return { quotations: query.data ?? [], isLoading: query.isLoading, create, update, remove, generateNumber: () => generateQuotationNumber(companyId) };
 }
