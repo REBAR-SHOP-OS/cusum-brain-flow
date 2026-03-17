@@ -19,6 +19,7 @@ import {
   Sparkles, Loader2, Plus, MessageSquare, FileOutput,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
