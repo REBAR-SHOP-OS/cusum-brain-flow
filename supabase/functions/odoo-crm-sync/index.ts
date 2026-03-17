@@ -9,7 +9,7 @@ import {
 
 const FIELDS = [
   "id", "name", "stage_id", "email_from", "phone", "contact_name",
-  "user_id", "probability", "expected_revenue", "planned_revenue", "type", "partner_name",
+  "user_id", "probability", "expected_revenue", "type", "partner_name",
   "city", "create_date", "write_date", "priority",
   "date_deadline",
 ];
