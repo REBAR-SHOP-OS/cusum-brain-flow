@@ -35,7 +35,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     if (!profile?.company_id) { setLoading(false); return; }
 
     let query = supabase
-      .from("purchasing_list_items" as any)
+      .from("purchasing_list_items")
       .select("*")
       .eq("company_id", profile.company_id)
       .order("created_at", { ascending: false });
