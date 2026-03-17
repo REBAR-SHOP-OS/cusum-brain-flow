@@ -17,22 +17,24 @@ export interface Automation {
   icon: "social" | "inbox" | "summary" | "comment" | "email" | "website" | "code" | "search" | "video" | "camera";
   beta?: boolean;
   route?: string;
+  highlights?: string[];
 }
 
 const defaultAutomations: Automation[] = [
   {
     id: "social-media-manager",
     name: "Social Media Manager",
-    description: "Auto-schedule and post to social platforms",
+    description: "Save hours — auto-schedule and publish across all channels",
     enabled: true,
     color: "purple",
     icon: "social",
     route: "/social-media-manager",
+    highlights: ["AI captions & hashtags", "Multi-platform scheduling"],
   },
   {
     id: "inbox-manager",
     name: "Inbox Manager",
-    description: "Organize and prioritize incoming emails",
+    description: "Never miss a lead — smart triage and priority sorting",
     enabled: true,
     color: "blue",
     icon: "inbox",
@@ -41,7 +43,7 @@ const defaultAutomations: Automation[] = [
   {
     id: "daily-summarizer",
     name: "Daily Summarizer",
-    description: "Get daily digests of key activities",
+    description: "Start each day informed with automated activity digests",
     enabled: true,
     color: "gold",
     icon: "summary",
@@ -50,7 +52,7 @@ const defaultAutomations: Automation[] = [
   {
     id: "facebook-commenter",
     name: "Facebook Commenter",
-    description: "Auto-respond to comments and messages",
+    description: "Keep engagement high with instant auto-replies",
     enabled: true,
     color: "blue",
     icon: "comment",
@@ -59,16 +61,17 @@ const defaultAutomations: Automation[] = [
   {
     id: "email-marketing",
     name: "Email Marketing",
-    description: "AI-driven campaigns with human approval",
+    description: "Launch targeted campaigns with AI copy and human approval",
     enabled: true,
     color: "teal",
     icon: "email",
     route: "/email-marketing",
+    highlights: ["AI-written subject lines & body", "One-click approve & send"],
   },
   {
     id: "website-manager",
     name: "Website Manager",
-    description: "Visual editing and AI management for rebar.shop",
+    description: "Edit and manage rebar.shop visually with AI assistance",
     enabled: true,
     color: "blue",
     icon: "website",
@@ -77,7 +80,7 @@ const defaultAutomations: Automation[] = [
   {
     id: "app-builder",
     name: "App Builder",
-    description: "Venture architect with ERP & Odoo data",
+    description: "Architect new ventures powered by your ERP data",
     enabled: true,
     color: "red",
     icon: "code",
@@ -86,7 +89,7 @@ const defaultAutomations: Automation[] = [
   {
     id: "seo-manager",
     name: "SEO Manager",
-    description: "AI-driven SEO audits for rebar.shop",
+    description: "Boost rankings with automated SEO audits and fixes",
     enabled: true,
     color: "teal",
     icon: "search",
@@ -95,7 +98,7 @@ const defaultAutomations: Automation[] = [
   {
     id: "automations-hub",
     name: "Automations Hub",
-    description: "17 AI automations for revenue, pipeline, production",
+    description: "17 AI automations for revenue, pipeline, and production",
     enabled: true,
     color: "red",
     icon: "code",
@@ -104,7 +107,7 @@ const defaultAutomations: Automation[] = [
   {
     id: "video-generator",
     name: "AI Video Studio",
-    description: "Generate videos, images & audio with AI",
+    description: "Generate videos, images & audio from a single prompt",
     enabled: true,
     color: "purple",
     icon: "video",
@@ -113,16 +116,17 @@ const defaultAutomations: Automation[] = [
   {
     id: "ad-director",
     name: "AI Video Director",
-    description: "Script-to-video 30s B2B ad production",
+    description: "Turn sales scripts into polished 30s B2B ads in minutes",
     enabled: true,
     color: "red",
     icon: "video",
     route: "/ad-director",
+    highlights: ["Auto voice, edit & subtitle", "Export share-ready ads"],
   },
   {
     id: "camera-intelligence",
     name: "Camera AI",
-    description: "Vision & dispatch intelligence for shop floor",
+    description: "Real-time vision & dispatch intelligence for the shop floor",
     enabled: true,
     color: "teal",
     icon: "camera",
@@ -165,22 +169,29 @@ const AutomationCard = React.forwardRef<HTMLDivElement, AutomationCardProps>(fun
       ref={ref}
       onClick={onClick}
       className={cn(
-        "relative overflow-hidden rounded-2xl p-4 text-white transition-transform hover:scale-[1.02] cursor-pointer",
+        "relative overflow-hidden rounded-2xl p-4 text-white transition-transform hover:scale-[1.02] cursor-pointer min-h-[140px]",
         colorGradients[automation.color]
       )}
     >
-      {/* Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 flex flex-col h-full">
         <h3 className="text-lg font-bold leading-tight mb-1">{automation.name}</h3>
-        <p className="text-sm text-white/70 mb-3">{automation.description}</p>
+        <p className="text-sm text-white/70 mb-2">{automation.description}</p>
 
-        <div className="flex items-center gap-3">
+        {automation.highlights && automation.highlights.length > 0 && (
+          <ul className="mb-2 space-y-0.5">
+            {automation.highlights.map((h) => (
+              <li key={h} className="text-xs text-white/60 flex items-center gap-1.5">
+                <span className="w-1 h-1 rounded-full bg-white/50 shrink-0" />
+                {h}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex items-center gap-3 mt-auto">
           <Switch
             checked={automation.enabled}
-            onCheckedChange={(checked) => {
-              // Prevent navigation when clicking the switch
-              onToggle(automation.id, checked);
-            }}
+            onCheckedChange={(checked) => onToggle(automation.id, checked)}
             onClick={(e) => e.stopPropagation()}
             className="data-[state=checked]:bg-white/30 data-[state=unchecked]:bg-white/20"
           />
@@ -195,13 +206,10 @@ const AutomationCard = React.forwardRef<HTMLDivElement, AutomationCardProps>(fun
         </div>
       </div>
 
-      {/* Decorative Icon */}
-      <div className="absolute right-4 bottom-4 opacity-20">
-        <Icon className="w-16 h-16" strokeWidth={1} />
+      {/* Decorative Icon — reduced size & opacity */}
+      <div className="absolute right-4 bottom-4 opacity-10">
+        <Icon className="w-10 h-10" strokeWidth={1} />
       </div>
-
-      {/* Glow effect */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
     </div>
   );
 });
