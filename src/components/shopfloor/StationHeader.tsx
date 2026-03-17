@@ -1,4 +1,5 @@
 import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building, Layers, FolderOpen, Check } from "lucide-react";
+import { QRJobScanner } from "./QRJobScanner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {

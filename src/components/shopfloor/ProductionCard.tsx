@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RotateCcw, ArrowRight, Loader2 } from "lucide-react";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
+import { ProductionCardInstructions } from "./ProductionCardInstructions";
 import { TransferMachineDialog } from "./TransferMachineDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
