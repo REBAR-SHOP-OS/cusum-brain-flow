@@ -251,11 +251,11 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
           {/* Mapping Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {CANONICAL_FIELDS.map(field => (
-              <div key={field.key} className="flex items-center gap-2 p-2 rounded-md bg-background/60 border border-border min-w-0">
+              <div key={field.key} className="flex flex-wrap items-center gap-2 p-2 rounded-md bg-background/60 border border-border min-w-0">
                 <div className="flex items-center gap-1 min-w-[70px] shrink-0">
                   {field.required && <span className="text-destructive text-[10px]">*</span>}
                   <span className="text-xs font-medium text-foreground truncate">
-                    {field.key === "length" ? `Cut Length (${lengthUnit})` : field.label}
+                    {field.key === "length" ? `Cut Length` : field.label}
                   </span>
                 </div>
                 <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
@@ -276,22 +276,25 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                   </SelectContent>
                 </Select>
                 {field.key === "length" && (
-                  <Select
-                    value={lengthUnit}
-                    onValueChange={(val) => { setLengthUnit(val as LengthUnit); setConfirmed(false); }}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger className="h-7 text-xs w-[80px] shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LENGTH_UNITS.map(u => (
-                        <SelectItem key={u.value} value={u.value} className="text-xs">
-                          {u.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="w-full flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-muted-foreground">Source unit:</span>
+                    <Select
+                      value={lengthUnit}
+                      onValueChange={(val) => { setLengthUnit(val as LengthUnit); setConfirmed(false); }}
+                      disabled={disabled}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-[100px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LENGTH_UNITS.map(u => (
+                          <SelectItem key={u.value} value={u.value} className="text-xs">
+                            {u.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
               </div>
             ))}
