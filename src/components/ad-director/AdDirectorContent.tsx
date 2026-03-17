@@ -10,12 +10,14 @@ import { ExportDialog } from "./ExportDialog";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
 import { FileText, Layers, Film, Loader2, ArrowLeft, X } from "lucide-react";
+import { StepIndicator } from "./StepIndicator";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
   type ContinuityProfile, type ClipOutput, type ModelOverrides,
   type PromptQualityScore, DEFAULT_BRAND, DEMO_SCRIPT,
 } from "@/types/adDirector";
 import { cn } from "@/lib/utils";
+import { usePromptHistory } from "@/hooks/usePromptHistory";
 import { stitchClips } from "@/lib/videoStitch";
 import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
@@ -34,14 +36,9 @@ import { BrandKitSidePanel } from "./editor/BrandKitSidePanel";
 import { DEFAULT_VIDEO_PARAMS, type VideoParams } from "./VideoParameters";
 
 import { Check } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type WorkflowStep = "script" | "storyboard" | "preview";
-
-const steps: { id: WorkflowStep; label: string; desc: string; icon: React.ReactNode }[] = [
-  { id: "script", label: "Script & Assets", desc: "Write or paste your ad script", icon: <FileText className="w-4 h-4" /> },
-  { id: "storyboard", label: "Storyboard", desc: "Review scenes & prompts", icon: <Layers className="w-4 h-4" /> },
-  { id: "preview", label: "Preview & Export", desc: "Assemble & download", icon: <Film className="w-4 h-4" /> },
-];
 
 const QUALITY_THRESHOLD = 7.0;
 const MAX_IMPROVE_ATTEMPTS = 2;
@@ -69,6 +66,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const { saveProject } = useAdProjectHistory();
   const projectIdRef = useRef<string | null>(null);
+  const promptHistory = usePromptHistory();
   const [step, setStep] = useState<WorkflowStep>("script");
   const [script, setScript] = useState("");
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
@@ -340,7 +338,17 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
 
   // ─── Prompt Edit ──────────────────────────────────────
   const handlePromptChange = (id: string, prompt: string) => {
+    const current = storyboard.find(s => s.id === id);
+    if (current) promptHistory.push(id, current.prompt);
     setStoryboard(prev => prev.map(s => s.id === id ? { ...s, prompt, promptQuality: undefined } : s));
+  };
+
+  const handlePromptUndo = (id: string) => {
+    const prev = promptHistory.undo(id);
+    if (prev) {
+      setStoryboard(st => st.map(s => s.id === id ? { ...s, prompt: prev, promptQuality: undefined } : s));
+      toast({ title: "Prompt reverted" });
+    }
   };
 
   const handleContinuityToggle = (id: string) => {
@@ -852,38 +860,21 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
       })()}
 
       {/* Step Indicator */}
-      <div className="flex items-center justify-center">
-        <div className="inline-flex items-center bg-muted/30 rounded-lg p-1 gap-px">
-          {steps.map((s, idx) => {
-            const stepOrder = ["script", "storyboard", "preview"];
-            const currentIdx = stepOrder.indexOf(step);
-            const thisIdx = stepOrder.indexOf(s.id);
-            const isCompleted = thisIdx < currentIdx;
-            const isActive = s.id === step;
-            const isDisabled = (s.id === "storyboard" && segments.length === 0) || (s.id === "preview" && storyboard.length === 0);
+      <StepIndicator
+        step={step}
+        onStepChange={setStep}
+        segments={segments}
+        storyboard={storyboard}
+        clips={clips}
+      />
 
-            return (
-              <button
-                key={s.id}
-                onClick={() => !isDisabled && setStep(s.id)}
-                disabled={isDisabled}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-md text-xs font-medium transition-all",
-                  isActive && "bg-background text-foreground shadow-sm",
-                  isCompleted && !isActive && "text-emerald-400",
-                  !isActive && !isCompleted && "text-muted-foreground hover:text-foreground",
-                  isDisabled && "opacity-30 cursor-not-allowed"
-                )}
-              >
-                {isCompleted ? <Check className="w-3.5 h-3.5" /> : <span className="w-4 text-center text-[10px]">{idx + 1}</span>}
-                <span className="hidden sm:inline">{s.label}</span>
-              </button>
-            );
-          })}
+      {/* Loading skeleton while brand kit loads */}
+      {brandLoading && step === "script" && (
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-[260px] w-full" />
         </div>
-      </div>
-
-      {/* Floating sidebar panel for non-preview steps */}
+      )}
       {step !== "preview" && externalActiveTab && (
         <div className="fixed left-60 top-20 z-40 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-border/40 bg-card/95 backdrop-blur-md shadow-xl p-4 animate-in slide-in-from-left-4 duration-200">
           <div className="flex items-center justify-between mb-3">
@@ -985,6 +976,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
                 onImprovePrompt={handleImprovePrompt}
                 improvingSceneId={improvingSceneId}
                 logoUrl={brand.logoUrl}
+                onPromptUndo={handlePromptUndo}
+                canUndoPrompt={promptHistory.canUndo}
               />
             </div>
             <div className="space-y-4">

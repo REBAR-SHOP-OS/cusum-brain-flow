@@ -21,7 +21,8 @@ type TaskType =
   | "generate-voiceover"
   | "classify-scene"
   | "quality-review"
-  | "optimize-ad";
+  | "optimize-ad"
+  | "write-script";
 
 interface ModelRoute {
   model: string;
@@ -45,6 +46,7 @@ const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
   "rewrite-cta":            { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.5, maxTokens: 1024 },
   "generate-voiceover":     { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.4, maxTokens: 2048 },
   "optimize-ad":            { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.5, maxTokens: 4096 },
+  "write-script":           { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.7, maxTokens: 4096 },
 
   // Google-led: vision, multimodal, evaluation, classification
   "score-prompt-quality":   { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.1, maxTokens: 1024 },
@@ -625,6 +627,18 @@ async function handleSimpleTextTask(apiKey: string, taskType: TaskType, body: an
   return { result: { text: extractContent(data) }, modelUsed, fallbackUsed };
 }
 
+// ─── Write Script Handler ───────────────────────────────────────
+const WRITE_SCRIPT_SYSTEM = `You are an expert ad scriptwriter for B2B video ads. Write a timed 30-second ad script with these sections:
+- Hook (0:00-0:04): Grab attention with a bold statement about the problem
+- Problem (0:04-0:09): Show the pain point with urgency
+- Solution (0:09-0:16): Present the product/service as the answer
+- Service (0:16-0:21): Detail what's included
+- Credibility (0:21-0:25): Build trust (expertise, speed, technology)
+- Call to Action (0:25-0:30): Direct clear CTA
+- Closing Tagline: One-line brand tagline
+
+Format each section with timestamps and labels, like "0:00–0:04 — Hook". Write in a punchy, conversational, professional tone. Keep narration natural and speakable aloud.`;
+
 // ─── Main Handler ───────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -719,6 +733,14 @@ serve(async (req) => {
         // Reuse analyze-script handler for this action
         result = await handleAnalyzeScript(LOVABLE_API_KEY, body, modelOverride);
         break;
+
+      case "write-script": {
+        const { input: desc, brand: scriptBrand } = body;
+        if (!desc) throw new Error("Product description is required");
+        const userMsg = `Write a 30-second ad script for: ${desc}\n\nBrand: ${scriptBrand?.name || "Company"}\nWebsite: ${scriptBrand?.website || ""}\nCTA: ${scriptBrand?.cta || ""}\nTagline: ${scriptBrand?.tagline || ""}\nAudience: ${scriptBrand?.targetAudience || "B2B professionals"}`;
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, { input: userMsg }, WRITE_SCRIPT_SYSTEM, modelOverride);
+        break;
+      }
 
       default:
         return new Response(JSON.stringify({ error: `Unhandled action: ${action}` }), {

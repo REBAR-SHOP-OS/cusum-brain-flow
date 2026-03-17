@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Video, Image as ImageIcon, Link2, FileText, Layers,
-  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight, Download
+  Lock, Unlock, RotateCcw, Pencil, CheckCircle2, Loader2, XCircle, Clock, ChevronRight, Download, Undo2
 } from "lucide-react";
 import { downloadFile } from "@/lib/downloadUtils";
 import { type StoryboardScene, type ClipOutput, type GenerationMode } from "@/types/adDirector";
@@ -60,12 +60,14 @@ interface SceneCardProps {
   onImprovePrompt?: (id: string) => void;
   improvingSceneId?: string | null;
   logoUrl?: string | null;
+  onPromptUndo?: (id: string) => void;
+  canUndoPrompt?: boolean;
 }
 
 export function SceneCard({
   scene, clip, index, startTime, endTime, segmentLabel,
   onPromptChange, onContinuityToggle, onRegenerate, canRegenerate,
-  onImprovePrompt, improvingSceneId, logoUrl,
+  onImprovePrompt, improvingSceneId, logoUrl, onPromptUndo, canUndoPrompt,
 }: SceneCardProps) {
   const [editing, setEditing] = useState(false);
   const [editPrompt, setEditPrompt] = useState(scene.prompt);
@@ -162,9 +164,16 @@ export function SceneCard({
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Generation Prompt</Label>
-            <Button variant="ghost" size="sm" className="h-5 px-1" onClick={() => { setEditPrompt(scene.prompt); setEditing(!editing); }}>
-              <Pencil className="w-3 h-3" />
-            </Button>
+            <div className="flex items-center gap-1">
+              {canUndoPrompt && onPromptUndo && (
+                <Button variant="ghost" size="sm" className="h-5 px-1" onClick={() => onPromptUndo(scene.id)} title="Undo prompt">
+                  <Undo2 className="w-3 h-3" />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" className="h-5 px-1" onClick={() => { setEditPrompt(scene.prompt); setEditing(!editing); }}>
+                <Pencil className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
           {editing ? (
             <div className="space-y-2">

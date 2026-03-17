@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { Clapperboard } from "lucide-react";
 import { AdDirectorContent } from "@/components/ad-director/AdDirectorContent";
 import { AdDirectorSidebar } from "@/components/ad-director/AdDirectorSidebar";
+import { AdDirectorErrorBoundary } from "@/components/ad-director/AdDirectorErrorBoundary";
 import type { AdProjectRow } from "@/hooks/useAdProjectHistory";
 
 export default function AdDirector() {
@@ -30,12 +31,14 @@ export default function AdDirector() {
 
         {/* Content */}
         <div className="max-w-6xl mx-auto w-full px-4 pb-8 pt-4">
-          <AdDirectorContent
-            externalLoadProject={loadTrigger}
-            onProjectLoaded={() => setLoadTrigger(null)}
-            externalActiveTab={activeEditorTab}
-            onActiveTabChanged={setActiveEditorTab}
-          />
+          <AdDirectorErrorBoundary>
+            <AdDirectorContent
+              externalLoadProject={loadTrigger}
+              onProjectLoaded={() => setLoadTrigger(null)}
+              externalActiveTab={activeEditorTab}
+              onActiveTabChanged={setActiveEditorTab}
+            />
+          </AdDirectorErrorBoundary>
         </div>
       </div>
     </div>

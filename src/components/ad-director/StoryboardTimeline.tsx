@@ -6,7 +6,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Play, Zap, DollarSign } from "lucide-react";
+import { Play, Zap, DollarSign, RotateCcw } from "lucide-react";
 import { SceneCard } from "./SceneCard";
 import { type StoryboardScene, type ScriptSegment, type ClipOutput, type GenerationMode } from "@/types/adDirector";
 
@@ -42,20 +42,28 @@ interface StoryboardTimelineProps {
   onImprovePrompt?: (id: string) => void;
   improvingSceneId?: string | null;
   logoUrl?: string | null;
+  onPromptUndo?: (id: string) => void;
+  canUndoPrompt?: (id: string) => boolean;
 }
 
 export function StoryboardTimeline({
   segments, storyboard, clips,
   onPromptChange, onContinuityToggle, onRegenerate, onGenerateAll, generatingAny,
-  onImprovePrompt, improvingSceneId, logoUrl,
+  onImprovePrompt, improvingSceneId, logoUrl, onPromptUndo, canUndoPrompt,
 }: StoryboardTimelineProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const completedCount = clips.filter(c => c.status === "completed").length;
+  const failedCount = clips.filter(c => c.status === "failed").length;
   const totalCount = storyboard.length;
 
   const totalCost = storyboard.reduce((sum, s) => sum + getSceneCost(s), 0);
   const totalDuration = segments.reduce((max, s) => Math.max(max, s.endTime), 0);
   const videoSceneCount = storyboard.filter(s => s.generationMode !== "static-card").length;
+
+  const handleRetryAllFailed = () => {
+    const failedSceneIds = clips.filter(c => c.status === "failed").map(c => c.sceneId);
+    failedSceneIds.forEach(id => onRegenerate(id));
+  };
 
   return (
     <div className="space-y-4">
@@ -74,6 +82,18 @@ export function StoryboardTimeline({
           )}
         </div>
 
+        <div className="flex items-center gap-2">
+          {failedCount > 0 && !generatingAny && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs h-8 gap-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+              onClick={handleRetryAllFailed}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Retry {failedCount} failed
+            </Button>
+          )}
         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
           <AlertDialogTrigger asChild>
             <Button
@@ -140,6 +160,7 @@ export function StoryboardTimeline({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </div>
       </div>
 
       {/* Timeline */}
@@ -165,6 +186,8 @@ export function StoryboardTimeline({
               onImprovePrompt={onImprovePrompt}
               improvingSceneId={improvingSceneId}
               logoUrl={logoUrl}
+              onPromptUndo={onPromptUndo}
+              canUndoPrompt={canUndoPrompt?.(scene.id)}
             />
           );
         })}
