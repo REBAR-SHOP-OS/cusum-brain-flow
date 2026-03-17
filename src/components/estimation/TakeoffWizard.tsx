@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { FileText, Upload, ArrowRight, ArrowLeft, Users, Briefcase, Sparkles, Lo
 import TakeoffPipeline from "./TakeoffPipeline";
 import { generateQuotationNumber } from "@/hooks/useSalesQuotations";
 import { getCompanyId } from "@/hooks/useCompanyId";
+import { QuotationTemplate } from "@/components/accounting/documents/QuotationTemplate";
 
 interface TakeoffWizardProps {
   open: boolean;
@@ -29,6 +30,7 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
   const [uploading, setUploading] = useState(false);
   const [pipelineStage, setPipelineStage] = useState<string | null>(null);
   const [resultData, setResultData] = useState<any>(null);
+  const [showPdf, setShowPdf] = useState(false);
 
   // Auto-scope state
   const [scopeLoading, setScopeLoading] = useState(false);
@@ -337,25 +339,68 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
           </div>
         )}
 
-        {step === 4 && resultData && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-lg border p-3">
-                <p className="text-2xl font-bold">{resultData.summary?.item_count ?? 0}</p>
-                <p className="text-xs text-muted-foreground">Items</p>
+        {step === 4 && resultData && (() => {
+          const totalCost = resultData.summary?.total_cost ?? 0;
+          const costWithMargin = Math.round(totalCost * 1.15);
+          const weightKg = resultData.summary?.total_weight_kg ?? 0;
+          const weightTonnes = weightKg / 1000;
+          const customerObj = customers.find((c: any) => c.customer_id === customerId || c.id === customerId);
+          const untaxedAmount = costWithMargin;
+          const taxRate = 0.13;
+          const taxAmount = Math.round(untaxedAmount * taxRate);
+          const total = untaxedAmount + taxAmount;
+          const today = new Date().toISOString().slice(0, 10);
+          const expiry = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+
+          const quoteData = {
+            quoteNumber: "DRAFT",
+            quoteDate: today,
+            expirationDate: expiry,
+            customerName: customerObj?.display_name || "—",
+            projectName,
+            items: [{
+              description: `Rebar supply — ${(resultData.summary?.item_count ?? 0)} items, ${weightTonnes.toFixed(2)} tonnes (incl. ${wasteFactor}% waste)`,
+              quantity: weightTonnes,
+              unitPrice: weightTonnes > 0 ? Math.round(costWithMargin / weightTonnes) : 0,
+              amount: costWithMargin,
+            }],
+            inclusions: ["Material supply", "Shop drawings", "Cut & bend to schedule"],
+            exclusions: ["Installation labour", "Delivery beyond GTA", "Engineering stamps"],
+            untaxedAmount,
+            taxRate,
+            taxAmount,
+            total,
+            terms: [
+              "Prices valid for 30 days from quote date",
+              "Payment: 50% deposit, balance on delivery",
+              "Lead time: 2–3 weeks from order confirmation",
+            ],
+          };
+
+          return (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-lg border p-3">
+                  <p className="text-2xl font-bold">{resultData.summary?.item_count ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">Items</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-2xl font-bold">{weightKg.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">kg</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-2xl font-bold">${totalCost.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Estimated Cost</p>
+                </div>
               </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-2xl font-bold">{(resultData.summary?.total_weight_kg ?? 0).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">kg</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-2xl font-bold">${(resultData.summary?.total_cost ?? 0).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Estimated Cost</p>
-              </div>
+              <Button variant="outline" className="w-full gap-2" onClick={() => setShowPdf(true)}>
+                <FileText className="h-4 w-4" /> Preview Quotation PDF
+              </Button>
+              <Button className="w-full" onClick={handleComplete}>Save & View Project</Button>
+              {showPdf && <QuotationTemplate data={quoteData} onClose={() => setShowPdf(false)} />}
             </div>
-            <Button className="w-full" onClick={handleComplete}>Save & View Project</Button>
-          </div>
-        )}
+          );
+        })()}
       </DialogContent>
     </Dialog>
   );
