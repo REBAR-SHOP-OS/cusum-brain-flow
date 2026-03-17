@@ -1,46 +1,37 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Image Generation Timeout for Non-Square Ratios
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Root Cause
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+When Pixel generates images with 9:16 ratio (as shown in screenshot), the pipeline can timeout because:
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+1. **The 1:1 fallback retry loop (line 827-895) has NO AbortController timeout** — if the AI gateway hangs, it blocks indefinitely
+2. **Total pipeline = 3 primary attempts (60s each) + 3 fallback attempts (unlimited) = potentially 360s+**, far exceeding the 120s client timeout in `sendAgentMessage`
+3. **The edge function itself gets killed** by Deno's wall-clock limit before the client timeout fires, causing an abort error that shows as "Image generation is taking longer than expected"
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Fix
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 1. Add timeout to fallback retry loop (`agentToolExecutor.ts` ~line 827)
+Add the same 60s `AbortController` timeout that the primary loop uses. This is the missing piece.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 2. Reduce total attempts from 6 to 4
+- Primary: 2 attempts (gemini-flash, gemini-pro) instead of 3 (currently gemini-flash is duplicated at lines 700-701)
+- Fallback: 2 attempts max
+- Total worst case: 4 × 60s = 240s, but with early-exit logic this is typically under 120s
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 3. Increase client-side timeout for social agent (`agent.ts`)
+Bump the `sendAgentMessage` timeout from 120s to 180s specifically, or make it configurable per agent. The image pipeline genuinely needs more time.
+
+### 4. Better error message differentiation (`AgentWorkspace.tsx`)
+Instead of a generic "Image generation is taking longer", show specific guidance like "Image generation timed out. Try with a simpler prompt or square (1:1) ratio."
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/agentToolExecutor.ts` | Add AbortController to fallback loop; remove duplicate attempt; limit fallback to 2 attempts |
+| `src/lib/agent.ts` | Increase timeout from 120s to 180s |
+| `src/pages/AgentWorkspace.tsx` | Improve timeout error message |
+| Redeploy `ai-agent` | |
+
