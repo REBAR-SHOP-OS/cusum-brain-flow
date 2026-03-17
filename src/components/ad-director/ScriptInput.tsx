@@ -153,8 +153,8 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
             </div>
           )}
 
-          {/* Existing textarea — only show when script has content or user initiated paste */}
-          {(script.trim() || (!showAiWriter && script === "")) && script !== "" && (
+          {/* Existing textarea — show when script has content OR user clicked "Paste a script" */}
+          {(script.trim().length > 0 || showTextarea) && (
             <>
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium flex items-center gap-1.5">
@@ -162,7 +162,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
                   Creative Brief
                 </Label>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => onScriptChange("")} className="text-[11px] h-7 text-muted-foreground">Clear</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { onScriptChange(""); setShowTextarea(false); }} className="text-[11px] h-7 text-muted-foreground">Clear</Button>
                   <Button variant="ghost" size="sm" onClick={() => onScriptChange(DEMO_SCRIPT)} className="text-[11px] h-7 text-muted-foreground">Demo</Button>
                   <Button variant="ghost" size="sm" onClick={() => setShowAiWriter(true)} className="text-[11px] h-7 text-primary gap-1">
                     <Wand2 className="w-3 h-3" />AI Write
@@ -176,6 +176,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
                   onChange={(e) => onScriptChange(e.target.value)}
                   placeholder="Paste your ad script here..."
                   className="min-h-[260px] text-sm leading-relaxed pb-10 rounded-lg border-border/30 bg-card/20"
+                  autoFocus={showTextarea && !script.trim()}
                 />
                 {script.trim() && (
                   <div className="absolute bottom-2 left-2 flex items-center gap-2">
