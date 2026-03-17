@@ -708,7 +708,7 @@ export default function Pipeline() {
             <span className="text-[11px] text-muted-foreground">
               ({filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""})
             </span>
-            {isAdmin && lastSyncedAt && (
+            {lastSyncedAt && (
               <span className={`hidden sm:flex items-center gap-1 text-[10px] font-medium ${syncStatusColor}`}>
                 <span className={`w-1.5 h-1.5 rounded-full inline-block ${
                   differenceInMinutes(new Date(), lastSyncedAt) < 30 ? "bg-emerald-500" :
