@@ -731,7 +731,7 @@ export async function executeToolCall(
                     if (dlRes.ok) imageBytes = new Uint8Array(await dlRes.arrayBuffer());
                   }
                   if (imageBytes) {
-                    if (aspectRatio) imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+                    try { if (aspectRatio) imageBytes = await cropToAspectRatio(imageBytes, aspectRatio); } catch (cropErr) { console.warn("[generate_image] OpenAI crop failed, using original:", cropErr); }
                     const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
                     const { error: uploadError } = await svcClient.storage
                       .from("social-images")
