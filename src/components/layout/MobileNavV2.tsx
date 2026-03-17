@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import { Link, useLocation } from "react-router-dom";
-import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, DollarSign, MessageSquare, BarChart3, Clock, Share2, FileText, Bot, Globe, Search, Headset, Monitor } from "lucide-react";
+import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, DollarSign, MessageSquare, BarChart3, Clock, Share2, FileText, Bot, Globe, Search, Headset, Monitor, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import React, { useState } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -30,6 +30,7 @@ const moreItems = [
   { name: "Social", href: "/social", icon: Share2, roles: ["admin", "office"] },
   { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"] },
   { name: "Summarizer", href: "/daily-summarizer", icon: FileText, roles: ["admin", "sales", "office"] },
+  { name: "Sales", href: "/sales", icon: TrendingUp, roles: ["admin", "sales", "office"] },
   { name: "Admin", href: "/admin", icon: Shield, roles: ["admin"] },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

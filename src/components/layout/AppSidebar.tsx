@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
   LayoutGrid, Brain, Settings, Shield, Plug, DollarSign, Activity,
-  Terminal, Lock, BarChart3, Monitor, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize, PanelLeftClose, PanelLeft,
+  Terminal, Lock, BarChart3, Monitor, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize, PanelLeftClose, PanelLeft, TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -164,6 +164,7 @@ export function AppSidebar() {
         { name: "Lead Scoring", href: "/lead-scoring", icon: Zap, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Admin role", tourId: "nav-lead-scoring" },
         { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers", blockedEmails: ["zahra@rebar.shop"] },
         { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"], lockReason: "Restricted access", tourId: "nav-accounting" },
+        { name: "Sales", href: "/sales", icon: TrendingUp, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Office role", tourId: "nav-sales" },
       ],
     },
     {
