@@ -105,7 +105,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     };
     const { error } = await supabase.from("purchasing_list_items" as any).update(updateData).eq("id", itemId);
     if (error) {
-      toast.error("خطا در بروزرسانی");
+      toast.error("Error updating");
       console.error(error);
     }
   }, [user]);
