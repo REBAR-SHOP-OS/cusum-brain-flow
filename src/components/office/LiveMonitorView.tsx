@@ -311,7 +311,7 @@ function SLAAlertStrip({ heartbeat }: { heartbeat: ReturnType<typeof useBusiness
     : 0;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {/* Production throughput */}
       <div className="rounded-lg border border-border/40 bg-card/40 p-3">
         <div className="flex items-center gap-2 mb-2">
@@ -340,28 +340,6 @@ function SLAAlertStrip({ heartbeat }: { heartbeat: ReturnType<typeof useBusiness
           </span>
         </div>
         <Progress value={utilPct} className="h-1.5 mt-2" />
-      </div>
-
-      {/* Financial snapshot */}
-      <div className="rounded-lg border border-border/40 bg-card/40 p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp className="h-3.5 w-3.5 text-blue-400" />
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Position</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <p className="text-[9px] text-muted-foreground uppercase">Receivables</p>
-            <p className="text-sm font-bold text-green-500 tabular-nums">
-              ${(heartbeat.spending.receivables / 1000).toFixed(0)}K
-            </p>
-          </div>
-          <div>
-            <p className="text-[9px] text-muted-foreground uppercase">Payables</p>
-            <p className="text-sm font-bold text-amber-500 tabular-nums">
-              ${(heartbeat.spending.payables / 1000).toFixed(0)}K
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );
