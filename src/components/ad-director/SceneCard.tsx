@@ -67,7 +67,7 @@ interface SceneCardProps {
 export function SceneCard({
   scene, clip, index, startTime, endTime, segmentLabel,
   onPromptChange, onContinuityToggle, onRegenerate, canRegenerate,
-  onImprovePrompt, improvingSceneId, logoUrl,
+  onImprovePrompt, improvingSceneId, logoUrl, onPromptUndo, canUndoPrompt,
 }: SceneCardProps) {
   const [editing, setEditing] = useState(false);
   const [editPrompt, setEditPrompt] = useState(scene.prompt);
