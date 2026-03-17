@@ -212,8 +212,18 @@ export function AppSidebar() {
     });
   };
 
+  const [pinned, setPinned] = useState(() => localStorage.getItem("sidebar_pinned") === "true");
+  const togglePin = () => {
+    const next = !pinned;
+    setPinned(next);
+    localStorage.setItem("sidebar_pinned", String(next));
+  };
+
   return (
-    <aside data-tour="sidebar" className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
+    <aside data-tour="sidebar" className={cn(
+      "group/sidebar shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden",
+      pinned ? "w-48" : "w-14 hover:w-48"
+    )}>
       <ScrollArea className="flex-1 py-2">
         {navGroups.map((group) => {
           // Show group if at least one item exists (locked or not)
