@@ -29,6 +29,7 @@ import { ARWorkbenchDrawer } from "@/components/ceo/drawers/ARWorkbenchDrawer";
 import { JobRiskDrawer } from "@/components/ceo/drawers/JobRiskDrawer";
 import { CapacityDrawer } from "@/components/ceo/drawers/CapacityDrawer";
 import { MeetingIntelligence } from "@/components/ceo/MeetingIntelligence";
+import { AITokenUsageCard } from "@/components/ceo/AITokenUsageCard";
 
 /* ─── Helpers ─── */
 
