@@ -307,15 +307,10 @@ export function PostReviewPanel({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const batchPosts = allPosts.filter(p =>
-        (post.image_url && p.image_url === post.image_url) ||
-        (post.title && p.title === post.title)
-      );
-      const toDelete = batchPosts.length > 0 ? batchPosts : [post];
-      for (const p of toDelete) {
-        await deletePost.mutateAsync(p.id);
-      }
-      toast({ title: "Deleted", description: `${toDelete.length} post(s) deleted across all platforms.` });
+      // Only delete this specific post — never auto-expand to siblings
+      // to prevent accidental deletion of scheduled/published posts
+      await deletePost.mutateAsync(post.id);
+      toast({ title: "Deleted", description: "Post deleted." });
     } finally {
       setDeleting(false);
       onClose();
