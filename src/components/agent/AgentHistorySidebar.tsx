@@ -20,6 +20,9 @@ interface AgentHistorySidebarProps {
   sessions: ChatSession[];
   loading: boolean;
   deleteSession: (id: string) => void;
+  purchasingDates?: string[];
+  activePurchasingDate?: string | null;
+  onSelectPurchasingDate?: (date: string | null) => void;
 }
 
 export function AgentHistorySidebar({
