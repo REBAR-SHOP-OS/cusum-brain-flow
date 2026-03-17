@@ -115,6 +115,8 @@ function getDateCutoff(rangeId: string): Date | null {
 export default function Pipeline() {
   usePipelineRealtime();
   const [searchQuery, setSearchQuery] = useState("");
+  // Stage group filter — default shows Sales + Estimation + Quotation + Operations (hides Terminal)
+  const [activeGroups, setActiveGroups] = useState<Set<string>>(() => new Set(["sales", "estimation", "quotation", "operations"]));
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [smartResult, setSmartResult] = useState<SmartSearchResult | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
