@@ -417,30 +417,77 @@ export function ContentStrategyPanel({
   );
 }
 
+const PERSIAN_EVENT_INFO: Record<string, string> = {
+  "New Year's Day": "آغاز سال نوی میلادی — فرصتی برای تعیین اهداف جدید و برنامه‌ریزی پروژه‌های ساختمانی سال آینده.",
+  "Family Literacy Day (CA)": "روز سوادآموزی خانواده در کانادا — تأکید بر اهمیت آموزش در حرفه‌های فنی و ارزش کارآموزی.",
+  "Black History Month": "ماه تاریخ سیاه‌پوستان — گرامیداشت تنوع و مشارکت در صنعت ساخت‌وساز.",
+  "Valentine's Day": "روز ولنتاین — عشق به کار و ساخت‌وساز، قدردانی از تیم و مشتریان.",
+  "Family Day (Ontario)": "روز خانواده در انتاریو — ارزش‌های کسب‌وکار خانوادگی و تیم به‌عنوان خانواده.",
+  "International Women's Day": "روز جهانی زن — گرامیداشت نقش زنان در صنعت ساخت‌وساز و حرفه‌های فنی.",
+  "St. Patrick's Day": "روز سنت پاتریک — خوش‌شانسی داشتن بهترین تیم و پروژه‌های سبز.",
+  "Nowruz (Persian New Year)": "نوروز، جشن باستانی آغاز بهار — نماد نوسازی و شروعی تازه در پروژه‌های عمرانی.",
+  "First Day of Spring": "اولین روز بهار — آغاز فصل ساخت‌وساز و شروع پروژه‌های بهاری.",
+  "Good Friday (CA)": "جمعه نیک در کانادا — زمان تأمل در ایمنی، استراحت و قدردانی از تیم.",
+  "Earth Day": "روز زمین — ساخت‌وساز پایدار، فولاد بازیافتی و ساختمان سبز.",
+  "National Day of Mourning (CA)": "روز ملی عزاداری کانادا — یادبود کارگرانی که در محل کار جان باختند. ایمنی محل کار در اولویت.",
+  "May Day / Workers' Day": "روز جهانی کارگر — گرامیداشت کارگران و قدرت نیروی کار.",
+  "North American Occupational Safety Week": "هفته ایمنی شغلی آمریکای شمالی — ایمنی کارگاه، تجهیزات حفاظتی و بهترین روش‌ها.",
+  "Mother's Day": "روز مادر — قدردانی از زنان رهبر در شرکت و مادران زحمتکش.",
+  "Victoria Day (CA)": "روز ویکتوریا در کانادا — تعطیلات آخر هفته طولانی و دستاوردهای ساختمانی.",
+  "Pride Month": "ماه افتخار — محیط کار فراگیر و تنوع در کارگاه.",
+  "Father's Day": "روز پدر — پدران در حرفه‌های فنی و انتقال مهارت به نسل بعد.",
+  "National Indigenous Peoples Day (CA)": "روز ملی بومیان کانادا — آشتی و بزرگداشت رهبران بومی در صنعت ساخت‌وساز.",
+  "Canada Day": "روز کانادا — ساخته‌شده در کانادا، فولاد کانادایی با افتخار.",
+  "Civic Holiday (Ontario)": "تعطیلات شهری انتاریو — نمایش پروژه‌های تابستانی و دستاوردهای نیمه سال.",
+  "Labour Day (CA)": "روز کارگر در کانادا — بزرگداشت همه کارگران و قدردانی از حرفه‌های فنی.",
+  "National Day for Truth & Reconciliation": "روز ملی حقیقت و آشتی — تأمل، آموزش و مسیر آشتی.",
+  "Construction Safety Month": "ماه ایمنی ساخت‌وساز — نوآوری‌های ایمنی، یادآوری تجهیزات حفاظتی و هدف صفر حادثه.",
+  "World Mental Health Day": "روز جهانی سلامت روان — سلامت روان در صنعت ساخت‌وساز و شکستن تابو.",
+  "Thanksgiving (CA)": "روز شکرگزاری کانادا — سپاسگزاری از تیم، مشتریان و پروژه‌های تکمیل‌شده.",
+  "Halloween": "هالووین — فرهنگ شاد تیمی و معاملات ترسناک خوب!",
+  "Remembrance Day (CA)": "روز یادبود کانادا — بزرگداشت جانبازان، نماد قدرت و فداکاری.",
+  "Black Friday": "جمعه سیاه — فوریت موجودی آماده، تخفیف‌های عمده و پیشنهادات محدود.",
+  "Small Business Saturday": "شنبه کسب‌وکارهای کوچک — حمایت از کسب‌وکارهای محلی و ارزش‌های بومی.",
+  "Cyber Monday": "دوشنبه سایبری — سفارش آنلاین و ابزارهای دیجیتال برای پیمانکاران.",
+  "Christmas Day": "روز کریسمس — تبریک فصل، مرور سال و جشن تیمی.",
+  "New Year's Eve": "شب سال نو — جمع‌بندی سال، برترین پروژه‌ها و اهداف سال آینده.",
+};
+
 function EventCard({ event }: { event: CalendarEvent }) {
   const badge = regionBadge[event.region];
+  const persianInfo = PERSIAN_EVENT_INFO[event.name];
   return (
-    <div className="flex gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
-      <div className="w-10 h-10 rounded-lg bg-muted flex flex-col items-center justify-center shrink-0">
-        <span className="text-xs font-bold leading-none">{event.day}</span>
-        <span className="text-[10px] text-muted-foreground">{months[event.month - 1]}</span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <p className="text-sm font-medium truncate">{event.name}</p>
-          {badge && (
-            <span className={cn("text-[10px] px-1.5 py-0.5 rounded border shrink-0", badge.className)}>
-              {badge.label}
-            </span>
-          )}
+    <Popover>
+      <PopoverTrigger asChild>
+        <div className="flex gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors cursor-pointer">
+          <div className="w-10 h-10 rounded-lg bg-muted flex flex-col items-center justify-center shrink-0">
+            <span className="text-xs font-bold leading-none">{event.day}</span>
+            <span className="text-[10px] text-muted-foreground">{months[event.month - 1]}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="text-sm font-medium truncate">{event.name}</p>
+              {badge && (
+                <span className={cn("text-[10px] px-1.5 py-0.5 rounded border shrink-0", badge.className)}>
+                  {badge.label}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground line-clamp-2">{event.contentTheme}</p>
+            <div className="flex gap-1 mt-1 flex-wrap">
+              {event.hashtags.slice(0, 3).map((h) => (
+                <span key={h} className="text-[10px] text-primary/80">{h}</span>
+              ))}
+            </div>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground line-clamp-2">{event.contentTheme}</p>
-        <div className="flex gap-1 mt-1 flex-wrap">
-          {event.hashtags.slice(0, 3).map((h) => (
-            <span key={h} className="text-[10px] text-primary/80">{h}</span>
-          ))}
-        </div>
-      </div>
-    </div>
+      </PopoverTrigger>
+      {persianInfo && (
+        <PopoverContent side="bottom" align="start" className="w-72 text-sm leading-relaxed" dir="rtl">
+          <p className="font-semibold mb-1 text-foreground">{event.name}</p>
+          <p className="text-muted-foreground">{persianInfo}</p>
+        </PopoverContent>
+      )}
+    </Popover>
   );
 }
