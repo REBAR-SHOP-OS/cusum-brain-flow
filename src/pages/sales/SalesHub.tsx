@@ -1,41 +1,58 @@
 import { Link } from "react-router-dom";
 import { TrendingUp, FileText, Receipt, Users, ArrowLeft } from "lucide-react";
-
-interface HubCard {
-  label: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  to: string;
-}
-
-const hubCards: HubCard[] = [
-  {
-    label: "PIPELINE",
-    subtitle: "DEALS & STAGES",
-    icon: <TrendingUp className="w-7 h-7" />,
-    to: "/sales/pipeline",
-  },
-  {
-    label: "QUOTATIONS",
-    subtitle: "ESTIMATES & BIDS",
-    icon: <FileText className="w-7 h-7" />,
-    to: "/sales/quotations",
-  },
-  {
-    label: "INVOICES",
-    subtitle: "BILLING & PAYMENTS",
-    icon: <Receipt className="w-7 h-7" />,
-    to: "/sales/invoices",
-  },
-  {
-    label: "CONTACTS",
-    subtitle: "CLIENTS & LEADS",
-    icon: <Users className="w-7 h-7" />,
-    to: "/sales/contacts",
-  },
-];
+import { useSalesLeads } from "@/hooks/useSalesLeads";
+import { useSalesQuotations } from "@/hooks/useSalesQuotations";
+import { useSalesInvoices } from "@/hooks/useSalesInvoices";
+import { useSalesContacts } from "@/hooks/useSalesContacts";
+import { isPast } from "date-fns";
 
 export default function SalesHub() {
+  const { leads } = useSalesLeads();
+  const { quotations } = useSalesQuotations();
+  const { invoices } = useSalesInvoices();
+  const { contacts } = useSalesContacts();
+
+  const pipelineValue = leads.reduce((s, l) => s + (l.expected_value || 0), 0);
+  const activeQuotes = quotations.filter(q => q.status === "draft" || q.status === "sent").length;
+  const overdueInvoices = invoices.filter(i => i.status === "sent" && i.due_date && isPast(new Date(i.due_date))).length;
+  const outstandingValue = invoices.filter(i => i.status !== "paid" && i.status !== "cancelled").reduce((s, i) => s + (i.amount || 0), 0);
+
+  const hubCards = [
+    {
+      label: "PIPELINE",
+      subtitle: "DEALS & STAGES",
+      icon: <TrendingUp className="w-7 h-7" />,
+      to: "/sales/pipeline",
+      badge: leads.length > 0 ? `${leads.length} deals` : null,
+      kpi: pipelineValue > 0 ? `$ ${pipelineValue.toLocaleString()}` : null,
+    },
+    {
+      label: "QUOTATIONS",
+      subtitle: "ESTIMATES & BIDS",
+      icon: <FileText className="w-7 h-7" />,
+      to: "/sales/quotations",
+      badge: activeQuotes > 0 ? `${activeQuotes} active` : null,
+      kpi: null,
+    },
+    {
+      label: "INVOICES",
+      subtitle: "BILLING & PAYMENTS",
+      icon: <Receipt className="w-7 h-7" />,
+      to: "/sales/invoices",
+      badge: overdueInvoices > 0 ? `${overdueInvoices} overdue` : null,
+      kpi: outstandingValue > 0 ? `$ ${outstandingValue.toLocaleString()}` : null,
+      pulse: overdueInvoices > 0,
+    },
+    {
+      label: "CONTACTS",
+      subtitle: "CLIENTS & LEADS",
+      icon: <Users className="w-7 h-7" />,
+      to: "/sales/contacts",
+      badge: contacts.length > 0 ? `${contacts.length}` : null,
+      kpi: null,
+    },
+  ];
+
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen bg-background overflow-hidden">
       {/* Radial glow background */}
@@ -74,6 +91,10 @@ export default function SalesHub() {
               to={card.to}
               className="group relative flex flex-col items-center justify-center gap-3 p-6 sm:p-8 rounded-xl border border-border/60 bg-card/50 backdrop-blur-sm hover:bg-card/80 hover:border-primary/40 transition-all duration-200 hover:shadow-[0_0_30px_-10px_hsl(var(--primary)/0.3)]"
             >
+              {/* Pulse indicator */}
+              {(card as any).pulse && (
+                <div className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-destructive animate-pulse" />
+              )}
               <div className="text-muted-foreground group-hover:text-foreground transition-colors">
                 {card.icon}
               </div>
@@ -85,6 +106,13 @@ export default function SalesHub() {
                   {card.subtitle}
                 </p>
               </div>
+              {/* KPI badges */}
+              {(card.badge || card.kpi) && (
+                <div className="flex flex-col items-center gap-0.5 mt-1">
+                  {card.kpi && <span className="text-xs font-bold text-primary">{card.kpi}</span>}
+                  {card.badge && <span className="text-[10px] text-muted-foreground">{card.badge}</span>}
+                </div>
+              )}
             </Link>
           ))}
         </div>
