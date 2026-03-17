@@ -63,7 +63,13 @@ export default function SalesContacts() {
                   <TableCell>{c.company_name || "—"}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">{c.email || "—"}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">{c.phone || "—"}</TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{c.source || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground text-xs">
+                    {c.source === "system" ? (
+                      <span className="inline-flex items-center rounded-full bg-accent/50 px-2 py-0.5 text-[10px] font-medium text-accent-foreground">CRM</span>
+                    ) : (
+                      c.source || "—"
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-xs">{format(new Date(c.created_at), "MMM d, yyyy")}</TableCell>
                 </TableRow>
               ))}

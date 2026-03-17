@@ -24,13 +24,50 @@ export function useSalesContacts() {
     queryKey: ["sales_contacts", companyId],
     enabled: !!companyId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sales_contacts")
-        .select("*")
-        .eq("company_id", companyId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as SalesContact[];
+      // Fetch from both sources in parallel
+      const [systemRes, manualRes] = await Promise.all([
+        supabase
+          .from("contacts")
+          .select("id, first_name, last_name, email, phone, created_at, updated_at, customer_id, customers(company_name)")
+          .eq("company_id", companyId!),
+        supabase
+          .from("sales_contacts")
+          .select("*")
+          .eq("company_id", companyId!)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (systemRes.error) throw systemRes.error;
+      if (manualRes.error) throw manualRes.error;
+
+      const systemContacts: SalesContact[] = (systemRes.data ?? []).map((c: any) => ({
+        id: c.id,
+        company_id: companyId!,
+        name: [c.first_name, c.last_name].filter(Boolean).join(" ") || "—",
+        company_name: c.customers?.company_name ?? null,
+        email: c.email ?? null,
+        phone: c.phone ?? null,
+        source: "system",
+        notes: null,
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+      }));
+
+      const manualContacts: SalesContact[] = (manualRes.data ?? []) as SalesContact[];
+
+      // Dedupe by email — manual entries take priority
+      const seen = new Set<string>();
+      const merged: SalesContact[] = [];
+      for (const c of manualContacts) {
+        if (c.email) seen.add(c.email.toLowerCase());
+        merged.push(c);
+      }
+      for (const c of systemContacts) {
+        if (c.email && seen.has(c.email.toLowerCase())) continue;
+        merged.push(c);
+      }
+
+      return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     },
   });
 
