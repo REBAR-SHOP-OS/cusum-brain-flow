@@ -1,10 +1,20 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CEODashboardView } from "@/components/office/CEODashboardView";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { useAuth } from "@/lib/auth";
 import { Shield } from "lucide-react";
 
 export default function CEOPortal() {
   const { isSuperAdmin } = useSuperAdmin();
+  const { loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+      </div>
+    );
+  }
 
   if (!isSuperAdmin) {
     return (
