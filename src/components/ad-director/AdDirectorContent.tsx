@@ -564,8 +564,18 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     ));
   };
 
+  const handleCancelGeneration = useCallback(() => {
+    cancelRef.current = true;
+    setClips(prev => prev.map(c =>
+      c.status === "generating" ? { ...c, status: "failed", error: "Cancelled by user", progress: 0 } : c
+    ));
+    setGenerationStatus("");
+    toast({ title: "Generation cancelled" });
+  }, [toast]);
+
   // ─── Generate All (with buildQty support) ──────────────
   const handleGenerateAll = useCallback(async () => {
+    cancelRef.current = false;
     const buildQty = videoParams.buildQty || 1;
     const baseScenes = storyboard;
 
@@ -577,18 +587,21 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
       });
       let launched = 0;
       for (const scene of scenesToGen) {
+        if (cancelRef.current) break;
         launched++;
         setGenerationStatus(`Generating scene ${launched} of ${scenesToGen.length}...`);
         await generateScene(scene.id);
         await new Promise(r => setTimeout(r, 2000));
       }
       setGenerationStatus("");
-      setStep("preview");
-      toast({ title: "Generation complete", description: `${scenesToGen.length} scenes generated.` });
+      if (!cancelRef.current) {
+        setStep("preview");
+        toast({ title: "Generation complete", description: `${scenesToGen.length} scenes generated.` });
+      }
       return;
     }
 
-    // Multi-build: run the full pipeline buildQty times, each producing a complete set of clips
+    // Multi-build: create all build slots upfront, then generate into each using a ref-tracked index
     const newBuilds: { buildIndex: number; clips: ClipOutput[] }[] = [];
     for (let b = 0; b < buildQty; b++) {
       newBuilds.push({
@@ -603,22 +616,29 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     let launched = 0;
 
     for (let b = 0; b < buildQty; b++) {
+      if (cancelRef.current) break;
       setActiveBuildIndex(b);
-      // Set the main clips state to this build's clips so generateScene updates the right entries
+      // Load this build's clips as the active set
       setClips(newBuilds[b].clips);
+      // Wait a tick for React to flush the state
+      await new Promise(r => setTimeout(r, 100));
 
       for (const scene of baseScenes) {
+        if (cancelRef.current) break;
         launched++;
         setGenerationStatus(`Build ${b + 1}/${buildQty} — scene ${launched} of ${totalJobs}...`);
         await generateScene(scene.id);
         await new Promise(r => setTimeout(r, 2000));
       }
 
-      // Snapshot current clips state into the build
-      setClips(prev => {
-        newBuilds[b] = { ...newBuilds[b], clips: [...prev] };
-        setBuilds([...newBuilds]);
-        return prev;
+      // Snapshot current clips into the build after all scenes in this build finish
+      await new Promise<void>(resolve => {
+        setClips(prev => {
+          newBuilds[b] = { ...newBuilds[b], clips: [...prev] };
+          setBuilds([...newBuilds]);
+          resolve();
+          return prev;
+        });
       });
     }
 
@@ -626,8 +646,10 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     setActiveBuildIndex(0);
     setClips(newBuilds[0].clips);
     setGenerationStatus("");
-    setStep("preview");
-    toast({ title: "All versions generated", description: `${buildQty} ad versions × ${baseScenes.length} scenes completed.` });
+    if (!cancelRef.current) {
+      setStep("preview");
+      toast({ title: "All versions generated", description: `${buildQty} ad versions × ${baseScenes.length} scenes completed.` });
+    }
   }, [storyboard, clips, generateScene, toast, videoParams.buildQty]);
 
   // ─── Export ──────────────────────────────────────
