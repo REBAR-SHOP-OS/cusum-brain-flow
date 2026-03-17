@@ -664,7 +664,7 @@ export function PostReviewPanel({
                 )}
 
                 {/* ── Fields Section — always visible (including stories) ── */}
-                {!editing && (
+                {(
                   <div className="px-4 pt-4 pb-4 space-y-3">
                     {/* Publish date */}
                     {isPublished ? (
