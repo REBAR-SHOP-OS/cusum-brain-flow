@@ -1214,106 +1214,13 @@ serve(async (req) => {
         noteParts.push(`Received: ${email.received_at}`);
         noteParts.push(`AI Reason: ${analysis.reason}`);
 
-        // === INSERT LEAD ===
-        const { data: newLead, error: insertError } = await supabaseAdmin
-          .from("leads")
-          .insert({
-            title: leadTitle,
-            description: analysis.description,
-            stage: "new",
-            source: `Email: ${analysis.sender_email || from}`,
-            source_email_id: sourceEmailId,
-            priority: analysis.priority,
-            expected_value: analysis.expected_value,
-            customer_id: customerId,
-            company_id: profile.company_id,
-            notes: noteParts.join(" | "),
-          })
-          .select("id")
-          .single();
-
-        if (insertError) {
-          console.error("Failed to insert lead:", insertError);
-          if (insertError.code === "23505") {
-            skipped++;
-            results.push({ emailId: email.id, from, subject, action: "skipped" });
-          }
-          continue;
-        }
-
-        // === STORE ROUTING METADATA ===
-        if (newLead?.id) {
-          const emailBody = (meta?.body as string) || email.body_preview || "";
-          const fileLinks = extractFileLinks(emailBody);
-          const leadFiles: Array<{ type: "attachment" | "link"; filename: string; url?: string; path?: string; mimeType?: string; size?: number }> = [];
-
-          if (emailAttachments.length > 0 && email.source_id) {
-            for (const att of emailAttachments.slice(0, 5)) {
-              const stored = await downloadAndStoreAttachment(supabaseAdmin, user.id, email.source_id, att, newLead.id);
-              if (stored) {
-                leadFiles.push({ type: "attachment", filename: stored.filename, path: stored.path, mimeType: stored.mimeType, size: stored.size });
-              }
-            }
-          }
-
-          for (const link of fileLinks) {
-            const urlFilename = link.split("/").pop()?.split("?")[0] || "download";
-            leadFiles.push({ type: "link", filename: urlFilename, url: link });
-          }
-
-          const leadMetadata: Record<string, unknown> = {
-            email_subject: subject,
-            email_body: emailBody.substring(0, 5000),
-            email_from: from,
-            email_to: email.to_address || "",
-            email_date: email.received_at,
-            // New routing metadata
-            thread_id: emailThreadId,
-            external_refs: emailRefs,
-            rfq_ref: emailRefs[0] || null,
-            email_message_ids: [email.source_id].filter(Boolean),
-            routing_confidence: bestMatch?.score || 0,
-          };
-
-          if (leadFiles.length > 0) {
-            leadMetadata.files = leadFiles;
-            leadMetadata.attachment_count = leadFiles.filter(f => f.type === "attachment").length;
-            leadMetadata.link_count = leadFiles.filter(f => f.type === "link").length;
-          }
-
-          await supabaseAdmin
-            .from("leads")
-            .update({ metadata: leadMetadata })
-            .eq("id", newLead.id);
-        }
-
-        // === LOG TIMELINE ACTIVITY ===
-        if (newLead?.id) {
-          const emailBody = (meta?.body as string) || email.body_preview || "";
-          const fileLinks = extractFileLinks(emailBody);
-
-          await supabaseAdmin.from("lead_activities").insert({
-            lead_id: newLead.id,
-            company_id: profile.company_id,
-            activity_type: "email",
-            title: "RFQ received via email",
-            description: [
-              `New inquiry from ${analysis.sender_name} at ${displayCompany}.`,
-              analysis.description,
-              analysis.city ? `📍 Location: ${analysis.city}` : "",
-              customerAction === "created" ? `🆕 New customer created automatically.` : `✅ Matched to existing customer.`,
-              assignedTo ? `👤 ${historicalAssignee ? 'Auto-assigned' : 'Default assigned'} to ${assignedTo}${historicalAssignee ? ' (handles this customer)' : ''}.` : "",
-              emailAttachments.length > 0 ? `📎 ${emailAttachments.length} attachment(s): ${emailAttachments.map(a => a.filename).join(", ")}` : "",
-              fileLinks.length > 0 ? `🔗 ${fileLinks.length} download link(s) found` : "",
-            ].filter(Boolean).join("\n"),
-            created_by: "Blitz AI",
-          });
-        }
-
-        created++;
+        // === SKIP LEAD CREATION (Odoo is source of truth) ===
+        // Email leads are no longer created here. Only Odoo-synced leads appear in pipeline.
+        console.log(`Skipping lead creation for email from ${from} — Odoo is source of truth`);
+        skipped++;
         results.push({
           emailId: email.id, from, subject,
-          action: "created",
+          action: "skipped_odoo_only",
           lead: analysis,
           customerAction,
           customerName: matchedCustomerName,
