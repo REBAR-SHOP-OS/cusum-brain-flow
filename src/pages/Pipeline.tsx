@@ -73,6 +73,30 @@ export const PIPELINE_STAGES = [
   { id: "archived_orphan", label: "Archived / Orphan", color: "bg-zinc-700" },
 ];
 
+/** Stage groups for quick-filtering the board width */
+export const STAGE_GROUPS: Record<string, { label: string; stages: Set<string> }> = {
+  sales: {
+    label: "Sales",
+    stages: new Set(["prospecting", "new", "telephonic_enquiries", "qualified", "hot_enquiries", "rfi", "addendums"]),
+  },
+  estimation: {
+    label: "Estimation",
+    stages: new Set(["estimation_ben", "estimation_karthick", "estimation_others", "estimation_partha", "qc_ben"]),
+  },
+  quotation: {
+    label: "Quotation",
+    stages: new Set(["quotation_priority", "quotation_bids"]),
+  },
+  operations: {
+    label: "Operations",
+    stages: new Set(["shop_drawing", "shop_drawing_approval", "fabrication_in_shop", "ready_to_dispatch", "out_for_delivery", "delivered_pickup_done"]),
+  },
+  terminal: {
+    label: "Terminal",
+    stages: new Set(["won", "lost", "loss", "merged", "no_rebars_out_of_scope", "temp_ir_vam", "migration_others", "dreamers", "archived_orphan"]),
+  },
+};
+
 function getDateCutoff(rangeId: string): Date | null {
   const now = new Date();
   switch (rangeId) {
@@ -91,6 +115,8 @@ function getDateCutoff(rangeId: string): Date | null {
 export default function Pipeline() {
   usePipelineRealtime();
   const [searchQuery, setSearchQuery] = useState("");
+  // Stage group filter — default shows Sales + Estimation + Quotation + Operations (hides Terminal)
+  const [activeGroups, setActiveGroups] = useState<Set<string>>(() => new Set(["sales", "estimation", "quotation", "operations"]));
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [smartResult, setSmartResult] = useState<SmartSearchResult | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -465,11 +491,23 @@ export default function Pipeline() {
   }, [filteredLeads]);
 
   const finalStages = useMemo(() => {
-    if (leadsByStage["__unmapped__"]?.length > 0) {
-      return [...orderedStages, { id: "__unmapped__", label: "Unmapped Stage", color: "bg-red-500" }];
+    // Build the set of visible stage IDs based on active groups
+    const visibleStageIds = new Set<string>();
+    for (const [groupKey, groupDef] of Object.entries(STAGE_GROUPS)) {
+      if (activeGroups.has(groupKey)) {
+        groupDef.stages.forEach(s => visibleStageIds.add(s));
+      }
     }
-    return orderedStages;
-  }, [orderedStages, leadsByStage]);
+    // If no groups selected, show all
+    const base = visibleStageIds.size > 0
+      ? orderedStages.filter(s => visibleStageIds.has(s.id))
+      : orderedStages;
+
+    if (leadsByStage["__unmapped__"]?.length > 0) {
+      return [...base, { id: "__unmapped__", label: "Unmapped Stage", color: "bg-red-500" }];
+    }
+    return base;
+  }, [orderedStages, leadsByStage, activeGroups]);
 
   const handleEdit = (lead: Lead) => {
     setEditingLead(lead);
@@ -811,6 +849,42 @@ export default function Pipeline() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
         />
+
+        {/* Row 3: Stage group quick-filter chips */}
+        <div className="flex items-center gap-1.5 pt-1">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mr-1">View:</span>
+          {Object.entries(STAGE_GROUPS).map(([key, group]) => {
+            const active = activeGroups.has(key);
+            const count = Array.from(group.stages).reduce((sum, sid) => sum + (leadsByStage[sid]?.length || 0), 0);
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveGroups(prev => {
+                  const next = new Set(prev);
+                  if (next.has(key)) next.delete(key);
+                  else next.add(key);
+                  return next;
+                })}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                  active
+                    ? "bg-primary/10 text-primary border-primary/30"
+                    : "bg-muted/50 text-muted-foreground border-border hover:bg-accent"
+                }`}
+              >
+                {group.label}
+                <span className="text-[10px] opacity-70">{count}</span>
+              </button>
+            );
+          })}
+          {activeGroups.size < Object.keys(STAGE_GROUPS).length && (
+            <button
+              onClick={() => setActiveGroups(new Set(Object.keys(STAGE_GROUPS)))}
+              className="text-[10px] text-muted-foreground hover:text-foreground ml-1 underline"
+            >
+              Show all
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Pipeline Board + AI Panel */}

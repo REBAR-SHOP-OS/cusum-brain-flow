@@ -9,10 +9,18 @@ import {
 
 const FIELDS = [
   "id", "name", "stage_id", "email_from", "phone", "contact_name",
-  "user_id", "probability", "expected_revenue", "type", "partner_name",
+  "user_id", "probability", "expected_revenue", "planned_revenue", "type", "partner_name",
   "city", "create_date", "write_date", "priority",
   "date_deadline",
 ];
+
+/** Map Odoo priority (0=Normal,1=Low,2=High,3=Very High) to our priority */
+function mapOdooPriority(raw: unknown): "low" | "medium" | "high" {
+  const p = String(raw ?? "0");
+  if (p === "3" || p === "2") return "high";
+  if (p === "1") return "low";
+  return "medium"; // 0 = Normal → medium
+}
 
 async function odooRpc(url: string, db: string, apiKey: string, model: string, method: string, args: unknown[]) {
   const rpcArgs = [db, 2, apiKey, model, method, ...args];
@@ -373,8 +381,9 @@ Deno.serve(async (req) => {
             title: ol.name || "Untitled",
             stage: erpStage,
             probability: normalizedProb,
-            expected_value: Number(ol.expected_revenue) || 0,
+            expected_value: Number(ol.expected_revenue) || Number(ol.planned_revenue) || 0,
             expected_close_date: dateDeadline,
+            priority: mapOdooPriority(ol.priority),
             metadata,
             updated_at: now,
             odoo_created_at: odooCreatedAt,
@@ -460,14 +469,14 @@ Deno.serve(async (req) => {
               title: ol.name || "Untitled",
               stage: erpStage,
               probability: normalizedProb,
-              expected_value: Number(ol.expected_revenue) || 0,
+              expected_value: Number(ol.expected_revenue) || Number(ol.planned_revenue) || 0,
               expected_close_date: dateDeadline,
               source: "odoo_sync",
               customer_id: customerId,
               contact_id: newContactId,
               company_id: companyId,
               metadata,
-              priority: ol.priority === "3" ? "high" : ol.priority === "2" ? "medium" : "low",
+              priority: mapOdooPriority(ol.priority),
               odoo_created_at: odooCreatedAt,
               odoo_updated_at: odooUpdatedAt,
               last_touched_at: lastTouchedAtInsert,

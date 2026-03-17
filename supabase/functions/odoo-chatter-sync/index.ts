@@ -284,11 +284,19 @@ Deno.serve(async (req) => {
             const msgDate = msg.date ? msg.date.replace(" ", "T") + "Z" : null;
             const updatePayload: Record<string, any> = { odoo_message_id: msg.id };
             if (msgDate) updatePayload.created_at = msgDate;
-            const { error: linkErr } = await serviceClient
+            // Try both integer and string forms of attachment IDs for robust matching
+            const intIds = msg.attachment_ids.map((id: any) => Number(id));
+            const strIds = msg.attachment_ids.map((id: any) => String(id));
+            const allIds = [...intIds, ...strIds];
+            const { error: linkErr, count: linkCount } = await serviceClient
               .from("lead_files")
               .update(updatePayload)
-              .in("odoo_id", msg.attachment_ids);
-            if (linkErr) console.warn("File linkage error for msg", msg.id, linkErr.message);
+              .in("odoo_id", allIds);
+            if (linkErr) {
+              console.warn("File linkage error for msg", msg.id, linkErr.message);
+            } else if (linkCount && linkCount > 0) {
+              console.log(`Linked ${linkCount} files to msg ${msg.id}`);
+            }
           }
         }
 
