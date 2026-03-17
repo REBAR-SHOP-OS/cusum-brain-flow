@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RotateCcw, ArrowRight, Loader2 } from "lucide-react";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
+import { ProductionCardInstructions } from "./ProductionCardInstructions";
 import { TransferMachineDialog } from "./TransferMachineDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -184,6 +185,9 @@ export function ProductionCard({
               {isBend ? item.bend_completed_pieces : item.completed_pieces} / {item.total_pieces} PCS
             </p>
           </div>
+
+          {/* Instructions section */}
+          <ProductionCardInstructions item={item} />
 
           {/* Project name micro-label */}
           {item.project_name && (

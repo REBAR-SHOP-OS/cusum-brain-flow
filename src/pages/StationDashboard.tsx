@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useSupabaseWorkOrders } from "@/hooks/useSupabaseWorkOrders";
 import { useProductionQueues } from "@/hooks/useProductionQueues";
@@ -8,15 +8,18 @@ import { MaterialFlowDiagram } from "@/components/shopfloor/MaterialFlowDiagram"
 import { ShopFloorProductionQueue } from "@/components/shopfloor/ShopFloorProductionQueue";
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
 import { WorkOrderQueueSection } from "@/components/shopfloor/WorkOrderQueueSection";
+import { DowntimeAlertBanner } from "@/components/shopfloor/DowntimeAlertBanner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle, Sun, Moon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useTabletPin } from "@/hooks/useTabletPin";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
+import type { MachineType, MachineStatus } from "@/types/machine";
+import { getCurrentShift, getShiftLabel, type ShiftType } from "@/lib/shiftUtils";
 
 export default function StationDashboard() {
   const { machines, isLoading, error } = useLiveMonitorData();
@@ -28,6 +31,28 @@ export default function StationDashboard() {
   const navigate = useNavigate();
   const { pinnedMachineId } = useTabletPin();
   const queryClient = useQueryClient();
+
+  // Filter state
+  const [typeFilter, setTypeFilter] = useState<MachineType | "all">("all");
+  const [statusFilters, setStatusFilters] = useState<Set<MachineStatus>>(new Set());
+  const [shiftFilter, setShiftFilter] = useState<ShiftType>(getCurrentShift());
+
+  const filteredMachines = useMemo(() => {
+    return machines.filter((m) => {
+      if (typeFilter !== "all" && m.type !== typeFilter) return false;
+      if (statusFilters.size > 0 && !statusFilters.has(m.status)) return false;
+      return true;
+    });
+  }, [machines, typeFilter, statusFilters]);
+
+  const toggleStatus = (s: MachineStatus) => {
+    setStatusFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  };
 
   // Realtime subscription for work_orders table
   useEffect(() => {
@@ -95,16 +120,71 @@ export default function StationDashboard() {
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-10">
+      <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
         {isLoading || woLoading || plansLoading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <>
+            {/* Downtime alerts */}
+            <DowntimeAlertBanner machines={machines} />
+
+            {/* Filter toolbar */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Type filter */}
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as MachineType | "all")}
+                className="h-8 rounded-md border border-border bg-card px-2.5 text-xs font-bold uppercase tracking-wider text-foreground"
+              >
+                <option value="all">All Types</option>
+                <option value="cutter">Cutters</option>
+                <option value="bender">Benders</option>
+                <option value="loader">Loaders</option>
+              </select>
+
+              {/* Status chips */}
+              {(["running", "idle", "blocked", "down"] as MachineStatus[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => toggleStatus(s)}
+                  className={`h-7 px-2.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-colors ${
+                    statusFilters.has(s)
+                      ? s === "running" ? "bg-success/20 text-success border-success/40"
+                      : s === "idle" ? "bg-muted text-muted-foreground border-border"
+                      : s === "blocked" ? "bg-warning/20 text-warning border-warning/40"
+                      : "bg-destructive/20 text-destructive border-destructive/40"
+                      : "bg-card text-muted-foreground border-border hover:bg-muted/50"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+
+              {/* Shift toggle */}
+              <div className="ml-auto flex items-center gap-1">
+                {(["day", "night", "all"] as ShiftType[]).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setShiftFilter(s)}
+                    className={`h-7 px-2.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-colors flex items-center gap-1 ${
+                      shiftFilter === s
+                        ? "bg-primary/20 text-primary border-primary/40"
+                        : "bg-card text-muted-foreground border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    {s === "day" && <Sun className="w-3 h-3" />}
+                    {s === "night" && <Moon className="w-3 h-3" />}
+                    {getShiftLabel(s)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <MaterialFlowDiagram />
             <ShopFloorProductionQueue />
-            <ActiveProductionHub machines={machines} activePlans={activePlans} />
+            <ActiveProductionHub machines={filteredMachines} activePlans={activePlans} />
 
             {/* Work Order Queue */}
             <WorkOrderQueueSection
@@ -113,7 +193,7 @@ export default function StationDashboard() {
               onStatusChanged={(name, action) => toast({ title: action, description: name })}
             />
 
-            <MachineSelector machines={machines} />
+            <MachineSelector machines={filteredMachines} />
           </>
         )}
       </div>

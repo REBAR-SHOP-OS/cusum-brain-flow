@@ -1,4 +1,5 @@
 import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building, Layers, FolderOpen, Check } from "lucide-react";
+import { QRJobScanner } from "./QRJobScanner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -95,6 +96,9 @@ export function StationHeader({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
+        {/* QR Scanner */}
+        <QRJobScanner machineId={undefined} />
+
         {/* Pool back-link for bidirectional navigation */}
         <Button
           variant="outline"
