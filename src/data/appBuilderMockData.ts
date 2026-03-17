@@ -255,7 +255,7 @@ export const CONNECTORS: ConnectorDef[] = [
     name: "Odoo",
     description: "Inventory, purchasing, and warehouse management",
     icon: "📦",
-    status: "disconnected",
+    status: "connected",
     diagnosticPrompt: "Check Odoo connection status and verify inventory sync is working.",
   },
 ];
