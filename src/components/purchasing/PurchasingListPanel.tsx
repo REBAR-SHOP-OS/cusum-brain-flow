@@ -150,10 +150,19 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
 
       {/* Items list */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {/* Company Defaults */}
+        <CompanyDefaultItems
+          dbItems={items}
+          onMarkPurchased={(title, category) => addItemAsPurchased(title, category)}
+          onUnmarkPurchased={(itemId) => togglePurchased(itemId, true)}
+        />
+
+        <div className="border-t border-border my-2" />
+
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading...</div>
         ) : items.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8">List is empty</div>
+          <div className="text-center text-muted-foreground py-4 text-sm">No additional items</div>
         ) : (
           items.map((item) => (
             <div
