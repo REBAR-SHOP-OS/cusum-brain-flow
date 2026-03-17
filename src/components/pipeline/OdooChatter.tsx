@@ -439,7 +439,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     }
 
     // Group standalone files into batches by time proximity
-    const pushFileBatches = (fileList: any[]) => {
+    const pushFileBatches = (fileList: any[], label?: string) => {
       if (fileList.length === 0) return;
       const sorted = [...fileList].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       let batch: any[] = [sorted[0]];
@@ -449,16 +449,16 @@ export function OdooChatter({ lead }: OdooChatterProps) {
         if (cur - prev <= 60_000) {
           batch.push(sorted[i]);
         } else {
-          items.push({ kind: "file_group", files: [...batch], date: new Date(batch[0].created_at) });
+          items.push({ kind: "file_group", files: [...batch], label, date: new Date(batch[0].created_at) });
           batch = [sorted[i]];
         }
       }
       if (batch.length > 0) {
-        items.push({ kind: "file_group", files: [...batch], date: new Date(batch[0].created_at) });
+        items.push({ kind: "file_group", files: [...batch], label, date: new Date(batch[0].created_at) });
       }
     };
     pushFileBatches(orphanFiles);
-    pushFileBatches(unlinkedOdooFiles);
+    pushFileBatches(unlinkedOdooFiles, "Unlinked Odoo Files");
 
     // Sort by date descending
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
