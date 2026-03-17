@@ -527,6 +527,9 @@ export async function executeToolCall(
         try {
           let imagePrompt = args.prompt || "A professional rebar construction image";
           const slot = args.slot || "";
+          // Hoist aspectRatio to outer scope so ALL paths (OpenAI, Gemini, fallback) can access it
+          const aspectRatio: string = (context?.imageAspectRatio as string) || args.aspect_ratio || "1:1";
+          console.log(`[generate_image] aspectRatio resolved (hoisted): args=${args.aspect_ratio}, context=${context?.imageAspectRatio}, final=${aspectRatio}`);
 
           // Inject mandatory style/product overrides from user selections
           // Nuclear enforcement: from context AND from tool args
