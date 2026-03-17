@@ -109,6 +109,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [musicTrackUrl, setMusicTrackUrl] = useState<string | null>(null);
   const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
+  const cancelRef = useRef(false);
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [endCardEnabled, setEndCardEnabled] = useState(true);
