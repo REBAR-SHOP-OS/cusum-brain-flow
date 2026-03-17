@@ -68,6 +68,7 @@ import AccountingHealth from "./pages/AccountingHealth";
 import CustomerAction from "./pages/CustomerAction";
 import CustomerPortal from "./pages/CustomerPortal";
 import CEOPortal from "./pages/CEOPortal";
+import LiveMonitor from "./pages/LiveMonitor";
 import VendorPortal from "./pages/VendorPortal";
 import Transcribe from "./pages/Transcribe";
 import TranscribeWatch from "./pages/TranscribeWatch";
