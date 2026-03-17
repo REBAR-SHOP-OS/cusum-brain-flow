@@ -96,6 +96,9 @@ export function StationHeader({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
+        {/* QR Scanner */}
+        <QRJobScanner machineId={undefined} />
+
         {/* Pool back-link for bidirectional navigation */}
         <Button
           variant="outline"

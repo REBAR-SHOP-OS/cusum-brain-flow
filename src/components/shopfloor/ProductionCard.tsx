@@ -186,6 +186,9 @@ export function ProductionCard({
             </p>
           </div>
 
+          {/* Instructions section */}
+          <ProductionCardInstructions item={item} />
+
           {/* Project name micro-label */}
           {item.project_name && (
             <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase truncate pt-0.5 border-t border-border/40 mt-1">
