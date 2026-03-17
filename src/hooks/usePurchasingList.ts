@@ -89,10 +89,10 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       created_by: user.id,
     });
     if (error) {
-      toast.error("خطا در افزودن آیتم");
+      toast.error("Error adding item");
       console.error(error);
     } else {
-      toast.success("آیتم اضافه شد");
+      toast.success("Item added");
     }
   }, [user]);
 
