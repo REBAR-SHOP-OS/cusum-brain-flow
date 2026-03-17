@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home, Phone, Shield } from "lucide-react";
+import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home, Phone, Shield, FileText, Receipt, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
 import { ThemeToggle } from "./ThemeToggle";
