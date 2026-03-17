@@ -29,6 +29,7 @@ import { ARWorkbenchDrawer } from "@/components/ceo/drawers/ARWorkbenchDrawer";
 import { JobRiskDrawer } from "@/components/ceo/drawers/JobRiskDrawer";
 import { CapacityDrawer } from "@/components/ceo/drawers/CapacityDrawer";
 import { MeetingIntelligence } from "@/components/ceo/MeetingIntelligence";
+import { AITokenUsageCard } from "@/components/ceo/AITokenUsageCard";
 
 /* ─── Helpers ─── */
 
@@ -506,6 +507,9 @@ export function CEODashboardView() {
       {/* ─── Drilldown Drawers ─── */}
       {/* ─── Meeting Intelligence ─── */}
       <MeetingIntelligence />
+
+      {/* ─── AI Token Usage ─── */}
+      <AITokenUsageCard />
 
       {/* ─── Drilldown Drawers ─── */}
       <ARWorkbenchDrawer open={openDrawer === "ar"} onClose={() => setOpenDrawer(null)} outstandingAR={m.outstandingAR} unpaidInvoices={m.unpaidInvoices} arAgingBuckets={m.arAgingBuckets} />
