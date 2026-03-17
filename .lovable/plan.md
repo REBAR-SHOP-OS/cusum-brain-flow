@@ -1,19 +1,47 @@
 
 
-# Add Final Confirm Button for Purchasing List
+# Add Approve & Reject Icons for Purchasing Items
 
-## What
-The confirm button at the bottom already exists but the user wants it to be the clear final action — when clicked, it confirms the purchasing list for the selected date and that date appears in the RECENTS sidebar. The current implementation just shows a toast. We need to ensure the flow works end-to-end.
+## Summary
+Each item gets two action icons:
+- **✓ (Check)** — marks item as approved/purchased → row turns **green**
+- **✗ (X)** — marks item as rejected → row turns **red**
 
-## Changes
+Currently the DB only has `is_purchased`. We need to add an `is_rejected` column to support the reject state.
 
-### `src/components/purchasing/PurchasingListPanel.tsx`
-- The confirm button is already in place (lines 213-226) — it shows when a date is selected and items are purchased
-- Keep it as-is but ensure the confirm button is visually prominent and the toast message is clear
-- No structural changes needed — the RECENTS sidebar already pulls dates from `usePurchasingDates` which queries all unique `due_date` values from `purchasing_list_items`
+## Database Migration
+Add `is_rejected` boolean column to `purchasing_list_items`:
+```sql
+ALTER TABLE public.purchasing_list_items 
+ADD COLUMN is_rejected boolean NOT NULL DEFAULT false;
+```
 
-### How RECENTS works
-The flow already works: when a user selects a date → checks items → those items are saved with that `due_date` → `usePurchasingDates` picks up the date → it appears in RECENTS. The confirm button serves as a visual confirmation step with a toast.
+## Code Changes
 
-**No code changes needed** — the existing implementation already handles this correctly. The confirm button appears when a date is filtered and items are checked, and the dates automatically appear in RECENTS because `addItemAsPurchased` saves items with the selected `due_date`.
+### 1. `src/hooks/usePurchasingList.ts`
+- Add `is_rejected` to the `PurchasingItem` interface
+- Add `rejectItem` function: sets `is_rejected = true, is_purchased = false`
+- Add `unrejectItem` function: sets `is_rejected = false`
+- Update `togglePurchased` to also clear `is_rejected` when approving
+
+### 2. `src/components/purchasing/CompanyDefaultItems.tsx`
+- Add `X` icon import from lucide-react
+- Add `onMarkRejected` and `onUnmarkRejected` props
+- Each `DefaultRow` gets two buttons side by side:
+  - Green check button (approve) — same as current
+  - Red X button (reject) — marks item red
+- Row styling: green background tint when approved, red background tint when rejected
+- Text: green + line-through when approved, red when rejected
+
+### 3. `src/components/purchasing/PurchasingListPanel.tsx`
+- Pass `onMarkRejected` / `onUnmarkRejected` to `CompanyDefaultItems`
+- Add same two-icon pattern for dynamic (custom-added) items
+- Wire up the reject/unreject calls from the hook
+
+## Item States
+| State | Check icon | X icon | Row style |
+|-------|-----------|--------|-----------|
+| Default | Gray | Gray | Normal |
+| Approved | Green filled | Gray | Green tint |
+| Rejected | Gray | Red filled | Red tint |
 
