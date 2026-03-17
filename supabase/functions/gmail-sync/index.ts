@@ -409,9 +409,11 @@ serve(async (req) => {
           from_address: msg.from,
           to_address: msg.to,
           subject: msg.subject,
-          body_preview: msg.body
-            ? msg.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
-            : msg.snippet,
+          body_preview: decodeHtmlEntities(
+            msg.body
+              ? msg.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
+              : (msg.snippet || "")
+          ),
           received_at: new Date(msg.internalDate).toISOString(),
           direction: "inbound",
           status: msg.isUnread ? "unread" : "read",

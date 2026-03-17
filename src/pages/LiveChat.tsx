@@ -233,7 +233,7 @@ export default function LiveChat() {
       <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-[calc(100vh-3.5rem)] bg-background">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate(-1)}>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => window.history.length > 1 ? navigate(-1) : navigate("/home")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-teal-400 shrink-0">
