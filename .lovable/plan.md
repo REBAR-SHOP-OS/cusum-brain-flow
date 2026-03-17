@@ -1,46 +1,50 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: Enforce Decline Lock and Approval Gate on Social Posts
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Problem
+1. When neel/radin/zahra decline a post, it only sets `status: "declined"` — nothing prevents re-scheduling or publishing it
+2. "Publish Now" sends `force_publish: true` which bypasses the `neel_approved` check in `social-publish`
+3. The `schedule-post` edge function has zero approval checks
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Changes
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### 1. Database: Add `declined_by` column
+Add a `declined_by` text column to `social_posts` so declined posts carry the decliner's email. This creates a permanent lock — only the decliner (or a super-admin) could reverse it by explicitly re-approving.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+Migration:
+```sql
+ALTER TABLE public.social_posts ADD COLUMN IF NOT EXISTS declined_by text;
+```
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 2. Frontend: `SocialMediaManager.tsx` — handleDecline
+Update to also set `neel_approved: false` and `declined_by: currentUserEmail` when declining. This resets any prior approval.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 3. Edge Function: `social-publish/index.ts` — Block declined posts
+After the duplicate-publish guard (line 105), add a check:
+- If `post.status === 'declined'` → return 403 "This post was declined and cannot be published"
+- **Remove the `force_publish` bypass** for the `neel_approved` check. ALL publishes (manual or cron) must have `neel_approved = true`
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 4. Edge Function: `schedule-post/index.ts` — Block declined + unapproved
+Before updating the post, add:
+- If `fullPost.status === 'declined'` → return 403 "Declined posts cannot be scheduled"
+- (No approval check needed for scheduling — only publishing is gated)
+
+### 5. Frontend: `PostReviewPanel.tsx` — Disable Publish Now for unapproved
+The "Publish Now" button (line 830) currently has no `neel_approved` guard. Add `disabled={!post.neel_approved || post.status === "declined"}` so only approved posts show an active publish button.
+
+### 6. Frontend: `schedulePost.ts` — Block declined on client side
+Add a pre-check: if the post status is "declined", show a toast and return early.
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| DB migration | Add `declined_by` column |
+| `src/pages/SocialMediaManager.tsx` | handleDecline sets `neel_approved: false, declined_by` |
+| `supabase/functions/social-publish/index.ts` | Block declined posts; remove `force_publish` bypass |
+| `supabase/functions/schedule-post/index.ts` | Block declined posts from scheduling |
+| `src/components/social/PostReviewPanel.tsx` | Disable Publish Now when not approved or declined |
+| `src/lib/schedulePost.ts` | Client-side declined guard |
+| Redeploy `social-publish`, `schedule-post` | |
+
