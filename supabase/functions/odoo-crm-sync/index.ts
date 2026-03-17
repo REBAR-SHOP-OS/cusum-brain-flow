@@ -605,27 +605,52 @@ Deno.serve(async (req) => {
 
     // === Reconciliation: check stale ERP leads not in this fetch ===
     const fetchedOdooIds = new Set(leads.map((ol: Record<string, unknown>) => String(ol.id)));
+    const TERMINAL_STAGES = new Set(["won", "lost", "loss", "merged", "archived_orphan"]);
+
+    // Find stale leads (have odoo_id but not in Odoo anymore)
     const staleLeads = allExisting.filter(l => {
       const meta = l.metadata as Record<string, unknown> | null;
       const oid = meta?.odoo_id as string;
       return oid && !fetchedOdooIds.has(oid);
     });
 
+    // Find orphan leads (no odoo_id at all)
+    const orphanLeads = allExisting.filter(l => {
+      const meta = l.metadata as Record<string, unknown> | null;
+      const oid = meta?.odoo_id;
+      return !oid && l.stage !== "archived_orphan";
+    });
+
     let reconciled = 0;
+
+    // Archive orphans (always, regardless of mode)
+    if (orphanLeads.length > 0) {
+      console.log(`Reconciliation: ${orphanLeads.length} orphan leads with NULL odoo_id — archiving`);
+      for (const ol of orphanLeads) {
+        const meta = ol.metadata as Record<string, unknown> | null;
+        await serviceClient.from("leads").update({
+          stage: "archived_orphan",
+          updated_at: new Date().toISOString(),
+          metadata: { ...meta, archived_reason: "null_odoo_id_orphan", archived_at: new Date().toISOString() },
+        }).eq("id", ol.id);
+        reconciled++;
+      }
+    }
+
     if (staleLeads.length > 0 && mode === "full") {
       console.log(`Reconciliation: ${staleLeads.length} ERP leads not found in Odoo full fetch — marking as archived_orphan`);
       for (const sl of staleLeads) {
         const meta = sl.metadata as Record<string, unknown> | null;
         const oid = (meta?.odoo_id as string) || "unknown";
         // Only archive if not already in a terminal stage
-        if (sl.stage !== "lost" && sl.stage !== "won" && sl.stage !== "archived_orphan") {
+        if (!TERMINAL_STAGES.has(sl.stage)) {
           await serviceClient.from("leads").update({
-            stage: "lost",
+            stage: "archived_orphan",
             updated_at: new Date().toISOString(),
             metadata: { ...meta, archived_reason: "not_found_in_odoo_full_sync", archived_at: new Date().toISOString() },
           }).eq("id", sl.id);
           await insertLeadEvent(serviceClient, sl.id, "stage_changed", {
-            from: sl.stage, to: "lost", source: "reconciliation_archive",
+            from: sl.stage, to: "archived_orphan", source: "reconciliation_archive",
             reason: "Lead not found in Odoo full fetch",
           });
           reconciled++;
@@ -634,7 +659,7 @@ Deno.serve(async (req) => {
           odoo_id: oid,
           severity: "warning", validation_type: "stale_lead",
           message: "ERP lead not found in Odoo full fetch — archived",
-          auto_fixed: true, fix_applied: "Stage set to lost (archived)",
+          auto_fixed: true, fix_applied: "Stage set to archived_orphan",
         });
       }
     } else if (staleLeads.length > 0) {
