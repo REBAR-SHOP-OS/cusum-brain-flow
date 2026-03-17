@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { CalendarIcon, Package, Check, X, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -33,6 +34,8 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const filterDate = externalDate !== undefined ? externalDate : internalDate;
   const setFilterDate = onFilterDateChange || setInternalDate;
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "purchased">("all");
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newQty, setNewQty] = useState("1");
   const [newCategory, setNewCategory] = useState("");
@@ -236,20 +239,42 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
       <div className="p-3 border-t border-border">
         <Button
           className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-          onClick={async () => {
-            const targetDate = filterDate || new Date();
-            const dateStr = format(targetDate, "yyyy-MM-dd");
+          onClick={() => {
             if (!filterDate) {
-              setFilterDate(targetDate);
+              toast.error("Please select a date first");
+              return;
             }
-            await confirmList(dateStr);
-            refetch();
+            setConfirmDialogOpen(true);
           }}
         >
           <CheckCircle className="w-4 h-4" />
           Confirm & Save
         </Button>
       </div>
+
+      {/* Confirmation dialog */}
+      <ConfirmActionDialog
+        open={confirmDialogOpen}
+        onOpenChange={setConfirmDialogOpen}
+        title="Confirm Purchasing List"
+        description={`Save all items for ${filterDate ? format(filterDate, "yyyy/MM/dd") : "today"}?`}
+        details={[
+          `Total items: ${items.length}`,
+          `Pending (no date): ${items.filter(i => !i.due_date).length}`,
+          `Date: ${filterDate ? format(filterDate, "yyyy/MM/dd") : "—"}`,
+        ]}
+        confirmLabel="Yes, Confirm & Save"
+        loading={confirmLoading}
+        onConfirm={async () => {
+          if (!filterDate) return;
+          setConfirmLoading(true);
+          const dateStr = format(filterDate, "yyyy-MM-dd");
+          await confirmList(dateStr);
+          await refetch();
+          setConfirmLoading(false);
+          setConfirmDialogOpen(false);
+        }}
+      />
     </div>
   );
 }
