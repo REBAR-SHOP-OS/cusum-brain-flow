@@ -174,7 +174,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
   }, [user]);
 
   const deleteItem = useCallback(async (itemId: string) => {
-    const { error } = await supabase.from("purchasing_list_items" as any).delete().eq("id", itemId);
+    const { error } = await supabase.from("purchasing_list_items").delete().eq("id", itemId);
     if (error) {
       toast.error("Error deleting");
       console.error(error);
