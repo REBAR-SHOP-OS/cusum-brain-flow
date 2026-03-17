@@ -156,6 +156,11 @@ export default function AgentWorkspace() {
     if (agentId === "social") {
       setTimeout(() => sendRef.current?.("Content schedule for today"), 100);
     }
+    // Reset purchasing state so user sees fresh default list
+    if (agentId === "purchasing") {
+      setPurchasingDate(undefined);
+      setActivePurchasingDateStr(null);
+    }
   }, [agentId]);
 
   // Auto-send initial message from Quick Actions
