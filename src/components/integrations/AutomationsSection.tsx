@@ -17,6 +17,7 @@ export interface Automation {
   icon: "social" | "inbox" | "summary" | "comment" | "email" | "website" | "code" | "search" | "video" | "camera";
   beta?: boolean;
   route?: string;
+  highlights?: string[];
 }
 
 const defaultAutomations: Automation[] = [
