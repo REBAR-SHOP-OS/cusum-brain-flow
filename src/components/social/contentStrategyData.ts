@@ -8,6 +8,7 @@ export interface CalendarEvent {
   region: "CA" | "global" | "industry";
   contentTheme: string;
   hashtags: string[];
+  description: string;
 }
 
 export const yearlyEvents: CalendarEvent[] = [
