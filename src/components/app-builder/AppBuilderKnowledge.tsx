@@ -35,7 +35,7 @@ export function AppBuilderKnowledge() {
   }, [companyId]);
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from("agent_memory").delete().eq("id", id);
+    const { error } = await (supabase as any).from("agent_memory").delete().eq("id", id);
     if (error) {
       toast({ title: "Error", description: "Failed to delete memory", variant: "destructive" });
     } else {
