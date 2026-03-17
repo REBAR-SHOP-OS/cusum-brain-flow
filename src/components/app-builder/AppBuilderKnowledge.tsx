@@ -22,7 +22,7 @@ export function AppBuilderKnowledge() {
   useEffect(() => {
     if (!companyId) return;
     setLoading(true);
-    supabase
+    (supabase as any)
       .from("agent_memory")
       .select("id, category, key, value, created_at")
       .eq("company_id", companyId)
