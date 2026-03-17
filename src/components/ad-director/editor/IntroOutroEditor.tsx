@@ -22,6 +22,7 @@ const LAYOUT_PRESETS: { value: IntroOutroCardSettings["layout"]; label: string }
   { value: "left", label: "Left Aligned" },
   { value: "logo-top", label: "Logo Top" },
   { value: "minimal", label: "Minimal" },
+  { value: "split", label: "Split (Logo | Text)" },
 ];
 
 interface IntroOutroEditorProps {
