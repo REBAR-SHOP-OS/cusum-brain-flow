@@ -87,10 +87,10 @@ export function useSalesLeads() {
   }, [companyId, qc]);
 
   const createLead = useMutation({
-    mutationFn: async (lead: Partial<SalesLead> & { title: string }) => {
+    mutationFn: async (lead: SalesLeadInsert) => {
       const { data, error } = await supabase
         .from("sales_leads")
-        .insert({ ...lead, company_id: companyId! })
+        .insert({ ...lead, company_id: companyId! } as any)
         .select()
         .single();
       if (error) throw error;
@@ -101,8 +101,8 @@ export function useSalesLeads() {
   });
 
   const updateLead = useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<SalesLead> & { id: string }) => {
-      const { error } = await supabase.from("sales_leads").update(updates).eq("id", id);
+    mutationFn: async ({ id, ...updates }: SalesLeadUpdate) => {
+      const { error } = await supabase.from("sales_leads").update(updates as any).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sales_leads", companyId] }),
