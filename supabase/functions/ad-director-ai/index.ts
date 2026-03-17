@@ -627,6 +627,18 @@ async function handleSimpleTextTask(apiKey: string, taskType: TaskType, body: an
   return { result: { text: extractContent(data) }, modelUsed, fallbackUsed };
 }
 
+// ─── Write Script Handler ───────────────────────────────────────
+const WRITE_SCRIPT_SYSTEM = `You are an expert ad scriptwriter for B2B video ads. Write a timed 30-second ad script with these sections:
+- Hook (0:00-0:04): Grab attention with a bold statement about the problem
+- Problem (0:04-0:09): Show the pain point with urgency
+- Solution (0:09-0:16): Present the product/service as the answer
+- Service (0:16-0:21): Detail what's included
+- Credibility (0:21-0:25): Build trust (expertise, speed, technology)
+- Call to Action (0:25-0:30): Direct clear CTA
+- Closing Tagline: One-line brand tagline
+
+Format each section with timestamps and labels, like "0:00–0:04 — Hook". Write in a punchy, conversational, professional tone. Keep narration natural and speakable aloud.`;
+
 // ─── Main Handler ───────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
