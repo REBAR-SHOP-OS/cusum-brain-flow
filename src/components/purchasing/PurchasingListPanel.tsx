@@ -226,20 +226,24 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         )}
       </div>
 
-      {/* Confirm button */}
-      {filterDate && items.some(i => i.is_purchased) && (
-        <div className="p-3 border-t border-border">
-          <Button
-            className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-            onClick={() => {
-              toast.success(`List confirmed for ${format(filterDate, "yyyy/MM/dd")}`);
-            }}
-          >
-            <CheckCircle className="w-4 h-4" />
-            Confirm
-          </Button>
-        </div>
-      )}
+      {/* Confirm button — always visible */}
+      <div className="p-3 border-t border-border">
+        <Button
+          className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+          onClick={async () => {
+            const targetDate = filterDate || new Date();
+            const dateStr = format(targetDate, "yyyy-MM-dd");
+            if (!filterDate) {
+              setFilterDate(targetDate);
+            }
+            await confirmList(dateStr);
+            refetch();
+          }}
+        >
+          <CheckCircle className="w-4 h-4" />
+          Confirm & Save
+        </Button>
+      </div>
     </div>
   );
 }
