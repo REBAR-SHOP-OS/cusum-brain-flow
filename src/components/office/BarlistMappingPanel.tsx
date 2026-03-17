@@ -64,7 +64,7 @@ const HEADER_ALIASES: Record<string, string> = {
   "grade": "grade", "steel grade": "grade",
   // dimensions
   "a": "dim_a", "b": "dim_b", "c": "dim_c", "d": "dim_d", "e": "dim_e",
-  "f": "dim_f", "g": "dim_g", "h": "dim_h", "j": "dim_j", "k": "dim_k",
+  "f": "dim_f", "g": "dim_g", "h": "dim_h", "i": "__ignore__", "j": "dim_j", "k": "dim_k",
   "o": "dim_o", "r": "dim_r",
   "dim a": "dim_a", "dim b": "dim_b", "dim c": "dim_c", "dim d": "dim_d",
   "dim e": "dim_e", "dim f": "dim_f", "dim g": "dim_g", "dim h": "dim_h",

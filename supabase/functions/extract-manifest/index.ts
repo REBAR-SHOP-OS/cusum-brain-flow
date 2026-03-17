@@ -348,36 +348,42 @@ Rules:
           .eq("id", sessionId);
 
         if (items.length > 0) {
-          const rows = items.map((item: any, idx: number) => ({
-            session_id: sessionId,
-            company_id: sessionCompanyId,
-            row_index: idx + 1,
-            dwg: item.dwg || null,
-            item_number: String(item.item || idx + 1),
-            grade: item.grade || null,
-            mark: item.mark || null,
-            quantity: item.quantity || 0,
-            bar_size: item.size || null,
-            shape_type: item.type || null,
-            total_length_mm: item.total_length || null,
-            dim_a: item.A || null,
-            dim_b: item.B || null,
-            dim_c: item.C || null,
-            dim_d: item.D || null,
-            dim_e: item.E || null,
-            dim_f: item.F || null,
-            dim_g: item.G || null,
-            dim_h: item.H || null,
-            dim_j: item.J || null,
-            dim_k: item.K || null,
-            dim_o: item.O || null,
-            dim_r: item.R || null,
-            weight_kg: item.weight || null,
-            customer: item.customer || null,
-            reference: item.ref || null,
-            address: item.address || null,
-            status: "raw",
-          }));
+          const rows = items.map((item: any, idx: number) => {
+            // Strip "I" dimension if AI returned it — rebar standards skip "I"
+            if (item.I != null) {
+              console.warn(`Row ${idx + 1}: AI returned "I" dimension value (${item.I}) — ignoring per rebar standard`);
+            }
+            return {
+              session_id: sessionId,
+              company_id: sessionCompanyId,
+              row_index: idx + 1,
+              dwg: item.dwg || null,
+              item_number: String(item.item || idx + 1),
+              grade: item.grade || null,
+              mark: item.mark || null,
+              quantity: item.quantity || 0,
+              bar_size: item.size || null,
+              shape_type: item.type || null,
+              total_length_mm: item.total_length || null,
+              dim_a: item.A || null,
+              dim_b: item.B || null,
+              dim_c: item.C || null,
+              dim_d: item.D || null,
+              dim_e: item.E || null,
+              dim_f: item.F || null,
+              dim_g: item.G || null,
+              dim_h: item.H || null,
+              dim_j: item.J || null,
+              dim_k: item.K || null,
+              dim_o: item.O || null,
+              dim_r: item.R || null,
+              weight_kg: item.weight || null,
+              customer: item.customer || null,
+              reference: item.ref || null,
+              address: item.address || null,
+              status: "raw",
+            };
+          });
 
           const { error: insertErr } = await svcClient.from("extract_rows").insert(rows);
           if (insertErr) throw new Error(`Failed to save rows: ${insertErr.message}`);
