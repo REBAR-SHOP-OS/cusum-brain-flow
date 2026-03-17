@@ -49,7 +49,7 @@ interface StoryboardTimelineProps {
 export function StoryboardTimeline({
   segments, storyboard, clips,
   onPromptChange, onContinuityToggle, onRegenerate, onGenerateAll, generatingAny,
-  onImprovePrompt, improvingSceneId, logoUrl,
+  onImprovePrompt, improvingSceneId, logoUrl, onPromptUndo, canUndoPrompt,
 }: StoryboardTimelineProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const completedCount = clips.filter(c => c.status === "completed").length;
