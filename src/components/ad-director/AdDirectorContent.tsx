@@ -884,6 +884,11 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               {progressValue !== undefined && (
                 <span className="ml-auto text-xs text-muted-foreground">{progressValue}%</span>
               )}
+              {generatingAny && (
+                <Button variant="ghost" size="sm" onClick={handleCancelGeneration} className="h-7 text-xs text-destructive hover:text-destructive ml-2 shrink-0">
+                  Cancel
+                </Button>
+              )}
             </div>
             {progressValue !== undefined && <Progress value={progressValue} className="h-2" />}
           </div>
