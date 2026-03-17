@@ -4,6 +4,7 @@ import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Ph
 import { cn } from "@/lib/utils";
 import React, { useState } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { useAuth } from "@/lib/auth";
 import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
 
@@ -37,6 +38,7 @@ export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV
   const [showMore, setShowMore] = useState(false);
   const { roles, isAdmin, isCustomer } = useUserRole();
   const { user } = useAuth();
+  const { isSuperAdmin } = useSuperAdmin();
   const email = user?.email || "";
   const isInternal = email.endsWith("@rebar.shop");
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
@@ -126,7 +128,7 @@ export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV
   const isMoreActive = moreItems.some((item) => location.pathname === item.href);
 
   const isVisible = (item: { roles?: string[]; allowedEmails?: string[]; blockedEmails?: string[] }) => {
-    if (item.blockedEmails?.includes(email.toLowerCase())) return false;
+    if (isSuperAdmin) return true;
     if (item.allowedEmails) {
       return item.allowedEmails.includes(email.toLowerCase());
     }
