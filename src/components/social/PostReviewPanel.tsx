@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
@@ -137,13 +137,15 @@ export function PostReviewPanel({
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canPublish = user?.email === "radin@rebar.shop";
-  const [editing, setEditing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regeneratingCaption, setRegeneratingCaption] = useState(false);
   const [approvingNeel, setApprovingNeel] = useState(false);
-  const [editTitle, setEditTitle] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [editHashtags, setEditHashtags] = useState("");
+  // Always-editable local state for auto-save
+  const [localTitle, setLocalTitle] = useState(post?.title || "");
+  const [localContent, setLocalContent] = useState(post?.content || "");
+  const [localHashtags, setLocalHashtags] = useState(post?.hashtags?.join(", ") || "");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
@@ -200,7 +202,12 @@ export function PostReviewPanel({
       setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
     }
     setLocalContentType(post.content_type || "post");
-  }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages]);
+    // Sync text fields from post data
+    setLocalTitle(post.title || "");
+    setLocalContent(post.content || "");
+    setLocalHashtags(post.hashtags?.join(", ") || "");
+    setSaveStatus("idle");
+  }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages, post?.title, post?.content, post?.hashtags]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
@@ -253,44 +260,49 @@ export function PostReviewPanel({
     });
   }, [localPlatforms]);
 
-  // Auto-save ref to avoid hook ordering issues
-  const saveEditRef = useRef<(() => void) | null>(null);
-  const prevPostIdRef = useRef(post?.id);
-
-  useEffect(() => {
-    if (prevPostIdRef.current && prevPostIdRef.current !== post?.id && editing) {
-      saveEditRef.current?.();
+  // Debounced auto-save for text fields
+  const flushSave = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
     }
-    prevPostIdRef.current = post?.id;
-  }, [post?.id, editing]);
-
-  if (!post) return null;
-
-  const startEdit = () => {
-    setEditTitle(post.title);
-    setEditContent(post.content);
-    setEditHashtags(post.hashtags.join(", "));
-    setEditing(true);
-  };
-
-  const saveEdit = () => {
-    const hashtagArray = editHashtags
+    if (!post) return;
+    const hashtagArray = localHashtags
       .split(/[,\s]+/)
       .map((h) => h.trim())
       .filter((h) => h.length > 0)
       .map((h) => (h.startsWith("#") ? h : `#${h}`));
+    setSaveStatus("saving");
+    updatePost.mutate(
+      { id: post.id, title: localTitle, content: localContent, hashtags: hashtagArray },
+      { onSuccess: () => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); },
+        onError: () => setSaveStatus("idle") }
+    );
+  }, [post?.id, localTitle, localContent, localHashtags, updatePost]);
 
-    updatePost.mutate({
-      id: post.id,
-      title: editTitle,
-      content: editContent,
-      hashtags: hashtagArray,
-    });
-    setEditing(false);
-  };
+  const flushRef = useRef(flushSave);
+  flushRef.current = flushSave;
 
-  // Keep ref in sync
-  saveEditRef.current = saveEdit;
+  const triggerDebouncedSave = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => flushRef.current(), 800);
+  }, []);
+
+  // Flush pending save on post switch or panel close
+  const prevPostIdRef = useRef(post?.id);
+  useEffect(() => {
+    if (prevPostIdRef.current && prevPostIdRef.current !== post?.id) {
+      flushRef.current();
+    }
+    prevPostIdRef.current = post?.id;
+  }, [post?.id]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { if (debounceRef.current) { clearTimeout(debounceRef.current); flushRef.current(); } };
+  }, []);
+
+  if (!post) return null;
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -355,7 +367,7 @@ export function PostReviewPanel({
 
   return (
     <>
-      <Sheet open={!!post} onOpenChange={(open) => { if (!open) { if (editing) saveEdit(); setSubPanel(null); onClose(); } }}>
+      <Sheet open={!!post} onOpenChange={(open) => { if (!open) { flushRef.current(); setSubPanel(null); onClose(); } }}>
         <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">
 
           {/* ── Sub-panel views ── */}
@@ -535,89 +547,91 @@ export function PostReviewPanel({
                   <div className="mx-4 rounded-lg border bg-muted/30 p-4 text-center">
                     <p className="text-sm text-muted-foreground">Stories are image/video only — no caption needed.</p>
                   </div>
-                ) : editing ? (
-                  <div className="px-4 pb-4 space-y-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Title</Label>
-                      <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Content</Label>
-                      <Textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        className="min-h-[120px] resize-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Hashtags</Label>
-                      <Input value={editHashtags} onChange={(e) => setEditHashtags(e.target.value)} />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button className="flex-1" onClick={saveEdit}>Save changes</Button>
-                      <Button variant="outline" className="flex-1" onClick={() => setEditing(false)}>Cancel</Button>
-                    </div>
-                  </div>
                 ) : (
                   <>
-                    {/* Content card — strip Persian block */}
+                    {/* Always-editable content fields with auto-save */}
+                    <div className="px-4 pb-2 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Content</p>
+                        {saveStatus === "saving" && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+                          </span>
+                        )}
+                        {saveStatus === "saved" && (
+                          <span className="text-xs text-green-600 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Saved ✓
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Title</Label>
+                        <Input
+                          value={localTitle}
+                          disabled={isPublished}
+                          onChange={(e) => { setLocalTitle(e.target.value); triggerDebouncedSave(); }}
+                          placeholder="Post title"
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Caption</Label>
+                        <Textarea
+                          value={localContent}
+                          disabled={isPublished}
+                          onChange={(e) => { setLocalContent(e.target.value); triggerDebouncedSave(); }}
+                          placeholder="Write your caption…"
+                          className="min-h-[120px] resize-none text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Hashtags</Label>
+                        <Input
+                          value={localHashtags}
+                          disabled={isPublished}
+                          onChange={(e) => { setLocalHashtags(e.target.value); triggerDebouncedSave(); }}
+                          placeholder="#hashtag1, #hashtag2"
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Persian translation — internal reference only */}
                     {(() => {
                       const persianSep = "---PERSIAN---";
                       const rawContent = post.content || "";
                       const persianIdx = rawContent.indexOf(persianSep);
-                      const englishContent = persianIdx !== -1 ? rawContent.slice(0, persianIdx).trim() : rawContent;
                       const persianBlock = persianIdx !== -1 ? rawContent.slice(persianIdx + persianSep.length).trim() : "";
-                      return (
-                        <>
-                          <div className="mx-4 rounded-lg border bg-card p-4 space-y-3">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Content</p>
-                            <div className="space-y-2 text-sm">
-                              {post.title && (
-                                <p className="font-semibold text-foreground">{post.title}</p>
-                              )}
-                              <p className="text-foreground/90 whitespace-pre-line leading-relaxed">{englishContent}</p>
-                              {post.hashtags.length > 0 && (
-                                <p className="text-primary text-xs leading-relaxed">
-                                  Hashtags: {post.hashtags.join(" ")}
+                      return persianBlock ? (
+                        <div className="mx-4">
+                          <Collapsible>
+                            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group w-full">
+                              <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
+                              <span>🔒 Persian Translation (internal only — never published)</span>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="mt-2 p-3 rounded-lg border border-border/50 bg-muted/30">
+                                <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed" dir="rtl">
+                                  {persianBlock}
                                 </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Persian translation — internal reference only */}
-                          {persianBlock && (
-                            <div className="mx-4">
-                              <Collapsible>
-                                <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group w-full">
-                                  <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
-                                  <span>🔒 Persian Translation (internal only — never published)</span>
-                                </CollapsibleTrigger>
-                                <CollapsibleContent>
-                                  <div className="mt-2 p-3 rounded-lg border border-border/50 bg-muted/30">
-                                    <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed" dir="rtl">
-                                      {persianBlock}
-                                    </p>
-                                  </div>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            </div>
-                          )}
-                        </>
-                      );
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        </div>
+                      ) : null;
                     })()}
 
-                    {/* Regenerate caption / AI Edit */}
+                    {/* Regenerate caption */}
                     <div className="flex gap-2 px-4 pt-3">
                       <Button
                         variant="outline"
                         size="sm"
                         className="gap-1.5"
-                        disabled={regeneratingCaption}
+                        disabled={regeneratingCaption || isPublished}
                         onClick={async () => {
                           setRegeneratingCaption(true);
                           try {
                             if (isVideo && post.image_url) {
-                              // Hybrid: try video-to-social first
                               try {
                                 const videoData = await invokeEdgeFunction("video-to-social", {
                                   videoUrl: post.image_url, platform: post.platform || "instagram", aspectRatio: "1:1"
@@ -645,16 +659,12 @@ export function PostReviewPanel({
                         {regeneratingCaption ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                         {regeneratingCaption ? "Regenerating..." : "Regenerate caption"}
                       </Button>
-                      <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
-                        <Sparkles className="w-3.5 h-3.5" />
-                        AI Edit
-                      </Button>
                     </div>
                   </>
                 )}
 
                 {/* ── Fields Section — always visible (including stories) ── */}
-                {!editing && (
+                {(
                   <div className="px-4 pt-4 pb-4 space-y-3">
                     {/* Publish date */}
                     {isPublished ? (
@@ -758,7 +768,7 @@ export function PostReviewPanel({
 
               {/* ── Footer Actions ── */}
               {/* Failed status banner + retry */}
-              {!editing && (post.status as string) === "failed" && (
+              {(post.status as string) === "failed" && (
                 <div className="p-4 border-t space-y-2">
                   <div className="w-full rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-center space-y-1">
                     <span className="text-sm font-medium text-destructive">Publishing Failed ❌</span>
@@ -779,14 +789,14 @@ export function PostReviewPanel({
                   </Button>
                 </div>
               )}
-              {!editing && isPublished && (
+              {isPublished && (
                 <div className="p-4 border-t">
                   <div className="w-full rounded-lg bg-green-600/10 border border-green-600/30 p-3 text-center">
                     <span className="text-sm font-medium text-green-600">Published ✅</span>
                   </div>
                 </div>
               )}
-              {!editing && !isPublished && (
+              {!isPublished && (
                 <div className="p-4 border-t space-y-2">
                   {/* Facebook permission warning */}
                   {fbPublishReady === false && (
