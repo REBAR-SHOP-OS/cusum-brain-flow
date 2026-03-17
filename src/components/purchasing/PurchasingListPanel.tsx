@@ -1,0 +1,185 @@
+import { useState } from "react";
+import { format } from "date-fns";
+import { CalendarIcon, Plus, Trash2, Package } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { usePurchasingList } from "@/hooks/usePurchasingList";
+
+const STATUS_TABS = [
+  { value: "all" as const, label: "همه" },
+  { value: "pending" as const, label: "خریداری نشده" },
+  { value: "purchased" as const, label: "خریداری شده" },
+];
+
+const PRIORITY_COLORS: Record<string, string> = {
+  high: "text-red-500",
+  medium: "text-yellow-500",
+  low: "text-green-500",
+};
+
+export function PurchasingListPanel() {
+  const [filterDate, setFilterDate] = useState<Date | undefined>();
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "purchased">("all");
+  const [newTitle, setNewTitle] = useState("");
+  const [newQty, setNewQty] = useState("1");
+  const [newCategory, setNewCategory] = useState("");
+  const [newPriority, setNewPriority] = useState("medium");
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  const { items, loading, addItem, togglePurchased, deleteItem } = usePurchasingList(filterDate, filterStatus);
+
+  const handleAdd = async () => {
+    if (!newTitle.trim()) return;
+    await addItem(newTitle.trim(), parseInt(newQty) || 1, newCategory || undefined, newPriority, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined);
+    setNewTitle("");
+    setNewQty("1");
+    setNewCategory("");
+    setNewPriority("medium");
+    setShowAddForm(false);
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-background text-foreground">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center gap-2">
+          <Package className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-bold">لیست خرید شرکت</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Calendar filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("gap-1", filterDate && "text-primary")}>
+                <CalendarIcon className="w-4 h-4" />
+                {filterDate ? format(filterDate, "yyyy/MM/dd") : "تقویم"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={filterDate}
+                onSelect={(d) => setFilterDate(d || undefined)}
+                className="p-3 pointer-events-auto"
+              />
+              {filterDate && (
+                <div className="p-2 border-t">
+                  <Button variant="ghost" size="sm" className="w-full" onClick={() => setFilterDate(undefined)}>
+                    پاک کردن فیلتر
+                  </Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          <Button size="sm" onClick={() => setShowAddForm(!showAddForm)} className="gap-1">
+            <Plus className="w-4 h-4" />
+            افزودن
+          </Button>
+        </div>
+      </div>
+
+      {/* Status tabs */}
+      <div className="flex gap-1 p-2 border-b border-border">
+        {STATUS_TABS.map((tab) => (
+          <Button
+            key={tab.value}
+            variant={filterStatus === tab.value ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setFilterStatus(tab.value)}
+          >
+            {tab.label}
+          </Button>
+        ))}
+      </div>
+
+      {/* Add form */}
+      {showAddForm && (
+        <div className="p-3 border-b border-border bg-muted/30 space-y-2">
+          <div className="flex gap-2">
+            <Input
+              placeholder="نام آیتم..."
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              className="flex-1"
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              autoFocus
+            />
+            <Input
+              type="number"
+              placeholder="تعداد"
+              value={newQty}
+              onChange={(e) => setNewQty(e.target.value)}
+              className="w-20"
+              min={1}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="دسته‌بندی (اختیاری)"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              className="flex-1"
+            />
+            <Select value={newPriority} onValueChange={setNewPriority}>
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="high">فوری</SelectItem>
+                <SelectItem value="medium">عادی</SelectItem>
+                <SelectItem value="low">کم‌اهمیت</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={handleAdd} disabled={!newTitle.trim()}>ثبت</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Items list */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {loading ? (
+          <div className="text-center text-muted-foreground py-8">در حال بارگذاری...</div>
+        ) : items.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8">لیست خالی است</div>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors",
+                item.is_purchased && "opacity-60"
+              )}
+            >
+              <Checkbox
+                checked={item.is_purchased}
+                onCheckedChange={() => togglePurchased(item.id, item.is_purchased)}
+              />
+              <div className="flex-1 min-w-0">
+                <div className={cn("font-medium", item.is_purchased && "line-through text-muted-foreground")}>
+                  {item.title}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                  <span>×{item.quantity}</span>
+                  {item.category && <span className="bg-muted px-1.5 py-0.5 rounded">{item.category}</span>}
+                  {item.due_date && <span>{item.due_date}</span>}
+                </div>
+              </div>
+              <span className={cn("text-xs font-medium", PRIORITY_COLORS[item.priority] || "text-muted-foreground")}>
+                {item.priority === "high" ? "فوری" : item.priority === "low" ? "کم" : "عادی"}
+              </span>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

@@ -219,6 +219,16 @@ const agentRoutes: AgentRoute[] = [
       "escalate", "escalation", "oversight", "department head",
     ],
   },
+  {
+    id: "purchasing",
+    route: "/agent/purchasing",
+    name: "Kala",
+    keywords: [
+      "purchase", "purchasing", "buy", "buying", "procurement", "supplies",
+      "shopping list", "order supplies", "خرید", "لیست خرید", "اقلام",
+      "تدارکات", "سفارش", "kala",
+    ],
+  },
 ];
 
 // ─── Route name map (for resolving LLM agent IDs to routes) ───

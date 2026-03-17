@@ -201,4 +201,13 @@ export const agentConfigs: Record<string, AgentConfig> = {
     placeholder: "Build a venture, diagnose apps, fix issues across platforms...",
     capabilities: ["Create & manage ventures", "Cross-platform diagnostics (ERP, WordPress, Odoo)", "Auto-fix issues via Vizzy queue", "AI stress tests with real business data", "WordPress content & SEO fixes", "Odoo CRM sync audit", "Connected to ARIA"],
   },
+  purchasing: {
+    name: "Kala",
+    role: "Purchasing & Procurement",
+    image: accountingHelper,
+    agentType: "purchasing",
+    greeting: "سلام! من کالا هستم، دستیار خرید شما. لیست خرید شرکت را مدیریت می‌کنم.",
+    placeholder: "اقلام مورد نیاز را بنویسید یا بپرسید...",
+    capabilities: ["مدیریت لیست خرید", "ثبت اقلام جدید", "پیگیری وضعیت خرید", "فیلتر بر اساس تاریخ"],
+  },
 };
