@@ -90,6 +90,7 @@ import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspac
 const QaWar = React.lazy(() => import("./pages/QaWar"));
 
 // Sales Department (new isolated workspace)
+const SalesHub = React.lazy(() => import("./pages/sales/SalesHub"));
 const SalesPipeline = React.lazy(() => import("./pages/sales/SalesPipeline"));
 const SalesQuotations = React.lazy(() => import("./pages/sales/SalesQuotations"));
 const SalesInvoices = React.lazy(() => import("./pages/sales/SalesInvoices"));
