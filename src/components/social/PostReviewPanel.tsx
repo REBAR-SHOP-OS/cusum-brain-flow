@@ -789,7 +789,7 @@ export function PostReviewPanel({
                   </Button>
                 </div>
               )}
-              {!editing && isPublished && (
+              {isPublished && (
                 <div className="p-4 border-t">
                   <div className="w-full rounded-lg bg-green-600/10 border border-green-600/30 p-3 text-center">
                     <span className="text-sm font-medium text-green-600">Published ✅</span>
