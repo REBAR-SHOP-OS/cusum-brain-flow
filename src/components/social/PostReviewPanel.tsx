@@ -202,7 +202,12 @@ export function PostReviewPanel({
       setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
     }
     setLocalContentType(post.content_type || "post");
-  }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages]);
+    // Sync text fields from post data
+    setLocalTitle(post.title || "");
+    setLocalContent(post.content || "");
+    setLocalHashtags(post.hashtags?.join(", ") || "");
+    setSaveStatus("idle");
+  }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages, post?.title, post?.content, post?.hashtags]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
