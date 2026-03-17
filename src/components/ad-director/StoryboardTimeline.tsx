@@ -186,6 +186,8 @@ export function StoryboardTimeline({
               onImprovePrompt={onImprovePrompt}
               improvingSceneId={improvingSceneId}
               logoUrl={logoUrl}
+              onPromptUndo={onPromptUndo}
+              canUndoPrompt={canUndoPrompt?.(scene.id)}
             />
           );
         })}
