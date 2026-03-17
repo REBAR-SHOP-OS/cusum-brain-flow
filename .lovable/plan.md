@@ -1,46 +1,44 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Add Permanent Company Default Items to Purchasing List
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## What
+Display a fixed set of default company items (Office + Workshop categories) that always appear in the purchasing list panel, each with check/uncheck buttons. These are **client-side static items** shown alongside any database items, so they persist visually even if not in the DB.
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Approach
+Rather than seeding the DB (which ties to a specific company_id and is hard to maintain), we define the defaults as a **constant array in code** and render them as a separate "Company Defaults" section above the dynamic items list. Each default item gets its own bought/not-bought toggle that syncs with the DB.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+### Option chosen: Hybrid approach
+- Define the static list as a constant in `PurchasingListPanel.tsx`
+- On load, check which default items already exist in the DB (match by title + category)
+- For items NOT in the DB yet, show them with a "not purchased" state — clicking the check button will **create** the item in the DB and mark it purchased
+- For items already in the DB, show their actual purchased state from the DB
+- Items are grouped under "Office" and "Workshop" section headers
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Changes
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 1. `src/components/purchasing/PurchasingListPanel.tsx`
+- Add a `COMPANY_DEFAULTS` constant with all 37 items organized by category
+- Render a "Company Defaults" section with two groups: **Office** and **Workshop**
+- Each item row: `[✓] [✗] Item Title [category badge]`
+- Merge logic: match DB items by title+category to determine purchased state
+- When user clicks ✓ on a default not yet in DB → call `addItem` with `is_purchased: true`
+- When user clicks ✗ on a purchased default → call `togglePurchased`
+- This section appears **above** the regular dynamic items list, separated by a divider
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 2. `src/hooks/usePurchasingList.ts`
+- Add an `addItemAsPurchased` method that inserts an item already marked as purchased (for when user checks a default item)
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+## Default Items
+
+**Office (15 items):** Paper Towels, Coffee, Tea, Cups, Milk, Paper, Garbage Bags, Snacks, AA Batteries, AAA Batteries, Stationery, Bottled Water (for Espresso Machine), Plates, Spoons, Forks
+
+**Workshop (19 items):** Coffee, Tea, Water for Coffee Machine, Small Drinking Cups, Small Coffee Cups, Plates, Spoons, Powdered Milk, Sugar, Thin Wire (for packaging), Forklift Oil Filter, Forklift Oil, Forklift Air Filter, Grease (for grease pump), Gasoline, Salt (for entrance / winter use), Paint for Sawhorses, Orange Paint (for Stirrup Machine), 220V Switch for Welding Machine, 220V Outlet for Welding Machine, Straps for Fire Extinguisher Pallets, Winter Gloves, Thick Black Markers, Rebar Tie Wire (for tying gun), Forklift Snow Chains
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `src/components/purchasing/PurchasingListPanel.tsx` | Add COMPANY_DEFAULTS constant, render grouped default items with check/uncheck buttons |
+| `src/hooks/usePurchasingList.ts` | Add `addItemAsPurchased` method |
+
