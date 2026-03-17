@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, Trash2, Package, Check, X, CheckCircle } from "lucide-react";
+import { CalendarIcon, Package, Check, X, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePurchasingList } from "@/hooks/usePurchasingList";
-import { CompanyDefaultItems } from "./CompanyDefaultItems";
+import { CompanyDefaultItems, COMPANY_DEFAULTS } from "./CompanyDefaultItems";
 
 const STATUS_TABS = [
   { value: "all" as const, label: "All" },
@@ -37,9 +37,12 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [newQty, setNewQty] = useState("1");
   const [newCategory, setNewCategory] = useState("");
   const [newPriority, setNewPriority] = useState("medium");
-  const [showAddForm, setShowAddForm] = useState(false);
 
-  const { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem } = usePurchasingList(filterDate, filterStatus);
+  const { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, refetch } = usePurchasingList(filterDate, filterStatus);
+
+  const customItems = items.filter(item =>
+    !COMPANY_DEFAULTS.some(d => d.title === item.title && d.category === item.category)
+  );
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
@@ -48,7 +51,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
     setNewQty("1");
     setNewCategory("");
     setNewPriority("medium");
-    setShowAddForm(false);
+    refetch();
   };
 
   return (
@@ -59,37 +62,29 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
           <Package className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-bold">Company Purchasing List</h2>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Calendar filter */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className={cn("gap-1", filterDate && "text-primary")}>
-                <CalendarIcon className="w-4 h-4" />
-                {filterDate ? format(filterDate, "yyyy/MM/dd") : "Calendar"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar
-                mode="single"
-                selected={filterDate}
-                onSelect={(d) => setFilterDate(d || undefined)}
-                className="p-3 pointer-events-auto"
-              />
-              {filterDate && (
-                <div className="p-2 border-t">
-                  <Button variant="ghost" size="sm" className="w-full" onClick={() => setFilterDate(undefined)}>
-                    Clear Filter
-                  </Button>
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-
-          <Button size="sm" onClick={() => setShowAddForm(!showAddForm)} className="gap-1">
-            <Plus className="w-4 h-4" />
-            Add
-          </Button>
-        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className={cn("gap-1", filterDate && "text-primary")}>
+              <CalendarIcon className="w-4 h-4" />
+              {filterDate ? format(filterDate, "yyyy/MM/dd") : "Calendar"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <Calendar
+              mode="single"
+              selected={filterDate}
+              onSelect={(d) => setFilterDate(d || undefined)}
+              className="p-3 pointer-events-auto"
+            />
+            {filterDate && (
+              <div className="p-2 border-t">
+                <Button variant="ghost" size="sm" className="w-full" onClick={() => setFilterDate(undefined)}>
+                  Clear Filter
+                </Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Status tabs */}
@@ -106,51 +101,48 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         ))}
       </div>
 
-      {/* Add form */}
-      {showAddForm && (
-        <div className="p-3 border-b border-border bg-muted/30 space-y-2">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Item name..."
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              className="flex-1"
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              autoFocus
-            />
-            <Input
-              type="number"
-              placeholder="Qty"
-              value={newQty}
-              onChange={(e) => setNewQty(e.target.value)}
-              className="w-20"
-              min={1}
-            />
-          </div>
-          <div className="flex gap-2">
-            <Select value={newCategory} onValueChange={setNewCategory}>
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Office">Office</SelectItem>
-                <SelectItem value="Workshop">Workshop</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={newPriority} onValueChange={setNewPriority}>
-              <SelectTrigger className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="high">Urgent</SelectItem>
-                <SelectItem value="medium">Normal</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={handleAdd} disabled={!newTitle.trim()}>Add</Button>
-          </div>
+      {/* Always-visible Add form */}
+      <div className="p-3 border-b border-border bg-muted/30 space-y-2">
+        <div className="flex gap-2">
+          <Input
+            placeholder="Item name..."
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            className="flex-1"
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          />
+          <Input
+            type="number"
+            placeholder="Qty"
+            value={newQty}
+            onChange={(e) => setNewQty(e.target.value)}
+            className="w-20"
+            min={1}
+          />
         </div>
-      )}
+        <div className="flex gap-2">
+          <Select value={newCategory} onValueChange={setNewCategory}>
+            <SelectTrigger className="flex-1">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Office">Office</SelectItem>
+              <SelectItem value="Workshop">Workshop</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={newPriority} onValueChange={setNewPriority}>
+            <SelectTrigger className="w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="high">Urgent</SelectItem>
+              <SelectItem value="medium">Normal</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={handleAdd} disabled={!newTitle.trim()}>Add</Button>
+        </div>
+      </div>
 
       {/* Items list */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -165,68 +157,72 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
 
         <div className="border-t border-border my-2" />
 
+        {/* Custom Items */}
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading...</div>
-        ) : items.length === 0 ? (
-          <div className="text-center text-muted-foreground py-4 text-sm">No additional items</div>
+        ) : customItems.length === 0 ? (
+          <div className="text-center text-muted-foreground py-4 text-sm">No custom items</div>
         ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className={cn(
-                "flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors",
-                item.is_purchased && "bg-green-500/10 border-green-500/30",
-                item.is_rejected && "bg-red-500/10 border-red-500/30"
-              )}
-            >
-              <Button
-                variant="ghost"
-                size="icon"
+          <>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1 pt-2 pb-1">Custom Items</h3>
+            {customItems.map((item) => (
+              <div
+                key={item.id}
                 className={cn(
-                  "h-7 w-7 rounded-full",
-                  item.is_purchased
-                    ? "bg-green-500/20 text-green-500 hover:bg-green-500/30"
-                    : "text-muted-foreground hover:text-green-500"
+                  "flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors",
+                  item.is_purchased && "bg-green-500/10 border-green-500/30",
+                  item.is_rejected && "bg-red-500/10 border-red-500/30"
                 )}
-                onClick={() => togglePurchased(item.id, item.is_purchased)}
               >
-                <Check className="w-3.5 h-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-7 w-7 rounded-full",
-                  item.is_rejected
-                    ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-                    : "text-muted-foreground hover:text-red-500"
-                )}
-                onClick={() => toggleRejected(item.id, item.is_rejected)}
-              >
-                <X className="w-3.5 h-3.5" />
-              </Button>
-              <div className="flex-1 min-w-0">
-                <div className={cn(
-                  "font-medium",
-                  item.is_purchased && "line-through text-green-600",
-                  item.is_rejected && "line-through text-red-500"
-                )}>
-                  {item.title}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-7 w-7 rounded-full",
+                    item.is_purchased
+                      ? "bg-green-500/20 text-green-500 hover:bg-green-500/30"
+                      : "text-muted-foreground hover:text-green-500"
+                  )}
+                  onClick={() => togglePurchased(item.id, item.is_purchased)}
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-7 w-7 rounded-full",
+                    item.is_rejected
+                      ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
+                      : "text-muted-foreground hover:text-red-500"
+                  )}
+                  onClick={() => toggleRejected(item.id, item.is_rejected)}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+                <div className="flex-1 min-w-0">
+                  <div className={cn(
+                    "font-medium",
+                    item.is_purchased && "line-through text-green-600",
+                    item.is_rejected && "line-through text-red-500"
+                  )}>
+                    {item.title}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                    <span>×{item.quantity}</span>
+                    {item.category && <span className="bg-muted px-1.5 py-0.5 rounded">{item.category}</span>}
+                    {item.due_date && <span>{item.due_date}</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                  <span>×{item.quantity}</span>
-                  {item.category && <span className="bg-muted px-1.5 py-0.5 rounded">{item.category}</span>}
-                  {item.due_date && <span>{item.due_date}</span>}
-                </div>
+                <span className={cn("text-xs font-medium", PRIORITY_COLORS[item.priority] || "text-muted-foreground")}>
+                  {item.priority === "high" ? "Urgent" : item.priority === "low" ? "Low" : "Normal"}
+                </span>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
               </div>
-              <span className={cn("text-xs font-medium", PRIORITY_COLORS[item.priority] || "text-muted-foreground")}>
-                {item.priority === "high" ? "Urgent" : item.priority === "low" ? "Low" : "Normal"}
-              </span>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          ))
+            ))}
+          </>
         )}
       </div>
 
