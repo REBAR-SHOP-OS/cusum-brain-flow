@@ -695,6 +695,9 @@ export async function executeToolCall(
           const fullPrompt = imagePrompt +
             "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image.";
 
+          let generated = false;
+          let lastError = "Unknown";
+
           // --- OpenAI gpt-image-1 path when user selected ChatGPT ---
           const userPreferredModel = (context as any)?.preferredModel;
           if (userPreferredModel === "chatgpt") {
