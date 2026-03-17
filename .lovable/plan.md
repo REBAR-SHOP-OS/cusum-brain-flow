@@ -1,110 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# AI App Builder — Full Module Build Plan
+## Completed: Add All Wan 2.6 Capabilities
 
-## Overview
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-Build a new **App Builder** workspace at `/app-builder` — a plan-first AI app planning tool with a premium dark UI, orange/amber accent gradients, and a 3-panel builder layout. This replaces the current `/empire` chat-only experience with a structured product.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-The existing EmpireBuilder chat agent remains available as a sub-feature (the AI backend), but the new UI wraps it in a proper planning workspace.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-## Architecture
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-```text
-/app-builder              → Landing/Hero + Dashboard
-/app-builder/:projectId   → 3-panel Builder Workspace
-```
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-**New files (~12 components + 1 page + 1 hook + mock data):**
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-```text
-src/pages/AppBuilder.tsx                         — Route shell, project list + hero
-src/components/app-builder/
-  AppBuilderHero.tsx                             — Gradient hero card (reference image)
-  AppBuilderDashboard.tsx                        — Project cards grid + "Create New"
-  AppBuilderWorkspace.tsx                        — 3-panel layout (sidebar/center/right)
-  AppBuilderSidebar.tsx                          — Left nav: Overview, Plan, Pages, Data Model, Preview, Versions, Export
-  AppBuilderPlanView.tsx                         — Center panel: plan sections (summary, features, pages, data model, readiness)
-  AppBuilderPromptBar.tsx                        — Top prompt input with AI generate
-  AppBuilderPreviewPanel.tsx                     — Right panel: mock screen previews in device frames
-  AppBuilderVersions.tsx                         — Version history list
-  AppBuilderExport.tsx                           — Export options cards
-  AppBuilderPagePlan.tsx                         — Individual page plan detail
-  AppBuilderDataModel.tsx                        — Entity relationship view
-src/data/appBuilderMockData.ts                   — "Contractor CRM" sample project with full plan
-src/hooks/useAppBuilderProject.ts                — Local state manager for project + sections
-```
-
-## Pages
-
-### 1. Hero + Dashboard (`AppBuilder.tsx`)
-- Bold gradient hero card matching reference: large orange-to-coral gradient, rounded-2xl, "App Builder" title, subtitle, toggle control, arrow nav icons
-- Below: feature highlights (3 cards), CTA
-- Dashboard grid of project cards (mock: Contractor CRM, 2 empty slots)
-- "Create New App" button opens the workspace with empty state
-
-### 2. Builder Workspace (`AppBuilderWorkspace.tsx`)
-3-panel layout, dark bg:
-
-**Left Sidebar** — Icon + label nav: Overview, Plan, Pages, Data Model, Preview, Versions, Export, Settings. Collapsible. Active state highlight with orange accent.
-
-**Center Panel** — Changes based on sidebar selection:
-- **Overview**: App summary card, quick stats
-- **Plan**: Full plan view with expandable sections (App Plan, Feature Plan, Page Plan, Data Model Plan, Build Readiness badge)
-- **Pages**: List of pages with purpose/components/actions
-- **Data Model**: Entity cards with fields and relationships
-- **Versions**: Version history with timestamps and restore
-- **Export**: Export option cards (React, Next.js, Supabase schema) — mock/disabled states
-
-Prompt bar at top of center panel: "Describe the app you want to build..." → triggers plan generation (uses mock data for now, wired to call empire agent later).
-
-**Right Panel** — Preview frame showing mock generated screens (dashboard with stat cards, data table, form, kanban). Device frame wrapper. Page switcher tabs.
-
-## Mock Data — Contractor CRM
-
-Pre-populated sample with:
-- 5 pages: Dashboard, Customers, Leads, Projects, Invoices
-- 5 entities: Customer, Lead, Project, Invoice, User
-- Features: lead tracking, estimate generation, job scheduling, invoicing
-- 3 versions with change summaries
-- Build readiness: "Medium complexity, ~12 screens, recommended: start with MVP"
-
-## Visual Design
-
-- Background: `bg-[#0A0D14]` dark
-- Cards: `bg-white/5 border-white/10 rounded-2xl`
-- Accent gradient: `from-orange-500 via-amber-500 to-coral-500`
-- Typography: large semibold headings, `text-white/60` secondary
-- Hover states: `hover:bg-white/10 hover:border-white/20`
-- Shadows: `shadow-2xl shadow-orange-500/5`
-- Consistent with existing design-principles memory
-
-## Routing
-
-Update `App.tsx` to add:
-```
-/app-builder → AppBuilder (dashboard/hero)
-/app-builder/:projectId → AppBuilderWorkspace
-```
-
-Update `AutomationsSection.tsx` to route app-builder card to `/app-builder` instead of `/empire`.
-
-## Scope Boundaries
-
-- All data is mock/static — no database tables needed
-- AI generation is simulated (returns mock plan after 1.5s delay)
-- Export buttons are disabled/mock
-- Preview screens use hardcoded UI blocks
-- The empire agent chat is NOT removed — just decoupled from this new UI
-
-## Files Changed
-
-| File | Action |
-|------|--------|
-| `src/pages/AppBuilder.tsx` | New — route shell |
-| `src/components/app-builder/*.tsx` | New — 12 components |
-| `src/data/appBuilderMockData.ts` | New — sample project data |
-| `src/hooks/useAppBuilderProject.ts` | New — project state hook |
-| `src/App.tsx` | Add routes |
-| `src/components/integrations/AutomationsSection.tsx` | Update route to `/app-builder` |
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

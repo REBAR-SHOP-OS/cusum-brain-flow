@@ -84,6 +84,8 @@ import QuoteEngine from "./pages/QuoteEngine";
 import AutomationsHub from "./pages/AutomationsHub";
 import VideoStudio from "./pages/VideoStudio";
 import AdDirector from "./pages/AdDirector";
+import AppBuilder from "./pages/AppBuilder";
+import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspace";
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
 
@@ -143,6 +145,8 @@ const App = () => (
                     <Route path="/website" element={<P><AdminRoute><WebsiteManager /></AdminRoute></P>} />
                     <Route path="/seo" element={<P><AdminRoute><SeoModule /></AdminRoute></P>} />
                     <Route path="/empire" element={<P><AdminRoute><EmpireBuilder /></AdminRoute></P>} />
+                    <Route path="/app-builder" element={<P><AppBuilder /></P>} />
+                    <Route path="/app-builder/:projectId" element={<P><AppBuilderWorkspace /></P>} />
                     <Route path="/autopilot" element={<P><AutopilotDashboard /></P>} />
                     <Route path="/support-inbox" element={<P><SupportInbox /></P>} />
 

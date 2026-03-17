@@ -84,7 +84,7 @@ const defaultAutomations: Automation[] = [
     enabled: true,
     color: "red",
     icon: "code",
-    route: "/empire",
+    route: "/app-builder",
   },
   {
     id: "seo-manager",
