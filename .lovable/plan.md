@@ -1,74 +1,114 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
+## رفع ریشه‌ای مشکل Pixel Agent
 
-## Completed: Add All Wan 2.6 Capabilities
+### نتیجه بررسی
+مشکل از خود پرامپت یا مدل نیست؛ یک باگ کدنویسی در مسیر اصلی تولید تصویر Pixel وجود دارد.
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+**شواهد**
+- درخواست واقعی کاربر به `ai-agent` با این کانتکست ارسال شده:
+  - `agent: "social"`
+  - `message: "یک عکس بساز برای نوروز"`
+  - `context.imageAspectRatio: "1:1"`
+- پاسخ تابع هم دقیقاً همین خطا را برگردانده:
+  - `"aspectRatio is not defined"`
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+### ریشه اصلی باگ
+در فایل:
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+`supabase/functions/_shared/agentToolExecutor.ts`
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+داخل شاخه `generate_image`، متغیر `aspectRatio` **داخل بلاک**
+```ts
+if (agent === "social") { ... }
+```
+تعریف شده، اما چند خط بعد **خارج از آن بلاک** استفاده می‌شود:
+- برای `openaiSizeMap[aspectRatio]`
+- برای `cropToAspectRatio(imageBytes, aspectRatio)`
+- برای fallbackهای بعدی
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+یعنی وقتی ابزار `generate_image` اجرا می‌شود، در زمان استفاده از آن متغیر، اسکوپش از بین رفته و همان خطای `aspectRatio is not defined` تولید می‌شود.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### باگ دوم که همزمان باید اصلاح شود
+در فایل:
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+`supabase/functions/ai-agent/index.ts`
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+در بخش `socialStyleOverride` این خط وجود دارد:
+```ts
+const aspectRatio = (context?.imageAspectRatio as string) || "1:1";
+```
 
-### Changes
+اما در این محدوده اصلاً `context` تعریف نشده و باید از `mergedContext` یا `userContext` استفاده شود.  
+یعنی حتی اگر باگ اول رفع شود، وقتی کاربر از تولبار Style/Product استفاده کند، یک خطای ثانویه در همین قسمت رخ می‌دهد.
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+---
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+## پلن اجرا
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+### 1) اصلاح اسکوپ `aspectRatio` در مسیر اصلی تولید تصویر Pixel
+**فایل:** `supabase/functions/_shared/agentToolExecutor.ts`
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+- `aspectRatio` را یک‌بار در ابتدای شاخه `generate_image` تعریف می‌کنم، قبل از `if (agent === "social")`
+- بعد همان متغیر واحد را در تمام مسیرها استفاده می‌کنم:
+  - composition hint
+  - OpenAI size mapping
+  - crop/resize
+  - square fallback
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+**هدف:** متغیر در کل lifecycle تولید تصویر در دسترس باشد و دیگر ReferenceError رخ ندهد.
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+### 2) اصلاح منبع aspect ratio در prompt override
+**فایل:** `supabase/functions/ai-agent/index.ts`
+
+- این بخش را از:
+```ts
+(context?.imageAspectRatio as string)
+```
+به منبع درست تغییر می‌دهم:
+```ts
+(mergedContext?.imageAspectRatio as string)
+```
+یا در همان ساختار موجود به `userContext/mergedContext` که واقعاً در اسکوپ هست.
+
+**هدف:** وقتی کاربر از چیپ‌های toolbar مثل Style / Product / Size استفاده می‌کند، Pixel باز هم پایدار بماند.
+
+### 3) یکپارچه‌سازی منطق aspect ratio
+برای جلوگیری از تکرار باگ:
+- در هر دو مسیر Pixel (`ai-agent` و `agentToolExecutor`) نسبت تصویر از یک منبع ثابت گرفته می‌شود:
+  1. `context.imageAspectRatio`
+  2. اگر نبود، مقدار پیش‌فرض `1:1`
+
+**هدف:** دیگر جایی از سیستم روی متغیر محلی ناپایدار تکیه نکند.
+
+### 4) حفظ رفتار فعلی بدون تغییر در UX
+هیچ تغییری در تجربه کاربر لازم نیست:
+- همان چت Pixel
+- همان selector نسبت تصویر
+- همان مدل‌های فعلی
+- همان Brain context و resource imageها
+
+فقط مسیر اجرا پایدار می‌شود تا کاربر بتواند واقعاً عکس بگیرد.
+
+---
+
+## فایل‌هایی که باید تغییر کنند
+1. `supabase/functions/_shared/agentToolExecutor.ts`
+2. `supabase/functions/ai-agent/index.ts`
+
+---
+
+## جزئیات فنی
+- **Bug 1:** block scope leak برای `aspectRatio`
+- **Bug 2:** استفاده از `context` تعریف‌نشده در `ai-agent`
+- **نیازی به تغییر دیتابیس نیست**
+- **نیازی به تغییر فرانت‌اند نیست**
+- تمرکز فقط روی منطق backend functionها است چون خطا در همان لایه تولید می‌شود
+
+---
+
+## نتیجه مورد انتظار بعد از پیاده‌سازی
+بعد از این اصلاح:
+- پیام‌هایی مثل `یک عکس بساز برای نوروز` باید واقعاً تصویر تولید کنند
+- انتخاب نسبت تصویر `1:1 / 16:9 / 9:16` پایدار بماند
+- استفاده از Style/Product chips هم باعث شکست مسیر نشود
+- خطای `"aspectRatio is not defined"` به‌صورت ریشه‌ای حذف شود
