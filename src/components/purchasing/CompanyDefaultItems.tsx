@@ -61,10 +61,14 @@ export const COMPANY_DEFAULTS: DefaultItem[] = [
 
 interface CompanyDefaultItemsProps {
   dbItems: PurchasingItem[];
+  customItems?: PurchasingItem[];
   onMarkPurchased: (title: string, category: string) => void;
   onUnmarkPurchased: (itemId: string) => void;
   onMarkRejected: (title: string, category: string) => void;
   onUnmarkRejected: (itemId: string) => void;
+  onTogglePurchased?: (itemId: string, current: boolean) => void;
+  onToggleRejected?: (itemId: string, current: boolean) => void;
+  onDeleteItem?: (itemId: string) => void;
 }
 
 function findDbMatch(def: DefaultItem, dbItems: PurchasingItem[]): PurchasingItem | undefined {
