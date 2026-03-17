@@ -164,9 +164,16 @@ export function SceneCard({
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Generation Prompt</Label>
-            <Button variant="ghost" size="sm" className="h-5 px-1" onClick={() => { setEditPrompt(scene.prompt); setEditing(!editing); }}>
-              <Pencil className="w-3 h-3" />
-            </Button>
+            <div className="flex items-center gap-1">
+              {canUndoPrompt && onPromptUndo && (
+                <Button variant="ghost" size="sm" className="h-5 px-1" onClick={() => onPromptUndo(scene.id)} title="Undo prompt">
+                  <Undo2 className="w-3 h-3" />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" className="h-5 px-1" onClick={() => { setEditPrompt(scene.prompt); setEditing(!editing); }}>
+                <Pencil className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
           {editing ? (
             <div className="space-y-2">
