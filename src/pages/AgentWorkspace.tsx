@@ -546,7 +546,13 @@ export default function AgentWorkspace() {
             <span className="text-xs text-muted-foreground">— {config.role}</span>
             <div className="flex-1" />
           </div>
-          <PurchasingListPanel />
+          <PurchasingListPanel
+            filterDate={purchasingDate}
+            onFilterDateChange={(d) => {
+              setPurchasingDate(d);
+              setActivePurchasingDateStr(d ? d.toISOString().split("T")[0] : null);
+            }}
+          />
         </div>
       ) : (
       <div className="flex-1 flex flex-col min-w-0">
