@@ -1,46 +1,42 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Fix: CEO Dashboard Missing Data — Status/Stage Mismatches
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Root Cause Analysis
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+The dashboard queries use hardcoded status values that **don't match the actual data** in your database. Here's every mismatch found:
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+| Metric | Code Filters For | Actual Data | Impact |
+|--------|-----------------|-------------|--------|
+| **Active Orders** | `active`, `pending` | `pending` (35), `needs_pricing` (28) | Shows 35, should show **63** |
+| **Deliveries** | `pending`, `in-transit`, `loading` | `staged` (2) | Shows **0**, should show 2 |
+| **Open Leads** | Excludes `closed_won`, `closed_lost` | Actual stages are `won`, `lost` (not `closed_won`/`closed_lost`) | Shows **2,948** (all leads), should show ~1,462 |
+| **Pipeline chart** | Uses `closed_won`/`closed_lost` labels | 22 custom Odoo stages like `quotation_bids`, `hot_enquiries`, `fabrication_in_shop` | Pipeline chart shows wrong stage names |
+| **Machines** | Shows 1/6 running (17% capacity) | CUTTER-02 is `running`, 5 idle | Correct but Ops score = 17 drags health to 59 |
+| **Blocked Jobs** | `production_locked = true` | No orders have status `confirmed`/`in_production` | Always **0** |
+| **QC Backlog** | `qc_final_approved = false` + `in_production` | No `in_production` orders exist | Always **0** |
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+## Fix Plan
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+### 1. Fix Order Status Filter (`useCEODashboard.ts` ~line 175)
+Include `needs_pricing`, `confirmed`, `in_production` in addition to `active`, `pending`.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 2. Fix Delivery Status Filter (~line 178)
+Add `staged` to the delivery status filter alongside `pending`, `in-transit`, `loading`.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+### 3. Fix Lead Stage Exclusion (~lines 179, 191, 454)
+Change `closed_won`/`closed_lost` to `won`/`lost` to match actual Odoo stage names. Also exclude `archived_orphan`, `loss`, `merged`, `no_rebars_out_of_scope`, `delivered_pickup_done` from "open" leads count.
+
+### 4. Fix Pipeline Stage Labels (~line 42-50 in CEODashboardView)
+Replace the hardcoded `stageLabels` map with labels that match the actual 22 Odoo stages (e.g., `quotation_bids` → "Quotation", `hot_enquiries` → "Hot Enquiry", `fabrication_in_shop` → "Fabrication").
+
+### 5. Fix QC/Blocked Queries (~lines 451-453)
+Widen the order status filter for blocked jobs and QC backlog to include `pending`, `needs_pricing` and any future production statuses.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/hooks/useCEODashboard.ts` | Fix 6 status/stage filters to match real DB data |
+| `src/components/office/CEODashboardView.tsx` | Update `stageLabels` map for Odoo pipeline stages |
+
