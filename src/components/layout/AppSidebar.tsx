@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
   LayoutGrid, Brain, Settings, Shield, Plug, DollarSign, Activity,
-  Terminal, Lock, BarChart3, Monitor, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize, PanelLeftClose, PanelLeft,
+  Terminal, Lock, BarChart3, Monitor, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize, PanelLeftClose, PanelLeft, TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
