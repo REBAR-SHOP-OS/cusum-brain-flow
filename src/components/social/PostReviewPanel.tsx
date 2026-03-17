@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useAuth } from "@/lib/auth";
 import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -134,6 +135,8 @@ export function PostReviewPanel({
   const { toast } = useToast();
   const { publishPost, publishing } = usePublishPost();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canPublish = user?.email === "radin@rebar.shop";
   const [editing, setEditing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regeneratingCaption, setRegeneratingCaption] = useState(false);
@@ -829,7 +832,7 @@ export function PostReviewPanel({
                   {/* Publish Now */}
                   <Button
                     className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
-                    disabled={publishing || !post.neel_approved || post.status === "declined"}
+                    disabled={publishing || !post.neel_approved || post.status === "declined" || !canPublish}
                     onClick={async () => {
                       if (localPages.length === 0) {
                         toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
