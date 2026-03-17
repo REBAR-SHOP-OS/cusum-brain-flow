@@ -495,6 +495,7 @@ Deno.serve(async (req) => {
     }
     
     const mergedContext = { ...dbContext, ...execContext, ...userContext };
+    if (preferredModel) mergedContext.preferredModel = preferredModel;
 
     // Document Analysis (Moved logic to shared/agentDocumentUtils but integrated here)
     let documentResults: { 

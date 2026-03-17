@@ -695,16 +695,68 @@ export async function executeToolCall(
           const fullPrompt = imagePrompt +
             "\n\nIMPORTANT: Place the text 'REBAR.SHOP' prominently as a watermark/logo in the image.";
 
+          let generated = false;
+          let lastError = "Unknown";
+
+          // --- OpenAI gpt-image-1 path when user selected ChatGPT ---
+          const userPreferredModel = (context as any)?.preferredModel;
+          if (userPreferredModel === "chatgpt") {
+            const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
+            if (GPT_API_KEY) {
+              try {
+                console.log("[generate_image] Attempting OpenAI gpt-image-1 (user selected ChatGPT)...");
+                const openaiSizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1536x1024", "9:16": "1024x1536" };
+                const openaiRes = await fetch("https://api.openai.com/v1/images/generations", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${GPT_API_KEY}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    model: "gpt-image-1",
+                    prompt: fullPrompt,
+                    n: 1,
+                    size: openaiSizeMap[aspectRatio] || "1024x1024",
+                    quality: "high",
+                  }),
+                });
+
+                if (openaiRes.ok) {
+                  const openaiData = await openaiRes.json();
+                  const imgItem = openaiData.data?.[0];
+                  let imageBytes: Uint8Array | null = null;
+                  if (imgItem?.b64_json) {
+                    imageBytes = Uint8Array.from(atob(imgItem.b64_json), (c) => c.charCodeAt(0));
+                  } else if (imgItem?.url) {
+                    const dlRes = await fetch(imgItem.url);
+                    if (dlRes.ok) imageBytes = new Uint8Array(await dlRes.arrayBuffer());
+                  }
+                  if (imageBytes) {
+                    if (aspectRatio) imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+                    const imagePath = `pixel/${slot ? slot.replace(":", "") + "/" : ""}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+                    const { error: uploadError } = await svcClient.storage
+                      .from("social-images")
+                      .upload(imagePath, imageBytes, { contentType: "image/png" });
+                    if (!uploadError) {
+                      const { data: urlData } = svcClient.storage.from("social-images").getPublicUrl(imagePath);
+                      console.log(`[generate_image] ✓ OpenAI gpt-image-1 uploaded: ${urlData.publicUrl}`);
+                      result.result = { success: true, image_url: urlData.publicUrl, slot, message: `Image generated via OpenAI for slot ${slot}` };
+                      generated = true;
+                    }
+                  }
+                } else {
+                  console.warn(`[generate_image] OpenAI gpt-image-1 returned ${openaiRes.status}, falling back to Gemini`);
+                }
+              } catch (e: any) {
+                console.warn(`[generate_image] OpenAI error: ${e?.message || e}, falling back to Gemini`);
+              }
+            }
+          }
+
           // Retry pipeline: try multiple models (2 primary + 2 fallback max = 4 total)
           const attempts = [
             { model: "google/gemini-2.5-flash-image", useLogo: true },
             { model: "google/gemini-3-pro-image-preview", useLogo: true },
           ];
 
-          let generated = false;
-          let lastError = "Unknown";
-
-          for (const attempt of attempts) {
+          if (!generated) for (const attempt of attempts) {
             const contentParts: any[] = [{ type: "text", text: fullPrompt }];
             if (attempt.useLogo && logoUrl) {
               contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
