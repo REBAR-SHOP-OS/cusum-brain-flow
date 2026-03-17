@@ -56,6 +56,34 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
       .then(({ data }) => { setLeads(data ?? []); });
   }, [customerId]);
 
+  // Auto-upload initialFiles when provided
+  const initialFilesProcessed = useRef(false);
+  useEffect(() => {
+    if (!open || !initialFiles?.length || initialFilesProcessed.current) return;
+    initialFilesProcessed.current = true;
+    (async () => {
+      setUploading(true);
+      const urls: string[] = [];
+      for (const file of initialFiles) {
+        const path = `estimation/${Date.now()}_${file.name}`;
+        const { error } = await supabase.storage.from("estimation-files").upload(path, file);
+        if (error) { toast.error(`Upload failed: ${file.name}`); continue; }
+        const { data: urlData } = supabase.storage.from("estimation-files").getPublicUrl(path);
+        urls.push(urlData.publicUrl);
+      }
+      setFileUrls(urls);
+      setUploading(false);
+      if (urls.length) {
+        toast.success(`${urls.length} file(s) uploaded`);
+        setStep(2);
+      }
+    })();
+  }, [open, initialFiles]);
+
+  useEffect(() => {
+    if (!open) initialFilesProcessed.current = false;
+  }, [open]);
+
   const analyzeScope = useCallback(async (urls: string[]) => {
     if (!urls.length || scopeLoading) return;
     setScopeLoading(true);
