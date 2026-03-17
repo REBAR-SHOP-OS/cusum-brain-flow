@@ -96,7 +96,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     }
   }, [user]);
 
-  const addItemAsPurchased = useCallback(async (title: string, category: string) => {
+  const addItemAsPurchased = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
@@ -111,6 +111,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       purchased_by: user.id,
       purchased_at: new Date().toISOString(),
       created_by: user.id,
+      due_date: dueDate || null,
     });
     if (error) {
       toast.error("Error marking item");

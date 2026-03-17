@@ -1,4 +1,4 @@
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PurchasingItem } from "@/hooks/usePurchasingList";
@@ -85,38 +85,25 @@ function DefaultRow({
         isPurchased && "opacity-60"
       )}
     >
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "h-7 w-7 rounded-full",
-            isPurchased
-              ? "bg-green-500/20 text-green-500 hover:bg-green-500/30"
-              : "text-muted-foreground hover:text-green-500"
-          )}
-          onClick={() => {
-            if (!isPurchased) onMarkPurchased(def.title, def.category);
-          }}
-        >
-          <Check className="w-3.5 h-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "h-7 w-7 rounded-full",
-            !isPurchased
-              ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-              : "text-muted-foreground hover:text-red-500"
-          )}
-          onClick={() => {
-            if (isPurchased && dbMatch) onUnmarkPurchased(dbMatch.id);
-          }}
-        >
-          <X className="w-3.5 h-3.5" />
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-7 w-7 rounded-full",
+          isPurchased
+            ? "bg-green-500/20 text-green-500 hover:bg-green-500/30"
+            : "text-muted-foreground hover:text-green-500"
+        )}
+        onClick={() => {
+          if (isPurchased && dbMatch) {
+            onUnmarkPurchased(dbMatch.id);
+          } else if (!isPurchased) {
+            onMarkPurchased(def.title, def.category);
+          }
+        }}
+      >
+        <Check className="w-3.5 h-3.5" />
+      </Button>
       <span className={cn("flex-1 text-sm font-medium", isPurchased && "line-through text-muted-foreground")}>
         {def.title}
       </span>

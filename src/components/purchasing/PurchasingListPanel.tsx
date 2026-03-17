@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, Trash2, Package, Check, X } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, Package, Check, CheckCircle } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
@@ -156,7 +157,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         {/* Company Defaults */}
         <CompanyDefaultItems
           dbItems={items}
-          onMarkPurchased={(title, category) => addItemAsPurchased(title, category)}
+          onMarkPurchased={(title, category) => addItemAsPurchased(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
           onUnmarkPurchased={(itemId) => togglePurchased(itemId, true)}
         />
 
@@ -175,34 +176,19 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
                 item.is_purchased && "opacity-60"
               )}
             >
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "h-7 w-7 rounded-full",
-                    item.is_purchased
-                      ? "bg-green-500/20 text-green-500 hover:bg-green-500/30"
-                      : "text-muted-foreground hover:text-green-500"
-                  )}
-                  onClick={() => !item.is_purchased && togglePurchased(item.id, item.is_purchased)}
-                >
-                  <Check className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "h-7 w-7 rounded-full",
-                    !item.is_purchased
-                      ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-                      : "text-muted-foreground hover:text-red-500"
-                  )}
-                  onClick={() => item.is_purchased && togglePurchased(item.id, item.is_purchased)}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-7 w-7 rounded-full",
+                  item.is_purchased
+                    ? "bg-green-500/20 text-green-500 hover:bg-green-500/30"
+                    : "text-muted-foreground hover:text-green-500"
+                )}
+                onClick={() => togglePurchased(item.id, item.is_purchased)}
+              >
+                <Check className="w-3.5 h-3.5" />
+              </Button>
               <div className="flex-1 min-w-0">
                 <div className={cn("font-medium", item.is_purchased && "line-through text-muted-foreground")}>
                   {item.title}
@@ -223,6 +209,21 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
           ))
         )}
       </div>
+
+      {/* Confirm button */}
+      {filterDate && items.some(i => i.is_purchased) && (
+        <div className="p-3 border-t border-border">
+          <Button
+            className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+            onClick={() => {
+              toast.success(`List confirmed for ${format(filterDate, "yyyy/MM/dd")}`);
+            }}
+          >
+            <CheckCircle className="w-4 h-4" />
+            Confirm
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
