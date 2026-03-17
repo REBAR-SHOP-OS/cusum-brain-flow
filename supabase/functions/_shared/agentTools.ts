@@ -369,6 +369,74 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
         }
       }
     );
+
+    // WordPress / rebar.shop tools for empire agent
+    tools.push(
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_list_posts",
+          description: "List WordPress posts from rebar.shop.",
+          parameters: { type: "object", properties: { per_page: { type: "string" }, status: { type: "string" } }, required: [] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_list_pages",
+          description: "List WordPress pages from rebar.shop.",
+          parameters: { type: "object", properties: { per_page: { type: "string" } }, required: [] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_list_products",
+          description: "List WooCommerce products from rebar.shop.",
+          parameters: { type: "object", properties: { per_page: { type: "string" }, status: { type: "string" } }, required: [] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_list_orders",
+          description: "List WooCommerce orders from rebar.shop.",
+          parameters: { type: "object", properties: { per_page: { type: "string" }, status: { type: "string" } }, required: [] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_update_post",
+          description: "Update a WordPress post by ID.",
+          parameters: { type: "object", properties: { id: { type: "string" }, data: { type: "object" } }, required: ["id", "data"] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_update_page",
+          description: "Update a WordPress page by ID.",
+          parameters: { type: "object", properties: { id: { type: "string" }, data: { type: "object" } }, required: ["id", "data"] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_update_product",
+          description: "Update a WooCommerce product by ID.",
+          parameters: { type: "object", properties: { id: { type: "string" }, data: { type: "object" } }, required: ["id", "data"] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "scrape_page",
+          description: "Fetch any URL and return the text/HTML content. Use for live website diagnostics.",
+          parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] }
+        }
+      }
+    );
   }
 
   // Accounting (Penny) — QB Action Tools

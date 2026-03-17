@@ -1134,6 +1134,75 @@ export async function executeToolCall(
       result.result = error ? { error: error.message } : { success: true, tickets: data, count: data?.length || 0 };
     }
 
+    // ═══════════════════════════════════════════════════
+    // WordPress / WooCommerce tools (Empire agent)
+    // ═══════════════════════════════════════════════════
+    else if (toolName === "wp_list_posts" || toolName === "wp_list_pages" || toolName === "wp_list_products" || toolName === "wp_list_orders") {
+      try {
+        const { WPClient } = await import("../functions/_shared/wpClient.ts").catch(() => import("../_shared/wpClient.ts"));
+        const wp = new WPClient();
+        const params: Record<string, string> = {};
+        if (args.per_page) params.per_page = args.per_page;
+        if (args.status) params.status = args.status;
+        let data;
+        if (toolName === "wp_list_posts") data = await wp.listPosts(params);
+        else if (toolName === "wp_list_pages") data = await wp.listPages(params);
+        else if (toolName === "wp_list_products") data = await wp.listProducts(params);
+        else data = await wp.listOrders(params);
+        // Trim to essential fields to save tokens
+        const trimmed = (data || []).map((item: any) => ({
+          id: item.id,
+          title: item.title?.rendered || item.name || item.title,
+          status: item.status,
+          slug: item.slug,
+          link: item.link || item.permalink,
+          ...(item.price ? { price: item.price } : {}),
+          ...(item.stock_status ? { stock_status: item.stock_status } : {}),
+          ...(item.total ? { total: item.total } : {}),
+        }));
+        result.result = { success: true, count: trimmed.length, items: trimmed };
+      } catch (wpErr: any) {
+        result.result = { error: `WordPress API error: ${wpErr.message}` };
+      }
+    }
+
+    else if (toolName === "wp_update_post" || toolName === "wp_update_page" || toolName === "wp_update_product") {
+      try {
+        const { WPClient } = await import("../functions/_shared/wpClient.ts").catch(() => import("../_shared/wpClient.ts"));
+        const wp = new WPClient();
+        const id = args.id;
+        const updateData = args.data || {};
+        let updated;
+        if (toolName === "wp_update_post") updated = await wp.updatePost(id, updateData);
+        else if (toolName === "wp_update_page") updated = await wp.updatePage(id, updateData);
+        else updated = await wp.updateProduct(id, updateData);
+        result.result = { success: true, id: updated?.id, title: updated?.title?.rendered || updated?.name };
+      } catch (wpErr: any) {
+        result.result = { error: `WordPress update error: ${wpErr.message}` };
+      }
+    }
+
+    else if (toolName === "scrape_page") {
+      try {
+        const targetUrl = args.url;
+        if (!targetUrl) throw new Error("url is required");
+        const resp = await fetch(targetUrl, {
+          headers: { "User-Agent": "RebarShopOS-Architect/1.0" },
+          signal: AbortSignal.timeout(15000),
+        });
+        const html = await resp.text();
+        // Return trimmed HTML (first 8000 chars to avoid token bloat)
+        result.result = {
+          success: true,
+          status_code: resp.status,
+          content_length: html.length,
+          content: html.slice(0, 8000),
+        };
+      } catch (scrapeErr: any) {
+        result.result = { error: `Scrape error: ${scrapeErr.message}` };
+      }
+    }
+
     // Default fallback
     else {
       result.result = { success: true, message: "Tool executed (simulated)" };
