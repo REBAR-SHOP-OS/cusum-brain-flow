@@ -123,6 +123,23 @@ export function Sidebar() {
           {/* Separator */}
           <div className="w-6 h-px bg-sidebar-border my-1" />
 
+          {/* Sales Department Group */}
+          {salesNav.map((item) => {
+            const isActive = location.pathname === item.href;
+            return (
+              <Link key={item.name} to={item.href} className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
+                "hover:bg-sidebar-accent",
+                isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+              )} title={item.name}>
+                <item.icon className="w-5 h-5" />
+              </Link>
+            );
+          })}
+
+          {/* Separator */}
+          <div className="w-6 h-px bg-sidebar-border my-1" />
+
           {/* Operations Group */}
           {operationsNav.map((item) => {
             const isActive = location.pathname === item.href;
