@@ -109,14 +109,21 @@ export default function SocialMediaManager() {
     if (statusFilter === "approved_by_neel") {
       items = items.filter((p) => p.neel_approved);
     } else if (statusFilter === "pending_approval") {
-      items = items.filter((p) => p.status === "scheduled" && !p.neel_approved);
+      items = items.filter(
+        (p) => p.status === "scheduled" || p.status === "published" || (p.status === "pending_approval")
+      );
     } else if (statusFilter !== "all") {
-      items = items.filter((p) => p.status === statusFilter);
+      // Always keep scheduled + published visible, plus the selected status
+      items = items.filter(
+        (p) => p.status === statusFilter || p.status === "scheduled" || p.status === "published"
+      );
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       items = items.filter(
         (p) =>
+          // Never hide scheduled/published posts even if they don't match search
+          p.status === "scheduled" || p.status === "published" ||
           p.title.toLowerCase().includes(q) ||
           p.content.toLowerCase().includes(q) ||
           p.hashtags.some((h) => h.toLowerCase().includes(q))
