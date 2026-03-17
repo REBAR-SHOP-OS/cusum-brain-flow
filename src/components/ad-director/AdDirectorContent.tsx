@@ -35,16 +35,10 @@ import { MusicTab } from "./editor/MusicTab";
 import { BrandKitSidePanel } from "./editor/BrandKitSidePanel";
 import { DEFAULT_VIDEO_PARAMS, type VideoParams } from "./VideoParameters";
 
-import { Check, Loader2 as Loader2Icon } from "lucide-react";
+import { Check } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type WorkflowStep = "script" | "storyboard" | "preview";
-
-const steps: { id: WorkflowStep; label: string; desc: string; icon: React.ReactNode }[] = [
-  { id: "script", label: "Script & Assets", desc: "Write or paste your ad script", icon: <FileText className="w-4 h-4" /> },
-  { id: "storyboard", label: "Storyboard", desc: "Review scenes & prompts", icon: <Layers className="w-4 h-4" /> },
-  { id: "preview", label: "Preview & Export", desc: "Assemble & download", icon: <Film className="w-4 h-4" /> },
-];
 
 const QUALITY_THRESHOLD = 7.0;
 const MAX_IMPROVE_ATTEMPTS = 2;
