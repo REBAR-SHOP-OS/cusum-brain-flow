@@ -9,6 +9,7 @@ export interface PurchasingItem {
   description: string | null;
   quantity: number;
   is_purchased: boolean;
+  is_rejected: boolean;
   purchased_by: string | null;
   purchased_at: string | null;
   due_date: string | null;
