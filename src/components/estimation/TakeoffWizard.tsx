@@ -17,9 +17,10 @@ interface TakeoffWizardProps {
   open: boolean;
   onClose: () => void;
   onComplete: (projectId: string) => void;
+  initialFiles?: File[];
 }
 
-export default function TakeoffWizard({ open, onClose, onComplete }: TakeoffWizardProps) {
+export default function TakeoffWizard({ open, onClose, onComplete, initialFiles }: TakeoffWizardProps) {
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState("");
   const [scopeContext, setScopeContext] = useState("");
