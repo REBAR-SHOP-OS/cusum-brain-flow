@@ -24,14 +24,14 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
   const { user } = useAuth();
 
   const fetchItems = useCallback(async () => {
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
     // Get company_id from profile
     const { data: profile } = await supabase
       .from("profiles")
       .select("company_id")
       .eq("id", user.id)
       .single();
-    if (!profile?.company_id) return;
+    if (!profile?.company_id) { setLoading(false); return; }
 
     let query = supabase
       .from("purchasing_list_items" as any)
