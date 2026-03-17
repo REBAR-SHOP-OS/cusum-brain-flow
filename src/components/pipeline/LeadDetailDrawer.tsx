@@ -80,6 +80,50 @@ export function LeadDetailDrawer({
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const { data: recommendation, isLoading: recLoading } = useLeadRecommendation(lead, open);
   const [convertingToQuote, setConvertingToQuote] = useState(false);
+  const [odooRefreshing, setOdooRefreshing] = useState(false);
+  const lastRefreshRef = useRef<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // ── On-open: targeted Odoo refresh for this lead ──
+  const isOdooLead = lead?.source === "odoo_sync";
+  const odooId = isOdooLead ? ((lead?.metadata as any)?.odoo_id as string) : null;
+
+  useEffect(() => {
+    if (!open || !odooId || !lead?.id) return;
+    // Cooldown: skip if refreshed this same lead within 30s
+    const key = `${lead.id}:${Date.now()}`;
+    if (lastRefreshRef.current === lead.id) return;
+    lastRefreshRef.current = lead.id;
+
+    let cancelled = false;
+    const refresh = async () => {
+      setOdooRefreshing(true);
+      try {
+        // Fire both syncs in parallel
+        const [crmRes, chatterRes] = await Promise.allSettled([
+          supabase.functions.invoke("odoo-crm-sync", { body: { mode: "single", odoo_id: odooId } }),
+          supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "single", odoo_id: odooId } }),
+        ]);
+        if (!cancelled) {
+          // Invalidate all lead-related queries
+          queryClient.invalidateQueries({ queryKey: ["lead-activities", lead.id] });
+          queryClient.invalidateQueries({ queryKey: ["lead-files-timeline", lead.id] });
+          queryClient.invalidateQueries({ queryKey: ["lead-events", lead.id] });
+          queryClient.invalidateQueries({ queryKey: ["lead-communications-chatter", lead.id] });
+          queryClient.invalidateQueries({ queryKey: ["leads"] });
+        }
+      } catch (e) {
+        console.warn("On-open Odoo refresh failed:", e);
+      } finally {
+        if (!cancelled) setOdooRefreshing(false);
+      }
+    };
+    refresh();
+
+    // Reset cooldown after 30s
+    const timer = setTimeout(() => { lastRefreshRef.current = null; }, 30_000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [open, odooId, lead?.id]);
 
   if (!lead) return null;
 
