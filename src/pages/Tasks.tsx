@@ -138,9 +138,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // ─── Helpers ────────────────────────────────────────────
+function parseDateString(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function isOverdue(task: TaskRow) {
   if (!task.due_date || task.status === "completed") return false;
-  return isPast(startOfDay(new Date(task.due_date))) && !isToday(new Date(task.due_date));
+  return isPast(startOfDay(parseDateString(task.due_date))) && !isToday(parseDateString(task.due_date));
 }
 
 function sortTasks(tasks: TaskRow[]): TaskRow[] {
