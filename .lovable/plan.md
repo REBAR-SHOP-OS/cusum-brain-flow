@@ -1,74 +1,91 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+## Production Patch: Odoo Mirror Pipeline + Sales Department
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+### Current State Assessment
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+**Already done (no work needed):**
+- Sales Department sidebar section with 4 icons ✅
+- Routes: `/sales/pipeline`, `/sales/quotations`, `/sales/invoices`, `/sales/contacts` ✅
+- Database tables: `sales_leads`, `sales_contacts`, `sales_invoices`, `sales_quotations` ✅
+- Sales Pipeline page with drag/drop, create, edit, stages (New → Won/Lost) ✅
+- Quotations, Invoices, Contacts pages with CRUD ✅
+- `useSalesLeads` hook with realtime subscription ✅
+- Old pipeline at `/pipeline` with full Odoo stage set ✅
+- `OdooChatter` with unified timeline (activities, comms, files, events, date sorting) ✅
+- `odoo-crm-sync` and `odoo-chatter-sync` edge functions ✅
+- LeadDetailDrawer with Odoo-style UI ✅
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+**What actually needs to be built:**
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### PART 1 — On-Open Lead Refresh from Odoo
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+When a user opens a lead in the old pipeline, trigger a targeted refresh for that specific lead.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+**File: `src/components/pipeline/LeadDetailDrawer.tsx`**
+- Add a `useEffect` that fires when the drawer opens (`open === true && lead?.id`)
+- Call `supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "single", odoo_id } })` to pull latest chatter/activities/files for just that lead
+- Show a small "Refreshing from Odoo..." indicator during fetch
+- Invalidate the relevant query keys (`lead-activities`, `lead-files-timeline`, `lead-events`, `lead-communications-chatter`) after the refresh completes
+- Also call a targeted single-lead refresh via `odoo-crm-sync` for field updates (stage, revenue, probability)
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+**File: `supabase/functions/odoo-crm-sync/index.ts`**
+- Add a `mode: "single"` path that accepts an `odoo_id` parameter
+- Fetches just that one lead from Odoo and updates the local record (stage, fields, metadata)
+- Returns the updated data
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+**File: `supabase/functions/odoo-chatter-sync/index.ts`**
+- The `mode: "single"` path already exists — verify it works correctly and returns a success indicator
 
-### Changes
+### PART 2 — Sync Freshness Indicator
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+**File: `src/components/pipeline/LeadDetailDrawer.tsx`**
+- Show "Last synced: X minutes ago" in the footer using `lead.metadata.synced_at`
+- Show sync status: a green dot for recent (<5min), yellow for stale (>30min), red for errors
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+### PART 3 — Odoo Delete/Archive Reconciliation
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+**File: `supabase/functions/odoo-crm-sync/index.ts`**
+- After syncing all active leads, compare local `odoo_sync` leads against the fetched set
+- Leads present locally but missing from Odoo → mark as `archived_orphan` stage
+- Already partially implemented (the function fetches all existing leads for dedup) — add the reconciliation step at the end
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+### PART 4 — Unified Timeline Improvements
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+The OdooChatter component (1172 lines) already implements a unified timeline with:
+- Activities, communications, files, lead events
+- File-to-message linking via `odoo_message_id`
+- Date separators
+- Visual distinction by type
+- Noise suppression
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+**Enhancements needed:**
+- **File: `src/components/pipeline/OdooChatter.tsx`**
+  - Add date separator headers ("Today", "Yesterday", "March 13, 2026")
+  - Ensure unlinked Odoo files show under a labeled "Unlinked Files" section (partially done, improve labeling)
+
+### Summary of Changes
+
+```text
+Files to modify:
+├── src/components/pipeline/LeadDetailDrawer.tsx  (on-open refresh + sync indicator)
+├── src/components/pipeline/OdooChatter.tsx       (date separators in timeline)
+├── supabase/functions/odoo-crm-sync/index.ts     (single-lead refresh mode + archive reconciliation)
+└── supabase/functions/odoo-chatter-sync/index.ts  (verify single mode, minor fixes)
+
+No new tables needed.
+No new routes needed.
+No sidebar changes needed.
+No new pages needed.
+```
+
+### Priority Order
+1. Single-lead refresh on open (biggest trust impact)
+2. Archive/delete reconciliation in sync
+3. Date separators in timeline
+4. Sync freshness indicator
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly — mitigate with a 30-second cooldown per lead
+- Single-lead sync adds ~1-2s latency on drawer open — mitigate with optimistic rendering + background refresh
+
