@@ -165,6 +165,7 @@ const App = () => (
                     <Route path="/customers" element={<P><Customers /></P>} />
 
                     {/* New Sales Department */}
+                    <Route path="/sales" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SalesHub /></Suspense></P>} />
                     <Route path="/sales/pipeline" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SalesPipeline /></Suspense></P>} />
                     <Route path="/sales/quotations" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SalesQuotations /></Suspense></P>} />
                     <Route path="/sales/invoices" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SalesInvoices /></Suspense></P>} />
