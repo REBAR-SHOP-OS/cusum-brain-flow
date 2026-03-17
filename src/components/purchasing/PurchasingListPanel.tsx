@@ -43,6 +43,8 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const customItems = items.filter(item =>
     !COMPANY_DEFAULTS.some(d => d.title === item.title && d.category === item.category)
   );
+  const categorizedCustom = customItems.filter(i => i.category === "Office" || i.category === "Workshop");
+  const otherCustom = customItems.filter(i => i.category !== "Office" && i.category !== "Workshop");
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
@@ -149,10 +151,14 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         {/* Company Defaults */}
         <CompanyDefaultItems
           dbItems={items}
+          customItems={categorizedCustom}
           onMarkPurchased={(title, category) => addItemAsPurchased(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
           onUnmarkPurchased={(itemId) => togglePurchased(itemId, true)}
           onMarkRejected={(title, category) => addItemAsRejected(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
           onUnmarkRejected={(itemId) => toggleRejected(itemId, true)}
+          onTogglePurchased={(itemId, current) => togglePurchased(itemId, current)}
+          onToggleRejected={(itemId, current) => toggleRejected(itemId, current)}
+          onDeleteItem={(itemId) => deleteItem(itemId)}
         />
 
         <div className="border-t border-border my-2" />
@@ -160,12 +166,12 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         {/* Custom Items */}
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading...</div>
-        ) : customItems.length === 0 ? (
+        ) : otherCustom.length === 0 ? (
           <div className="text-center text-muted-foreground py-4 text-sm">No custom items</div>
         ) : (
           <>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1 pt-2 pb-1">Custom Items</h3>
-            {customItems.map((item) => (
+            {otherCustom.map((item) => (
               <div
                 key={item.id}
                 className={cn(
