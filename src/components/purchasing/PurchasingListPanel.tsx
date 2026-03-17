@@ -73,29 +73,53 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
           <Package className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-bold">Company Purchasing List</h2>
         </div>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className={cn("gap-1", filterDate && "text-primary")}>
-              <CalendarIcon className="w-4 h-4" />
-              {filterDate ? format(filterDate, "yyyy/MM/dd") : "Calendar"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <Calendar
-              mode="single"
-              selected={filterDate}
-              onSelect={(d) => setFilterDate(d || undefined)}
-              className="p-3 pointer-events-auto"
-            />
-            {filterDate && (
-              <div className="p-2 border-t">
-                <Button variant="ghost" size="sm" className="w-full" onClick={() => setFilterDate(undefined)}>
-                  Clear Filter
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 rounded-full text-green-600 hover:bg-green-600/10 hover:text-green-700"
+                  onClick={() => {
+                    if (!filterDate) {
+                      toast.error("Select a date first");
+                      setCalendarOpen(true);
+                      return;
+                    }
+                    setConfirmDialogOpen(true);
+                  }}
+                >
+                  <CheckCircle className="w-5 h-5" />
                 </Button>
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
+              </TooltipTrigger>
+              <TooltipContent>Confirm & Save List</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("gap-1", filterDate && "text-primary")}>
+                <CalendarIcon className="w-4 h-4" />
+                {filterDate ? format(filterDate, "yyyy/MM/dd") : "Calendar"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={filterDate}
+                onSelect={(d) => setFilterDate(d || undefined)}
+                className="p-3 pointer-events-auto"
+              />
+              {filterDate && (
+                <div className="p-2 border-t">
+                  <Button variant="ghost" size="sm" className="w-full" onClick={() => setFilterDate(undefined)}>
+                    Clear Filter
+                  </Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       {/* Status tabs */}
