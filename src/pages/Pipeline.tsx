@@ -849,6 +849,42 @@ export default function Pipeline() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
         />
+
+        {/* Row 3: Stage group quick-filter chips */}
+        <div className="flex items-center gap-1.5 pt-1">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mr-1">View:</span>
+          {Object.entries(STAGE_GROUPS).map(([key, group]) => {
+            const active = activeGroups.has(key);
+            const count = Array.from(group.stages).reduce((sum, sid) => sum + (leadsByStage[sid]?.length || 0), 0);
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveGroups(prev => {
+                  const next = new Set(prev);
+                  if (next.has(key)) next.delete(key);
+                  else next.add(key);
+                  return next;
+                })}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                  active
+                    ? "bg-primary/10 text-primary border-primary/30"
+                    : "bg-muted/50 text-muted-foreground border-border hover:bg-accent"
+                }`}
+              >
+                {group.label}
+                <span className="text-[10px] opacity-70">{count}</span>
+              </button>
+            );
+          })}
+          {activeGroups.size < Object.keys(STAGE_GROUPS).length && (
+            <button
+              onClick={() => setActiveGroups(new Set(Object.keys(STAGE_GROUPS)))}
+              className="text-[10px] text-muted-foreground hover:text-foreground ml-1 underline"
+            >
+              Show all
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Pipeline Board + AI Panel */}
