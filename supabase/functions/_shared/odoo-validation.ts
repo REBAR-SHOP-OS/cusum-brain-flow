@@ -25,6 +25,8 @@ export const STAGE_MAP: Record<string, string> = {
   "Out for Delivery": "out_for_delivery",
   "Won": "won",
   "Loss": "loss",
+  "Lost": "lost",
+  "Prospecting": "prospecting",
   "Merged": "merged",
   "No rebars(Our of Scope)": "no_rebars_out_of_scope",
   "Temp: IR/VAM": "temp_ir_vam",

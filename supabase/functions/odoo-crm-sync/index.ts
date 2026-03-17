@@ -9,10 +9,18 @@ import {
 
 const FIELDS = [
   "id", "name", "stage_id", "email_from", "phone", "contact_name",
-  "user_id", "probability", "expected_revenue", "type", "partner_name",
+  "user_id", "probability", "expected_revenue", "planned_revenue", "type", "partner_name",
   "city", "create_date", "write_date", "priority",
   "date_deadline",
 ];
+
+/** Map Odoo priority (0=Normal,1=Low,2=High,3=Very High) to our priority */
+function mapOdooPriority(raw: unknown): "low" | "medium" | "high" {
+  const p = String(raw ?? "0");
+  if (p === "3" || p === "2") return "high";
+  if (p === "1") return "low";
+  return "medium"; // 0 = Normal → medium
+}
 
 async function odooRpc(url: string, db: string, apiKey: string, model: string, method: string, args: unknown[]) {
   const rpcArgs = [db, 2, apiKey, model, method, ...args];
