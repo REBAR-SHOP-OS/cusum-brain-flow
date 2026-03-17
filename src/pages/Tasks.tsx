@@ -1275,7 +1275,7 @@ export default function Tasks() {
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"
-                          selected={selectedTask.due_date ? new Date(selectedTask.due_date) : undefined}
+                          selected={selectedTask.due_date ? parseDateString(selectedTask.due_date) : undefined}
                           onSelect={async (date) => {
                             const oldDate = selectedTask.due_date;
                             const newDate = date ? format(date, "yyyy-MM-dd") : null;
