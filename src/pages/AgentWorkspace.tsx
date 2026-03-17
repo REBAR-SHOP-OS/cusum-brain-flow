@@ -301,7 +301,7 @@ export default function AgentWorkspace() {
         content: (() => {
           const errText = error instanceof Error ? error.message : "";
           const friendlyMsg = /abort|timeout|failed to send/i.test(errText)
-            ? "Image generation is taking longer than expected. Please try again."
+            ? "Image generation timed out. Try a simpler prompt or square (1:1) ratio."
             : errText;
           return `Sorry, I encountered an error. ${friendlyMsg}`;
         })(),
