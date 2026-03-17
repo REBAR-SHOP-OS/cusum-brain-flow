@@ -44,10 +44,10 @@ export function usePublishPost() {
 
       // Strip Persian translation block — never publish Persian text
       const cleanContent = stripPersian(post.content);
-      const message = [
-        cleanContent,
-        post.hashtags.length > 0 ? "\n\n" + post.hashtags.join(" ") : "",
-      ].join("");
+      const contentHasHashtags = /#[a-zA-Z]\w/.test(cleanContent);
+      const message = contentHasHashtags
+        ? cleanContent
+        : [cleanContent, post.hashtags.length > 0 ? "\n\n" + post.hashtags.join(" ") : ""].join("");
 
       // Use raw fetch with 120s timeout so client doesn't abort before server-side
       // video polling completes (Instagram Reels can take 60-90s to process)
