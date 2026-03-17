@@ -97,6 +97,28 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     }
   }, [user]);
 
+  const addItemAsRejected = useCallback(async (title: string, category: string, dueDate?: string) => {
+    if (!user) return;
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    if (!profile?.company_id) return;
+
+    const { error } = await supabase.from("purchasing_list_items" as any).insert({
+      company_id: profile.company_id,
+      title,
+      quantity: 1,
+      category,
+      priority: "medium",
+      is_rejected: true,
+      is_purchased: false,
+      created_by: user.id,
+      due_date: dueDate || null,
+    });
+    if (error) {
+      toast.error("Error rejecting item");
+      console.error(error);
+    }
+  }, [user]);
+
   const addItemAsPurchased = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
