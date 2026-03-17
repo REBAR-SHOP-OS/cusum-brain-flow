@@ -36,6 +36,7 @@ const SALES_ALLOWED = [
   "/integrations",
   "/agent",
   "/daily-summarizer",
+  "/live-monitor",
 ];
 
 interface RoleGuardProps {
