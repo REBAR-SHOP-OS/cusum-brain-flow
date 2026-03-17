@@ -11,9 +11,9 @@ import { cn } from "@/lib/utils";
 import { usePurchasingList } from "@/hooks/usePurchasingList";
 
 const STATUS_TABS = [
-  { value: "all" as const, label: "همه" },
-  { value: "pending" as const, label: "خریداری نشده" },
-  { value: "purchased" as const, label: "خریداری شده" },
+  { value: "all" as const, label: "All" },
+  { value: "pending" as const, label: "Not Purchased" },
+  { value: "purchased" as const, label: "Purchased" },
 ];
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -49,7 +49,7 @@ export function PurchasingListPanel() {
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-2">
           <Package className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-bold">لیست خرید شرکت</h2>
+          <h2 className="text-lg font-bold">Company Purchasing List</h2>
         </div>
         <div className="flex items-center gap-2">
           {/* Calendar filter */}
@@ -57,7 +57,7 @@ export function PurchasingListPanel() {
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className={cn("gap-1", filterDate && "text-primary")}>
                 <CalendarIcon className="w-4 h-4" />
-                {filterDate ? format(filterDate, "yyyy/MM/dd") : "تقویم"}
+                {filterDate ? format(filterDate, "yyyy/MM/dd") : "Calendar"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
@@ -70,7 +70,7 @@ export function PurchasingListPanel() {
               {filterDate && (
                 <div className="p-2 border-t">
                   <Button variant="ghost" size="sm" className="w-full" onClick={() => setFilterDate(undefined)}>
-                    پاک کردن فیلتر
+                    Clear Filter
                   </Button>
                 </div>
               )}
@@ -79,7 +79,7 @@ export function PurchasingListPanel() {
 
           <Button size="sm" onClick={() => setShowAddForm(!showAddForm)} className="gap-1">
             <Plus className="w-4 h-4" />
-            افزودن
+            Add
           </Button>
         </div>
       </div>
@@ -103,7 +103,7 @@ export function PurchasingListPanel() {
         <div className="p-3 border-b border-border bg-muted/30 space-y-2">
           <div className="flex gap-2">
             <Input
-              placeholder="نام آیتم..."
+              placeholder="Item name..."
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               className="flex-1"
@@ -112,7 +112,7 @@ export function PurchasingListPanel() {
             />
             <Input
               type="number"
-              placeholder="تعداد"
+              placeholder="Qty"
               value={newQty}
               onChange={(e) => setNewQty(e.target.value)}
               className="w-20"
@@ -121,7 +121,7 @@ export function PurchasingListPanel() {
           </div>
           <div className="flex gap-2">
             <Input
-              placeholder="دسته‌بندی (اختیاری)"
+              placeholder="Category (optional)"
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value)}
               className="flex-1"
@@ -131,12 +131,12 @@ export function PurchasingListPanel() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="high">فوری</SelectItem>
-                <SelectItem value="medium">عادی</SelectItem>
-                <SelectItem value="low">کم‌اهمیت</SelectItem>
+                <SelectItem value="high">Urgent</SelectItem>
+                <SelectItem value="medium">Normal</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={handleAdd} disabled={!newTitle.trim()}>ثبت</Button>
+            <Button onClick={handleAdd} disabled={!newTitle.trim()}>Add</Button>
           </div>
         </div>
       )}
@@ -144,9 +144,9 @@ export function PurchasingListPanel() {
       {/* Items list */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {loading ? (
-          <div className="text-center text-muted-foreground py-8">در حال بارگذاری...</div>
+          <div className="text-center text-muted-foreground py-8">Loading...</div>
         ) : items.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8">لیست خالی است</div>
+          <div className="text-center text-muted-foreground py-8">List is empty</div>
         ) : (
           items.map((item) => (
             <div
@@ -171,7 +171,7 @@ export function PurchasingListPanel() {
                 </div>
               </div>
               <span className={cn("text-xs font-medium", PRIORITY_COLORS[item.priority] || "text-muted-foreground")}>
-                {item.priority === "high" ? "فوری" : item.priority === "low" ? "کم" : "عادی"}
+                {item.priority === "high" ? "Urgent" : item.priority === "low" ? "Low" : "Normal"}
               </span>
               <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
                 <Trash2 className="w-3.5 h-3.5" />

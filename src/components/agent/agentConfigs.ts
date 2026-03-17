@@ -206,8 +206,8 @@ export const agentConfigs: Record<string, AgentConfig> = {
     role: "Purchasing & Procurement",
     image: accountingHelper,
     agentType: "purchasing",
-    greeting: "سلام! من کالا هستم، دستیار خرید شما. لیست خرید شرکت را مدیریت می‌کنم.",
-    placeholder: "اقلام مورد نیاز را بنویسید یا بپرسید...",
-    capabilities: ["مدیریت لیست خرید", "ثبت اقلام جدید", "پیگیری وضعیت خرید", "فیلتر بر اساس تاریخ"],
+    greeting: "Hi! I'm Kala, your Purchasing & Procurement agent. I manage the company purchasing list.",
+    placeholder: "Ask about items to buy, list status, etc.",
+    capabilities: ["Manage purchasing list", "Add new items", "Track purchase status", "Filter by date"],
   },
 };
