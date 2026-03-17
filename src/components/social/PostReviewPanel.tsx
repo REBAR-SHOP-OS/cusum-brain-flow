@@ -547,89 +547,91 @@ export function PostReviewPanel({
                   <div className="mx-4 rounded-lg border bg-muted/30 p-4 text-center">
                     <p className="text-sm text-muted-foreground">Stories are image/video only — no caption needed.</p>
                   </div>
-                ) : editing ? (
-                  <div className="px-4 pb-4 space-y-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Title</Label>
-                      <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Content</Label>
-                      <Textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        className="min-h-[120px] resize-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Hashtags</Label>
-                      <Input value={editHashtags} onChange={(e) => setEditHashtags(e.target.value)} />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button className="flex-1" onClick={saveEdit}>Save changes</Button>
-                      <Button variant="outline" className="flex-1" onClick={() => setEditing(false)}>Cancel</Button>
-                    </div>
-                  </div>
                 ) : (
                   <>
-                    {/* Content card — strip Persian block */}
+                    {/* Always-editable content fields with auto-save */}
+                    <div className="px-4 pb-2 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Content</p>
+                        {saveStatus === "saving" && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+                          </span>
+                        )}
+                        {saveStatus === "saved" && (
+                          <span className="text-xs text-green-600 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Saved ✓
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Title</Label>
+                        <Input
+                          value={localTitle}
+                          disabled={isPublished}
+                          onChange={(e) => { setLocalTitle(e.target.value); triggerDebouncedSave(); }}
+                          placeholder="Post title"
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Caption</Label>
+                        <Textarea
+                          value={localContent}
+                          disabled={isPublished}
+                          onChange={(e) => { setLocalContent(e.target.value); triggerDebouncedSave(); }}
+                          placeholder="Write your caption…"
+                          className="min-h-[120px] resize-none text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Hashtags</Label>
+                        <Input
+                          value={localHashtags}
+                          disabled={isPublished}
+                          onChange={(e) => { setLocalHashtags(e.target.value); triggerDebouncedSave(); }}
+                          placeholder="#hashtag1, #hashtag2"
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Persian translation — internal reference only */}
                     {(() => {
                       const persianSep = "---PERSIAN---";
                       const rawContent = post.content || "";
                       const persianIdx = rawContent.indexOf(persianSep);
-                      const englishContent = persianIdx !== -1 ? rawContent.slice(0, persianIdx).trim() : rawContent;
                       const persianBlock = persianIdx !== -1 ? rawContent.slice(persianIdx + persianSep.length).trim() : "";
-                      return (
-                        <>
-                          <div className="mx-4 rounded-lg border bg-card p-4 space-y-3">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Content</p>
-                            <div className="space-y-2 text-sm">
-                              {post.title && (
-                                <p className="font-semibold text-foreground">{post.title}</p>
-                              )}
-                              <p className="text-foreground/90 whitespace-pre-line leading-relaxed">{englishContent}</p>
-                              {post.hashtags.length > 0 && (
-                                <p className="text-primary text-xs leading-relaxed">
-                                  Hashtags: {post.hashtags.join(" ")}
+                      return persianBlock ? (
+                        <div className="mx-4">
+                          <Collapsible>
+                            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group w-full">
+                              <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
+                              <span>🔒 Persian Translation (internal only — never published)</span>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="mt-2 p-3 rounded-lg border border-border/50 bg-muted/30">
+                                <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed" dir="rtl">
+                                  {persianBlock}
                                 </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Persian translation — internal reference only */}
-                          {persianBlock && (
-                            <div className="mx-4">
-                              <Collapsible>
-                                <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group w-full">
-                                  <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
-                                  <span>🔒 Persian Translation (internal only — never published)</span>
-                                </CollapsibleTrigger>
-                                <CollapsibleContent>
-                                  <div className="mt-2 p-3 rounded-lg border border-border/50 bg-muted/30">
-                                    <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed" dir="rtl">
-                                      {persianBlock}
-                                    </p>
-                                  </div>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            </div>
-                          )}
-                        </>
-                      );
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        </div>
+                      ) : null;
                     })()}
 
-                    {/* Regenerate caption / AI Edit */}
+                    {/* Regenerate caption */}
                     <div className="flex gap-2 px-4 pt-3">
                       <Button
                         variant="outline"
                         size="sm"
                         className="gap-1.5"
-                        disabled={regeneratingCaption}
+                        disabled={regeneratingCaption || isPublished}
                         onClick={async () => {
                           setRegeneratingCaption(true);
                           try {
                             if (isVideo && post.image_url) {
-                              // Hybrid: try video-to-social first
                               try {
                                 const videoData = await invokeEdgeFunction("video-to-social", {
                                   videoUrl: post.image_url, platform: post.platform || "instagram", aspectRatio: "1:1"
@@ -656,10 +658,6 @@ export function PostReviewPanel({
                       >
                         {regeneratingCaption ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                         {regeneratingCaption ? "Regenerating..." : "Regenerate caption"}
-                      </Button>
-                      <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
-                        <Sparkles className="w-3.5 h-3.5" />
-                        AI Edit
                       </Button>
                     </div>
                   </>
