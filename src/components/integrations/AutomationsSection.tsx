@@ -169,22 +169,29 @@ const AutomationCard = React.forwardRef<HTMLDivElement, AutomationCardProps>(fun
       ref={ref}
       onClick={onClick}
       className={cn(
-        "relative overflow-hidden rounded-2xl p-4 text-white transition-transform hover:scale-[1.02] cursor-pointer",
+        "relative overflow-hidden rounded-2xl p-4 text-white transition-transform hover:scale-[1.02] cursor-pointer min-h-[140px]",
         colorGradients[automation.color]
       )}
     >
-      {/* Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 flex flex-col h-full">
         <h3 className="text-lg font-bold leading-tight mb-1">{automation.name}</h3>
-        <p className="text-sm text-white/70 mb-3">{automation.description}</p>
+        <p className="text-sm text-white/70 mb-2">{automation.description}</p>
 
-        <div className="flex items-center gap-3">
+        {automation.highlights && automation.highlights.length > 0 && (
+          <ul className="mb-2 space-y-0.5">
+            {automation.highlights.map((h) => (
+              <li key={h} className="text-xs text-white/60 flex items-center gap-1.5">
+                <span className="w-1 h-1 rounded-full bg-white/50 shrink-0" />
+                {h}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex items-center gap-3 mt-auto">
           <Switch
             checked={automation.enabled}
-            onCheckedChange={(checked) => {
-              // Prevent navigation when clicking the switch
-              onToggle(automation.id, checked);
-            }}
+            onCheckedChange={(checked) => onToggle(automation.id, checked)}
             onClick={(e) => e.stopPropagation()}
             className="data-[state=checked]:bg-white/30 data-[state=unchecked]:bg-white/20"
           />
@@ -199,13 +206,10 @@ const AutomationCard = React.forwardRef<HTMLDivElement, AutomationCardProps>(fun
         </div>
       </div>
 
-      {/* Decorative Icon */}
-      <div className="absolute right-4 bottom-4 opacity-20">
-        <Icon className="w-16 h-16" strokeWidth={1} />
+      {/* Decorative Icon — reduced size & opacity */}
+      <div className="absolute right-4 bottom-4 opacity-10">
+        <Icon className="w-10 h-10" strokeWidth={1} />
       </div>
-
-      {/* Glow effect */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
     </div>
   );
 });
