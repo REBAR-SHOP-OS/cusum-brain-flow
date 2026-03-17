@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "./useCompanyId";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 export type SalesContact = {
@@ -70,6 +71,18 @@ export function useSalesContacts() {
       return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     },
   });
+
+  // Realtime
+  useEffect(() => {
+    if (!companyId) return;
+    const channel = supabase
+      .channel("sales_contacts_rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales_contacts" }, () => {
+        qc.invalidateQueries({ queryKey: ["sales_contacts", companyId] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [companyId, qc]);
 
   const create = useMutation({
     mutationFn: async (item: Partial<SalesContact> & { name: string }) => {

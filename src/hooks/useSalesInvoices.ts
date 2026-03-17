@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "./useCompanyId";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 export type SalesInvoice = {
@@ -17,6 +18,8 @@ export type SalesInvoice = {
   issued_date: string | null;
   notes: string | null;
   created_at: string;
+  paid_date?: string | null;
+  payment_method?: string | null;
 };
 
 export function useSalesInvoices() {
@@ -36,6 +39,18 @@ export function useSalesInvoices() {
       return data as SalesInvoice[];
     },
   });
+
+  // Realtime
+  useEffect(() => {
+    if (!companyId) return;
+    const channel = supabase
+      .channel("sales_invoices_rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales_invoices" }, () => {
+        qc.invalidateQueries({ queryKey: ["sales_invoices", companyId] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [companyId, qc]);
 
   const create = useMutation({
     mutationFn: async (item: Partial<SalesInvoice> & { invoice_number: string }) => {
@@ -69,5 +84,21 @@ export function useSalesInvoices() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  return { invoices: query.data ?? [], isLoading: query.isLoading, create, update, remove };
+  const generateNumber = async () => {
+    const year = new Date().getFullYear();
+    const prefix = `INV-${year}`;
+    if (!companyId) return `${prefix}0001`;
+    const { data } = await supabase
+      .from("sales_invoices")
+      .select("invoice_number")
+      .eq("company_id", companyId)
+      .like("invoice_number", `${prefix}%`)
+      .order("invoice_number", { ascending: false })
+      .limit(1);
+    if (!data?.length) return `${prefix}0001`;
+    const lastNum = parseInt(data[0].invoice_number.slice(prefix.length), 10) || 0;
+    return `${prefix}${String(lastNum + 1).padStart(4, "0")}`;
+  };
+
+  return { invoices: query.data ?? [], isLoading: query.isLoading, create, update, remove, generateNumber };
 }

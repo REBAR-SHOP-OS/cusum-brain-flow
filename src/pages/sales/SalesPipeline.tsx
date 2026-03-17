@@ -1,33 +1,74 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import SalesSearchBar from "@/components/sales/SalesSearchBar";
+import SalesSummaryCards, { SummaryCardData } from "@/components/sales/SalesSummaryCards";
+import SalesLeadCard from "@/components/sales/SalesLeadCard";
+import SalesLeadDrawer from "@/components/sales/SalesLeadDrawer";
 
 export default function SalesPipeline() {
   const { leads, isLoading, createLead, updateLead, deleteLead } = useSalesLeads();
   const [createOpen, setCreateOpen] = useState(false);
-  const [editLead, setEditLead] = useState<SalesLead | null>(null);
+  const [drawerLead, setDrawerLead] = useState<SalesLead | null>(null);
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   // Form state
   const [form, setForm] = useState({ title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "", expected_value: "", source: "", notes: "" });
-
   const resetForm = () => setForm({ title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "", expected_value: "", source: "", notes: "" });
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.key === "n") { e.preventDefault(); setCreateOpen(true); }
+      if (e.key === "Escape") setDrawerLead(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  // Filter leads
+  const filtered = useMemo(() => {
+    if (!search.trim()) return leads;
+    const q = search.toLowerCase();
+    return leads.filter(l =>
+      l.title.toLowerCase().includes(q) ||
+      (l.contact_name || "").toLowerCase().includes(q) ||
+      (l.contact_company || "").toLowerCase().includes(q) ||
+      (l.contact_email || "").toLowerCase().includes(q)
+    );
+  }, [leads, search]);
 
   const leadsByStage: Record<string, SalesLead[]> = {};
   SALES_STAGES.forEach(s => { leadsByStage[s.id] = []; });
-  leads.forEach(l => {
+  filtered.forEach(l => {
     if (leadsByStage[l.stage]) leadsByStage[l.stage].push(l);
     else leadsByStage["new"]?.push(l);
   });
+
+  // Analytics
+  const totalValue = leads.reduce((s, l) => s + (l.expected_value || 0), 0);
+  const wonLeads = leads.filter(l => l.stage === "won");
+  const wonValue = wonLeads.reduce((s, l) => s + (l.expected_value || 0), 0);
+  const closedLeads = leads.filter(l => l.stage === "won" || l.stage === "lost");
+  const winRate = closedLeads.length > 0 ? Math.round((wonLeads.length / closedLeads.length) * 100) : 0;
+  const avgDeal = wonLeads.length > 0 ? Math.round(wonValue / wonLeads.length) : 0;
+
+  const summaryCards: SummaryCardData[] = [
+    { label: "Pipeline Value", value: `$ ${totalValue.toLocaleString()}`, sub: `${leads.length} deals` },
+    { label: "Won Value", value: `$ ${wonValue.toLocaleString()}`, sub: `${wonLeads.length} deals`, color: "text-green-500" },
+    { label: "Win Rate", value: `${winRate}%`, sub: `${closedLeads.length} closed` },
+    { label: "Avg Deal", value: avgDeal > 0 ? `$ ${avgDeal.toLocaleString()}` : "—" },
+  ];
 
   const handleCreate = () => {
     if (!form.title.trim()) return;
@@ -60,9 +101,17 @@ export default function SalesPipeline() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h1 className="text-lg font-semibold text-foreground">Sales Pipeline</h1>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border gap-3">
+        <h1 className="text-lg font-semibold text-foreground shrink-0">Sales Pipeline</h1>
+        <div className="flex-1 max-w-xs">
+          <SalesSearchBar value={search} onChange={setSearch} placeholder="Search leads... ( / )" />
+        </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1" />New Lead</Button>
+      </div>
+
+      {/* Analytics */}
+      <div className="px-4 pt-3">
+        <SalesSummaryCards cards={summaryCards} />
       </div>
 
       {/* Board */}
@@ -70,7 +119,7 @@ export default function SalesPipeline() {
         <div className="flex gap-0 min-w-max h-full">
           {SALES_STAGES.map(stage => {
             const stageLeads = leadsByStage[stage.id] || [];
-            const totalValue = stageLeads.reduce((s, l) => s + (l.expected_value || 0), 0);
+            const stageValue = stageLeads.reduce((s, l) => s + (l.expected_value || 0), 0);
             return (
               <div
                 key={stage.id}
@@ -86,7 +135,7 @@ export default function SalesPipeline() {
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-[13px] truncate flex-1 text-foreground">{stage.label}</h3>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {totalValue > 0 && <span className="text-[11px] font-medium text-muted-foreground">$ {totalValue.toLocaleString()}</span>}
+                      {stageValue > 0 && <span className="text-[11px] font-medium text-muted-foreground">$ {stageValue.toLocaleString()}</span>}
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 min-w-[20px] justify-center rounded-sm">{stageLeads.length}</Badge>
                     </div>
                   </div>
@@ -98,25 +147,14 @@ export default function SalesPipeline() {
                   {stageLeads.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-8 opacity-50">Drop leads here</p>
                   ) : stageLeads.map(lead => (
-                    <div
+                    <SalesLeadCard
                       key={lead.id}
-                      draggable
+                      lead={lead}
+                      isDragging={draggedLead === lead.id}
+                      onClick={() => setDrawerLead(lead)}
                       onDragStart={() => setDraggedLead(lead.id)}
                       onDragEnd={() => { setDraggedLead(null); setDragOverStage(null); }}
-                      onClick={() => setEditLead(lead)}
-                      className={cn(
-                        "bg-card border border-border rounded-md p-2.5 cursor-pointer hover:shadow-sm transition-shadow",
-                        draggedLead === lead.id && "opacity-50"
-                      )}
-                    >
-                      <p className="text-sm font-medium text-foreground truncate">{lead.title}</p>
-                      {lead.contact_company && <p className="text-xs text-muted-foreground truncate">{lead.contact_company}</p>}
-                      {lead.contact_name && <p className="text-xs text-muted-foreground truncate">{lead.contact_name}</p>}
-                      <div className="flex items-center justify-between mt-1.5">
-                        {lead.expected_value ? <span className="text-xs font-medium text-primary">$ {Number(lead.expected_value).toLocaleString()}</span> : <span />}
-                        {lead.source && <Badge variant="outline" className="text-[10px] h-4">{lead.source}</Badge>}
-                      </div>
-                    </div>
+                    />
                   ))}
                 </div>
               </div>
@@ -149,36 +187,14 @@ export default function SalesPipeline() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit/Detail Dialog */}
-      <Dialog open={!!editLead} onOpenChange={() => setEditLead(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editLead?.title}</DialogTitle></DialogHeader>
-          {editLead && (
-            <div className="space-y-3">
-              <div><Label>Stage</Label>
-                <Select value={editLead.stage} onValueChange={v => { updateLead.mutate({ id: editLead.id, stage: v }); setEditLead({ ...editLead, stage: v }); }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{SALES_STAGES.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><Label>Contact</Label><p className="text-sm text-muted-foreground">{editLead.contact_name || "—"}</p></div>
-                <div><Label>Company</Label><p className="text-sm text-muted-foreground">{editLead.contact_company || "—"}</p></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><Label>Email</Label><p className="text-sm text-muted-foreground">{editLead.contact_email || "—"}</p></div>
-                <div><Label>Phone</Label><p className="text-sm text-muted-foreground">{editLead.contact_phone || "—"}</p></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><Label>Value</Label><p className="text-sm text-muted-foreground">{editLead.expected_value ? `$ ${Number(editLead.expected_value).toLocaleString()}` : "—"}</p></div>
-                <div><Label>Source</Label><p className="text-sm text-muted-foreground">{editLead.source || "—"}</p></div>
-              </div>
-              {editLead.notes && <div><Label>Notes</Label><p className="text-sm text-muted-foreground">{editLead.notes}</p></div>}
-              <Button variant="destructive" size="sm" onClick={() => { deleteLead.mutate(editLead.id); setEditLead(null); }}>Delete Lead</Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Detail Drawer */}
+      <SalesLeadDrawer
+        lead={drawerLead}
+        open={!!drawerLead}
+        onClose={() => setDrawerLead(null)}
+        onUpdate={(data) => { updateLead.mutate(data); setDrawerLead(prev => prev ? { ...prev, ...data } : null); }}
+        onDelete={(id) => deleteLead.mutate(id)}
+      />
     </div>
   );
 }
