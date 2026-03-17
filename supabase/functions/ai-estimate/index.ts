@@ -312,13 +312,29 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
           const aiData = await aiRes.json();
           const content = aiData.choices?.[0]?.message?.content ?? "";
           console.log("AI extraction response length:", content.length);
+          console.log("AI response preview:", content.substring(0, 500));
 
-          const jsonMatch = content.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            extractedItems = JSON.parse(jsonMatch[0]);
-            console.log(`Extracted ${extractedItems.length} items from drawings`);
-          } else {
-            console.error("No JSON array found in AI response");
+          // Robust JSON parsing: strip markdown fences, try direct parse, then regex fallback
+          let cleaned = content.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+
+          try {
+            const parsed = JSON.parse(cleaned);
+            extractedItems = Array.isArray(parsed) ? parsed : [parsed];
+            console.log(`Extracted ${extractedItems.length} items (direct parse)`);
+          } catch {
+            const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              try {
+                extractedItems = JSON.parse(jsonMatch[0]);
+                console.log(`Extracted ${extractedItems.length} items (regex fallback)`);
+              } catch (parseErr) {
+                console.error("JSON parse failed after regex match:", parseErr);
+                console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
+              }
+            } else {
+              console.error("No JSON array found in AI response");
+              console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
+            }
           }
         }
       } catch (e) {
