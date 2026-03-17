@@ -443,6 +443,9 @@ export function LiveMonitorView() {
               totalTonnage={totalTonnage}
             />
 
+            {/* Downtime Alerts */}
+            <DowntimeAlertBanner machines={machines} />
+
             {/* Machine Cards Section */}
             <section>
               <div className="flex items-center gap-2 mb-3">
@@ -465,6 +468,9 @@ export function LiveMonitorView() {
                 )}
               </div>
             </section>
+
+            {/* Material Flow Pipeline */}
+            <MaterialFlowDiagram />
 
             {/* Operational Metrics */}
             <SLAAlertStrip heartbeat={heartbeat ?? null} />
