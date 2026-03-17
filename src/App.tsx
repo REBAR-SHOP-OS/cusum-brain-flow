@@ -84,6 +84,8 @@ import QuoteEngine from "./pages/QuoteEngine";
 import AutomationsHub from "./pages/AutomationsHub";
 import VideoStudio from "./pages/VideoStudio";
 import AdDirector from "./pages/AdDirector";
+import AppBuilder from "./pages/AppBuilder";
+import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspace";
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
 
