@@ -135,6 +135,7 @@ const App = () => (
                     {/* Core */}
                     <Route path="/home" element={<P><Home /></P>} />
                     <Route path="/ceo" element={<P><CEOPortal /></P>} />
+                    <Route path="/live-monitor" element={<P><LiveMonitor /></P>} />
                     
                     <Route path="/tasks" element={<P><Tasks /></P>} />
                     <Route path="/phonecalls" element={<P><Phonecalls /></P>} />
