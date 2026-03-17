@@ -256,12 +256,19 @@ Deno.serve(async (req) => {
           (existing || []).forEach((e: any) => existingMsgIds.add(e.odoo_message_id));
         }
 
-        // For re-sync: update existing rows that are missing body_html
-        const updateRows = rows.filter(r => existingMsgIds.has(r.odoo_message_id) && r.body_html);
+        // For re-sync: always update existing rows with body_html, description, and metadata
+        const updateRows = rows.filter(r => existingMsgIds.has(r.odoo_message_id));
         for (const ur of updateRows) {
-          await serviceClient.from("lead_activities")
-            .update({ body_html: ur.body_html, metadata: ur.metadata })
-            .eq("odoo_message_id", ur.odoo_message_id);
+          const updates: Record<string, any> = {};
+          if (ur.body_html) updates.body_html = ur.body_html;
+          if (ur.description) updates.description = ur.description;
+          if (ur.metadata) updates.metadata = ur.metadata;
+          if (ur.created_by) updates.created_by = ur.created_by;
+          if (Object.keys(updates).length > 0) {
+            await serviceClient.from("lead_activities")
+              .update(updates)
+              .eq("odoo_message_id", ur.odoo_message_id);
+          }
         }
 
         const newRows = rows.filter(r => !existingMsgIds.has(r.odoo_message_id));
@@ -278,25 +285,93 @@ Deno.serve(async (req) => {
             messagesInserted += chunk.length;
           }
         }
-        // Backfill: link lead_files to their parent message via attachment_ids + fix created_at
+        // ── Fetch + upsert attachments from Odoo, linked to their parent message ──
+        // Collect all attachment_ids from this batch of messages
+        const allAttachmentIds: number[] = [];
+        const attachmentToMsg = new Map<number, { msgId: number; leadId: string; msgDate: string | null }>();
         for (const msg of messages) {
           if (Array.isArray(msg.attachment_ids) && msg.attachment_ids.length > 0) {
+            const leadId = odooToLead.get(msg.res_id);
+            if (!leadId) continue;
+            const msgDate = msg.date ? msg.date.replace(" ", "T") + "Z" : null;
+            for (const aid of msg.attachment_ids) {
+              const numId = Number(aid);
+              allAttachmentIds.push(numId);
+              attachmentToMsg.set(numId, { msgId: msg.id, leadId, msgDate });
+            }
+          }
+        }
+
+        // Fetch attachment metadata from Odoo in chunks
+        if (allAttachmentIds.length > 0) {
+          for (let ai = 0; ai < allAttachmentIds.length; ai += 100) {
+            const aidBatch = allAttachmentIds.slice(ai, ai + 100);
+            try {
+              const attachments = await odooRpc(odooUrl, odooDB, odooKey, "ir.attachment", "read", [
+                [aidBatch],
+                { fields: ["id", "name", "mimetype", "file_size", "create_date", "res_id", "res_model"] },
+              ]);
+              if (!Array.isArray(attachments)) continue;
+
+              for (const att of attachments) {
+                const attId = Number(att.id);
+                const parent = attachmentToMsg.get(attId);
+                if (!parent) continue;
+
+                const mimeType = att.mimetype || "application/octet-stream";
+                const fileName = att.name || "attachment";
+                const fileUrl = `${odooUrl}/web/content/${attId}?download=true`;
+                const createdAt = parent.msgDate || (att.create_date ? att.create_date.replace(" ", "T") + "Z" : new Date().toISOString());
+
+                // Upsert: if file with this odoo_id exists, update linkage; otherwise create
+                const { data: existing } = await serviceClient
+                  .from("lead_files")
+                  .select("id, odoo_message_id")
+                  .eq("odoo_id", attId)
+                  .limit(1);
+
+                if (existing && existing.length > 0) {
+                  // Update linkage + timestamp if missing
+                  const updates: Record<string, any> = {};
+                  if (!existing[0].odoo_message_id) updates.odoo_message_id = parent.msgId;
+                  if (Object.keys(updates).length > 0) {
+                    updates.created_at = createdAt;
+                    await serviceClient.from("lead_files").update(updates).eq("id", existing[0].id);
+                  }
+                } else {
+                  // Create new lead_file entry
+                  await serviceClient.from("lead_files").insert({
+                    lead_id: parent.leadId,
+                    company_id: companyId,
+                    file_name: fileName,
+                    file_url: fileUrl,
+                    mime_type: mimeType,
+                    file_size_bytes: att.file_size || null,
+                    odoo_id: attId,
+                    odoo_message_id: parent.msgId,
+                    source: "odoo_sync",
+                    created_at: createdAt,
+                  });
+                }
+              }
+            } catch (attErr) {
+              console.warn("Attachment fetch error for batch:", attErr);
+            }
+          }
+        }
+
+        // Also try to link any pre-existing orphan files by odoo_id (integer match only)
+        for (const msg of messages) {
+          if (Array.isArray(msg.attachment_ids) && msg.attachment_ids.length > 0) {
+            const intIds = msg.attachment_ids.map((id: any) => Number(id));
             const msgDate = msg.date ? msg.date.replace(" ", "T") + "Z" : null;
             const updatePayload: Record<string, any> = { odoo_message_id: msg.id };
             if (msgDate) updatePayload.created_at = msgDate;
-            // Try both integer and string forms of attachment IDs for robust matching
-            const intIds = msg.attachment_ids.map((id: any) => Number(id));
-            const strIds = msg.attachment_ids.map((id: any) => String(id));
-            const allIds = [...intIds, ...strIds];
-            const { error: linkErr, count: linkCount } = await serviceClient
+            await serviceClient
               .from("lead_files")
               .update(updatePayload)
-              .in("odoo_id", allIds);
-            if (linkErr) {
-              console.warn("File linkage error for msg", msg.id, linkErr.message);
-            } else if (linkCount && linkCount > 0) {
-              console.log(`Linked ${linkCount} files to msg ${msg.id}`);
-            }
+              .in("odoo_id", intIds)
+              .is("odoo_message_id", null);
           }
         }
 

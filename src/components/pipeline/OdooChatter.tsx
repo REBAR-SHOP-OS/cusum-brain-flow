@@ -331,7 +331,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   // Unified thread — files linked to their parent activity via odoo_message_id
   type ThreadItem =
     | { kind: "activity"; data: LeadActivity; matchedFiles?: any[]; date: Date }
-    | { kind: "file_group"; files: any[]; date: Date }
+    | { kind: "file_group"; files: any[]; label?: string; date: Date }
     | { kind: "comm"; data: (typeof communications)[0]; date: Date }
     | { kind: "system_group"; items: LeadActivity[]; date: Date };
 
@@ -439,7 +439,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     }
 
     // Group standalone files into batches by time proximity
-    const pushFileBatches = (fileList: any[]) => {
+    const pushFileBatches = (fileList: any[], label?: string) => {
       if (fileList.length === 0) return;
       const sorted = [...fileList].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       let batch: any[] = [sorted[0]];
@@ -449,16 +449,16 @@ export function OdooChatter({ lead }: OdooChatterProps) {
         if (cur - prev <= 60_000) {
           batch.push(sorted[i]);
         } else {
-          items.push({ kind: "file_group", files: [...batch], date: new Date(batch[0].created_at) });
+          items.push({ kind: "file_group", files: [...batch], label, date: new Date(batch[0].created_at) });
           batch = [sorted[i]];
         }
       }
       if (batch.length > 0) {
-        items.push({ kind: "file_group", files: [...batch], date: new Date(batch[0].created_at) });
+        items.push({ kind: "file_group", files: [...batch], label, date: new Date(batch[0].created_at) });
       }
     };
     pushFileBatches(orphanFiles);
-    pushFileBatches(unlinkedOdooFiles);
+    pushFileBatches(unlinkedOdooFiles, "Unlinked Odoo Files");
 
     // Sort by date descending
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -749,7 +749,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
                 <div key={key} className="border-b border-border last:border-b-0">
                   {showDateSep && <DateSeparator date={item.date} />}
                   {item.kind === "file_group" ? (
-                    <FileGroupThreadItem files={item.files} />
+                    <FileGroupThreadItem files={item.files} label={item.label} />
                   ) : item.kind === "comm" ? (
                     <CommThreadItem comm={item.data} />
                   ) : item.kind === "system_group" ? (
@@ -1086,7 +1086,7 @@ function InlineFileAttachments({ files }: { files: any[] }) {
   );
 }
 
-function FileGroupThreadItem({ files }: { files: any[] }) {
+function FileGroupThreadItem({ files, label }: { files: any[]; label?: string }) {
   return (
     <div className="flex gap-3 p-3 hover:bg-accent/50 rounded-md transition-colors">
       <Avatar className="w-8 h-8 shrink-0 text-[11px]">
@@ -1097,12 +1097,15 @@ function FileGroupThreadItem({ files }: { files: any[] }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[13px] font-semibold truncate">
-            {files.length} file{files.length > 1 ? "s" : ""} attached
+            {label ? `${label} (${files.length})` : `${files.length} file${files.length > 1 ? "s" : ""} attached`}
           </span>
           <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
             {format(new Date(files[0].created_at), "h:mm a")}
           </span>
         </div>
+        {label && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">These files could not be linked to a specific message</p>
+        )}
         <InlineFileAttachments files={files} />
       </div>
     </div>
