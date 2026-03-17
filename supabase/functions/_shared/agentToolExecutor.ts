@@ -756,10 +756,7 @@ export async function executeToolCall(
             { model: "google/gemini-3-pro-image-preview", useLogo: true },
           ];
 
-          let generated = false;
-          let lastError = "Unknown";
-
-          for (const attempt of attempts) {
+          if (!generated) for (const attempt of attempts) {
             const contentParts: any[] = [{ type: "text", text: fullPrompt }];
             if (attempt.useLogo && logoUrl) {
               contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
