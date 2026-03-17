@@ -213,7 +213,6 @@ export function AppSidebar() {
     });
   };
 
-  const [pinned, setPinned] = useState(() => localStorage.getItem("sidebar_pinned") === "true");
   const togglePin = () => {
     const next = !pinned;
     setPinned(next);
