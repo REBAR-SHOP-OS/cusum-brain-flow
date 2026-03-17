@@ -11354,6 +11354,7 @@ export type Database = {
       }
       sales_contacts: {
         Row: {
+          address: string | null
           company_id: string
           company_name: string | null
           created_at: string
@@ -11363,9 +11364,12 @@ export type Database = {
           notes: string | null
           phone: string | null
           source: string | null
+          tags: string[] | null
+          title: string | null
           updated_at: string
         }
         Insert: {
+          address?: string | null
           company_id: string
           company_name?: string | null
           created_at?: string
@@ -11375,9 +11379,12 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           source?: string | null
+          tags?: string[] | null
+          title?: string | null
           updated_at?: string
         }
         Update: {
+          address?: string | null
           company_id?: string
           company_name?: string | null
           created_at?: string
@@ -11387,6 +11394,8 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           source?: string | null
+          tags?: string[] | null
+          title?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -11395,6 +11404,53 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_invoice_items: {
+        Row: {
+          company_id: string
+          created_at: string
+          description: string
+          id: string
+          invoice_id: string
+          quantity: number
+          sort_order: number
+          total: number | null
+          unit: string | null
+          unit_price: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_id: string
+          quantity?: number
+          sort_order?: number
+          total?: number | null
+          unit?: string | null
+          unit_price?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_id?: string
+          quantity?: number
+          sort_order?: number
+          total?: number | null
+          unit?: string | null
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "sales_invoices"
             referencedColumns: ["id"]
           },
         ]
@@ -11411,6 +11467,8 @@ export type Database = {
           invoice_number: string
           issued_date: string | null
           notes: string | null
+          paid_date: string | null
+          payment_method: string | null
           quotation_id: string | null
           sales_lead_id: string | null
           status: string
@@ -11426,6 +11484,8 @@ export type Database = {
           invoice_number: string
           issued_date?: string | null
           notes?: string | null
+          paid_date?: string | null
+          payment_method?: string | null
           quotation_id?: string | null
           sales_lead_id?: string | null
           status?: string
@@ -11441,6 +11501,8 @@ export type Database = {
           invoice_number?: string
           issued_date?: string | null
           notes?: string | null
+          paid_date?: string | null
+          payment_method?: string | null
           quotation_id?: string | null
           sales_lead_id?: string | null
           status?: string
@@ -11482,12 +11544,15 @@ export type Database = {
           expected_close_date: string | null
           expected_value: number | null
           id: string
+          last_activity_date: string | null
+          lost_reason: string | null
           metadata: Json | null
           notes: string | null
           priority: string | null
           probability: number | null
           source: string | null
           stage: string
+          tags: string[] | null
           title: string
           updated_at: string
         }
@@ -11503,12 +11568,15 @@ export type Database = {
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
+          last_activity_date?: string | null
+          lost_reason?: string | null
           metadata?: Json | null
           notes?: string | null
           priority?: string | null
           probability?: number | null
           source?: string | null
           stage?: string
+          tags?: string[] | null
           title: string
           updated_at?: string
         }
@@ -11524,12 +11592,15 @@ export type Database = {
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
+          last_activity_date?: string | null
+          lost_reason?: string | null
           metadata?: Json | null
           notes?: string | null
           priority?: string | null
           probability?: number | null
           source?: string | null
           stage?: string
+          tags?: string[] | null
           title?: string
           updated_at?: string
         }
@@ -11539,6 +11610,53 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_quotation_items: {
+        Row: {
+          company_id: string
+          created_at: string
+          description: string
+          id: string
+          quantity: number
+          quotation_id: string
+          sort_order: number
+          total: number | null
+          unit: string | null
+          unit_price: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          description?: string
+          id?: string
+          quantity?: number
+          quotation_id: string
+          sort_order?: number
+          total?: number | null
+          unit?: string | null
+          unit_price?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          quantity?: number
+          quotation_id?: string
+          sort_order?: number
+          total?: number | null
+          unit?: string | null
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_quotation_items_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: false
+            referencedRelation: "sales_quotations"
             referencedColumns: ["id"]
           },
         ]
