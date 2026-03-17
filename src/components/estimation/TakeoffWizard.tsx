@@ -12,7 +12,6 @@ import { FileText, Upload, ArrowRight, ArrowLeft, Users, Briefcase, Sparkles, Lo
 import TakeoffPipeline from "./TakeoffPipeline";
 import { generateQuotationNumber } from "@/hooks/useSalesQuotations";
 import { getCompanyId } from "@/hooks/useCompanyId";
-import TakeoffPipeline from "./TakeoffPipeline";
 
 interface TakeoffWizardProps {
   open: boolean;
