@@ -1009,6 +1009,12 @@ Deno.serve(async (req) => {
     // Tools
     const tools = getTools(agent, stripSendCapabilities);
 
+    // Force tool use for empire agent on diagnostic/fix requests
+    const empireForceTools = agent === "empire" && tools.length > 0 &&
+      /check|diagnos|fix|rebar\.shop|scrape|audit|report|seo|issue|broken|error|status/i.test(message);
+    const initialToolChoice = empireForceTools ? "required" : "auto";
+    if (empireForceTools) console.log("🔧 Empire: forcing toolChoice=required for diagnostic request");
+
     // AI Call
     let aiResult = await callAI({
       provider: modelConfig.provider,
@@ -1018,7 +1024,7 @@ Deno.serve(async (req) => {
       maxTokens: modelConfig.maxTokens,
       temperature: modelConfig.temperature,
       tools,
-      toolChoice: "auto",
+      toolChoice: initialToolChoice,
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
 
