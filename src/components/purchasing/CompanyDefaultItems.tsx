@@ -89,8 +89,8 @@ function DefaultRow({
     <div
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-lg border border-border hover:bg-muted/30 transition-colors",
-        isPurchased && "bg-green-500/10 border-green-500/30",
-        isRejected && "bg-red-500/10 border-red-500/30"
+        isPurchased && "bg-green-500/20 border-green-500/50",
+        isRejected && "bg-red-500/20 border-red-500/50"
       )}
     >
       {/* Approve button */}
