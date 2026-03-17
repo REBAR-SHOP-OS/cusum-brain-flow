@@ -109,6 +109,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [musicTrackUrl, setMusicTrackUrl] = useState<string | null>(null);
   const [improvingSceneId, setImprovingSceneId] = useState<string | null>(null);
+  const cancelRef = useRef(false);
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [endCardEnabled, setEndCardEnabled] = useState(true);
@@ -497,6 +498,14 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     const maxAttempts = 120;
     let consecutiveErrors = 0;
     for (let i = 0; i < maxAttempts; i++) {
+      if (cancelRef.current) {
+        setClips(prev => prev.map(c =>
+          c.sceneId === sceneId && c.status === "generating"
+            ? { ...c, status: "failed", error: "Cancelled by user", progress: 0 }
+            : c
+        ));
+        return;
+      }
       await new Promise(r => setTimeout(r, 5000));
       try {
         const result = await invokeEdgeFunction<{ status?: string; videoUrl?: string; url?: string }>(
@@ -555,8 +564,18 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     ));
   };
 
+  const handleCancelGeneration = useCallback(() => {
+    cancelRef.current = true;
+    setClips(prev => prev.map(c =>
+      c.status === "generating" ? { ...c, status: "failed", error: "Cancelled by user", progress: 0 } : c
+    ));
+    setGenerationStatus("");
+    toast({ title: "Generation cancelled" });
+  }, [toast]);
+
   // ─── Generate All (with buildQty support) ──────────────
   const handleGenerateAll = useCallback(async () => {
+    cancelRef.current = false;
     const buildQty = videoParams.buildQty || 1;
     const baseScenes = storyboard;
 
@@ -568,18 +587,21 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
       });
       let launched = 0;
       for (const scene of scenesToGen) {
+        if (cancelRef.current) break;
         launched++;
         setGenerationStatus(`Generating scene ${launched} of ${scenesToGen.length}...`);
         await generateScene(scene.id);
         await new Promise(r => setTimeout(r, 2000));
       }
       setGenerationStatus("");
-      setStep("preview");
-      toast({ title: "Generation complete", description: `${scenesToGen.length} scenes generated.` });
+      if (!cancelRef.current) {
+        setStep("preview");
+        toast({ title: "Generation complete", description: `${scenesToGen.length} scenes generated.` });
+      }
       return;
     }
 
-    // Multi-build: run the full pipeline buildQty times, each producing a complete set of clips
+    // Multi-build: create all build slots upfront, then generate into each using a ref-tracked index
     const newBuilds: { buildIndex: number; clips: ClipOutput[] }[] = [];
     for (let b = 0; b < buildQty; b++) {
       newBuilds.push({
@@ -594,22 +616,29 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     let launched = 0;
 
     for (let b = 0; b < buildQty; b++) {
+      if (cancelRef.current) break;
       setActiveBuildIndex(b);
-      // Set the main clips state to this build's clips so generateScene updates the right entries
+      // Load this build's clips as the active set
       setClips(newBuilds[b].clips);
+      // Wait a tick for React to flush the state
+      await new Promise(r => setTimeout(r, 100));
 
       for (const scene of baseScenes) {
+        if (cancelRef.current) break;
         launched++;
         setGenerationStatus(`Build ${b + 1}/${buildQty} — scene ${launched} of ${totalJobs}...`);
         await generateScene(scene.id);
         await new Promise(r => setTimeout(r, 2000));
       }
 
-      // Snapshot current clips state into the build
-      setClips(prev => {
-        newBuilds[b] = { ...newBuilds[b], clips: [...prev] };
-        setBuilds([...newBuilds]);
-        return prev;
+      // Snapshot current clips into the build after all scenes in this build finish
+      await new Promise<void>(resolve => {
+        setClips(prev => {
+          newBuilds[b] = { ...newBuilds[b], clips: [...prev] };
+          setBuilds([...newBuilds]);
+          resolve();
+          return prev;
+        });
       });
     }
 
@@ -617,8 +646,10 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     setActiveBuildIndex(0);
     setClips(newBuilds[0].clips);
     setGenerationStatus("");
-    setStep("preview");
-    toast({ title: "All versions generated", description: `${buildQty} ad versions × ${baseScenes.length} scenes completed.` });
+    if (!cancelRef.current) {
+      setStep("preview");
+      toast({ title: "All versions generated", description: `${buildQty} ad versions × ${baseScenes.length} scenes completed.` });
+    }
   }, [storyboard, clips, generateScene, toast, videoParams.buildQty]);
 
   // ─── Export ──────────────────────────────────────
@@ -853,6 +884,11 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
               {progressValue !== undefined && (
                 <span className="ml-auto text-xs text-muted-foreground">{progressValue}%</span>
               )}
+              {generatingAny && (
+                <Button variant="ghost" size="sm" onClick={handleCancelGeneration} className="h-7 text-xs text-destructive hover:text-destructive ml-2 shrink-0">
+                  Cancel
+                </Button>
+              )}
             </div>
             {progressValue !== undefined && <Progress value={progressValue} className="h-2" />}
           </div>
@@ -876,7 +912,13 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
         </div>
       )}
       {step !== "preview" && externalActiveTab && (
-        <div className="fixed left-60 top-20 z-40 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-border/40 bg-card/95 backdrop-blur-md shadow-xl p-4 animate-in slide-in-from-left-4 duration-200">
+        <>
+          {/* Mobile backdrop */}
+          <div
+            className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+            onClick={() => onActiveTabChanged?.(null)}
+          />
+          <div className="fixed left-60 top-20 z-40 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-border/40 bg-card/95 backdrop-blur-md shadow-xl p-4 animate-in slide-in-from-left-4 duration-200">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold capitalize">{externalActiveTab.replace("-", " ")}</h3>
             <button
@@ -909,6 +951,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
             />
           )}
         </div>
+        </>
       )}
 
       {/* Content */}

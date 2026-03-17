@@ -1,47 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# AI Video Director — Bug Fixes & Stability Audit
+## Completed: Add All Wan 2.6 Capabilities
 
-After reviewing all files, I found several concrete bugs that cause the "mixing all together" behavior, plus stability issues from the last round of changes.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Bugs Found
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. Script textarea never appears after "Paste a script" click
-**File**: `ScriptInput.tsx` line 161
-The condition `(script.trim() || (!showAiWriter && script === "")) && script !== ""` is contradictory — it requires `script !== ""` but the "Paste a script" button sets script to `" "` then `""` after 50ms, so the textarea vanishes immediately. The empty state re-appears instead of the textarea.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-**Fix**: Simplify the condition to `script.trim().length > 0` — only show the textarea when there's actual content. Add a `manualEdit` state flag that the "Paste a script" button sets, which keeps the textarea visible even when empty.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### 2. Prompt undo never works on first edit
-**File**: `usePromptHistory.ts`
-`canUndo` requires `>= 2` entries, but `push` is only called once per edit (with the old prompt). After one edit the stack is `[oldPrompt]` — length 1, so `canUndo` returns false. The initial prompt from analysis is never pushed.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-**Fix**: In `AdDirectorContent.tsx` `handlePromptChange`, push the current prompt AND also ensure the initial prompt gets pushed on first edit. Change `canUndo` threshold to `>= 1`.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### 3. Multi-build clips race condition
-**File**: `AdDirectorContent.tsx` lines 596-618
-`handleGenerateAll` calls `setClips(newBuilds[b].clips)` to swap the active clip set, then calls `generateScene` which also calls `setClips`. React batches state updates, so the snapshot on line 609 may capture stale data from the wrong build. This is the "mixing all together" issue.
-
-**Fix**: Instead of swapping the global `clips` state between builds, track the active build index and have `generateScene` write directly to the correct build's clip array. Use a ref to track which build is active during generation.
-
-### 4. Floating sidebar has no mobile backdrop
-**File**: `AdDirectorContent.tsx` line 879
-The fixed-position panel overlaps content on mobile with no way to dismiss by tapping outside.
-
-**Fix**: Add a semi-transparent backdrop overlay that calls `onActiveTabChanged(null)` on click.
-
-### 5. No cancel button for generation polling
-The plan specified adding cancel, but it was not implemented. Polling runs for up to 10 minutes with no user control.
-
-**Fix**: Add an `AbortController` ref. Show a "Cancel" button in the global progress bar. On cancel, set all generating clips to "cancelled" status.
-
-## Files to Edit
-
-| File | Changes |
-|------|---------|
-| `src/components/ad-director/ScriptInput.tsx` | Fix textarea visibility condition |
-| `src/hooks/usePromptHistory.ts` | Fix canUndo threshold |
-| `src/components/ad-director/AdDirectorContent.tsx` | Fix multi-build race condition, add cancel generation, add mobile backdrop, fix initial prompt push |
-
-No database changes. No edge function changes.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

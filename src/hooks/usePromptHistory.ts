@@ -25,7 +25,7 @@ export function usePromptHistory() {
   }, []);
 
   const canUndo = useCallback((sceneId: string): boolean => {
-    return (historyRef.current[sceneId]?.length ?? 0) >= 2;
+    return (historyRef.current[sceneId]?.length ?? 0) >= 1;
   }, []);
 
   return { push, undo, canUndo };

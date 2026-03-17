@@ -45,6 +45,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
   const [aiWriting, setAiWriting] = useState(false);
   const [productDescription, setProductDescription] = useState("");
   const [showAiWriter, setShowAiWriter] = useState(false);
+  const [showTextarea, setShowTextarea] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -86,7 +87,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
         {/* ── Left Column: Creative Brief ── */}
         <div className="lg:col-span-2 space-y-3">
           {/* Empty State — Quick-Start Options */}
-          {!script.trim() && !showAiWriter && (
+          {!script.trim() && !showAiWriter && !showTextarea && (
             <div className="rounded-xl border border-border/30 bg-card/30 p-6 space-y-4">
               <div className="text-center space-y-1">
                 <Clapperboard className="w-8 h-8 text-primary mx-auto mb-2" />
@@ -97,12 +98,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
-                  onClick={() => {
-                    const el = document.getElementById("script-textarea");
-                    el?.focus();
-                    onScriptChange(" ");
-                    setTimeout(() => onScriptChange(""), 50);
-                  }}
+                  onClick={() => setShowTextarea(true)}
                   className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border/30 hover:border-primary/40 hover:bg-primary/5 transition-all group"
                 >
                   <ClipboardPaste className="w-5 h-5 text-muted-foreground group-hover:text-primary" />
@@ -157,8 +153,8 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
             </div>
           )}
 
-          {/* Existing textarea — only show when script has content or user initiated paste */}
-          {(script.trim() || (!showAiWriter && script === "")) && script !== "" && (
+          {/* Existing textarea — show when script has content OR user clicked "Paste a script" */}
+          {(script.trim().length > 0 || showTextarea) && (
             <>
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium flex items-center gap-1.5">
@@ -166,7 +162,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
                   Creative Brief
                 </Label>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => onScriptChange("")} className="text-[11px] h-7 text-muted-foreground">Clear</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { onScriptChange(""); setShowTextarea(false); }} className="text-[11px] h-7 text-muted-foreground">Clear</Button>
                   <Button variant="ghost" size="sm" onClick={() => onScriptChange(DEMO_SCRIPT)} className="text-[11px] h-7 text-muted-foreground">Demo</Button>
                   <Button variant="ghost" size="sm" onClick={() => setShowAiWriter(true)} className="text-[11px] h-7 text-primary gap-1">
                     <Wand2 className="w-3 h-3" />AI Write
@@ -180,6 +176,7 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
                   onChange={(e) => onScriptChange(e.target.value)}
                   placeholder="Paste your ad script here..."
                   className="min-h-[260px] text-sm leading-relaxed pb-10 rounded-lg border-border/30 bg-card/20"
+                  autoFocus={showTextarea && !script.trim()}
                 />
                 {script.trim() && (
                   <div className="absolute bottom-2 left-2 flex items-center gap-2">
