@@ -53,11 +53,17 @@ export function StoryboardTimeline({
 }: StoryboardTimelineProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const completedCount = clips.filter(c => c.status === "completed").length;
+  const failedCount = clips.filter(c => c.status === "failed").length;
   const totalCount = storyboard.length;
 
   const totalCost = storyboard.reduce((sum, s) => sum + getSceneCost(s), 0);
   const totalDuration = segments.reduce((max, s) => Math.max(max, s.endTime), 0);
   const videoSceneCount = storyboard.filter(s => s.generationMode !== "static-card").length;
+
+  const handleRetryAllFailed = () => {
+    const failedSceneIds = clips.filter(c => c.status === "failed").map(c => c.sceneId);
+    failedSceneIds.forEach(id => onRegenerate(id));
+  };
 
   return (
     <div className="space-y-4">
