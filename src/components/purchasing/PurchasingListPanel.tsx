@@ -39,7 +39,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [newPriority, setNewPriority] = useState("medium");
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const { items, loading, addItem, addItemAsPurchased, togglePurchased, deleteItem } = usePurchasingList(filterDate, filterStatus);
+  const { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem } = usePurchasingList(filterDate, filterStatus);
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
