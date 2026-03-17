@@ -253,14 +253,16 @@ export function PostReviewPanel({
     });
   }, [localPlatforms]);
 
-  // Auto-save when switching to a different card while editing
+  // Auto-save ref to avoid hook ordering issues
+  const saveEditRef = useRef<(() => void) | null>(null);
   const prevPostIdRef = useRef(post?.id);
+
   useEffect(() => {
     if (prevPostIdRef.current && prevPostIdRef.current !== post?.id && editing) {
-      saveEdit();
+      saveEditRef.current?.();
     }
     prevPostIdRef.current = post?.id;
-  }, [post?.id]);
+  }, [post?.id, editing]);
 
   if (!post) return null;
 
@@ -286,6 +288,9 @@ export function PostReviewPanel({
     });
     setEditing(false);
   };
+
+  // Keep ref in sync
+  saveEditRef.current = saveEdit;
 
   const handleDelete = async () => {
     setDeleting(true);
