@@ -476,7 +476,7 @@ Deno.serve(async (req) => {
               contact_id: newContactId,
               company_id: companyId,
               metadata,
-              priority: ol.priority === "3" ? "high" : ol.priority === "2" ? "medium" : "low",
+              priority: mapOdooPriority(ol.priority),
               odoo_created_at: odooCreatedAt,
               odoo_updated_at: odooUpdatedAt,
               last_touched_at: lastTouchedAtInsert,
