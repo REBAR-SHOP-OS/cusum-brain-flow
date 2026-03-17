@@ -156,7 +156,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         {/* Company Defaults */}
         <CompanyDefaultItems
           dbItems={items}
-          onMarkPurchased={(title, category) => addItemAsPurchased(title, category)}
+          onMarkPurchased={(title, category) => addItemAsPurchased(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
           onUnmarkPurchased={(itemId) => togglePurchased(itemId, true)}
         />
 
