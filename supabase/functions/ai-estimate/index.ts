@@ -205,7 +205,7 @@ serve(async (req) => {
           }
         }
 
-        const extractionPrompt = `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings and extract ALL rebar reinforcement items.
+        const extractionPrompt = `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings OR estimation documents and extract ALL rebar reinforcement items.
 
 ${scope_context ? `Context: ${scope_context}` : ""}
 ${historicalContext}
@@ -248,6 +248,14 @@ These drawings use RebarCAD notation common in Canadian rebar detailing. Key pat
 - All dimensions are in imperial (feet-inches): 4'-2" = 1270mm, 30'-0" = 9144mm
 - Convert ALL dimensions to millimeters for output
 
+## TABULAR ESTIMATION FILES
+If the document is a spreadsheet, table-format bar schedule, or estimation bid document (not a drawing):
+- Extract items from the table rows
+- Common columns: Mark, Bar Size, No. of Bars/Qty, Cut Length, Shape/Bend Type, Element, Drawing Ref, Weight
+- Map each row to the same output JSON format below
+- If bar sizes use imperial (#4, #5, #6...), convert: #3=10M, #4=15M, #5=15M, #6=20M, #7=25M, #8=25M, #9=30M, #10=30M, #11=35M
+- If lengths are in feet-inches, convert to mm
+
 ## EXTRACTION INSTRUCTIONS
 
 For each rebar callout found on the drawings, extract:
@@ -277,7 +285,7 @@ For each rebar callout found on the drawings, extract:
 5. If a bar appears on multiple drawing sheets, list each occurrence separately
 6. For bbox: x=0.0 is left edge, x=1.0 is right, y=0.0 is top, y=1.0 is bottom
 
-Return ONLY a valid JSON array of items.`;
+Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
 
         contentParts.push({ type: "text", text: extractionPrompt });
 
@@ -304,13 +312,29 @@ Return ONLY a valid JSON array of items.`;
           const aiData = await aiRes.json();
           const content = aiData.choices?.[0]?.message?.content ?? "";
           console.log("AI extraction response length:", content.length);
+          console.log("AI response preview:", content.substring(0, 500));
 
-          const jsonMatch = content.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            extractedItems = JSON.parse(jsonMatch[0]);
-            console.log(`Extracted ${extractedItems.length} items from drawings`);
-          } else {
-            console.error("No JSON array found in AI response");
+          // Robust JSON parsing: strip markdown fences, try direct parse, then regex fallback
+          let cleaned = content.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+
+          try {
+            const parsed = JSON.parse(cleaned);
+            extractedItems = Array.isArray(parsed) ? parsed : [parsed];
+            console.log(`Extracted ${extractedItems.length} items (direct parse)`);
+          } catch {
+            const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              try {
+                extractedItems = JSON.parse(jsonMatch[0]);
+                console.log(`Extracted ${extractedItems.length} items (regex fallback)`);
+              } catch (parseErr) {
+                console.error("JSON parse failed after regex match:", parseErr);
+                console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
+              }
+            } else {
+              console.error("No JSON array found in AI response");
+              console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
+            }
           }
         }
       } catch (e) {
