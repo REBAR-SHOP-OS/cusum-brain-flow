@@ -846,7 +846,7 @@ export function PostReviewPanel({
                   {/* Publish Now */}
                   <Button
                     className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
-                    disabled={publishing || !post.neel_approved || post.status === "declined" || !canPublish}
+                    disabled={publishing || post.status === "declined" || (!canPublish && !post.neel_approved)}
                     onClick={async () => {
                       if (localPages.length === 0) {
                         toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
