@@ -6,7 +6,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Play, Zap, DollarSign } from "lucide-react";
+import { Play, Zap, DollarSign, RotateCcw } from "lucide-react";
 import { SceneCard } from "./SceneCard";
 import { type StoryboardScene, type ScriptSegment, type ClipOutput, type GenerationMode } from "@/types/adDirector";
 
