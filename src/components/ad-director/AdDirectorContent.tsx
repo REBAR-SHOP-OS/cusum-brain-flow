@@ -951,6 +951,7 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
             />
           )}
         </div>
+        </>
       )}
 
       {/* Content */}
