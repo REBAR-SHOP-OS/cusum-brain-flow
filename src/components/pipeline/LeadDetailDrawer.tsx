@@ -469,7 +469,30 @@ export function LeadDetailDrawer({
 
         {/* Footer */}
         <div className="border-t border-border p-3 text-[11px] text-muted-foreground flex items-center justify-between bg-muted/30">
-          <span>Created {format(new Date(lead.created_at), "MMM d, yyyy")}</span>
+          <span>
+            Created {format(new Date(lead.created_at), "MMM d, yyyy")}
+            {isOdooLead && meta.synced_at && (
+              <>
+                {" · "}
+                <span className={cn(
+                  "inline-flex items-center gap-1",
+                  (() => {
+                    const mins = (Date.now() - new Date(meta.synced_at as string).getTime()) / 60000;
+                    return mins < 5 ? "text-emerald-600 dark:text-emerald-400" : mins < 30 ? "text-yellow-600 dark:text-yellow-400" : "text-destructive";
+                  })()
+                )}>
+                  <span className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    (() => {
+                      const mins = (Date.now() - new Date(meta.synced_at as string).getTime()) / 60000;
+                      return mins < 5 ? "bg-emerald-500" : mins < 30 ? "bg-yellow-500" : "bg-destructive";
+                    })()
+                  )} />
+                  Synced {formatDistanceToNow(new Date(meta.synced_at as string), { addSuffix: true })}
+                </span>
+              </>
+            )}
+          </span>
           {isAdmin ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>

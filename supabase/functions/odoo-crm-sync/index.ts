@@ -108,9 +108,14 @@ Deno.serve(async (req) => {
 
     // Parse mode from request body
     let mode = "incremental";
+    let singleOdooId: string | null = null;
     try {
       const body = await req.json();
       if (body?.mode === "full") mode = "full";
+      if (body?.mode === "single" && body?.odoo_id) {
+        mode = "single";
+        singleOdooId = String(body.odoo_id);
+      }
     } catch { /* no body = incremental */ }
 
     const odooUrl = Deno.env.get("ODOO_URL")!.trim();
