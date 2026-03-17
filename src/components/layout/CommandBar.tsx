@@ -12,7 +12,7 @@ import {
 import {
   Home, Factory, Package, Truck, Users, Kanban, CheckSquare,
   LayoutGrid, FileText, Brain, Settings, Shield, Inbox, Phone,
-  Sparkles, MessageSquare,
+  Sparkles, MessageSquare, TrendingUp, Receipt,
 } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
