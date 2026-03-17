@@ -1,33 +1,32 @@
 
 
-## سیستم تایید/رد تسک‌های انجام‌شده توسط Neel
+## افزودن توضیحات کامل‌تر به تقویم رویدادها
 
-### خلاصه
-وقتی Radin تسکی را Done می‌کند، کنار آن تسک خط‌خورده دو آیکون ✅ (تایید) و ❌ (رد) نمایش داده شود که فقط Neel بتواند روی آنها کلیک کند.
+### مشکل فعلی
+توضیحات فارسی در popover هر رویداد فقط یک خط کوتاه است و اطلاعات کافی به کاربر نمی‌دهد.
 
-### تغییرات دیتابیس
-- افزودن دو ستون به جدول `tasks`:
-  - `review_status` (text, nullable) — مقادیر: `approved`, `rejected`, `null` (بررسی نشده)
-  - `reviewed_by` (uuid, nullable) — پروفایل کسی که تایید/رد کرده
+### راه‌حل
+1. **توضیحات انگلیسی مفصل** به `CalendarEvent` اضافه شود (فیلد `description`) — 2-3 جمله درباره تاریخچه، اهمیت و ارتباط با صنعت
+2. **توضیحات فارسی را گسترش دهیم** — هر ورودی `PERSIAN_EVENT_INFO` از یک خط به 2-3 خط افزایش یابد
+3. **Popover را بزرگ‌تر و ساختارمندتر کنیم** — نمایش هم توضیح انگلیسی و هم فارسی با ساختار بهتر
 
-### تغییرات UI در `src/pages/Tasks.tsx`
+### تغییرات
 
-**بخش completedTasks (خطوط 1067-1101):**
-- بعد از نام تسک و قبل از دکمه حذف، دو آیکون اضافه شود:
-  - آیکون `Check` (سبز) برای تایید
-  - آیکون `X` (قرمز) برای رد
-- این آیکون‌ها **فقط** وقتی نمایش داده شوند که:
-  1. تسک `assigned_to === RADIN_PROFILE_ID` باشد (تسک‌های Radin)
-  2. کاربر فعلی `currentProfileId === NEEL_PROFILE_ID` باشد
-  3. تسک هنوز `review_status` نداشته باشد (null)
-- اگر تسک قبلاً تایید/رد شده، یک Badge کوچک نمایش دهد (✅ Approved / ❌ Rejected)
+**`src/components/social/contentStrategyData.ts`**
+- افزودن فیلد `description: string` به `CalendarEvent` interface
+- برای هر رویداد، یک توضیح 2-3 جمله‌ای انگلیسی اضافه شود (تاریخچه، اهمیت، چرا مربوط به صنعت ساخت‌وساز است)
 
-**تابع جدید `reviewTask`:**
-- آپدیت `review_status` و `reviewed_by` در دیتابیس
-- ثبت در audit log
-- اگر رد شد، تسک را به status `open` برگرداند (بازگشت به لیست فعال)
+**`src/components/social/ContentStrategyPanel.tsx`**
+- `PERSIAN_EVENT_INFO` را به ساختار object با فیلدهای `summary` (خلاصه فارسی) و `details` (توضیح کامل فارسی 2-3 جمله) تبدیل کنیم
+- در `EventCard` popover:
+  - عرض از `w-72` به `w-80` افزایش
+  - نمایش `event.description` (انگلیسی) در بالا
+  - نمایش hashtag‌ها
+  - خط جداکننده
+  - توضیح فارسی کامل در پایین
+  - اضافه کردن آیکون‌های کوچک برای بخش‌ها (📖 Background، 🏗️ Industry Relevance)
 
 ### فایل‌ها
-- **Migration SQL** — افزودن `review_status` و `reviewed_by` به `tasks`
-- **`src/pages/Tasks.tsx`** — افزودن آیکون‌های تایید/رد و تابع `reviewTask`
+- `src/components/social/contentStrategyData.ts` — افزودن `description` به interface و داده‌ها
+- `src/components/social/ContentStrategyPanel.tsx` — گسترش `PERSIAN_EVENT_INFO` و بازطراحی popover
 
