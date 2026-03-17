@@ -18,7 +18,7 @@ export function DetailedListView() {
   const { activePlans, completedPlans } = useMemo(() => {
     const active: typeof plans = [];
     const completed: typeof plans = [];
-    for (const plan of plans) {
+    for (const plan of plans.filter(p => !p.name.endsWith("(Small)"))) {
       if (plan.status === "completed") {
         completed.push(plan);
       } else {
