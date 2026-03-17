@@ -76,7 +76,7 @@ export function LeadDetailDrawer({
   onStageChange,
 }: LeadDetailDrawerProps) {
   const { isAdmin } = useUserRole();
-  const [activeTab, setActiveTab] = useState<"chatter" | "activities" | "files" | "notes">("chatter");
+  const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const { data: recommendation, isLoading: recLoading } = useLeadRecommendation(lead, open);
   const [convertingToQuote, setConvertingToQuote] = useState(false);
 
