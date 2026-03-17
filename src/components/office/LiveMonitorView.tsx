@@ -5,10 +5,12 @@ import { useBusinessHeartbeat } from "@/hooks/useBusinessHeartbeat";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { MaterialFlowDiagram } from "@/components/shopfloor/MaterialFlowDiagram";
+import { DowntimeAlertBanner } from "@/components/shopfloor/DowntimeAlertBanner";
 import {
   Scissors, Circle, Activity, Play, ChevronRight, Clock,
-  Loader2, Truck, Wrench, Zap, Users, Cpu, Globe,
-  Target, ShoppingCart, TrendingUp, AlertTriangle,
+  Loader2, Truck, Wrench, Zap, Cpu,
+  Target, ShoppingCart,
   Timer, Signal, Gauge, BarChart3,
 } from "lucide-react";
 import type { LiveMachine } from "@/types/machine";
