@@ -752,7 +752,7 @@ export async function executeToolCall(
 
           // Retry pipeline: try multiple models (2 primary + 2 fallback max = 4 total)
           const attempts = [
-            { model: "google/gemini-2.5-flash-image", useLogo: true },
+            { model: "google/gemini-3.1-flash-image-preview", useLogo: true },
             { model: "google/gemini-3-pro-image-preview", useLogo: true },
           ];
 
@@ -797,7 +797,7 @@ export async function executeToolCall(
               clearTimeout(imgTimeout);
             }
 
-            if (!aiRes.ok) { lastError = `${attempt.model}: ${aiRes.status}`; continue; }
+            if (!aiRes.ok) { const errBody = await aiRes.text().catch(() => ""); console.warn(`[generate_image] ${attempt.model} returned ${aiRes.status}: ${errBody.slice(0, 200)}`); lastError = `${attempt.model}: ${aiRes.status}`; continue; }
 
             const aiData = await aiRes.json();
 
