@@ -212,7 +212,7 @@ export interface IntroOutroCardSettings {
   logoPosition: "top" | "center" | "bottom";
   logoScale: number;
   showLogo: boolean;
-  layout: "centered" | "left" | "logo-top" | "minimal";
+  layout: "centered" | "left" | "logo-top" | "minimal" | "split";
 }
 
 export const DEFAULT_CARD_SETTINGS = (brand: BrandProfile): IntroOutroCardSettings => ({
