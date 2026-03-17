@@ -222,8 +222,6 @@ export function LeadDetailDrawer({
                   Syncing…
                 </div>
               )}
-                <Pencil className="w-3.5 h-3.5" />
-              </Button>
               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onOpenChange(false)}>
                 <X className="w-3.5 h-3.5" />
               </Button>
