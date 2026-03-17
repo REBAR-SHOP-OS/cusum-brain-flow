@@ -113,10 +113,10 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
   const deleteItem = useCallback(async (itemId: string) => {
     const { error } = await supabase.from("purchasing_list_items" as any).delete().eq("id", itemId);
     if (error) {
-      toast.error("خطا در حذف");
+      toast.error("Error deleting");
       console.error(error);
     } else {
-      toast.success("حذف شد");
+      toast.success("Deleted");
     }
   }, []);
 
