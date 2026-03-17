@@ -19,6 +19,7 @@ import {
   Sparkles, Loader2, Plus, MessageSquare, FileOutput,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
@@ -101,8 +102,8 @@ export function LeadDetailDrawer({
       try {
         // Fire both syncs in parallel
         const [crmRes, chatterRes] = await Promise.allSettled([
-          supabase.functions.invoke("odoo-crm-sync", { body: { mode: "single", odoo_id: odooId } }),
-          supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "single", odoo_id: odooId } }),
+          invokeEdgeFunction("odoo-crm-sync", { mode: "single", odoo_id: odooId }),
+          invokeEdgeFunction("odoo-chatter-sync", { mode: "single", odoo_id: odooId }),
         ]);
         if (!cancelled) {
           // Invalidate all lead-related queries

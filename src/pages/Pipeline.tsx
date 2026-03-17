@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -632,8 +633,7 @@ export default function Pipeline() {
   const handleOdooSync = async () => {
     setIsSyncingOdoo(true);
     try {
-      const { data, error } = await supabase.functions.invoke("odoo-crm-sync", { body: { mode: "full" } });
-      if (error) throw error;
+      const data = await invokeEdgeFunction("odoo-crm-sync", { mode: "full" }, { timeoutMs: 180000 });
 
       // Handle disabled or error responses that come back as 200
       if (data?.disabled) {
@@ -648,7 +648,7 @@ export default function Pipeline() {
       // Chain chatter + activity sync for full Odoo parity
       let chatterMsg = "";
       try {
-        const { data: chatterData } = await supabase.functions.invoke("odoo-chatter-sync", { body: { mode: "full" } });
+        const chatterData = await invokeEdgeFunction("odoo-chatter-sync", { mode: "full" }, { timeoutMs: 120000 });
         if (chatterData && !chatterData.disabled) {
           chatterMsg = ` | Chatter: ${chatterData.messages_inserted ?? 0} msgs, ${chatterData.activities_inserted ?? 0} activities`;
         }
