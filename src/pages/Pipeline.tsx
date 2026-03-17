@@ -633,8 +633,7 @@ export default function Pipeline() {
   const handleOdooSync = async () => {
     setIsSyncingOdoo(true);
     try {
-      const { data, error } = await supabase.functions.invoke("odoo-crm-sync", { body: { mode: "full" } });
-      if (error) throw error;
+      const data = await invokeEdgeFunction("odoo-crm-sync", { mode: "full" }, { timeoutMs: 180000 });
 
       // Handle disabled or error responses that come back as 200
       if (data?.disabled) {
