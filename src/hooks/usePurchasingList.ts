@@ -80,7 +80,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
 
-    const { error } = await supabase.from("purchasing_list_items" as any).insert({
+    const { error } = await supabase.from("purchasing_list_items").insert({
       company_id: profile.company_id,
       title,
       quantity,
@@ -91,10 +91,11 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     });
     if (error) {
       toast.error("Error adding item");
-      console.error(error);
-    } else {
-      toast.success("Item added");
+      console.error("addItem error:", error);
+      return false;
     }
+    toast.success("Item added");
+    return true;
   }, [user]);
 
   const addItemAsRejected = useCallback(async (title: string, category: string, dueDate?: string) => {
