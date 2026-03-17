@@ -155,10 +155,34 @@ export function PurchasingListPanel() {
                 item.is_purchased && "opacity-60"
               )}
             >
-              <Checkbox
-                checked={item.is_purchased}
-                onCheckedChange={() => togglePurchased(item.id, item.is_purchased)}
-              />
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-7 w-7 rounded-full",
+                    item.is_purchased
+                      ? "bg-green-500/20 text-green-500 hover:bg-green-500/30"
+                      : "text-muted-foreground hover:text-green-500"
+                  )}
+                  onClick={() => !item.is_purchased && togglePurchased(item.id, item.is_purchased)}
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-7 w-7 rounded-full",
+                    !item.is_purchased
+                      ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
+                      : "text-muted-foreground hover:text-red-500"
+                  )}
+                  onClick={() => item.is_purchased && togglePurchased(item.id, item.is_purchased)}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
               <div className="flex-1 min-w-0">
                 <div className={cn("font-medium", item.is_purchased && "line-through text-muted-foreground")}>
                   {item.title}
