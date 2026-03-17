@@ -260,44 +260,49 @@ export function PostReviewPanel({
     });
   }, [localPlatforms]);
 
-  // Auto-save ref to avoid hook ordering issues
-  const saveEditRef = useRef<(() => void) | null>(null);
-  const prevPostIdRef = useRef(post?.id);
-
-  useEffect(() => {
-    if (prevPostIdRef.current && prevPostIdRef.current !== post?.id && editing) {
-      saveEditRef.current?.();
+  // Debounced auto-save for text fields
+  const flushSave = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
     }
-    prevPostIdRef.current = post?.id;
-  }, [post?.id, editing]);
-
-  if (!post) return null;
-
-  const startEdit = () => {
-    setEditTitle(post.title);
-    setEditContent(post.content);
-    setEditHashtags(post.hashtags.join(", "));
-    setEditing(true);
-  };
-
-  const saveEdit = () => {
-    const hashtagArray = editHashtags
+    if (!post) return;
+    const hashtagArray = localHashtags
       .split(/[,\s]+/)
       .map((h) => h.trim())
       .filter((h) => h.length > 0)
       .map((h) => (h.startsWith("#") ? h : `#${h}`));
+    setSaveStatus("saving");
+    updatePost.mutate(
+      { id: post.id, title: localTitle, content: localContent, hashtags: hashtagArray },
+      { onSuccess: () => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); },
+        onError: () => setSaveStatus("idle") }
+    );
+  }, [post?.id, localTitle, localContent, localHashtags, updatePost]);
 
-    updatePost.mutate({
-      id: post.id,
-      title: editTitle,
-      content: editContent,
-      hashtags: hashtagArray,
-    });
-    setEditing(false);
-  };
+  const flushRef = useRef(flushSave);
+  flushRef.current = flushSave;
 
-  // Keep ref in sync
-  saveEditRef.current = saveEdit;
+  const triggerDebouncedSave = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => flushRef.current(), 800);
+  }, []);
+
+  // Flush pending save on post switch or panel close
+  const prevPostIdRef = useRef(post?.id);
+  useEffect(() => {
+    if (prevPostIdRef.current && prevPostIdRef.current !== post?.id) {
+      flushRef.current();
+    }
+    prevPostIdRef.current = post?.id;
+  }, [post?.id]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { if (debounceRef.current) { clearTimeout(debounceRef.current); flushRef.current(); } };
+  }, []);
+
+  if (!post) return null;
 
   const handleDelete = async () => {
     setDeleting(true);
