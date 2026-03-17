@@ -752,7 +752,7 @@ export async function executeToolCall(
 
           // Retry pipeline: try multiple models (2 primary + 2 fallback max = 4 total)
           const attempts = [
-            { model: "google/gemini-2.5-flash-image", useLogo: true },
+            { model: "google/gemini-3.1-flash-image-preview", useLogo: true },
             { model: "google/gemini-3-pro-image-preview", useLogo: true },
           ];
 
