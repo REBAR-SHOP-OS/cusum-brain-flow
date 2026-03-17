@@ -180,12 +180,12 @@ interface ListMessagesResponse {
 function decodeBase64Url(data: string): string {
   const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
   try {
-    return decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder("utf-8").decode(bytes);
   } catch {
     return atob(base64);
   }
@@ -409,9 +409,11 @@ serve(async (req) => {
           from_address: msg.from,
           to_address: msg.to,
           subject: msg.subject,
-          body_preview: msg.body
-            ? msg.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
-            : msg.snippet,
+          body_preview: decodeHtmlEntities(
+            msg.body
+              ? msg.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
+              : (msg.snippet || "")
+          ),
           received_at: new Date(msg.internalDate).toISOString(),
           direction: "inbound",
           status: msg.isUnread ? "unread" : "read",

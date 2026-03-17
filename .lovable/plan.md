@@ -1,60 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix Plan: 6 Remaining Issues in REBAR SHOP OS
+## Completed: Add All Wan 2.6 Capabilities
 
-## 1. Inbox Garbled Characters (UTF-8 Encoding)
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-**Root cause:** The `decodeBase64Url` function in `supabase/functions/gmail-sync/index.ts` (line 180-192) has a fallback `atob(base64)` that doesn't handle UTF-8 multi-byte characters. Characters like `•`, `…`, `'` get mangled into `Ã¢â‚¬Â¢` etc. Additionally, `body_preview` (line 412-414) is derived from `msg.body` after stripping HTML tags but doesn't run through `decodeHtmlEntities`.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-**Fix:**
-- Update `decodeBase64Url` fallback to use `TextDecoder` for proper UTF-8: convert `atob` output to `Uint8Array` then decode with `new TextDecoder("utf-8")`
-- Apply `decodeHtmlEntities()` to the `body_preview` value (line 412-414) after stripping HTML tags
-- Also run a one-time cleanup query on existing `body_preview` data that contains garbled characters (optional, will be fixed on next sync)
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-**File:** `supabase/functions/gmail-sync/index.ts`
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-## 2. SMS Templates "New Template" Button Redirect
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-**Root cause:** The `SMSTemplateManager` component uses a `Dialog` with `DialogTrigger` wrapping the "New Template" button. The `open`/`onOpenChange` props are passed from `InboxView` via controlled state (`showSMSTemplates`). However, `setShowSMSTemplates(true)` is **never called anywhere** in the codebase — the trigger button inside `SMSTemplateManager` works standalone, but when used as a controlled component with `open={false}`, the `DialogTrigger` click may not properly open the dialog because the controlled `open` prop overrides it.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-**Fix:**
-- In `SMSTemplateManager`, when `DialogTrigger` is clicked while in controlled mode, ensure `setOpen(true)` is called. The issue is that `DialogTrigger` sets the internal state but the controlled `open` prop takes precedence. Add an explicit `onClick` to the trigger button that calls `setOpen(true)`.
-
-**File:** `src/components/inbox/SMSTemplateManager.tsx` — Add `onClick={() => setOpen(true)}` to the "New Template" Button inside DialogTrigger.
-
-## 3. Customers "0 customers" Flash — Already Fixed
-
-This was addressed in the previous round (loading state added to `src/pages/Customers.tsx`). No further changes needed.
-
-## 4. Chat Back Arrow Not Working
-
-**Root cause:** The `LiveChat.tsx` page at line 236 uses `navigate(-1)` which should work. However, if the user navigated directly to `/chat` (e.g., via the Vizzy floating button), there's no history entry to go back to, so `navigate(-1)` does nothing.
-
-**Fix:**
-- Update the back arrow in `LiveChat.tsx` to use `navigate(-1)` with a fallback: check if there's history to go back to, otherwise navigate to `/home`.
-
-**File:** `src/pages/LiveChat.tsx` — Change `onClick={() => navigate(-1)}` to `onClick={() => window.history.length > 1 ? navigate(-1) : navigate("/home")}`
-
-## 5. Pipeline Sync Interval — Already Fixed
-
-The previous round already added a prominent manual Sync button (visible on line 741-751). There is no automatic cron job for Odoo CRM sync (only `archive-odoo-files` runs on cron). The sync is manual-only. The "9 hours" the user sees is simply how long since someone last clicked Sync. No further changes needed — the manual button is already there.
-
-## 6. Sidebar Collapse Persistence — Already Fixed
-
-The previous round added `localStorage`-based pin/collapse persistence with `sidebar_pinned` key. The sidebar now has a Pin toggle button at the bottom. No further changes needed.
-
----
-
-## Summary of New Changes Needed
-
-| # | Issue | File | Status |
-|---|-------|------|--------|
-| 1 | Garbled characters | `supabase/functions/gmail-sync/index.ts` | **Needs fix** |
-| 2 | SMS Template button | `src/components/inbox/SMSTemplateManager.tsx` | **Needs fix** |
-| 3 | Customers loading | `src/pages/Customers.tsx` | Already fixed |
-| 4 | Chat back arrow | `src/pages/LiveChat.tsx` | **Needs fix** |
-| 5 | Pipeline sync | `src/pages/Pipeline.tsx` | Already fixed |
-| 6 | Sidebar collapse | `src/components/layout/AppSidebar.tsx` | Already fixed |
-
-Three files need changes. The gmail-sync edge function will be redeployed after the fix.
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically

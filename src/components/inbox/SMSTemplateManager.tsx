@@ -128,7 +128,7 @@ export function SMSTemplateManager({ open: controlledOpen, onOpenChange }: SMSTe
         <h3 className="text-sm font-semibold">SMS Templates</h3>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setOpen(true)}>
               <Plus className="w-4 h-4" />
               New Template
             </Button>
