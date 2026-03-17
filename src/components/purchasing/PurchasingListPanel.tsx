@@ -159,6 +159,8 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
           dbItems={items}
           onMarkPurchased={(title, category) => addItemAsPurchased(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
           onUnmarkPurchased={(itemId) => togglePurchased(itemId, true)}
+          onMarkRejected={(title, category) => addItemAsRejected(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
+          onUnmarkRejected={(itemId) => toggleRejected(itemId, true)}
         />
 
         <div className="border-t border-border my-2" />
