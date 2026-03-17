@@ -22,6 +22,7 @@ const LAYOUT_PRESETS: { value: IntroOutroCardSettings["layout"]; label: string }
   { value: "left", label: "Left Aligned" },
   { value: "logo-top", label: "Logo Top" },
   { value: "minimal", label: "Minimal" },
+  { value: "split", label: "Split (Logo | Text)" },
 ];
 
 interface IntroOutroEditorProps {
@@ -29,6 +30,24 @@ interface IntroOutroEditorProps {
   brand: BrandProfile;
   onChange: (s: IntroOutroCardSettings) => void;
   onApply: () => void;
+}
+
+/** Wraps text to fit within maxWidth, returns array of lines */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = test;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
 }
 
 /** Draws a card preview onto a canvas element using the given settings + optional logo */
@@ -49,58 +68,164 @@ export function drawCardToCanvas(
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  const isLeft = settings.layout === "left";
-  const isLogoTop = settings.layout === "logo-top";
-  const isMinimal = settings.layout === "minimal";
-  ctx.textAlign = isLeft ? "left" : "center";
-  const xAnchor = isLeft ? 80 : W / 2;
+  // Subtle vignette overlay for text contrast
+  const vignette = ctx.createRadialGradient(W / 2, H / 2, W * 0.2, W / 2, H / 2, W * 0.75);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
 
-  let yOffset = H / 2 - 60;
+  const hasLogo = settings.showLogo && logoImg && logoImg.complete && logoImg.naturalWidth > 0;
+  const isSplit = settings.layout === "split";
+  const isLeft = settings.layout === "left";
+  const isMinimal = settings.layout === "minimal";
+  const isLogoTop = settings.layout === "logo-top";
+  const PAD = 60;
+  const GAP = 30;
+
+  // ── Split layout: logo left, text right ──
+  if (isSplit) {
+    const halfW = W / 2;
+    // Logo on left half
+    if (hasLogo) {
+      const logoH = Math.min(120 * settings.logoScale, H * 0.4);
+      const logoW = (logoImg!.naturalWidth / logoImg!.naturalHeight) * logoH;
+      const lx = halfW / 2 - logoW / 2;
+      const ly = H / 2 - logoH / 2;
+      ctx.drawImage(logoImg!, lx, ly, logoW, logoH);
+    }
+    // Text stack on right half
+    const textX = halfW + PAD;
+    const maxTextW = halfW - PAD * 2;
+    let ty = H / 2 - 60;
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = settings.textColor;
+    ctx.font = `bold ${settings.headlineFontSize}px ${settings.fontFamily}`;
+    const headLines = wrapText(ctx, settings.headline, maxTextW);
+    for (const line of headLines) {
+      ctx.fillText(line, textX, ty);
+      ty += settings.headlineFontSize + 6;
+    }
+    ty += GAP * 0.5;
+
+    if (settings.subheadline && !isMinimal) {
+      ctx.font = `${settings.subFontSize}px ${settings.fontFamily}`;
+      ctx.fillStyle = settings.textColor + "d9";
+      const subLines = wrapText(ctx, settings.subheadline, maxTextW);
+      for (const line of subLines) {
+        ctx.fillText(line, textX, ty);
+        ty += settings.subFontSize + 4;
+      }
+      ty += GAP;
+    }
+
+    if (settings.website) {
+      ctx.font = `bold ${Math.round(settings.subFontSize * 0.9)}px ${settings.fontFamily}`;
+      ctx.fillStyle = settings.textColor;
+      ctx.fillText(settings.website, textX, ty);
+    }
+    return;
+  }
+
+  // ── Stack layouts: measure total height then center ──
+  const maxW = isLeft ? W - PAD * 2 : W * 0.75;
+  const align = isLeft ? "left" : "center";
+  const xAnchor = isLeft ? PAD : W / 2;
+  ctx.textAlign = align;
+
+  // Measure elements
+  const elements: { type: string; height: number; lines?: string[] }[] = [];
 
   // Logo
-  if (settings.showLogo && logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
-    const logoH = 60 * settings.logoScale;
-    const logoW = (logoImg.naturalWidth / logoImg.naturalHeight) * logoH;
-    let logoX = xAnchor - (isLeft ? 0 : logoW / 2);
-    let logoY = yOffset - logoH - 20;
-    if (isLogoTop || settings.logoPosition === "top") {
-      logoY = 60;
-      logoX = W / 2 - logoW / 2;
-    } else if (settings.logoPosition === "bottom") {
-      logoY = H - logoH - 40;
-      logoX = W / 2 - logoW / 2;
-    } else if (settings.logoPosition === "center") {
-      logoY = H / 2 - logoH / 2 - 80;
-      logoX = W / 2 - logoW / 2;
-    }
-    ctx.drawImage(logoImg, logoX, logoY, logoW, logoH);
-    if (isLogoTop) yOffset = logoY + logoH + 60;
+  let logoW = 0, logoH = 0;
+  if (hasLogo && (isLogoTop || settings.logoPosition === "top")) {
+    logoH = Math.min(60 * settings.logoScale, H * 0.2);
+    logoW = (logoImg!.naturalWidth / logoImg!.naturalHeight) * logoH;
+    elements.push({ type: "logo", height: logoH });
   }
 
   // Headline
-  ctx.fillStyle = settings.textColor;
   ctx.font = `bold ${settings.headlineFontSize}px ${settings.fontFamily}`;
-  ctx.fillText(settings.headline, xAnchor, yOffset);
+  const headLines = wrapText(ctx, settings.headline, maxW);
+  const headHeight = headLines.length * (settings.headlineFontSize + 6);
+  elements.push({ type: "headline", height: headHeight, lines: headLines });
 
   // Subheadline
+  let subLines: string[] = [];
   if (settings.subheadline && !isMinimal) {
     ctx.font = `${settings.subFontSize}px ${settings.fontFamily}`;
-    ctx.fillStyle = settings.textColor + "d9"; // ~85% opacity
-    ctx.fillText(settings.subheadline, xAnchor, yOffset + 60);
+    subLines = wrapText(ctx, settings.subheadline, maxW);
+    const subH = subLines.length * (settings.subFontSize + 4);
+    elements.push({ type: "sub", height: subH, lines: subLines });
   }
 
-  // CTA
+  // CTA pill
   if (settings.cta && !isMinimal) {
-    ctx.font = `${Math.round(settings.subFontSize * 0.75)}px ${settings.fontFamily}`;
-    ctx.fillStyle = settings.textColor + "b3"; // ~70% opacity
-    ctx.fillText(settings.cta, xAnchor, yOffset + 110);
+    elements.push({ type: "cta", height: 44 });
   }
 
   // Website
   if (settings.website) {
-    ctx.font = `bold ${Math.round(settings.subFontSize * 0.88)}px ${settings.fontFamily}`;
-    ctx.fillStyle = settings.textColor;
-    ctx.fillText(settings.website, xAnchor, yOffset + (isMinimal ? 60 : 160));
+    elements.push({ type: "website", height: Math.round(settings.subFontSize * 0.9) + 8 });
+  }
+
+  // Bottom logo
+  if (hasLogo && !isLogoTop && settings.logoPosition !== "top") {
+    logoH = Math.min(60 * settings.logoScale, H * 0.2);
+    logoW = (logoImg!.naturalWidth / logoImg!.naturalHeight) * logoH;
+    elements.push({ type: "logo-bottom", height: logoH });
+  }
+
+  const totalH = elements.reduce((s, e) => s + e.height, 0) + (elements.length - 1) * GAP;
+  let y = (H - totalH) / 2;
+
+  for (const el of elements) {
+    if (el.type === "logo" || el.type === "logo-bottom") {
+      const lx = align === "left" ? xAnchor : W / 2 - logoW / 2;
+      ctx.drawImage(logoImg!, lx, y, logoW, logoH);
+    } else if (el.type === "headline") {
+      ctx.fillStyle = settings.textColor;
+      ctx.font = `bold ${settings.headlineFontSize}px ${settings.fontFamily}`;
+      for (const line of el.lines!) {
+        y += settings.headlineFontSize;
+        ctx.fillText(line, xAnchor, y);
+        y += 6;
+      }
+      y -= el.height; // reset, we'll add full height below
+    } else if (el.type === "sub") {
+      ctx.fillStyle = settings.textColor + "d9";
+      ctx.font = `${settings.subFontSize}px ${settings.fontFamily}`;
+      for (const line of el.lines!) {
+        y += settings.subFontSize;
+        ctx.fillText(line, xAnchor, y);
+        y += 4;
+      }
+      y -= el.height;
+    } else if (el.type === "cta") {
+      // Rounded pill button
+      const ctaFont = Math.round(settings.subFontSize * 0.7);
+      ctx.font = `bold ${ctaFont}px ${settings.fontFamily}`;
+      const tw = ctx.measureText(settings.cta).width;
+      const pillW = tw + 48;
+      const pillH = 40;
+      const px = align === "left" ? xAnchor : W / 2 - pillW / 2;
+      const py = y + 2;
+      ctx.fillStyle = settings.textColor;
+      ctx.beginPath();
+      ctx.roundRect(px, py, pillW, pillH, 20);
+      ctx.fill();
+      ctx.fillStyle = settings.gradientStart;
+      ctx.textAlign = "center";
+      ctx.fillText(settings.cta, px + pillW / 2, py + pillH / 2 + ctaFont * 0.35);
+      ctx.textAlign = align;
+    } else if (el.type === "website") {
+      const wFont = Math.round(settings.subFontSize * 0.9);
+      ctx.font = `bold ${wFont}px ${settings.fontFamily}`;
+      ctx.fillStyle = settings.textColor + "cc";
+      ctx.fillText(settings.website, xAnchor, y + wFont);
+    }
+    y += el.height + GAP;
   }
 }
 

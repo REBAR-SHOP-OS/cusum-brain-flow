@@ -212,7 +212,7 @@ export interface IntroOutroCardSettings {
   logoPosition: "top" | "center" | "bottom";
   logoScale: number;
   showLogo: boolean;
-  layout: "centered" | "left" | "logo-top" | "minimal";
+  layout: "centered" | "left" | "logo-top" | "minimal" | "split";
 }
 
 export const DEFAULT_CARD_SETTINGS = (brand: BrandProfile): IntroOutroCardSettings => ({
@@ -224,12 +224,12 @@ export const DEFAULT_CARD_SETTINGS = (brand: BrandProfile): IntroOutroCardSettin
   gradientEnd: brand.secondaryColor || "#1e293b",
   textColor: "#ffffff",
   fontFamily: "sans-serif",
-  headlineFontSize: 64,
-  subFontSize: 32,
+  headlineFontSize: 52,
+  subFontSize: 28,
   logoPosition: "top",
-  logoScale: 1,
+  logoScale: 0.8,
   showLogo: true,
-  layout: "centered",
+  layout: "logo-top",
 });
 
 export const DEMO_SCRIPT = `30-Second Ad Script — Rebar.Shop
