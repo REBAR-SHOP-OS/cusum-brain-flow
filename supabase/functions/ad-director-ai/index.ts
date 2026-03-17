@@ -46,6 +46,7 @@ const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
   "rewrite-cta":            { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.5, maxTokens: 1024 },
   "generate-voiceover":     { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.4, maxTokens: 2048 },
   "optimize-ad":            { model: "google/gemini-2.5-pro",        fallback: "google/gemini-2.5-flash",      temperature: 0.5, maxTokens: 4096 },
+  "write-script":           { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.7, maxTokens: 4096 },
 
   // Google-led: vision, multimodal, evaluation, classification
   "score-prompt-quality":   { model: "google/gemini-2.5-flash",      fallback: "google/gemini-2.5-flash-lite", temperature: 0.1, maxTokens: 1024 },
