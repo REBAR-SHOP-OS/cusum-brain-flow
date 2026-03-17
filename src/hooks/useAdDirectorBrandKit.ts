@@ -16,7 +16,7 @@ export function useAdDirectorBrandKit() {
       if (!user) return null;
 
       const { data, error } = await supabase
-        .from("brand_kit" as any)
+        .from("brand_kit")
         .select("*")
         .eq("user_id", user.id)
         .maybeSingle();
