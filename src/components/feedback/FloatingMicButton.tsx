@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { Mic, MicOff } from "lucide-react";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 
@@ -56,6 +57,6 @@ export function FloatingMicButton({ onToggleVoice, isListening, isSupported }: F
         <Mic className="w-9 h-9 pointer-events-none" />
       )}
     </button>,
-    document.body
+    getFloatingPortalContainer()
   );
 }

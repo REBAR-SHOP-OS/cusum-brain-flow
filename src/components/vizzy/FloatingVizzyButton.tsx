@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -137,7 +138,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
           </button>
         </div>
       </>,
-      document.body
+      getFloatingPortalContainer()
     );
   }
 );
