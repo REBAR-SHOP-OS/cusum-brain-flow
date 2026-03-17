@@ -166,7 +166,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       purchased_by: null,
       purchased_at: null,
     };
-    const { error } = await supabase.from("purchasing_list_items" as any).update(updateData).eq("id", itemId);
+    const { error } = await (supabase.from("purchasing_list_items") as any).update(updateData).eq("id", itemId);
     if (error) {
       toast.error("Error updating");
       console.error(error);
