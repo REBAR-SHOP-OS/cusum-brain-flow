@@ -491,11 +491,23 @@ export default function Pipeline() {
   }, [filteredLeads]);
 
   const finalStages = useMemo(() => {
-    if (leadsByStage["__unmapped__"]?.length > 0) {
-      return [...orderedStages, { id: "__unmapped__", label: "Unmapped Stage", color: "bg-red-500" }];
+    // Build the set of visible stage IDs based on active groups
+    const visibleStageIds = new Set<string>();
+    for (const [groupKey, groupDef] of Object.entries(STAGE_GROUPS)) {
+      if (activeGroups.has(groupKey)) {
+        groupDef.stages.forEach(s => visibleStageIds.add(s));
+      }
     }
-    return orderedStages;
-  }, [orderedStages, leadsByStage]);
+    // If no groups selected, show all
+    const base = visibleStageIds.size > 0
+      ? orderedStages.filter(s => visibleStageIds.has(s.id))
+      : orderedStages;
+
+    if (leadsByStage["__unmapped__"]?.length > 0) {
+      return [...base, { id: "__unmapped__", label: "Unmapped Stage", color: "bg-red-500" }];
+    }
+    return base;
+  }, [orderedStages, leadsByStage, activeGroups]);
 
   const handleEdit = (lead: Lead) => {
     setEditingLead(lead);
