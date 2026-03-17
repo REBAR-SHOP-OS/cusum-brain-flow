@@ -1,46 +1,105 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# App Builder → Full IDE Workspace (Lovable-style)
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## What You Want
+Transform the current plan-only App Builder into a full development workspace like Lovable — with a settings menu, project history, knowledge management, file attachments, screenshot capture, connectors panel, visual edits mode, and deep integration with all existing modules (rebar.shop, ERP, Odoo, the Architect agent).
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+## Architecture
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+Merge the best of both worlds: the **structured planning UI** (current App Builder) + the **AI chat + file/diagnostic capabilities** (current EmpireBuilder at `/empire`) into one unified workspace.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+```text
+/app-builder                    → Landing + Dashboard (keep existing)
+/app-builder/:projectId         → Full IDE Workspace (upgraded)
+```
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+## Changes
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 1. Upgrade Sidebar with Lovable-style sections
+**File**: `AppBuilderSidebar.tsx`
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+Add new nav sections:
+- **Connectors** — links to rebar.shop, ERP, Odoo (the project cards from EmpireBuilder)
+- **Knowledge** — show/manage project memories (reuse the memory fetch from EmpireBuilder)
+- **History** — version history + chat history combined
+- Divider between planning sections and management sections
+
+### 2. Add Settings dropdown/panel
+**File**: New `AppBuilderSettingsMenu.tsx`
+
+A dropdown menu (like Lovable's) triggered from project name in sidebar header:
+- **Project Settings** — name, description, status
+- **History** — link to versions section
+- **Knowledge** — open knowledge panel
+- **Connectors** — show connected modules (rebar.shop, ERP, Odoo)
+- **Take a Screenshot** — capture preview panel
+- **Add Reference** — open file picker
+- **Attach** — file upload
+
+### 3. Upgrade Prompt Bar to Lovable-style input
+**File**: `AppBuilderPromptBar.tsx`
+
+Replace the simple textarea with a full chat composer:
+- **+ button** (left) — dropdown: Attach file, Take screenshot, Add reference, Use template
+- **Chat/Plan mode toggle** — switch between "Build mode" (AI modifies plan) and "Chat mode" (discuss without changes)
+- **File attachment chips** — show pending files with preview thumbnails and remove buttons
+- **Drag-and-drop** file support (reuse the logic from EmpireBuilder)
+- **Send button** (right) — orange gradient, circular
+
+### 4. Add AI Chat panel alongside planning
+**File**: `AppBuilderWorkspace.tsx`
+
+Add a new sidebar section **"Chat"** that shows the Architect agent conversation within the workspace context. When in chat mode:
+- Messages stream in the center panel
+- The right panel still shows preview
+- Chat has full context of the current project plan
+
+Wire `sendAgentMessage` from `src/lib/agent.ts` with the empire agent config so the AI can diagnose rebar.shop, check ERP, and modify the plan.
+
+### 5. Connectors panel
+**File**: New `AppBuilderConnectors.tsx`
+
+Display connected modules as cards (same style as EmpireBuilder's project buttons):
+- **rebar.shop** — status indicator, click to diagnose
+- **ERP** — status indicator, click to check
+- **Odoo** — status indicator, click to sync
+- **+ Add Connector** button
+
+Clicking a connector sends a diagnostic prompt to the AI chat.
+
+### 6. Knowledge panel
+**File**: New `AppBuilderKnowledge.tsx`
+
+Fetch and display project memories from the `agent_memory` table (reuse `useCompanyId` + memory query from EmpireBuilder). Allow:
+- View memories by category
+- Delete memories
+- Add manual knowledge entries
+
+### 7. Update hook with new sections + chat state
+**File**: `useAppBuilderProject.ts`
+
+- Add new `SidebarSection` values: `"chat"`, `"connectors"`, `"knowledge"`
+- Add chat message state (`messages`, `isLoading`, `sendMessage`)
+- Add file attachment state (`pendingFiles`, `addFiles`, `removeFile`)
+- Add mode toggle (`buildMode` vs `chatMode`)
+
+### 8. Wire rebar.shop diagnostics
+The Architect agent already has WordPress diagnostic capabilities. The chat integration in step 4 gives direct access — users can type "fix rebar.shop header" and the AI will use the existing `empire` agent tools.
+
+## Files
+
+| File | Action |
+|------|--------|
+| `src/components/app-builder/AppBuilderSidebar.tsx` | Add connectors, knowledge, chat, dividers |
+| `src/components/app-builder/AppBuilderPromptBar.tsx` | Rewrite as Lovable-style composer with +menu, attachments, mode toggle |
+| `src/components/app-builder/AppBuilderWorkspace.tsx` | Add chat view, connectors view, knowledge view, settings menu |
+| `src/components/app-builder/AppBuilderSettingsMenu.tsx` | New — dropdown menu from project name |
+| `src/components/app-builder/AppBuilderConnectors.tsx` | New — connected modules panel |
+| `src/components/app-builder/AppBuilderKnowledge.tsx` | New — memory/knowledge management |
+| `src/components/app-builder/AppBuilderChat.tsx` | New — AI chat panel reusing agent infrastructure |
+| `src/hooks/useAppBuilderProject.ts` | Add chat state, file state, mode toggle, new sections |
+| `src/data/appBuilderMockData.ts` | Add connector definitions |
+
+No database changes. No edge function changes. Reuses existing `sendAgentMessage`, `agent_memory`, and empire agent config.
+
