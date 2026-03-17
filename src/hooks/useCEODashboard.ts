@@ -172,11 +172,11 @@ async function fetchCEOMetrics(companyId: string): Promise<CEOMetrics> {
     phaseItemsRes,
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }).eq("status", "active").eq("company_id", companyId),
-    supabase.from("orders").select("id", { count: "exact", head: true }).in("status", ["active", "pending"]).eq("company_id", companyId),
+    supabase.from("orders").select("id", { count: "exact", head: true }).in("status", ["active", "pending", "needs_pricing", "confirmed", "in_production"]).eq("company_id", companyId),
     supabase.from("cut_plan_items").select("total_pieces, completed_pieces, cut_plans!inner(company_id)").eq("cut_plans.company_id", companyId!),
     supabase.from("machines").select("id, name, type, status").eq("company_id", companyId),
-    supabase.from("deliveries").select("id", { count: "exact", head: true }).in("status", ["pending", "in-transit", "loading"]).eq("company_id", companyId),
-    supabase.from("leads").select("stage, expected_value").not("stage", "in", "(closed_won,closed_lost)").eq("company_id", companyId),
+    supabase.from("deliveries").select("id", { count: "exact", head: true }).in("status", ["pending", "in-transit", "loading", "staged"]).eq("company_id", companyId),
+    supabase.from("leads").select("stage, expected_value").not("stage", "in", "(won,lost,archived_orphan,loss,merged,no_rebars_out_of_scope,delivered_pickup_done)").eq("company_id", companyId),
     supabase.from("v_customers_clean" as any).select("customer_id", { count: "exact", head: true }).eq("company_id", companyId),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("company_id", companyId),
     supabase.from("time_clock_entries").select("profile_id").gte("clock_in", todayStart),
@@ -448,9 +448,9 @@ async function fetchCEOMetrics(companyId: string): Promise<CEOMetrics> {
 
   // QC & SLA metrics
   const [blockedOrdersRes, qcBacklogRes, revenueHeldRes, slaBreachLeadsRes, slaBreachOrdersRes] = await Promise.all([
-    supabase.from("orders").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("production_locked", true).in("status", ["confirmed", "in_production"]),
-    supabase.from("orders").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("qc_final_approved", false).in("status", ["in_production"]),
-    supabase.from("orders").select("total_amount").eq("company_id", companyId).eq("qc_evidence_uploaded", false).in("status", ["in_production"]),
+    supabase.from("orders").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("production_locked", true).in("status", ["pending", "needs_pricing", "confirmed", "in_production"]),
+    supabase.from("orders").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("qc_final_approved", false).in("status", ["pending", "needs_pricing", "confirmed", "in_production"]),
+    supabase.from("orders").select("total_amount").eq("company_id", companyId).eq("qc_evidence_uploaded", false).in("status", ["pending", "needs_pricing", "confirmed", "in_production"]),
     supabase.from("leads").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("sla_breached", true).not("stage", "in", "(won,lost,archived_orphan)"),
     supabase.from("sla_escalation_log").select("id, entity_type", { count: "exact", head: true }).eq("company_id", companyId).is("resolved_at", null),
   ]);

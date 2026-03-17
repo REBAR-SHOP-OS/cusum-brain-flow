@@ -41,12 +41,23 @@ const statusColors: Record<string, string> = {
 
 const stageLabels: Record<string, { label: string; color: string }> = {
   new: { label: "New", color: "hsl(var(--primary))" },
-  contacted: { label: "Contacted", color: "hsl(210, 80%, 55%)" },
+  hot_enquiries: { label: "Hot Enquiry", color: "hsl(0, 85%, 55%)" },
+  quotation_bids: { label: "Quotation", color: "hsl(210, 80%, 55%)" },
+  quote_follow_up: { label: "Quote F/U", color: "hsl(200, 70%, 50%)" },
+  contacted: { label: "Contacted", color: "hsl(210, 60%, 55%)" },
   qualified: { label: "Qualified", color: "hsl(180, 70%, 45%)" },
   proposal: { label: "Proposal", color: "hsl(45, 90%, 50%)" },
   negotiation: { label: "Negotiation", color: "hsl(30, 85%, 50%)" },
-  closed_won: { label: "Won", color: "hsl(140, 70%, 45%)" },
-  closed_lost: { label: "Lost", color: "hsl(0, 60%, 50%)" },
+  order_confirmed: { label: "Confirmed", color: "hsl(160, 60%, 45%)" },
+  fabrication_in_shop: { label: "Fabrication", color: "hsl(270, 50%, 55%)" },
+  ready_for_delivery: { label: "Ready Delivery", color: "hsl(190, 60%, 50%)" },
+  delivered_pickup_done: { label: "Delivered", color: "hsl(140, 50%, 50%)" },
+  won: { label: "Won", color: "hsl(140, 70%, 45%)" },
+  lost: { label: "Lost", color: "hsl(0, 60%, 50%)" },
+  loss: { label: "Loss", color: "hsl(0, 50%, 45%)" },
+  archived_orphan: { label: "Archived", color: "hsl(0, 0%, 55%)" },
+  merged: { label: "Merged", color: "hsl(0, 0%, 60%)" },
+  no_rebars_out_of_scope: { label: "Out of Scope", color: "hsl(0, 0%, 50%)" },
 };
 
 function formatCurrency(v: number): string {
@@ -98,10 +109,10 @@ export function CEODashboardView() {
   }
 
   const pipelineStages = Object.entries(m.pipelineByStage)
-    .filter(([stage]) => stage !== "closed_lost")
+    .filter(([stage]) => !["lost", "loss", "archived_orphan", "merged", "no_rebars_out_of_scope"].includes(stage))
     .map(([stage, data]) => ({
       stage,
-      label: stageLabels[stage]?.label || stage,
+      label: stageLabels[stage]?.label || stage.replace(/_/g, " "),
       color: stageLabels[stage]?.color || "hsl(var(--muted-foreground))",
       ...data,
     }));
