@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePurchasingList } from "@/hooks/usePurchasingList";
+import { CompanyDefaultItems } from "./CompanyDefaultItems";
 
 const STATUS_TABS = [
   { value: "all" as const, label: "All" },
@@ -37,7 +38,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [newPriority, setNewPriority] = useState("medium");
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const { items, loading, addItem, togglePurchased, deleteItem } = usePurchasingList(filterDate, filterStatus);
+  const { items, loading, addItem, addItemAsPurchased, togglePurchased, deleteItem } = usePurchasingList(filterDate, filterStatus);
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
