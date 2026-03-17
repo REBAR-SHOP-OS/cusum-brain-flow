@@ -138,9 +138,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // ─── Helpers ────────────────────────────────────────────
+function parseDateString(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function isOverdue(task: TaskRow) {
   if (!task.due_date || task.status === "completed") return false;
-  return isPast(startOfDay(new Date(task.due_date))) && !isToday(new Date(task.due_date));
+  return isPast(startOfDay(parseDateString(task.due_date))) && !isToday(parseDateString(task.due_date));
 }
 
 function sortTasks(tasks: TaskRow[]): TaskRow[] {
@@ -152,7 +157,7 @@ function sortTasks(tasks: TaskRow[]): TaskRow[] {
     const bOver = isOverdue(b) ? 0 : 1;
     if (aOver !== bOver) return aOver - bOver;
     if (a.due_date && b.due_date) {
-      const diff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      const diff = parseDateString(a.due_date).getTime() - parseDateString(b.due_date).getTime();
       if (diff !== 0) return diff;
     } else if (a.due_date && !b.due_date) return -1;
     else if (!a.due_date && b.due_date) return 1;
@@ -1030,7 +1035,7 @@ export default function Tasks() {
                                   "text-[10px]",
                                   isOverdue(task) ? "text-destructive" : "text-muted-foreground"
                                 )}>
-                                  · {format(new Date(task.due_date), "MMM d")}
+                                  · {format(parseDateString(task.due_date), "MMM d")}
                                 </span>
                               )}
                             </div>
@@ -1264,13 +1269,13 @@ export default function Tasks() {
                           isOverdue(selectedTask) && "text-destructive font-medium"
                         )}>
                           <CalendarDays className="h-3.5 w-3.5 opacity-60" />
-                          {selectedTask.due_date ? format(new Date(selectedTask.due_date), "MMM d, yyyy") : <span className="text-muted-foreground">Set date</span>}
+                          {selectedTask.due_date ? format(parseDateString(selectedTask.due_date), "MMM d, yyyy") : <span className="text-muted-foreground">Set date</span>}
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"
-                          selected={selectedTask.due_date ? new Date(selectedTask.due_date) : undefined}
+                          selected={selectedTask.due_date ? parseDateString(selectedTask.due_date) : undefined}
                           onSelect={async (date) => {
                             const oldDate = selectedTask.due_date;
                             const newDate = date ? format(date, "yyyy-MM-dd") : null;
