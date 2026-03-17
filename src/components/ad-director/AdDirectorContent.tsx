@@ -982,6 +982,8 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
                 onImprovePrompt={handleImprovePrompt}
                 improvingSceneId={improvingSceneId}
                 logoUrl={brand.logoUrl}
+                onPromptUndo={handlePromptUndo}
+                canUndoPrompt={promptHistory.canUndo}
               />
             </div>
             <div className="space-y-4">
