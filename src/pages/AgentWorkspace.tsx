@@ -93,6 +93,10 @@ export default function AgentWorkspace() {
   const [imageStyles, setImageStyles] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [imageAspectRatio, setImageAspectRatio] = useState<string>("1:1");
+  const [purchasingDate, setPurchasingDate] = useState<Date | undefined>();
+  const [activePurchasingDateStr, setActivePurchasingDateStr] = useState<string | null>(null);
+
+  const { dates: purchasingDates } = usePurchasingDates();
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle } = useChatSessions();
   const hasConversation = messages.length > 0;
