@@ -498,6 +498,14 @@ export function AdDirectorContent({ externalLoadProject, onProjectLoaded, extern
     const maxAttempts = 120;
     let consecutiveErrors = 0;
     for (let i = 0; i < maxAttempts; i++) {
+      if (cancelRef.current) {
+        setClips(prev => prev.map(c =>
+          c.sceneId === sceneId && c.status === "generating"
+            ? { ...c, status: "failed", error: "Cancelled by user", progress: 0 }
+            : c
+        ));
+        return;
+      }
       await new Promise(r => setTimeout(r, 5000));
       try {
         const result = await invokeEdgeFunction<{ status?: string; videoUrl?: string; url?: string }>(
