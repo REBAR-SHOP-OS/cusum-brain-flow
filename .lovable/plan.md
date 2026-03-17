@@ -1,48 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix Empire Agent — Broken Tools for rebar.shop Diagnostics
+## Completed: Add All Wan 2.6 Capabilities
 
-## Root Causes
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-**Two critical issues** prevent the empire agent from running diagnostics:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### 1. Missing `execute_readonly_query` database function
-The `db_read_query` tool calls `svcClient.rpc("execute_readonly_query", { sql_query })` — but this PostgreSQL function **does not exist** in the database. Every DB read fails silently.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 2. Missing WordPress tools for the empire agent
-The empire agent's prompt instructs it to call `wp_list_products`, `wp_list_pages`, `wp_update_post`, `scrape_page`, etc. — but `getTools("empire")` in `agentTools.ts` only registers DB/fix-ticket tools. **No WordPress tools are available**, so the AI hallucinates tool calls that fail.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-The `admin-chat` edge function has all the WordPress tools and their execution logic, but the `ai-agent` empire path doesn't.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-## Fix Plan
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### Step 1: Create `execute_readonly_query` database function
-SQL migration to create a `SECURITY DEFINER` function that runs read-only queries via the service client. Restricted to SELECT only with a safeguard.
-
-### Step 2: Create `execute_write_fix` database function
-Same pattern for write operations — the empire agent also needs this for fixes.
-
-### Step 3: Add WordPress tools to `getTools("empire")` in `agentTools.ts`
-Register the same WordPress read/write tools that `admin-chat` has:
-- `wp_list_posts`, `wp_list_pages`, `wp_list_products`, `wp_list_orders`
-- `wp_get_site_health`
-- `wp_update_post`, `wp_update_page`, `wp_update_product`
-- `scrape_page` (fetch any URL and return HTML/text)
-
-### Step 4: Add WordPress tool execution to `agentToolExecutor.ts`
-The executor currently doesn't handle WP tools — it needs a `WPClient` import and execution branches for all the wp_* tools, plus a `scrape_page` tool that fetches any URL.
-
-### Step 5: Update empire agent prompt
-Remove references to `diagnose_platform` (not a real tool) and align the prompt with the actual available tool names.
-
-### Step 6: Deploy `ai-agent` edge function
-
-## Files Changed
-
-| File | Action |
-|------|--------|
-| Database migration | Create `execute_readonly_query` + `execute_write_fix` functions |
-| `supabase/functions/_shared/agentTools.ts` | Add WP tools + `scrape_page` to empire agent |
-| `supabase/functions/_shared/agentToolExecutor.ts` | Add WP tool execution + scrape_page handler |
-| `supabase/functions/_shared/agents/empire.ts` | Fix prompt to reference real tool names only |
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
