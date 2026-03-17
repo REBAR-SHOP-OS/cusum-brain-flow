@@ -18,6 +18,13 @@ const crmNav = [
   { name: "Customers", href: "/customers", icon: Users },
 ];
 
+const salesNav = [
+  { name: "Sales Pipeline", href: "/sales/pipeline", icon: Kanban },
+  { name: "Quotations", href: "/sales/quotations", icon: FileText },
+  { name: "Invoices", href: "/sales/invoices", icon: Receipt },
+  { name: "Contacts", href: "/sales/contacts", icon: UserPlus },
+];
+
 const operationsNav = [
   { name: "Shop Floor", href: "/shop-floor", icon: Factory },
 ];
