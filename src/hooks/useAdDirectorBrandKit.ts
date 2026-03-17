@@ -23,8 +23,8 @@ export function useAdDirectorBrandKit() {
 
       if (error || !data) return null;
 
-      const row = data as any;
-      const colors = (typeof row.colors === "object" && row.colors) || {};
+      const row = data as Record<string, any>;
+      const colors = (typeof row.colors === "object" && row.colors) || {} as Record<string, string>;
 
       return {
         name: row.business_name || "",
