@@ -1,43 +1,46 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-# Fix: Force Empire Agent to Call Tools (Not Narrate)
+## Completed: Add All Wan 2.6 Capabilities
 
-## Problem
-The empire agent has all the right tools registered and wired up, but Gemini 2.5 Pro ignores them. With `toolChoice: "auto"`, the model chooses to respond with text like "I'll query the seo_issues table..." instead of actually calling `db_read_query` or `scrape_page`. The TOOL-FIRST RULE in the prompt is being ignored by the model.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-## Root Cause
-`toolChoice: "auto"` is a suggestion, not an enforcement. Gemini often prefers text responses over tool calls, especially with long system prompts that contain lots of narrative instructions.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-## Fix
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### 1. Force `toolChoice: "required"` for empire diagnostic requests
-**File**: `supabase/functions/ai-agent/index.ts` (~line 1020)
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-Detect when the empire agent receives a diagnostic or fix message (keywords: "check", "diagnostic", "fix", "rebar.shop", "scrape", "audit", "report") and override `toolChoice` from `"auto"` to `"required"`. This forces the model to call at least one tool on the first turn.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-After the first tool loop iteration completes, revert to `"auto"` so the model can produce a final text summary.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-```text
-Before:  toolChoice: "auto"  (every turn)
-After:   toolChoice: "required" (first turn for empire diagnostics)
-         toolChoice: "auto"     (subsequent turns)
-```
-
-### 2. Add tool-call logging for debugging
-**File**: `supabase/functions/ai-agent/index.ts` (~line 1039)
-
-Add a `console.log` inside the tool loop to track which tools are being called, making future debugging easier.
-
-### 3. Reduce empire system prompt verbosity
-**File**: `supabase/functions/_shared/agents/empire.ts`
-
-The system prompt is ~230 lines. Gemini may be "overwhelmed" and defaulting to text. Move the TOOL-FIRST RULE to the very top of the prompt (before the role description) so it's the first thing the model sees. Also add a final user-level reinforcement message.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `supabase/functions/ai-agent/index.ts` | Force `toolChoice: "required"` for empire diagnostic messages on first turn |
-| `supabase/functions/_shared/agents/empire.ts` | Move TOOL-FIRST RULE to top of prompt |
-| Redeploy `ai-agent` | Apply changes |
-
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
