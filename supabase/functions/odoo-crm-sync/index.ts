@@ -381,7 +381,7 @@ Deno.serve(async (req) => {
             title: ol.name || "Untitled",
             stage: erpStage,
             probability: normalizedProb,
-            expected_value: Number(ol.expected_revenue) || Number(ol.planned_revenue) || 0,
+            expected_value: Number(ol.expected_revenue) || 0,
             expected_close_date: dateDeadline,
             priority: mapOdooPriority(ol.priority),
             metadata,
