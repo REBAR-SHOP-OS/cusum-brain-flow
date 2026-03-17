@@ -17,6 +17,7 @@ import {
   type PromptQualityScore, DEFAULT_BRAND, DEMO_SCRIPT,
 } from "@/types/adDirector";
 import { cn } from "@/lib/utils";
+import { usePromptHistory } from "@/hooks/usePromptHistory";
 import { stitchClips } from "@/lib/videoStitch";
 import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
