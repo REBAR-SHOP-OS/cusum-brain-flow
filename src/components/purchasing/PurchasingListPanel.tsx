@@ -171,7 +171,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         ) : (
           <>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1 pt-2 pb-1">Custom Items</h3>
-            {customItems.map((item) => (
+            {otherCustom.map((item) => (
               <div
                 key={item.id}
                 className={cn(
