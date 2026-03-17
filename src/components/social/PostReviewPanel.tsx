@@ -796,7 +796,7 @@ export function PostReviewPanel({
                   </div>
                 </div>
               )}
-              {!editing && !isPublished && (
+              {!isPublished && (
                 <div className="p-4 border-t space-y-2">
                   {/* Facebook permission warning */}
                   {fbPublishReady === false && (
