@@ -127,12 +127,15 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
             />
           </div>
           <div className="flex gap-2">
-            <Input
-              placeholder="Category (optional)"
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              className="flex-1"
-            />
+            <Select value={newCategory} onValueChange={setNewCategory}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Office">Office</SelectItem>
+                <SelectItem value="Workshop">Workshop</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={newPriority} onValueChange={setNewPriority}>
               <SelectTrigger className="w-28">
                 <SelectValue />
