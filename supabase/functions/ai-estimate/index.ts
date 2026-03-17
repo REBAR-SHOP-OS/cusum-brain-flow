@@ -147,12 +147,62 @@ serve(async (req) => {
 
     if (file_urls.length > 0) {
       try {
-        // Use Lovable AI gateway with URL references — no file download needed
         const contentParts: any[] = [];
 
-        // Pass file URLs directly as image_url references (gateway fetches them)
-        for (const url of file_urls.slice(0, 2)) {
-          contentParts.push({ type: "image_url", image_url: { url } });
+        // Helper: chunked base64 encoder (avoids call-stack overflow on large files)
+        function arrayBufferToBase64(buffer: Uint8Array): string {
+          const chunkSize = 8192;
+          let binary = "";
+          for (let i = 0; i < buffer.length; i += chunkSize) {
+            const chunk = buffer.subarray(i, Math.min(i + chunkSize, buffer.length));
+            for (let j = 0; j < chunk.length; j++) {
+              binary += String.fromCharCode(chunk[j]);
+            }
+          }
+          return btoa(binary);
+        }
+
+        // Build content parts — handle PDFs via base64, images via direct URL
+        for (const url of file_urls.slice(0, 4)) {
+          const lower = url.toLowerCase();
+          const isPdf = /\.pdf(\?|$)/.test(lower);
+          const isImage = /\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower);
+          const isCsv = /\.csv(\?|$)/.test(lower);
+
+          if (isPdf) {
+            try {
+              const res = await fetch(url);
+              if (!res.ok) { console.error(`Failed to fetch PDF: ${url} (${res.status})`); continue; }
+              const bytes = new Uint8Array(await res.arrayBuffer());
+              const b64 = arrayBufferToBase64(bytes);
+              contentParts.push({ type: "image_url", image_url: { url: `data:application/pdf;base64,${b64}` } });
+              console.log(`PDF converted to base64: ${(bytes.length / 1024).toFixed(0)}KB`);
+            } catch (fetchErr) {
+              console.error(`PDF fetch/convert error for ${url}:`, fetchErr);
+            }
+          } else if (isCsv) {
+            try {
+              const res = await fetch(url);
+              if (!res.ok) { console.error(`Failed to fetch CSV: ${url}`); continue; }
+              const text = await res.text();
+              contentParts.push({ type: "text", text: `[CSV DATA]\n${text.slice(0, 50000)}` });
+            } catch (fetchErr) {
+              console.error(`CSV fetch error for ${url}:`, fetchErr);
+            }
+          } else if (isImage) {
+            contentParts.push({ type: "image_url", image_url: { url } });
+          } else {
+            // Fallback: try as base64 with generic mime
+            try {
+              const res = await fetch(url);
+              if (!res.ok) continue;
+              const bytes = new Uint8Array(await res.arrayBuffer());
+              const b64 = arrayBufferToBase64(bytes);
+              const ext = lower.split('.').pop()?.split('?')[0] ?? "octet-stream";
+              const mime = ext === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : `application/${ext}`;
+              contentParts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } });
+            } catch { /* skip unsupported */ }
+          }
         }
 
         const extractionPrompt = `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings and extract ALL rebar reinforcement items.
@@ -242,7 +292,7 @@ Return ONLY a valid JSON array of items.`;
             messages: [
               { role: "user", content: contentParts },
             ],
-            max_tokens: 8000,
+            max_tokens: 16000,
             temperature: 0.1,
           }),
         });
