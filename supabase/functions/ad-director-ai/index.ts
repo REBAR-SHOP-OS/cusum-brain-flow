@@ -734,6 +734,14 @@ serve(async (req) => {
         result = await handleAnalyzeScript(LOVABLE_API_KEY, body, modelOverride);
         break;
 
+      case "write-script": {
+        const { input: desc, brand: scriptBrand } = body;
+        if (!desc) throw new Error("Product description is required");
+        const userMsg = `Write a 30-second ad script for: ${desc}\n\nBrand: ${scriptBrand?.name || "Company"}\nWebsite: ${scriptBrand?.website || ""}\nCTA: ${scriptBrand?.cta || ""}\nTagline: ${scriptBrand?.tagline || ""}\nAudience: ${scriptBrand?.targetAudience || "B2B professionals"}`;
+        result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, { input: userMsg }, WRITE_SCRIPT_SYSTEM, modelOverride);
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unhandled action: ${action}` }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
