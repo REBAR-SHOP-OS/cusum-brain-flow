@@ -175,7 +175,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
               <SelectItem value="low">Low</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={handleAdd} disabled={!newTitle.trim()}>Add</Button>
+          <Button onClick={handleAdd} disabled={!newTitle.trim() || !newCategory}>Add</Button>
         </div>
       </div>
 
