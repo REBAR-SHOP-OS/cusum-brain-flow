@@ -794,7 +794,18 @@ export default function Tasks() {
     loadData();
   };
 
-  const createTask = async () => {
+  const reviewTask = async (taskId: string, status: "approved" | "rejected") => {
+    const { error } = await supabase.from("tasks").update({
+      review_status: status,
+      reviewed_by: currentProfileId,
+      ...(status === "rejected" ? { status: "open", completed_at: null } : {}),
+    } as any).eq("id", taskId);
+    if (error) { toast.error(error.message); return; }
+    await writeAudit(taskId, "review", "review_status", null, status);
+    toast.success(status === "approved" ? "Task approved ✅" : "Task rejected — reopened");
+    loadData();
+  };
+
     if (!newTitle.trim() || !createForEmployee) { toast.error("Title is required"); return; }
     if (newDueDate && newDueDate < new Date().toISOString().split("T")[0]) { toast.error("Due date cannot be in the past"); return; }
     setCreating(true);
