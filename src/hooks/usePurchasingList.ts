@@ -9,6 +9,7 @@ export interface PurchasingItem {
   description: string | null;
   quantity: number;
   is_purchased: boolean;
+  is_rejected: boolean;
   purchased_by: string | null;
   purchased_at: string | null;
   due_date: string | null;
@@ -96,6 +97,28 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     }
   }, [user]);
 
+  const addItemAsRejected = useCallback(async (title: string, category: string, dueDate?: string) => {
+    if (!user) return;
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    if (!profile?.company_id) return;
+
+    const { error } = await supabase.from("purchasing_list_items" as any).insert({
+      company_id: profile.company_id,
+      title,
+      quantity: 1,
+      category,
+      priority: "medium",
+      is_rejected: true,
+      is_purchased: false,
+      created_by: user.id,
+      due_date: dueDate || null,
+    });
+    if (error) {
+      toast.error("Error rejecting item");
+      console.error(error);
+    }
+  }, [user]);
+
   const addItemAsPurchased = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
@@ -123,8 +146,24 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     if (!user) return;
     const updateData: any = {
       is_purchased: !currentValue,
+      is_rejected: false,
       purchased_by: !currentValue ? user.id : null,
       purchased_at: !currentValue ? new Date().toISOString() : null,
+    };
+    const { error } = await supabase.from("purchasing_list_items" as any).update(updateData).eq("id", itemId);
+    if (error) {
+      toast.error("Error updating");
+      console.error(error);
+    }
+  }, [user]);
+
+  const toggleRejected = useCallback(async (itemId: string, currentValue: boolean) => {
+    if (!user) return;
+    const updateData: any = {
+      is_rejected: !currentValue,
+      is_purchased: false,
+      purchased_by: null,
+      purchased_at: null,
     };
     const { error } = await supabase.from("purchasing_list_items" as any).update(updateData).eq("id", itemId);
     if (error) {
@@ -143,5 +182,5 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     }
   }, []);
 
-  return { items, loading, addItem, addItemAsPurchased, togglePurchased, deleteItem, refetch: fetchItems };
+  return { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, refetch: fetchItems };
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, Trash2, Package, Check, CheckCircle } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, Package, Check, X, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [newPriority, setNewPriority] = useState("medium");
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const { items, loading, addItem, addItemAsPurchased, togglePurchased, deleteItem } = usePurchasingList(filterDate, filterStatus);
+  const { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem } = usePurchasingList(filterDate, filterStatus);
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
@@ -159,6 +159,8 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
           dbItems={items}
           onMarkPurchased={(title, category) => addItemAsPurchased(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
           onUnmarkPurchased={(itemId) => togglePurchased(itemId, true)}
+          onMarkRejected={(title, category) => addItemAsRejected(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
+          onUnmarkRejected={(itemId) => toggleRejected(itemId, true)}
         />
 
         <div className="border-t border-border my-2" />
@@ -173,7 +175,8 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
               key={item.id}
               className={cn(
                 "flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors",
-                item.is_purchased && "opacity-60"
+                item.is_purchased && "bg-green-500/10 border-green-500/30",
+                item.is_rejected && "bg-red-500/10 border-red-500/30"
               )}
             >
               <Button
@@ -189,8 +192,25 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
               >
                 <Check className="w-3.5 h-3.5" />
               </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-7 w-7 rounded-full",
+                  item.is_rejected
+                    ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
+                    : "text-muted-foreground hover:text-red-500"
+                )}
+                onClick={() => toggleRejected(item.id, item.is_rejected)}
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
               <div className="flex-1 min-w-0">
-                <div className={cn("font-medium", item.is_purchased && "line-through text-muted-foreground")}>
+                <div className={cn(
+                  "font-medium",
+                  item.is_purchased && "line-through text-green-600",
+                  item.is_rejected && "line-through text-red-500"
+                )}>
                   {item.title}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
