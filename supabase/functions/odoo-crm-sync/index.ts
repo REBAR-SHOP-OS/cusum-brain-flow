@@ -613,15 +613,28 @@ Deno.serve(async (req) => {
 
     let reconciled = 0;
     if (staleLeads.length > 0 && mode === "full") {
-      console.log(`Reconciliation: ${staleLeads.length} ERP leads not found in Odoo full fetch`);
-      // Log stale leads as validation warnings
+      console.log(`Reconciliation: ${staleLeads.length} ERP leads not found in Odoo full fetch — marking as archived_orphan`);
       for (const sl of staleLeads) {
         const meta = sl.metadata as Record<string, unknown> | null;
+        const oid = (meta?.odoo_id as string) || "unknown";
+        // Only archive if not already in a terminal stage
+        if (sl.stage !== "lost" && sl.stage !== "won" && sl.stage !== "archived_orphan") {
+          await serviceClient.from("leads").update({
+            stage: "lost",
+            updated_at: new Date().toISOString(),
+            metadata: { ...meta, archived_reason: "not_found_in_odoo_full_sync", archived_at: new Date().toISOString() },
+          }).eq("id", sl.id);
+          await insertLeadEvent(serviceClient, sl.id, "stage_changed", {
+            from: sl.stage, to: "lost", source: "reconciliation_archive",
+            reason: "Lead not found in Odoo full fetch",
+          });
+          reconciled++;
+        }
         allValidationWarnings.push({
-          odoo_id: (meta?.odoo_id as string) || "unknown",
+          odoo_id: oid,
           severity: "warning", validation_type: "stale_lead",
-          message: "ERP lead not found in Odoo full fetch — may be deleted or type-changed",
-          auto_fixed: false,
+          message: "ERP lead not found in Odoo full fetch — archived",
+          auto_fixed: true, fix_applied: "Stage set to lost (archived)",
         });
       }
     } else if (staleLeads.length > 0) {
