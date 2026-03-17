@@ -521,6 +521,9 @@ export function CEODashboardView() {
       {/* ─── AI Token Usage ─── */}
       <AITokenUsageCard />
 
+      {/* ─── Fix Request Queue ─── */}
+      <FixRequestQueue />
+
       {/* ─── Drilldown Drawers ─── */}
       <ARWorkbenchDrawer open={openDrawer === "ar"} onClose={() => setOpenDrawer(null)} outstandingAR={m.outstandingAR} unpaidInvoices={m.unpaidInvoices} arAgingBuckets={m.arAgingBuckets} />
       <JobRiskDrawer open={openDrawer === "risk"} onClose={() => setOpenDrawer(null)} atRiskJobs={m.atRiskJobs} />
