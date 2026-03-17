@@ -182,5 +182,5 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     }
   }, []);
 
-  return { items, loading, addItem, addItemAsPurchased, togglePurchased, deleteItem, refetch: fetchItems };
+  return { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, refetch: fetchItems };
 }

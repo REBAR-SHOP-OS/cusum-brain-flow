@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PurchasingItem } from "@/hooks/usePurchasingList";
@@ -57,6 +57,8 @@ interface CompanyDefaultItemsProps {
   dbItems: PurchasingItem[];
   onMarkPurchased: (title: string, category: string) => void;
   onUnmarkPurchased: (itemId: string) => void;
+  onMarkRejected: (title: string, category: string) => void;
+  onUnmarkRejected: (itemId: string) => void;
 }
 
 function findDbMatch(def: DefaultItem, dbItems: PurchasingItem[]): PurchasingItem | undefined {
@@ -70,21 +72,28 @@ function DefaultRow({
   dbMatch,
   onMarkPurchased,
   onUnmarkPurchased,
+  onMarkRejected,
+  onUnmarkRejected,
 }: {
   def: DefaultItem;
   dbMatch: PurchasingItem | undefined;
   onMarkPurchased: (title: string, category: string) => void;
   onUnmarkPurchased: (itemId: string) => void;
+  onMarkRejected: (title: string, category: string) => void;
+  onUnmarkRejected: (itemId: string) => void;
 }) {
   const isPurchased = dbMatch?.is_purchased ?? false;
+  const isRejected = dbMatch?.is_rejected ?? false;
 
   return (
     <div
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-lg border border-border hover:bg-muted/30 transition-colors",
-        isPurchased && "opacity-60"
+        isPurchased && "bg-green-500/10 border-green-500/30",
+        isRejected && "bg-red-500/10 border-red-500/30"
       )}
     >
+      {/* Approve button */}
       <Button
         variant="ghost"
         size="icon"
@@ -97,21 +106,51 @@ function DefaultRow({
         onClick={() => {
           if (isPurchased && dbMatch) {
             onUnmarkPurchased(dbMatch.id);
-          } else if (!isPurchased) {
+          } else {
+            if (isRejected && dbMatch) {
+              onUnmarkRejected(dbMatch.id);
+            }
             onMarkPurchased(def.title, def.category);
           }
         }}
       >
         <Check className="w-3.5 h-3.5" />
       </Button>
-      <span className={cn("flex-1 text-sm font-medium", isPurchased && "line-through text-muted-foreground")}>
+      {/* Reject button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-7 w-7 rounded-full",
+          isRejected
+            ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
+            : "text-muted-foreground hover:text-red-500"
+        )}
+        onClick={() => {
+          if (isRejected && dbMatch) {
+            onUnmarkRejected(dbMatch.id);
+          } else {
+            if (isPurchased && dbMatch) {
+              onUnmarkPurchased(dbMatch.id);
+            }
+            onMarkRejected(def.title, def.category);
+          }
+        }}
+      >
+        <X className="w-3.5 h-3.5" />
+      </Button>
+      <span className={cn(
+        "flex-1 text-sm font-medium",
+        isPurchased && "line-through text-green-600",
+        isRejected && "line-through text-red-500"
+      )}>
         {def.title}
       </span>
     </div>
   );
 }
 
-export function CompanyDefaultItems({ dbItems, onMarkPurchased, onUnmarkPurchased }: CompanyDefaultItemsProps) {
+export function CompanyDefaultItems({ dbItems, onMarkPurchased, onUnmarkPurchased, onMarkRejected, onUnmarkRejected }: CompanyDefaultItemsProps) {
   const officeItems = COMPANY_DEFAULTS.filter((d) => d.category === "Office");
   const workshopItems = COMPANY_DEFAULTS.filter((d) => d.category === "Workshop");
 
@@ -127,6 +166,8 @@ export function CompanyDefaultItems({ dbItems, onMarkPurchased, onUnmarkPurchase
           dbMatch={findDbMatch(def, dbItems)}
           onMarkPurchased={onMarkPurchased}
           onUnmarkPurchased={onUnmarkPurchased}
+          onMarkRejected={onMarkRejected}
+          onUnmarkRejected={onUnmarkRejected}
         />
       ))}
     </div>
