@@ -145,7 +145,33 @@ export default function TakeoffWizard({ open, onClose, onComplete }: TakeoffWiza
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    // Auto-create quotation from estimation result
+    try {
+      const companyId = await getCompanyId();
+      if (companyId && resultData?.summary) {
+        const qNum = await generateQuotationNumber(companyId);
+        const costWithMargin = Math.round((resultData.summary.total_cost ?? 0) * 1.15);
+        const customerObj = customers.find((c: any) => c.customer_id === customerId || c.id === customerId);
+        const { error } = await supabase.from("sales_quotations").insert({
+          company_id: companyId,
+          quotation_number: qNum,
+          customer_name: customerObj?.display_name || customerObj?.name || null,
+          amount: costWithMargin || null,
+          notes: `Auto-generated from estimation: ${projectName}`,
+          status: "draft",
+          sales_lead_id: leadId || null,
+        });
+        if (!error) {
+          toast.success(`Quotation ${qNum} created automatically`);
+        } else {
+          console.warn("Auto-quotation failed:", error.message);
+        }
+      }
+    } catch (err) {
+      console.warn("Auto-quotation error:", err);
+    }
+
     if (resultData?.project_id) {
       onComplete(resultData.project_id);
     }
