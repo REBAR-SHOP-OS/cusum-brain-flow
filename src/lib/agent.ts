@@ -41,7 +41,7 @@ export async function sendAgentMessage(
   preferredModel?: string
 ): Promise<AgentResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+  const timeoutId = setTimeout(() => controller.abort(), 180_000);
 
   let data: unknown, invokeError: unknown;
   try {

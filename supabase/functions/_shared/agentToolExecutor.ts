@@ -806,10 +806,11 @@ export async function executeToolCall(
             break;
           }
 
-          // Fallback: if all attempts failed and ratio is not 1:1, retry with square ratio
+          // Fallback: if all attempts failed and ratio is not 1:1, retry with square ratio (max 2 attempts)
           if (!generated && aspectRatio && aspectRatio !== "1:1") {
             console.log(`[generate_image] All attempts failed with ratio ${aspectRatio}, retrying with 1:1 fallback...`);
-            for (const attempt of attempts) {
+            const fallbackAttempts = attempts.slice(0, 2);
+            for (const attempt of fallbackAttempts) {
               const contentParts: any[] = [{ type: "text", text: fullPrompt }];
               if (attempt.useLogo && logoUrl) {
                 contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
@@ -823,19 +824,31 @@ export async function executeToolCall(
                 }
               }
 
-              const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: attempt.model,
-                  messages: [{ role: "user", content: contentParts }],
-                  modalities: ["image", "text"],
-                  
-                }),
-              });
+              const fbController = new AbortController();
+              const fbTimeout = setTimeout(() => fbController.abort(), 60000);
+              let aiRes: Response;
+              try {
+                aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                  method: "POST",
+                  signal: fbController.signal,
+                  headers: {
+                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: attempt.model,
+                    messages: [{ role: "user", content: contentParts }],
+                    modalities: ["image", "text"],
+                  }),
+                });
+              } catch (fetchErr: any) {
+                const isTimeout = fetchErr?.name === "AbortError";
+                console.warn(`[generate_image] ${attempt.model} (1:1 fallback) ${isTimeout ? "TIMEOUT (60s)" : "FETCH ERROR"}: ${fetchErr?.message || fetchErr}`);
+                lastError = `${attempt.model} (1:1 fallback): ${isTimeout ? "timeout" : fetchErr?.message}`;
+                continue;
+              } finally {
+                clearTimeout(fbTimeout);
+              }
 
               if (!aiRes.ok) { lastError = `${attempt.model} (1:1 fallback): ${aiRes.status}`; continue; }
 
