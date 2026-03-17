@@ -572,10 +572,11 @@ Deno.serve(async (req) => {
     if (agent === "social") {
       const msgLower = message.trim().toLowerCase();
       // Detect if user wants to CREATE something (not see the schedule)
-      const isCreationIntent = /(بساز|بنویس|درست کن|create|generate|make|build|design|عکس|تصویر|image|photo|video|ویدیو|پست|کپشن|caption)/i.test(msgLower);
+      const isCreationIntent = /(بساز|بنویس|درست کن|طراحی|ساخت|بنر|پوستر|محتوا|لوگو|create|generate|make|build|design|poster|banner|logo|content|intro|عکس|تصویر|image|photo|video|ویدیو|پست|کپشن|caption|نوروز|تبریک|تخفیف)/i.test(msgLower);
+      const isExplicitScheduleRequest = /\b(content\s*schedule|schedule\s*for\s*today|today|program|برنامه)\b/i.test(msgLower);
       const isScheduleRequest = (
-        (history.length === 0 && !isCreationIntent) || // new chat WITHOUT creation intent
-        /\b(content\s*schedule|schedule\s*for\s*today|today|program|برنامه)\b/i.test(msgLower)
+        (history.length === 0 && !isCreationIntent && !msgLower.trim()) || // empty auto-message on new chat
+        (isExplicitScheduleRequest && !isCreationIntent) // explicit schedule request without creation intent
       ) && !/^\d$/.test(msgLower) && msgLower !== "all"; // not a slot selection
 
       if (isScheduleRequest) {
