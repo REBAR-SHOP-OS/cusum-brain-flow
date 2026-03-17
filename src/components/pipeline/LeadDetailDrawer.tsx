@@ -216,6 +216,14 @@ export function LeadDetailDrawer({
               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { onOpenChange(false); onEdit(lead); }}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
+              {odooRefreshing && (
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Syncing…
+                </div>
+              )}
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onOpenChange(false)}>
                 <X className="w-3.5 h-3.5" />
               </Button>

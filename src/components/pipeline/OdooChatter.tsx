@@ -770,11 +770,19 @@ export function OdooChatter({ lead }: OdooChatterProps) {
 // ── Sub-components ─────────────────────────────────────────────────
 
 function DateSeparator({ date }: { date: Date }) {
+  const now = new Date();
+  const isDateToday = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  const label = isDateToday ? "Today" : isYesterday ? "Yesterday" : format(date, "MMMM d, yyyy");
+
   return (
     <div className="flex items-center gap-3 py-3">
       <div className="flex-1 h-px bg-border" />
       <span className="text-[11px] font-medium text-muted-foreground shrink-0">
-        {format(date, "MMMM d, yyyy")}
+        {label}
       </span>
       <div className="flex-1 h-px bg-border" />
     </div>
