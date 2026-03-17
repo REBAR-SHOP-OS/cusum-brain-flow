@@ -33,6 +33,12 @@ Deno.serve(async (req) => {
       return json({ error: "Post not found" }, 404);
     }
 
+    // HARD GATE: declined posts can NEVER be scheduled
+    if (fullPost.status === "declined") {
+      console.warn(`[schedule-post] BLOCKED — post ${post_id} is declined (by ${fullPost.declined_by || 'unknown'})`);
+      return json({ error: "This post was declined and cannot be scheduled." }, 403);
+    }
+
     const isUnassigned = delete_original === true || fullPost.platform === "unassigned";
     const cloned: string[] = [];
 

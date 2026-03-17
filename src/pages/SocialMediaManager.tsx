@@ -216,8 +216,11 @@ export default function SocialMediaManager() {
     setSelectedPost(null);
   };
 
-  const handleDecline = (post: SocialPost) => {
-    updatePost.mutate({ id: post.id, status: "declined" });
+  const handleDecline = async (post: SocialPost) => {
+    // Get current user email to record who declined
+    const { data: { user } } = await supabase.auth.getUser();
+    const declinedBy = user?.email || "unknown";
+    updatePost.mutate({ id: post.id, status: "declined", neel_approved: false, declined_by: declinedBy } as any);
     setSelectedPost(null);
   };
 
