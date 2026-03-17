@@ -304,6 +304,24 @@ export function AppSidebar() {
           );
         })}
       </ScrollArea>
+      <div className="px-2 py-2 border-t border-sidebar-border">
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              onClick={togglePin}
+              className="h-10 w-full rounded-lg flex items-center gap-3 px-2 transition-colors hover:bg-sidebar-accent text-sidebar-foreground"
+            >
+              {pinned ? <PanelLeftClose className="w-[18px] h-[18px] shrink-0" /> : <PanelLeft className="w-[18px] h-[18px] shrink-0" />}
+              <span className={cn("text-sm overflow-hidden transition-opacity duration-200", pinned ? "opacity-100" : "opacity-0 group-hover/sidebar:opacity-100")}>
+                {pinned ? "Collapse" : "Pin open"}
+              </span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="text-xs group-hover/sidebar:hidden">
+            {pinned ? "Collapse" : "Pin open"}
+          </TooltipContent>
+        </Tooltip>
+      </div>
     </aside>
   );
 }
