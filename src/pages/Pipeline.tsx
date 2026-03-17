@@ -236,6 +236,7 @@ export default function Pipeline() {
         const { data, error } = await supabase
           .from("leads")
           .select("*, customers(name, company_name)")
+          .eq("source", "odoo_sync")
           .order("updated_at", { ascending: false })
           .range(from, from + PAGE - 1);
 
