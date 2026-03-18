@@ -541,12 +541,12 @@ export function generateQuote(
   // 8. Shipping
   const totalWeightKg = straightWeightKg + fabricatedWeightKg + cageWeightKg;
   const totalTonnage = totalWeightKg / 1000;
-  const truckCap = req.shipping.truck_capacity_tons || config.default_truck_capacity_tons;
+  const truckCap = shipping.truck_capacity_tons || config.default_truck_capacity_tons;
   let shippingTrips = 0;
 
-  if (req.shipping.delivery_required && req.shipping.distance_km > 0) {
+  if (shipping.delivery_required && shipping.distance_km > 0) {
     const ship = computeShipping(
-      req.shipping.distance_km,
+      shipping.distance_km,
       totalTonnage,
       truckCap,
       config.shipping_per_km_cad
@@ -554,13 +554,13 @@ export function generateQuote(
     shippingTrips = ship.trips;
     lineItems.push({
       category: "Shipping",
-      description: `Delivery ${req.shipping.distance_km} km × ${ship.trips} trip(s)`,
+      description: `Delivery ${shipping.distance_km} km × ${ship.trips} trip(s)`,
       bar_size: "—",
       qty: ship.trips,
-      length_or_weight: `${req.shipping.distance_km} km`,
+      length_or_weight: `${shipping.distance_km} km`,
       weight_kg: 0,
       tonnage: round3(totalTonnage),
-      unit_price_cad: round2(req.shipping.distance_km * config.shipping_per_km_cad),
+      unit_price_cad: round2(shipping.distance_km * config.shipping_per_km_cad),
       extended_price_cad: ship.cost,
       notes: `ceil(${round3(totalTonnage)}t / ${truckCap}t) = ${ship.trips} trips`,
     });
