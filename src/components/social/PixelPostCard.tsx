@@ -44,7 +44,8 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
       }
     };
 
-    const hasInternalRef = post.imageTextTranslation || post.captionTranslation;
+    // Strip hashtags from caption to avoid duplication with hashtags field
+    const cleanCaption = (post.caption || "").replace(/#[a-zA-Z]\w*/g, "").replace(/\s{2,}/g, " ").trim();
 
     return (
       <div
@@ -81,7 +82,7 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
         {/* 2. Caption */}
         <div className="px-3 pt-3 pb-1">
           <p className="text-sm text-foreground leading-snug whitespace-pre-line">
-            {post.caption || "Untitled post"}
+            {cleanCaption || "Untitled post"}
           </p>
         </div>
 
