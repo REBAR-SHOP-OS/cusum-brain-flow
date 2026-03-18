@@ -76,10 +76,10 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
   }, [fetchItems]);
 
   const refreshSessionIfNeeded = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      const { error } = await supabase.auth.refreshSession();
-      if (error) {
+    const { error } = await supabase.auth.getUser();
+    if (error) {
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
         toast.error("Session expired – please log in again");
         await supabase.auth.signOut({ scope: "local" });
         return false;
