@@ -36,7 +36,11 @@ async function semrushFetch(endpoint: string, params: Record<string, string>): P
     throw new Error(`SEMrush API error ${res.status}: ${body}`);
   }
   const text = await res.text();
-  if (text.startsWith("ERROR")) throw new Error(`SEMrush: ${text}`);
+  if (text.startsWith("ERROR")) {
+    // "ERROR 50 :: NOTHING FOUND" means no data — return empty rather than throwing
+    if (text.includes("NOTHING FOUND")) return [];
+    throw new Error(`SEMrush: ${text}`);
+  }
   return parseSemrushCsv(text);
 }
 
