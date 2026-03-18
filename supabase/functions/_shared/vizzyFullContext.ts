@@ -137,6 +137,12 @@ export async function buildFullVizzyContext(
       .order("received_at", { ascending: false })
       .limit(30),
     supabase
+      .from("communications")
+      .select("from_address, to_address, direction, received_at, gmail_thread_id")
+      .gte("received_at", today + "T00:00:00")
+      .order("received_at", { ascending: false })
+      .limit(500),
+    supabase
       .from("chat_sessions")
       .select("id, title, agent_name, user_id, created_at")
       .gte("created_at", today + "T00:00:00")
@@ -172,6 +178,14 @@ export async function buildFullVizzyContext(
       .from("machines")
       .select("id, name, status, current_operator_profile_id")
       .not("current_operator_profile_id", "is", null),
+    // Employee activity events today (for per-employee action counts)
+    supabase
+      .from("activity_events")
+      .select("actor_id, event_type, entity_type, created_at")
+      .gte("created_at", today + "T00:00:00")
+      .not("actor_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(500),
   ]);
 
   // Compute financials
