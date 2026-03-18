@@ -77,7 +77,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   const addItem = useCallback(async (title: string, quantity = 1, category?: string, priority = "medium", dueDate?: string) => {
     if (!user) return;
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
     const { error } = await supabase.from("purchasing_list_items").insert({
