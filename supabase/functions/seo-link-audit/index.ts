@@ -189,6 +189,76 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
   });
 }
 
+// ─── CHECK BROKEN PHASE ───
+
+async function handleCheckBroken(sb: any, domainId: string) {
+  // Get all external links that are currently "ok" (not yet checked)
+  const { data: links } = await sb
+    .from("seo_link_audit")
+    .select("id, link_href")
+    .eq("domain_id", domainId)
+    .eq("link_type", "external")
+    .eq("status", "ok")
+    .limit(50); // Process 50 at a time
+
+  if (!links || links.length === 0) {
+    return new Response(JSON.stringify({ success: true, checked: 0, broken: 0, remaining: 0 }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Deduplicate URLs
+  const urlMap = new Map<string, string[]>(); // href -> [ids]
+  for (const link of links) {
+    if (!link.link_href) continue;
+    const existing = urlMap.get(link.link_href) || [];
+    existing.push(link.id);
+    urlMap.set(link.link_href, existing);
+  }
+
+  let brokenCount = 0;
+  const uniqueUrls = Array.from(urlMap.keys());
+
+  // Check in batches of 20 concurrently
+  const BATCH = 20;
+  for (let i = 0; i < uniqueUrls.length; i += BATCH) {
+    const batch = uniqueUrls.slice(i, i + BATCH);
+    const checks = await Promise.all(batch.map(async (url) => {
+      try {
+        const res = await fetch(url, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(3000) });
+        return { url, broken: res.status >= 400, status: res.status };
+      } catch {
+        return { url, broken: true, status: null };
+      }
+    }));
+
+    for (const check of checks) {
+      if (check.broken) {
+        const ids = urlMap.get(check.url) || [];
+        const suggestion = check.status ? `Link returns ${check.status}. Fix or remove.` : "Link unreachable or timed out";
+        for (const id of ids) {
+          await sb.from("seo_link_audit").update({ status: "broken", suggestion }).eq("id", id);
+        }
+        brokenCount += ids.length;
+      }
+    }
+  }
+
+  // Check how many remain
+  const { count } = await sb
+    .from("seo_link_audit")
+    .select("id", { count: "exact", head: true })
+    .eq("domain_id", domainId)
+    .eq("link_type", "external")
+    .eq("status", "ok");
+
+  console.log(`Check complete: ${brokenCount} broken found, ${count || 0} remaining`);
+
+  return new Response(JSON.stringify({ success: true, checked: links.length, broken: brokenCount, remaining: count || 0 }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // ─── PREVIEW PHASE (AI-powered) ───
 
 async function handlePreview(sb: any, auditIds: string[], _companyId: string) {
