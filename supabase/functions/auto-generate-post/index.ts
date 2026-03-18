@@ -379,6 +379,35 @@ Return an array of 5 objects:
 
         if (!Array.isArray(generatedPosts) || generatedPosts.length === 0) continue;
 
+        // Post-processing: enforce slogan/caption separation
+        for (const post of generatedPosts) {
+          // If AI returned image_slogan, ensure content doesn't overlap
+          const slogan = (post.image_slogan || "").toLowerCase().trim();
+          const caption = (post.content || "").toLowerCase();
+          if (slogan && caption) {
+            const sloganWords = slogan.split(/\s+/).filter((w: string) => w.length > 3);
+            const captionWords = caption.split(/\s+/);
+            const overlap = sloganWords.filter((w: string) => captionWords.includes(w));
+            const overlapRatio = sloganWords.length > 0 ? overlap.length / sloganWords.length : 0;
+            if (overlapRatio > 0.4) {
+              console.warn(`⚠️ Slogan/caption overlap detected (${Math.round(overlapRatio * 100)}%): "${post.image_slogan}" vs caption. Stripping slogan phrases from caption.`);
+              // Remove slogan phrases from caption start
+              let cleaned = post.content;
+              for (const word of sloganWords) {
+                const re = new RegExp(`\\b${word}\\b`, "gi");
+                const firstSentenceEnd = cleaned.indexOf(". ");
+                if (firstSentenceEnd > 0 && firstSentenceEnd < 80) {
+                  const firstSentence = cleaned.slice(0, firstSentenceEnd);
+                  if (firstSentence.toLowerCase().includes(word)) {
+                    cleaned = cleaned.slice(firstSentenceEnd + 2);
+                  }
+                }
+              }
+              post.content = cleaned.trim() || post.content;
+            }
+          }
+        }
+
         // Create posts and generate images via Lovable AI
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 

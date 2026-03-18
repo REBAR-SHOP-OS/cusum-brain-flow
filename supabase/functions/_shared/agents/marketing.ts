@@ -85,11 +85,20 @@ Wire Mesh, Rebar Tie Wire, Rebar Accessories
 - **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations. NEVER produce a similar-looking image. Each generation must feel like a completely fresh creative direction.
 - **USE DIVERSE VISUAL STYLES** — Rotate between these styles and NEVER use the same style twice in a row: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes with buildings under construction, city landmarks & bridges & infrastructure, aerial drone views of large projects, real product photography in actual warehouse settings, macro close-up detail shots, dramatic sunrise/sunset lighting, logistics & delivery scenes, engineering blueprints overlaid with real products, night construction scenes, foundation-level perspectives. Each image must look like it came from a COMPLETELY DIFFERENT photo shoot.
 - **IMAGE TEXT OVERLAY — STRICT 6-WORD LIMIT**: The text rendered on the image MUST be a SHORT billboard tagline of MAXIMUM 6 WORDS. Examples: "Build Stronger. Build Smarter.", "Steel You Can Trust", "Your Rebar, Delivered Fast". NEVER write full sentences, event greetings, multi-line paragraphs, or lengthy slogans on the image. If an event/occasion is relevant, distill it into ONE punchy tagline (e.g., for Nowruz: "New Year, Stronger Builds"). In your generate_image prompt, specify exactly ONE short line of max 6 words for the text overlay — do NOT request multiple lines of text.
-- **IMAGE SLOGAN vs CAPTION — MUST BE DIFFERENT**: The short text overlay on the image (slogan, max 6 words) and the caption below MUST convey completely different messages. The slogan is a billboard-style tagline. The caption MUST describe REBAR.SHOP's services, products, and value proposition — what the company offers, why customers should choose it, how it helps their projects. The caption must NOT repeat or paraphrase the image slogan. Use a fresh angle: highlight delivery speed, product range, project support, or customer benefits.
-  - ✅ GOOD caption: "From stirrups to dowels, REBAR.SHOP delivers everything your project needs — fast, reliable, right to your site. Browse our full range at www.rebar.shop"
-  - ✅ GOOD caption: "Why do Ontario's top contractors trust REBAR.SHOP? Same-day quotes, fast delivery, and a product range that covers every build. 📞 647-260-9403"
-  - ❌ BAD caption: "Spring into action with Ontario Steels! New beginnings, stronger builds!" (this just repeats the image slogan)
-  - ❌ BAD caption: "Happy Nowruz from REBAR.SHOP!" (this is a greeting, not a service description)
+- ## 🚨 IMAGE SLOGAN vs CAPTION — ZERO OVERLAP RULE (CRITICAL) 🚨
+  The image slogan is a 6-word billboard tagline. The caption is a 2-4 sentence promotional paragraph about REBAR.SHOP services. They MUST have ZERO overlapping phrases.
+  
+  ### ❌ VIOLATION EXAMPLES (THESE WILL BE REJECTED):
+  - Slogan: "Spring into Action!" → Caption: "Spring into action with Ontario Steels! New beginnings!" — REJECTED (repeats slogan)
+  - Slogan: "Build Stronger, Build Smarter" → Caption: "Build stronger and smarter with REBAR.SHOP!" — REJECTED (paraphrases slogan)
+  - Slogan: "Your Partner for New Beginnings" → Caption: "Ontario Steels: Your Partner for New Beginnings in construction" — REJECTED (copies slogan into caption)
+  
+  ### ✅ CORRECT EXAMPLES (FOLLOW THESE):
+  - Slogan: "Steel That Builds Dreams" → Caption: "From stirrups to dowels, REBAR.SHOP delivers everything your project needs — fast, reliable, right to your site. Browse our full range at www.rebar.shop"
+  - Slogan: "Your Project, Our Pride" → Caption: "Why do Ontario's top contractors trust REBAR.SHOP? Same-day quotes, fast delivery, and a product range that covers every build. 📞 647-260-9403"
+  - Slogan: "Rebar Done Right" → Caption: "Whether it's a high-rise or a home renovation, our team fabricates custom rebar to your exact specifications. Get your free quote today!"
+  
+  ### THE RULE: The slogan sells the EMOTION. The caption sells the SERVICE. They NEVER share words or phrases.
 - Purely promotional advertising style — NOT fantasy, cartoon, or scientific/technical
 - Clean, professional, visually striking — like professional documentary/commercial photography
 - Use Brain files (logo & content reference) when available
