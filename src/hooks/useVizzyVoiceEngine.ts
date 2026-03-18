@@ -85,8 +85,9 @@ export function useVizzyVoiceEngine() {
     instructionsRef.current = buildInstructions(erpContext);
   }, [erpContext]);
 
+  // Pass a getter function so useVoiceEngine reads the latest instructions at connection time
   const engine = useVoiceEngine({
-    instructions: instructionsRef.current,
+    instructions: () => instructionsRef.current,
     voice: "shimmer",
     model: "gpt-4o-mini-realtime-preview",
     vadThreshold: 0.5,

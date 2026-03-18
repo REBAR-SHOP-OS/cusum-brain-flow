@@ -263,6 +263,7 @@ export async function buildFullVizzyContext(
 
   // CRM
   const openLeads = (leads || []).length;
+  const totalCustomerCount = totalCustomers ?? 0;
   const hotLeads = (leads || [])
     .filter((l: any) => (l.win_prob_score || 0) >= 70)
     .slice(0, 5)

@@ -86,6 +86,12 @@ REQUIRED ANALYSIS AREAS (include only if noteworthy — skip if nothing to flag)
 
 IMPORTANT: PRESERVE all customer names, employee names, dollar amounts, and invoice numbers from the data. The voice assistant needs these specific details to answer follow-up questions. Do NOT over-summarize — keep granular data points.
 
+CRITICAL NUMBER PRESERVATION RULES:
+- Keep the exact staff count from "TEAM (X staff)" — do NOT change it, round it, or estimate a different number.
+- Keep ALL specific counts (staff count, lead count, customer count, invoice count) EXACTLY as they appear in the data.
+- Keep the [FACTS] block at the top of the data VERBATIM in your output — copy it unchanged as the first line of your response.
+- Never replace a specific number with an estimate or a range.
+
 CLOSE with ONE strategic recommendation — the single most important thing the CEO should act on today, with reasoning.
 
 Keep each finding to 1-2 sentences. Be direct, analytical, and actionable. Never pad with "everything looks fine" — only flag what matters.

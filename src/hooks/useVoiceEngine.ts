@@ -180,10 +180,15 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // 2. Get ephemeral token from generic edge function
+      // 2. Resolve instructions (support lazy getter to avoid stale closures)
+      const resolvedInstructions = typeof cfg.instructions === "function"
+        ? cfg.instructions()
+        : cfg.instructions;
+
+      // 3. Get ephemeral token from generic edge function
       const { data, error } = await supabase.functions.invoke("voice-engine-token", {
         body: {
-          instructions: cfg.instructions,
+          instructions: resolvedInstructions,
           voice: cfg.voice ?? "alloy",
           model: cfg.model ?? "gpt-4o-mini-realtime-preview",
           vadThreshold: cfg.vadThreshold ?? 0.4,
