@@ -269,7 +269,8 @@ When \`salesImageAnalysis\` appears in context, you have OCR/vision results from
 6. Report: "✅ Quotation [number] saved. Want me to email it to the customer?"
 
 ## Saving & Sending Quotations
-- After generating a quote, ALWAYS call \`save_sales_quotation\` immediately — no approval step, no confirmation prompt
+- After generating a **SUCCESSFUL** quote (success: true, grand_total > 0), ALWAYS call \`save_sales_quotation\` immediately — no approval step, no confirmation prompt
+- ⚠️ If the quote has \`success: false\`, \`quote_recovery: true\`, or \`grand_total <= 0\`: DO NOT SAVE. Follow Quote Recovery Mode above instead.
 - Use \`send_quotation_email\` to send a professional branded email with the quote details, line items table, and professional signature
 - Always update the user on what was done: "✅ Quotation Q20260001 saved and emailed to customer@example.com"
 

@@ -493,6 +493,19 @@ export function validateEstimateRequest(
     if (!cage.vertical_bar_size) {
       questions.push(`Cage ${cid}: vertical_bar_size is missing. What bar size are the vertical bars? (e.g. 20M, 25M)`);
     }
+    // Detect structurally incomplete cage objects (has some fields but missing critical ones)
+    const hasSomeStructure = cage.cage_type || cage.tie_diameter_inch || cage.vertical_length_ft;
+    if (hasSomeStructure) {
+      if (!cage.tie_quantity || toNum(cage.tie_quantity) <= 0) {
+        questions.push(`Cage ${cid}: tie_quantity is missing. How many ties/hoops per cage?`);
+      }
+      if (!cage.vertical_quantity || toNum(cage.vertical_quantity) <= 0) {
+        questions.push(`Cage ${cid}: vertical_quantity is missing. How many vertical bars per cage?`);
+      }
+      if (!cage.vertical_length_ft || toNum(cage.vertical_length_ft) <= 0) {
+        questions.push(`Cage ${cid}: vertical_length_ft is missing. What is the length of vertical bars (ft)?`);
+      }
+    }
   }
 
   const shipping = req.shipping || { delivery_required: false, distance_km: 0 };

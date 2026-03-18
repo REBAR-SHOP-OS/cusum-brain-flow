@@ -337,12 +337,15 @@ export async function executeToolCall(
         const errBody = await qeRes.text();
         let parsedErr: any = {};
         try { parsedErr = JSON.parse(errBody); } catch {}
+        console.warn("[generate_sales_quote] Quote engine returned non-200:", qeRes.status, parsedErr?.error || errBody);
         result.result = {
           success: false,
           quote_recovery: true,
-          error: parsedErr?.error || errBody,
-          missing_inputs: parsedErr?.failure_details?.missing_inputs || [],
+          pricing_status: "failed",
           failure_reason: parsedErr?.failure_reason || "engine_error",
+          error: parsedErr?.error || errBody,
+          missing_inputs: parsedErr?.failure_details?.missing_inputs || parsedErr?.missing_inputs_questions || [],
+          message: "The quote engine could not price this request. Check the missing_inputs list and ask the customer to provide the missing details before re-quoting.",
         };
       }
     }

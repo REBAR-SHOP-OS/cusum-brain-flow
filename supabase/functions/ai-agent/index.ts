@@ -1124,8 +1124,25 @@ Deno.serve(async (req) => {
       const currentAssistantMsg = aiResult.raw.choices?.[0]?.message;
       accumulatedTurns.push(currentAssistantMsg);
       accumulatedTurns.push(...toolResults);
+
+      // ── Quote Recovery Injection: if any tool result signals a failed quote,
+      //    inject a system-level instruction so the model cannot narrate success ──
+      const hasQuoteRecovery = toolResults.some((tr: any) => {
+        try {
+          const parsed = typeof tr.content === "string" ? JSON.parse(tr.content) : tr.content;
+          return parsed?.quote_recovery === true || parsed?.pricing_status === "failed" || parsed?.failure_reason === "grand_total_zero";
+        } catch { return false; }
+      });
       
       const nextMessages = [...messages, ...accumulatedTurns];
+
+      if (hasQuoteRecovery) {
+        console.log("🔴 Quote recovery detected — injecting recovery-mode instruction");
+        nextMessages.push({
+          role: "system" as const,
+          content: "🚨 QUOTE RECOVERY MODE ACTIVE. The quote tool returned a FAILED result. You MUST NOT say the quote succeeded, was saved, or is ready. Do NOT call save_sales_quotation. Instead, tell the customer what details are missing (from the missing_inputs field) and ask them to provide those details so you can re-quote. This overrides all auto-save instructions."
+        });
+      }
       
       // Inject structured output reminder for social agent before follow-up call
       if (agent === "social") {
