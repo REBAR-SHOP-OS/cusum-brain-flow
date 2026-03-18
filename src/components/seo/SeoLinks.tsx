@@ -394,12 +394,20 @@ export function SeoLinks() {
                 AI is analyzing your content...
               </div>
             )}
-            {proposals.length > 0 && proposals.every(p => !!p.error) && (
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-sm text-destructive">
-                <p className="font-semibold mb-1">All {proposals.length} items failed to resolve</p>
-                <p className="text-xs">{proposals[0]?.error}. Try re-running the link audit to refresh WordPress page mappings.</p>
-              </div>
-            )}
+            {proposals.length > 0 && (() => {
+              const errorCount = proposals.filter(p => !!p.error).length;
+              const validCount = proposals.filter(p => !p.error && p.before_paragraph).length;
+              return errorCount > 0 ? (
+                <div className={`border rounded-lg p-4 text-sm ${errorCount === proposals.length ? 'bg-destructive/10 border-destructive/20 text-destructive' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-700'}`}>
+                  <p className="font-semibold mb-1">
+                    {errorCount === proposals.length
+                      ? `All ${errorCount} items failed to resolve`
+                      : `${errorCount} of ${proposals.length} items failed — ${validCount} ready to apply`}
+                  </p>
+                  <p className="text-xs opacity-80">{proposals.find(p => p.error)?.error}. Try re-running the link audit to refresh WordPress page mappings.</p>
+                </div>
+              ) : null;
+            })()}
             {proposals.map((p, i) => (
               <Card key={p.id} className="border-border">
                 <CardContent className="pt-4 space-y-3">
