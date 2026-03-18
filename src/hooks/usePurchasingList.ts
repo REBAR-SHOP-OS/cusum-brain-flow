@@ -161,6 +161,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   const togglePurchased = useCallback(async (itemId: string, currentValue: boolean) => {
     if (!user) return;
+    if (!(await refreshSessionIfNeeded())) return;
     const { error } = await supabase
       .from("purchasing_list_items")
       .update({
@@ -171,23 +172,23 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       })
       .eq("id", itemId);
     if (error) {
-      toast.error("Error updating");
+      toast.error(`Error updating: ${error.message}`);
       console.error(error);
     }
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const toggleRejected = useCallback(async (itemId: string, currentValue: boolean) => {
     if (!user) return;
-    // Reject = delete the record so the item disappears from the list
+    if (!(await refreshSessionIfNeeded())) return;
     const { error } = await supabase
       .from("purchasing_list_items")
       .delete()
       .eq("id", itemId);
     if (error) {
-      toast.error("Error removing item");
+      toast.error(`Error removing item: ${error.message}`);
       console.error(error);
     }
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const deleteItem = useCallback(async (itemId: string) => {
     const { error } = await supabase.from("purchasing_list_items").delete().eq("id", itemId);
