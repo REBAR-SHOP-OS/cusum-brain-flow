@@ -203,9 +203,9 @@ export function SeoKeywords() {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
-                  ) : !filtered.length ? (
-                    <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">No keywords yet. Run a full analysis to discover keyword opportunities.</td></tr>
+                   <tr><td colSpan={13} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
+                   ) : !filtered.length ? (
+                     <tr><td colSpan={13} className="p-8 text-center text-muted-foreground">No keywords yet. Run a full analysis to discover keyword opportunities.</td></tr>
                   ) : (
                     filtered.map((kw: any) => (
                       <tr key={kw.id} className="border-b hover:bg-muted/30 transition-colors">
