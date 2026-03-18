@@ -53,6 +53,7 @@ interface DockChatBoxProps {
 export function DockChatBox({ channelId, channelName, channelType, minimized, style }: DockChatBoxProps) {
   const navigate = useNavigate();
   const { closeChat, toggleMinimize } = useDockChat();
+  const { ensureSession } = useSessionGuard();
   const { messages, isLoading } = useTeamMessages(channelId);
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
