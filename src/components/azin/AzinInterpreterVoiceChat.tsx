@@ -87,7 +87,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
             transform: `scale(${isActive ? 1.1 : 1})`,
           }} />
           {state === "connecting" && (
-            <div className="absolute inset-0 rounded-full animate-ping" style={{ margin: "-20px", borderRadius: "50%", background: "hsl(172 66% 50% / 0.15)" }} />
+            <div className="absolute inset-0 rounded-full animate-ping" style={{ margin: "-20px", borderRadius: "50%", background: "hsl(245 58% 55% / 0.15)" }} />
           )}
           <div
             className={cn(
