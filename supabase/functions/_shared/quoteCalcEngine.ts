@@ -515,7 +515,7 @@ export function generateQuote(
 
   // 7. Shop drawings
   const nonCageTonnage = round3((straightWeightKg + fabricatedWeightKg) / 1000);
-  if (req.scope.shop_drawings_required) {
+  if (scope.shop_drawings_required) {
     const sdCost = round2(
       nonCageTonnage * config.fabrication_pricing.shop_drawing_per_ton_cad
     );
