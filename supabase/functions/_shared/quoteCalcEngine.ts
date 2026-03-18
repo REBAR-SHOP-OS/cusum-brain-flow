@@ -582,9 +582,9 @@ export function generateQuote(
   return {
     quote_id: null,
     summary: {
-      project_name: req.project.project_name,
-      customer_name: req.project.customer_name,
-      quote_date: req.project.quote_date,
+      project_name: project.project_name,
+      customer_name: project.customer_name,
+      quote_date: project.quote_date,
       coating_type: coatingType,
       subtotal: round2(subtotal),
       tax,
