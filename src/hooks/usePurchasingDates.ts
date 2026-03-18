@@ -58,5 +58,23 @@ export function usePurchasingDates() {
     return confirmedLists.find((c) => c.due_date === dateStr) || null;
   }, [confirmedLists]);
 
-  return { dates, confirmedLists, loading, getConfirmedSnapshot };
+  const deleteConfirmedList = useCallback(async (dateStr: string) => {
+    if (!user) return;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .single();
+    if (!profile?.company_id) return;
+
+    await supabase
+      .from("purchasing_confirmed_lists")
+      .delete()
+      .eq("company_id", profile.company_id)
+      .eq("due_date", dateStr);
+
+    fetchDates();
+  }, [user, fetchDates]);
+
+  return { dates, confirmedLists, loading, getConfirmedSnapshot, deleteConfirmedList };
 }
