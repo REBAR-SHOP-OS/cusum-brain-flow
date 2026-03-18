@@ -377,7 +377,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
                 onClick={handleGenerate}
               >
                 <Sparkles className="w-4 h-4" />
-                Generate Ad Image with {currentModel.label}
+                Generate Ad Image with {currentModelLabel}
               </Button>
             </>
           )}
