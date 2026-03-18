@@ -496,7 +496,7 @@ export function generateQuote(
   }
 
   // 6. Mesh
-  for (const mesh of req.scope.mesh) {
+  for (const mesh of scope.mesh) {
     if (mesh.quantity > 0 && mesh.unit_price_cad) {
       lineItems.push({
         category: "Mesh",
