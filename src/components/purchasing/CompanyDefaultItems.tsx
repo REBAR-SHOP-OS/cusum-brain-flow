@@ -191,12 +191,17 @@ export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased
 
   const renderGroup = (label: string, items: DefaultItem[]) => {
     const groupCustom = customItems.filter(i => i.category === label);
+    // Filter out rejected default items (they should be hidden)
+    const visibleItems = items.filter((def) => {
+      const match = findDbMatch(def, dbItems);
+      return !match?.is_rejected;
+    });
     return (
       <div className="space-y-1">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1 pt-2 pb-1">
           {label}
         </h3>
-        {items.map((def, i) => (
+        {visibleItems.map((def, i) => (
           <DefaultRow
             key={`${def.category}-${i}`}
             def={def}

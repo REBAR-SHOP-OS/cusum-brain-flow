@@ -189,8 +189,8 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
 
-    const { error } = await (supabase
-      .from("purchasing_list_items") as any)
+    const { error } = await supabase
+      .from("purchasing_list_items")
       .update({ due_date: date })
       .eq("company_id", profile.company_id)
       .is("due_date", null);
