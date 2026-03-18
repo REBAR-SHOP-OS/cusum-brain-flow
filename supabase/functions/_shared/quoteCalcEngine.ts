@@ -315,7 +315,7 @@ export function validateEstimateRequest(
   }
 
   // Check cages
-  for (const cage of req.scope.cages) {
+  for (const cage of scope.cages) {
     if (cage.total_cage_weight_kg <= 0) {
       questions.push(`Cage ${cage.line_id}: total_cage_weight_kg is 0 or missing.`);
     }
