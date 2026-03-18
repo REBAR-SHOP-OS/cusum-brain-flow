@@ -71,12 +71,14 @@ export async function buildFullVizzyContext(
     { data: accountingInv },
     { data: accountingBill },
     { data: communications },
+    { data: allEmailsToday },
     { data: agentSessions },
     { data: timeClockEntries },
     { data: memories },
     { data: workOrdersToday },
     { data: agentActions },
     { data: machineOps },
+    { data: employeeEvents },
   ] = await Promise.all([
     supabase
       .from("work_orders")
