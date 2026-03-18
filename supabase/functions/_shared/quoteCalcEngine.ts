@@ -248,6 +248,23 @@ export function applyScrap(weightKg: number, scrapPct: number): number {
   return weightKg * (1 + scrapPct / 100);
 }
 
+// ─── Scope Normalizer ───
+
+function normalizeScope(scope: any): EstimateRequest["scope"] {
+  return {
+    straight_rebar_lines: Array.isArray(scope?.straight_rebar_lines) ? scope.straight_rebar_lines : [],
+    fabricated_rebar_lines: Array.isArray(scope?.fabricated_rebar_lines) ? scope.fabricated_rebar_lines : [],
+    dowels: Array.isArray(scope?.dowels) ? scope.dowels : [],
+    ties_circular: Array.isArray(scope?.ties_circular) ? scope.ties_circular : [],
+    cages: Array.isArray(scope?.cages) ? scope.cages : [],
+    mesh: Array.isArray(scope?.mesh) ? scope.mesh : [],
+    coating_type: scope?.coating_type || "black",
+    shop_drawings_required: scope?.shop_drawings_required || false,
+    scrap_percent_override: scope?.scrap_percent_override ?? null,
+    tax_rate: scope?.tax_rate ?? 13,
+  };
+}
+
 // ─── Validation ───
 
 export function validateEstimateRequest(
