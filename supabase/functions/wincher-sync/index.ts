@@ -58,6 +58,7 @@ Deno.serve(async (req) => {
     // Resolve company_id from user profile
     const { data: profile } = await serviceClient.from("profiles").select("company_id").eq("user_id", userId).single();
     const companyId = profile?.company_id;
+    if (!companyId) throw new Error("No company profile found for Wincher sync");
 
     // Helper: get service client
     const sb = serviceClient;
@@ -126,10 +127,7 @@ Deno.serve(async (req) => {
           source_count: 1,
         };
 
-        // Set search volume if available
-        if (kw.search_volume?.volume != null) {
-          upsertData.volume = kw.search_volume.volume;
-        }
+        // Wincher keyword sync updates only columns that exist on seo_keyword_ai
 
         // Set intent if available
         if (kw.intents?.length) {
