@@ -53,7 +53,8 @@ function getTaskCreatorName(task: TaskRow): string | null {
   const profileName = task.created_by_profile?.full_name;
   if (!isInvalidName(profileName)) return profileName!.trim();
 
-  return null;
+  // 4) No human creator found — attribute to System
+  return "System";
 }
 
 // ─── Types ──────────────────────────────────────────────
