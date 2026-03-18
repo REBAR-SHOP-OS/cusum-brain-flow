@@ -285,7 +285,7 @@ export function validateEstimateRequest(
   }
 
   // Check dowels
-  for (const line of req.scope.dowels) {
+  for (const line of scope.dowels) {
     if (line.quantity <= 0) {
       questions.push(`Dowel ${line.line_id}: quantity is 0 or missing.`);
     }
