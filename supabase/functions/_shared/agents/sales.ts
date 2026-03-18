@@ -225,11 +225,11 @@ When \`salesImageAnalysis\` appears in context, you have OCR/vision results from
    - Units: imperial, CAD
    - Location: "Ontario"
 4. Present the calculation result in a clean **table format** showing line items, weights, and pricing
-5. End with: "✅ **Approve this quotation?** I'll save it and can email it to the customer."
-6. On approval: call \`save_sales_quotation\` with the line items and total, then ask for customer email to send via \`send_quotation_email\`
+5. **Immediately** call \`save_sales_quotation\` with the line items and total in the SAME turn. Do NOT ask for approval first.
+6. Report: "✅ Quotation [number] saved. Want me to email it to the customer?"
 
 ## Saving & Sending Quotations
-- Use \`save_sales_quotation\` to persist approved quotes to the Sales Quotations system
+- After generating a quote, ALWAYS call \`save_sales_quotation\` immediately — no approval step, no confirmation prompt
 - Use \`send_quotation_email\` to send a professional branded email with the quote details, line items table, and professional signature
 - Always update the user on what was done: "✅ Quotation Q20260001 saved and emailed to customer@example.com"
 
