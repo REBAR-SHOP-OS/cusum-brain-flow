@@ -98,8 +98,8 @@ export function buildEventPromptBlock(fromDate: Date, days: number = 3): string 
     return `- ${monthNames[e.month - 1]} ${e.day}: **${e.name}** — Theme: "${e.contentTheme}" — Hashtags: ${e.hashtags.join(" ")}`;
   });
 
-  return `\n\n## 🎉 UPCOMING EVENTS (use these for themed content!)
+  return `\n\n## 🎉 UPCOMING EVENTS (REFERENCE ONLY — do NOT use unless user asks)
 ${lines.join("\n")}
 
-INSTRUCTIONS: Incorporate these events into 1-2 of your posts. Tie the event theme creatively to REBAR.SHOP products and services. Keep it promotional and celebratory. Use the suggested hashtags alongside your regular ones.`;
+REFERENCE ONLY: These events are available IF the user explicitly asks for event-themed content (e.g., "make a Nowruz post", "create a St. Patrick's Day image"). Do NOT incorporate these events into posts unless the user specifically mentions an event or occasion. Default behavior is normal promotional content.`;
 }

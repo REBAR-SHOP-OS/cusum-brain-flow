@@ -224,7 +224,7 @@ ENFORCEMENT RULES:
 
       // Pixel-specific: fetch knowledge items tagged with metadata.agent = "social"
       if (agent === "social") {
-        // Inject upcoming event calendar
+        // Inject upcoming event calendar as PASSIVE reference (opt-in only)
         const eventBlock = buildEventPromptBlock(new Date(), 5);
         if (eventBlock) {
           brainBlock += `\n${eventBlock}`;
