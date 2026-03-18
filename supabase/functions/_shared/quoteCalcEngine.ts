@@ -322,18 +322,63 @@ export function computeShopDrawingCost(
   return { cost: 0, description: "No shop drawing pricing configured" };
 }
 
+/**
+ * Estimate cage weight from structural details when total_cage_weight_kg is 0.
+ * Ties weight = π × (diameter_inch × 0.0254) × mass_kg_per_m(tie_bar_size) × tie_quantity
+ * Verticals weight = vertical_length_ft × 0.3048 × mass_kg_per_m(vertical_bar_size) × vertical_quantity
+ */
+function estimateCageWeightKg(cage: CageLine, rebarSizes: RebarSizeRow[]): number {
+  let weight = 0;
+
+  // Ties/hoops weight
+  const tieDia = toNum(cage.tie_diameter_inch);
+  const tieQty = toNum(cage.tie_quantity);
+  const tieSize = cage.tie_bar_size ? normalizeBarSize(cage.tie_bar_size) : null;
+  if (tieDia > 0 && tieQty > 0 && tieSize) {
+    const sizeData = rebarSizes.find((r) => normalizeBarSize(r.bar_code) === tieSize);
+    if (sizeData) {
+      const circumferenceM = Math.PI * tieDia * 0.0254; // inches → meters
+      weight += circumferenceM * sizeData.mass_kg_per_m * tieQty;
+    }
+  }
+
+  // Vertical bars weight
+  const vertLen = toNum(cage.vertical_length_ft);
+  const vertQty = toNum(cage.vertical_quantity);
+  const vertSize = cage.vertical_bar_size ? normalizeBarSize(cage.vertical_bar_size) : null;
+  if (vertLen > 0 && vertQty > 0 && vertSize) {
+    const sizeData = rebarSizes.find((r) => normalizeBarSize(r.bar_code) === vertSize);
+    if (sizeData) {
+      weight += vertLen * 0.3048 * sizeData.mass_kg_per_m * vertQty;
+    }
+  }
+
+  return round3(weight);
+}
+
 export function computeCagePrice(
   cage: CageLine,
   config: PricingConfig,
-  scrapPct: number
-): { weight_kg: number; tonnage: number; cost: number } {
-  const raw_kg = toNum(cage.total_cage_weight_kg) * toNum(cage.quantity);
+  scrapPct: number,
+  rebarSizes?: RebarSizeRow[]
+): { weight_kg: number; tonnage: number; cost: number; auto_estimated: boolean } {
+  let perCageKg = toNum(cage.total_cage_weight_kg);
+  let autoEstimated = false;
+
+  // Auto-estimate weight if not provided but structural details exist
+  if (perCageKg <= 0 && rebarSizes) {
+    perCageKg = estimateCageWeightKg(cage, rebarSizes);
+    autoEstimated = perCageKg > 0;
+  }
+
+  const raw_kg = perCageKg * toNum(cage.quantity);
   const with_scrap = applyScrap(raw_kg, scrapPct);
   const tonnage = with_scrap / 1000;
   return {
     weight_kg: round3(with_scrap),
     tonnage: round3(tonnage),
     cost: round2(tonnage * config.cage_price_per_ton_cad),
+    auto_estimated: autoEstimated,
   };
 }
 
