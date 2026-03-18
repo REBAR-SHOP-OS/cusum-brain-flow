@@ -923,7 +923,7 @@ export default function Tasks() {
     const newUrls: string[] = [];
     for (const file of files) {
       const path = `task-attachments/${selectedTask.id}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage.from("clearance-photos").upload(path, file);
+      const { error: upErr } = await uploadToStorage("clearance-photos", path, file);
       if (!upErr) {
         const { data: signed } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 60 * 60 * 24 * 365);
         if (signed?.signedUrl) newUrls.push(signed.signedUrl);

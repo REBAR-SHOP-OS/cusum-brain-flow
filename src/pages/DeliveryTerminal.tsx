@@ -237,7 +237,7 @@ export default function DeliveryTerminal() {
       if (photoFile) {
         const ext = photoFile.name.split(".").pop();
         const path = `pod/${stopId}-photo.${ext}`;
-        const { error } = await supabase.storage.from("clearance-photos").upload(path, photoFile, { upsert: true });
+        const { error } = await uploadToStorage("clearance-photos", path, photoFile, { upsert: true });
         if (!error) photoPath = path;
       }
 

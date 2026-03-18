@@ -220,7 +220,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
         const fileName = `${crypto.randomUUID()}.${fileExt}`;
         const filePath = `${user.id}/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage.from("estimation-files").upload(filePath, file);
+        const { error: uploadError } = await uploadToStorage("estimation-files", filePath, file);
         if (uploadError) {
           toast({ title: "Upload failed", description: `${file.name}: ${uploadError.message}`, variant: "destructive" });
           continue;

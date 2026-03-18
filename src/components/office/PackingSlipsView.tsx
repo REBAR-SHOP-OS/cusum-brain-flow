@@ -496,7 +496,7 @@ function ProjectDetailView({ project, loadingPhotos, companyId, userId, onBack, 
     try {
       const ext = file.name.split(".").pop() || "jpg";
       const path = `loading/${project.name.replace(/\s+/g, "_")}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("clearance-photos").upload(path, file, { upsert: true });
+      const { error: upErr } = await uploadToStorage("clearance-photos", path, file, { upsert: true });
       if (upErr) throw upErr;
 
       const { error: dbErr } = await supabase.from("loading_evidence").insert({

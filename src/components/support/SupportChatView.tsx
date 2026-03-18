@@ -177,7 +177,7 @@ export function SupportChatView({ conversationId }: Props) {
     try {
       const ext = file.name.split(".").pop() || "png";
       const path = `${conversationId}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("support-attachments").upload(path, file);
+      const { error: upErr } = await uploadToStorage("support-attachments", path, file);
       if (upErr) throw upErr;
 
       const { data: urlData } = supabase.storage.from("support-attachments").getPublicUrl(path);

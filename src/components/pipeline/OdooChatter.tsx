@@ -148,7 +148,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
     try {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `lead-attachments/${lead.id}/${Date.now()}-${safeName}`;
-      const { error: uploadError } = await supabase.storage.from("clearance-photos").upload(path, file);
+      const { error: uploadError } = await uploadToStorage("clearance-photos", path, file);
       if (uploadError) throw uploadError;
       const { error: insertError } = await supabase.from("lead_files").insert({
         lead_id: lead.id,

@@ -93,7 +93,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
 
   const uploadFile = async (file: File): Promise<string | null> => {
     const path = `chat-uploads/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("clearance-photos").upload(path, file);
+    const { error } = await uploadToStorage("clearance-photos", path, file);
     if (error) {
       console.error("Upload failed:", error);
       return null;

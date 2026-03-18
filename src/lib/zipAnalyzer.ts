@@ -69,7 +69,7 @@ export async function analyzeZip(file: File): Promise<ZipAnalysisResult> {
       if (!("getData" in imgEntry) || typeof (imgEntry as any).getData !== "function") continue;
       const blob = await (imgEntry as any).getData(new BlobWriter(getMimeType(imgEntry.filename)));
       const path = `chat-uploads/${Date.now()}-${imgEntry.filename.split("/").pop()}`;
-      const { error } = await supabase.storage.from("clearance-photos").upload(path, blob);
+      const { error } = await uploadToStorage("clearance-photos", path, blob);
       if (error) continue;
       const { data: urlData } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 3600);
       if (urlData?.signedUrl) imageUrls.push(urlData.signedUrl);

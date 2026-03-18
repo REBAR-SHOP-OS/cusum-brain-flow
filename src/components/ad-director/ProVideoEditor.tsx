@@ -1002,7 +1002,7 @@ export function ProVideoEditor({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const path = `${user.id}/logo-${Date.now()}.${file.name.split('.').pop()}`;
-      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true });
+      const { error } = await uploadToStorage("brand-assets", path, file, { upsert: true });
       if (error) throw error;
       const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
       onUpdateBrand?.({ ...brand, logoUrl: data.publicUrl });

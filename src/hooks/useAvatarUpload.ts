@@ -15,9 +15,7 @@ export function useAvatarUpload() {
     const ext = file.name.split(".").pop()?.toLowerCase() || "png";
     const path = `${profileId}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true, contentType: file.type });
+    const { error: uploadError } = await uploadToStorage("avatars", path, file, { upsert: true, contentType: file.type });
 
     if (uploadError) throw uploadError;
 

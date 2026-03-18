@@ -134,7 +134,7 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
     const urls: string[] = [];
     for (const file of Array.from(files)) {
       const path = `estimation/${Date.now()}_${file.name}`;
-      const { error } = await supabase.storage.from("estimation-files").upload(path, file);
+      const { error } = await uploadToStorage("estimation-files", path, file);
       if (error) { toast.error(`Upload failed: ${file.name}`); continue; }
       const { data: urlData } = supabase.storage.from("estimation-files").getPublicUrl(path);
       urls.push(urlData.publicUrl);

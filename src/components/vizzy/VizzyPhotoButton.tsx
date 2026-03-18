@@ -19,7 +19,7 @@ export function VizzyPhotoButton({ onAnalysisReady }: VizzyPhotoButtonProps) {
     try {
       // Upload to storage
       const path = `vizzy-photos/${Date.now()}-${file.name}`;
-      const { error: uploadErr } = await supabase.storage.from("clearance-photos").upload(path, file);
+      const { error: uploadErr } = await uploadToStorage("clearance-photos", path, file);
       if (uploadErr) throw uploadErr;
 
       // Get signed URL (1 hour)
