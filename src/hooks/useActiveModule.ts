@@ -23,6 +23,7 @@ const ROUTE_MAP: Record<string, { module: string; moduleRoute: string; page?: st
   "/phonecalls": { module: "Communications", moduleRoute: "/phonecalls", page: "Phone Calls" },
   "/website": { module: "Website", moduleRoute: "/website" },
   "/seo": { module: "SEO", moduleRoute: "/seo" },
+  "/vizzy": { module: "Vizzy", moduleRoute: "/vizzy" },
 };
 
 export function useActiveModule(): ActiveModule {

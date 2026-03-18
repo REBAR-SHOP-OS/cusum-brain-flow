@@ -105,6 +105,7 @@ import OrgChart from "./pages/OrgChart";
 import GlassesCapture from "./pages/GlassesCapture";
 import CameraIntelligence from "./pages/CameraIntelligence";
 import AzinInterpreter from "./pages/AzinInterpreter";
+import VizzyLive from "./pages/VizzyLive";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -240,6 +241,7 @@ const App = () => (
 
                     {/* Full-screen live chat */}
                     <Route path="/chat" element={<P><LiveChat /></P>} />
+                    <Route path="/vizzy" element={<ProtectedRoute><VizzyLive /></ProtectedRoute>} />
                     
 
                     {/* Legacy redirects */}
