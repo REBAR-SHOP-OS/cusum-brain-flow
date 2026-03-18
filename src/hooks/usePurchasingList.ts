@@ -183,12 +183,13 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     }
   }, []);
 
-  // Confirm list: set due_date on all items without one for the current company
+  // Confirm list: set due_date on all items without one, then save a snapshot
   const confirmList = useCallback(async (date: string) => {
     if (!user) return;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
 
+    // 1. Set due_date on items without one
     const { error } = await supabase
       .from("purchasing_list_items")
       .update({ due_date: date })
@@ -197,6 +198,36 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     if (error) {
       toast.error("Error confirming list");
       console.error(error);
+      return;
+    }
+
+    // 2. Fetch all items for this date to build snapshot
+    const { data: allItems } = await supabase
+      .from("purchasing_list_items")
+      .select("*")
+      .eq("company_id", profile.company_id)
+      .eq("due_date", date);
+
+    const snapshot = (allItems || []).map((item: any) => ({
+      title: item.title,
+      category: item.category || null,
+      quantity: item.quantity,
+      status: item.is_purchased ? "purchased" : item.is_rejected ? "rejected" : "pending",
+      priority: item.priority,
+    }));
+
+    // 3. Save snapshot to purchasing_confirmed_lists
+    const { error: snapError } = await supabase
+      .from("purchasing_confirmed_lists" as any)
+      .insert({
+        company_id: profile.company_id,
+        confirmed_by: user.id,
+        due_date: date,
+        snapshot,
+      });
+    if (snapError) {
+      console.error("Snapshot save error:", snapError);
+      toast.error("List confirmed but snapshot failed to save");
     } else {
       toast.success(`List confirmed for ${date}`);
     }
