@@ -10,6 +10,7 @@ import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useSemrushSync } from "@/hooks/useSemrushApi";
+import { useWincherSync } from "@/hooks/useWincherSync";
 import * as XLSX from "@e965/xlsx";
 
 const SOURCE_COLORS: Record<string, string> = {
