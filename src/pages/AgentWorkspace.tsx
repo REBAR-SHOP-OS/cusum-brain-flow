@@ -541,6 +541,7 @@ export default function AgentWorkspace() {
                 }
                 setMobileHistoryOpen(false);
               } : undefined}
+              onDeletePurchasingDate={agentId === "purchasing" ? handleDeletePurchasingDate : undefined}
             />
           </div>
         </div>
