@@ -27,7 +27,7 @@ export async function logActivity(opts: LogOptions): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.from("activity_events").insert({
+    await supabase.from("activity_events").insert([{
       company_id: COMPANY_ID,
       entity_type: opts.entityType,
       entity_id: opts.entityId || crypto.randomUUID(),
@@ -38,7 +38,7 @@ export async function logActivity(opts: LogOptions): Promise<void> {
       actor_type: "user",
       metadata: opts.metadata ?? null,
       dedupe_key: `${user.id}:${opts.eventType}:${opts.entityId ?? ""}:${new Date().toISOString().slice(0, 16)}`,
-    });
+    }]);
   } catch {
     // Non-critical — silently fail
   }
