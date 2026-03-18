@@ -97,7 +97,7 @@ const SalesInvoices = React.lazy(() => import("./pages/sales/SalesInvoices"));
 const SalesContacts = React.lazy(() => import("./pages/sales/SalesContacts"));
 
 import LiveChat from "./pages/LiveChat";
-import VizzyLive from "./pages/VizzyLive";
+
 import EmailMarketing from "./pages/EmailMarketing";
 import Unsubscribe from "./pages/Unsubscribe";
 import InboxManager from "./pages/InboxManager";
