@@ -183,12 +183,12 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
       {isConnected && (
         <>
           <motion.div
-            className="absolute w-24 h-24 rounded-full border-2 border-blue-400/20"
+            className="absolute w-24 h-24 rounded-full border-2 border-indigo-400/20"
             animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0, 0.4] }}
             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute w-28 h-28 rounded-full border border-blue-400/10"
+            className="absolute w-28 h-28 rounded-full border border-indigo-400/10"
             animate={{ scale: [1, 1.4, 1], opacity: [0.3, 0, 0.3] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
           />
