@@ -12028,6 +12028,9 @@ export type Database = {
           id: string
           pages_per_visit: number | null
           position_tracking_date: string | null
+          semrush_backlinks_json: Json | null
+          semrush_competitors_json: Json | null
+          semrush_rank_history_json: Json | null
           top10_keywords: number | null
           top3_keywords: number | null
           total_tracked_keywords: number | null
@@ -12053,6 +12056,9 @@ export type Database = {
           id?: string
           pages_per_visit?: number | null
           position_tracking_date?: string | null
+          semrush_backlinks_json?: Json | null
+          semrush_competitors_json?: Json | null
+          semrush_rank_history_json?: Json | null
           top10_keywords?: number | null
           top3_keywords?: number | null
           total_tracked_keywords?: number | null
@@ -12078,6 +12084,9 @@ export type Database = {
           id?: string
           pages_per_visit?: number | null
           position_tracking_date?: string | null
+          semrush_backlinks_json?: Json | null
+          semrush_competitors_json?: Json | null
+          semrush_rank_history_json?: Json | null
           top10_keywords?: number | null
           top3_keywords?: number | null
           total_tracked_keywords?: number | null
