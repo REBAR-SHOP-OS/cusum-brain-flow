@@ -274,14 +274,17 @@ async function handlePreview(sb: any, auditIds: string[], _companyId: string) {
   const wp = new WPClient();
   const proposals: any[] = [];
 
-  for (const id of auditIds) {
+  // Cap at 10 items per call to prevent timeouts
+  const capped = auditIds.slice(0, 10);
+
+  for (const id of capped) {
     const { data: record } = await sb.from("seo_link_audit").select("*").eq("id", id).single();
     if (!record || record.is_fixed) continue;
 
     try {
-      const wpItem = await findWPItem(wp, record.page_url);
+      const wpItem = await findWPItemFromRecord(wp, record);
       if (!wpItem) {
-        proposals.push({ id, error: "Could not find WordPress page/post" });
+        proposals.push({ id, error: "Could not find WordPress page/post for: " + record.page_url });
         continue;
       }
 
