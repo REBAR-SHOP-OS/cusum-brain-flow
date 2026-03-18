@@ -287,8 +287,13 @@ export function PostReviewPanel({
       .filter((h) => h.length > 0)
       .map((h) => (h.startsWith("#") ? h : `#${h}`));
     setSaveStatus("saving");
+    // Re-append Persian block so it's preserved in DB but never in the editable textarea
+    let contentToSave = localContent;
+    if (persianImageText || persianCaptionText) {
+      contentToSave += "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + (persianImageText || "") + "\n📝 ترجمه کپشن: " + (persianCaptionText || "");
+    }
     updatePost.mutate(
-      { id: post.id, title: localTitle, content: localContent, hashtags: hashtagArray },
+      { id: post.id, title: localTitle, content: contentToSave, hashtags: hashtagArray },
       { onSuccess: () => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); },
         onError: () => setSaveStatus("idle") }
     );
