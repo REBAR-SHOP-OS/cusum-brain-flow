@@ -275,7 +275,7 @@ export function validateEstimateRequest(
   }
 
   // Check fabricated bars
-  for (const line of req.scope.fabricated_rebar_lines) {
+  for (const line of scope.fabricated_rebar_lines) {
     if (line.quantity <= 0) {
       questions.push(`Fabricated bar ${line.line_id}: quantity is 0 or missing.`);
     }
