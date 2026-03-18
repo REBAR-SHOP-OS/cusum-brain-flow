@@ -6,9 +6,9 @@ import { AzinVoiceOrb } from "@/components/azin/AzinVoiceOrb";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AzinVoiceChatButton } from "@/components/azin/AzinVoiceChatButton";
-import { VizzyVoiceChat } from "@/components/vizzy/VizzyVoiceChat";
+import { AzinInterpreterVoiceChat } from "@/components/azin/AzinInterpreterVoiceChat";
 import { AnimatePresence } from "framer-motion";
+import azinAvatar from "@/assets/helpers/azin-helper.png";
 
 export default function AzinInterpreter() {
   const navigate = useNavigate();
@@ -60,7 +60,6 @@ export default function AzinInterpreter() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <AzinVoiceChatButton onClick={() => setShowVoiceChat(true)} />
           <Button
             variant="ghost"
             size="icon"
@@ -122,8 +121,20 @@ export default function AzinInterpreter() {
         </div>
       </div>
 
-      {/* Voice Orb */}
-      <div className="flex items-center justify-center py-6 border-t border-border">
+      {/* Bottom bar: AZIN avatar + Voice Orb */}
+      <div className="flex items-center justify-center gap-6 py-6 border-t border-border">
+        {/* AZIN Voice Interpreter Button */}
+        <button
+          onClick={() => setShowVoiceChat(true)}
+          className="relative w-14 h-14 rounded-full focus:outline-none group"
+          aria-label="Start voice interpreter with AZIN"
+        >
+          <div className="w-14 h-14 rounded-full overflow-hidden ring-2 ring-primary/50 group-hover:ring-primary transition-all shadow-lg">
+            <img src={azinAvatar} alt="AZIN" className="w-full h-full object-cover" draggable={false} />
+          </div>
+        </button>
+
+        {/* Mic Orb */}
         <AzinVoiceOrb
           isConnected={isConnected}
           isConnecting={isConnecting}
@@ -134,7 +145,7 @@ export default function AzinInterpreter() {
       {/* Voice Chat Overlay */}
       <AnimatePresence>
         {showVoiceChat && (
-          <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+          <AzinInterpreterVoiceChat onClose={() => setShowVoiceChat(false)} />
         )}
       </AnimatePresence>
     </div>
