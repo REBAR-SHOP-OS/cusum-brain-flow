@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       // UNASSIGNED flow: clone for ALL combos, then delete original
       const scheduledDay = scheduled_date.substring(0, 10);
 
-      for (const combo of extra_combos) {
+      for (const combo of sanitizedCombos) {
         // Duplicate check
         const { data: existing } = await serviceClient
           .from("social_posts")
