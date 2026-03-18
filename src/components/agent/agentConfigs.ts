@@ -18,6 +18,7 @@ import talentHelper from "@/assets/helpers/talent-helper.png";
 import seoHelper from "@/assets/helpers/seo-helper.png";
 import growthHelper from "@/assets/helpers/growth-helper.png";
 import eisenhowerHelper from "@/assets/helpers/eisenhower-helper.png";
+import azinHelper from "@/assets/helpers/azin-helper.png";
 
 export interface AgentConfig {
   name: string;
