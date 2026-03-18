@@ -3,9 +3,8 @@ import { useVoiceEngine } from "./useVoiceEngine";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 /**
- * Vizzy Voice Engine — thin wrapper around useVoiceEngine
- * with Vizzy's executive intelligence system prompt.
- * Fetches live ERP data on session start and injects it into voice instructions.
+ * Vizzy Voice Engine — wraps useVoiceEngine with executive intelligence prompt
+ * and live ERP data injection from vizzy-daily-brief edge function.
  */
 
 const VIZZY_INSTRUCTIONS = `You are VIZZY — the Executive Intelligence System for Rebar.shop. You operate as a COO + CFO hybrid AI voice assistant.
@@ -40,7 +39,7 @@ Keep it under 30 seconds of speech. Be punchy.
 - Match formality to their tone
 
 ═══ CAPABILITIES ═══
-You have LIVE access to the ERP brain data below. Use it to answer with real numbers about:
+You have LIVE access to the full ERP data below. Use it to answer with real numbers about:
 orders, leads, customers, invoices, production status, machine utilization, financial health,
 team presence, deliveries, and recent activity events.
 
@@ -59,9 +58,8 @@ export function useVizzyVoiceEngine() {
   const [contextLoading, setContextLoading] = useState(false);
   const contextFetched = useRef(false);
 
-  // Build full instructions with ERP data
   const fullInstructions = erpContext
-    ? `${VIZZY_INSTRUCTIONS}\n\n═══ LIVE BUSINESS DATA (as of now) ═══\n${erpContext}`
+    ? `${VIZZY_INSTRUCTIONS}\n\n═══ LIVE BUSINESS DATA (as of ${new Date().toLocaleString()}) ═══\n${erpContext}`
     : VIZZY_INSTRUCTIONS;
 
   const engine = useVoiceEngine({
@@ -71,13 +69,12 @@ export function useVizzyVoiceEngine() {
     vadThreshold: 0.5,
     silenceDurationMs: 500,
     prefixPaddingMs: 300,
-    connectionTimeoutMs: 15_000,
+    connectionTimeoutMs: 20_000,
   });
 
   const originalStartSession = engine.startSession;
 
   const startSession = useCallback(async () => {
-    // Fetch ERP context first (only once)
     if (!contextFetched.current) {
       contextFetched.current = true;
       setContextLoading(true);
@@ -85,20 +82,19 @@ export function useVizzyVoiceEngine() {
         const data = await invokeEdgeFunction<{ briefing: string }>(
           "vizzy-daily-brief",
           {},
-          { timeoutMs: 20000 }
+          { timeoutMs: 25000 }
         );
         if (data?.briefing) {
           setErpContext(data.briefing);
         }
       } catch (err) {
-        console.warn("Failed to fetch ERP context for Vizzy:", err);
-        // Continue without context — Vizzy still works, just less informed
+        console.warn("Failed to fetch ERP context for Vizzy voice:", err);
       } finally {
         setContextLoading(false);
       }
     }
-    // Small delay to let state update with context before connecting
-    await new Promise(r => setTimeout(r, 100));
+    // Let state propagate before connecting
+    await new Promise((r) => setTimeout(r, 150));
     originalStartSession();
   }, [originalStartSession]);
 

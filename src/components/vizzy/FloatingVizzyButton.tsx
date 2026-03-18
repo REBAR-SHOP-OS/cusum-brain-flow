@@ -2,15 +2,15 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Mic } from "lucide-react";
+import { Mic, MessageSquare } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { VizzyVoiceChat } from "./VizzyVoiceChat";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { motion, AnimatePresence } from "framer-motion";
 
-const BTN_SIZE = 56;
-const TOOLTIP_KEY = "vizzy-btn-tooltip-shown";
+const BTN_SIZE = 64;
 
 export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
   function FloatingVizzyButton(_props, ref) {
@@ -19,107 +19,160 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     const navigate = useNavigate();
     const location = useLocation();
 
-    const [showTooltip, setShowTooltip] = useState(false);
-    const [showActions, setShowActions] = useState(isMobile);
+    const [expanded, setExpanded] = useState(false);
     const [showVoiceChat, setShowVoiceChat] = useState(false);
+    const [pulseActive, setPulseActive] = useState(true);
 
     const { pos, handlers, wasDragged } = useDraggablePosition({
       storageKey: "vizzy-btn-pos",
       btnSize: BTN_SIZE,
       defaultPos: (mobile) => ({
-        x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 24 : 300,
-        y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 80 : 24) : 300,
+        x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 20 : 300,
+        y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 90 : 28) : 300,
       }),
     });
 
-    // Show tooltip on first use
+    // Stop pulse after 10 seconds
     useEffect(() => {
-      if (!localStorage.getItem(TOOLTIP_KEY)) {
-        setShowTooltip(true);
-        const timer = setTimeout(() => {
-          setShowTooltip(false);
-          localStorage.setItem(TOOLTIP_KEY, "1");
-        }, 5000);
-        return () => clearTimeout(timer);
-      }
+      const t = setTimeout(() => setPulseActive(false), 10000);
+      return () => clearTimeout(t);
     }, []);
-
-    const handleContainerPointerDown = useCallback((e: React.PointerEvent) => {
-      handlers.onPointerDown(e);
-    }, [handlers]);
-
-    const handleContainerPointerMove = useCallback((e: React.PointerEvent) => {
-      handlers.onPointerMove(e);
-    }, [handlers]);
-
-    const handleContainerPointerUp = useCallback((e: React.PointerEvent) => {
-      handlers.onPointerUp(e);
-    }, [handlers]);
 
     const handleAvatarClick = useCallback(() => {
       if (wasDragged.current) return;
-      if (showTooltip) {
-        setShowTooltip(false);
-        localStorage.setItem(TOOLTIP_KEY, "1");
-      }
+      setExpanded((p) => !p);
+    }, [wasDragged]);
+
+    const onMicClick = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+      setExpanded(false);
+      setShowVoiceChat(true);
+    }, []);
+
+    const onChatClick = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+      setExpanded(false);
       if (location.pathname === "/chat") {
         navigate(-1);
       } else {
         navigate("/chat");
       }
-    }, [wasDragged, location.pathname, navigate, showTooltip]);
-
-    const onMicClick = useCallback((e: React.MouseEvent) => {
-      e.stopPropagation();
-      setShowVoiceChat(true);
-    }, []);
+    }, [location.pathname, navigate]);
 
     if (!isSuperAdmin) return null;
 
     return createPortal(
       <>
-        {showVoiceChat && (
-          <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
-        )}
+        <AnimatePresence>
+          {showVoiceChat && (
+            <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+          )}
+        </AnimatePresence>
+
         <div
           data-feedback-btn="true"
-          className="fixed z-[9999] group cursor-grab active:cursor-grabbing select-none"
-          style={{ left: pos.x, top: pos.y, touchAction: "none" }}
-          onPointerDown={handleContainerPointerDown}
-          onPointerMove={handleContainerPointerMove}
-          onPointerUp={handleContainerPointerUp}
-          onMouseEnter={() => !isMobile && setShowActions(true)}
-          onMouseLeave={() => !isMobile && setShowActions(false)}
+          className="fixed select-none"
+          style={{
+            left: pos.x,
+            top: pos.y,
+            touchAction: "none",
+            zIndex: 99999,
+            pointerEvents: "auto",
+          }}
+          onPointerDown={handlers.onPointerDown}
+          onPointerMove={handlers.onPointerMove}
+          onPointerUp={handlers.onPointerUp}
         >
-          {/* Mic button - above avatar */}
-          {showActions && (
-            <button
-              onClick={onMicClick}
-              className="absolute -top-9 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-card border border-border ring-1 ring-teal-400/60 shadow-md flex items-center justify-center hover:bg-accent transition-all animate-fade-in"
-              aria-label="Start voice chat"
-            >
-              <Mic size={14} className="text-teal-400" />
-            </button>
-          )}
+          {/* Action buttons */}
+          <AnimatePresence>
+            {expanded && (
+              <>
+                {/* Voice button */}
+                <motion.button
+                  initial={{ scale: 0, opacity: 0, y: 0 }}
+                  animate={{ scale: 1, opacity: 1, y: -60 }}
+                  exit={{ scale: 0, opacity: 0, y: 0 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0 }}
+                  onClick={onMicClick}
+                  className="absolute left-1/2 -translate-x-1/2 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-teal-500/30 cursor-pointer"
+                  style={{
+                    background: "linear-gradient(135deg, hsl(172 66% 40%), hsl(172 66% 55%))",
+                  }}
+                  aria-label="Start voice session"
+                >
+                  <Mic size={18} className="text-white" />
+                </motion.button>
 
-          {/* Tooltip */}
-          {showTooltip && (
-            <span className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card text-foreground text-[10px] px-2 py-1 rounded-lg shadow-lg border border-border animate-fade-in">
-              Tap to chat · 🎤 for voice
-            </span>
-          )}
+                {/* Chat button */}
+                <motion.button
+                  initial={{ scale: 0, opacity: 0, x: 0 }}
+                  animate={{ scale: 1, opacity: 1, x: -55, y: -25 }}
+                  exit={{ scale: 0, opacity: 0, x: 0 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0.05 }}
+                  onClick={onChatClick}
+                  className="absolute left-1/2 -translate-x-1/2 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-primary/30 cursor-pointer bg-primary"
+                  aria-label="Open text chat"
+                >
+                  <MessageSquare size={18} className="text-primary-foreground" />
+                </motion.button>
+              </>
+            )}
+          </AnimatePresence>
 
-          {/* Main avatar button */}
+          {/* Main orbital button */}
           <button
             ref={ref}
             onClick={handleAvatarClick}
-            className="pointer-events-auto"
+            className="relative cursor-grab active:cursor-grabbing group"
             aria-label="Open Vizzy AI Assistant"
           >
-            <span className="absolute inset-0 rounded-full animate-ping bg-teal-400/30" />
-            <span className="absolute -inset-1 rounded-full border-2 border-teal-400/60 animate-pulse" />
+            {/* Outer orbital ring */}
+            <svg
+              className="absolute -inset-3"
+              width={BTN_SIZE + 24}
+              height={BTN_SIZE + 24}
+              viewBox={`0 0 ${BTN_SIZE + 24} ${BTN_SIZE + 24}`}
+            >
+              <circle
+                cx={(BTN_SIZE + 24) / 2}
+                cy={(BTN_SIZE + 24) / 2}
+                r={(BTN_SIZE + 24) / 2 - 3}
+                fill="none"
+                stroke="hsl(172 66% 50%)"
+                strokeWidth="2.5"
+                strokeDasharray="6 4"
+                opacity="0.5"
+                className="animate-[spin_12s_linear_infinite]"
+              />
+              <circle
+                cx={(BTN_SIZE + 24) / 2}
+                cy={(BTN_SIZE + 24) / 2}
+                r={(BTN_SIZE + 24) / 2 - 3}
+                fill="none"
+                stroke="hsl(172 66% 50%)"
+                strokeWidth="1.5"
+                opacity="0.25"
+              />
+            </svg>
 
-            <div className="relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-teal-400 shadow-lg shadow-teal-500/25 transition-transform group-hover:scale-110">
+            {/* Pulse ring */}
+            {pulseActive && (
+              <span
+                className="absolute -inset-1 rounded-full animate-ping"
+                style={{ background: "hsl(172 66% 50% / 0.15)" }}
+              />
+            )}
+
+            {/* Avatar container */}
+            <div
+              className="relative rounded-full overflow-hidden shadow-xl transition-transform duration-200 group-hover:scale-105"
+              style={{
+                width: BTN_SIZE,
+                height: BTN_SIZE,
+                boxShadow: "0 0 24px 4px hsl(172 66% 50% / 0.3), 0 4px 16px hsl(0 0% 0% / 0.4)",
+                border: "2.5px solid hsl(172 66% 50% / 0.7)",
+              }}
+            >
               <img
                 src={vizzyAvatar}
                 alt="Vizzy AI"
@@ -128,7 +181,15 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
               />
             </div>
 
-            <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-background rounded-full" />
+            {/* Status dot */}
+            <span
+              className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full border-2"
+              style={{
+                background: "hsl(152 69% 53%)",
+                borderColor: "hsl(var(--background))",
+                boxShadow: "0 0 6px hsl(152 69% 53% / 0.6)",
+              }}
+            />
           </button>
         </div>
       </>,
