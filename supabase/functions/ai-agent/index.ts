@@ -538,6 +538,41 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Sales agent image analysis ───
+    if (agent === "sales" && attachedFiles.length > 0) {
+      console.log(`[Sales] Analyzing ${attachedFiles.length} attached files for rebar extraction...`);
+      let imageAnalysisText = "";
+      for (const file of attachedFiles) {
+        const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|tiff?)$/i.test(file.name);
+        const isPdf = /\.pdf$/i.test(file.name);
+
+        if (isImage) {
+          // Try OCR first, fall back to Gemini vision
+          const ocrResult = await performOCR(file.url);
+          if (ocrResult.fullText) {
+            imageAnalysisText += `\n--- OCR: ${file.name} ---\n${ocrResult.fullText}`;
+          } else {
+            const result = await analyzeDocumentWithGemini(file.url, file.name,
+              "Extract ALL rebar details from this image: bar sizes, quantities, lengths, shapes, spacing, element references. Output in structured format.");
+            if (result.text) imageAnalysisText += `\n--- Analysis: ${file.name} ---\n${result.text}`;
+          }
+        } else if (isPdf) {
+          const pdfResult = await convertPdfToImages(file.url, 5);
+          if (pdfResult.pages.length > 0) {
+            imageAnalysisText += `\n--- PDF: ${file.name} (${pdfResult.pageCount} pages) ---`;
+            for (let pi = 0; pi < pdfResult.pages.length; pi++) {
+              const pageOcr = await performOCROnBase64(pdfResult.pages[pi]);
+              if (pageOcr.fullText) imageAnalysisText += `\n[Page ${pi + 1}]\n${pageOcr.fullText}`;
+            }
+          }
+        }
+      }
+      if (imageAnalysisText) {
+        mergedContext.salesImageAnalysis = imageAnalysisText;
+        console.log(`[Sales] Image analysis complete: ${imageAnalysisText.length} chars extracted`);
+      }
+    }
+
     // Empire file analysis (simplified integration using shared utils)
     if (agent === "empire" && attachedFiles.length > 0) {
       console.log(`[Empire] Processing ${attachedFiles.length} files...`);
