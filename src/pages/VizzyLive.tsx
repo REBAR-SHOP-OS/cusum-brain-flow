@@ -13,12 +13,6 @@ import assistantHelper from "@/assets/helpers/assistant-helper.png";
 export default function VizzyLive() {
   const navigate = useNavigate();
   const { isSuperAdmin } = useSuperAdmin();
-
-  // Super admin gate — redirect non-admins
-  if (!isSuperAdmin) {
-    return <Navigate to="/home" replace />;
-  }
-
   const {
     state, transcripts, isSpeaking, mode,
     startSession, endSession, clearTranscripts,
@@ -26,6 +20,11 @@ export default function VizzyLive() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(0);
+
+  // Super admin gate — redirect non-admins
+  if (!isSuperAdmin) {
+    return <Navigate to="/home" replace />;
+  }
 
   // Auto-start session on mount
   useEffect(() => {
