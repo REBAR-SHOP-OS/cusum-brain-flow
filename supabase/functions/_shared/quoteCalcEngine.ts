@@ -383,7 +383,7 @@ export function generateQuote(
     found: boolean;
   }[] = [];
 
-  for (const line of req.scope.fabricated_rebar_lines) {
+  for (const line of scope.fabricated_rebar_lines) {
     const wResult = computeFabricatedWeight(line, rebarSizes);
     totalFabWeightKg += wResult.total_weight_kg;
     fabLineDetails.push({
