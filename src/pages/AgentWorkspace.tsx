@@ -675,8 +675,71 @@ export default function AgentWorkspace() {
               )}
             </div>
 
-            {/* Pixel agent: two mode cards */}
+            {/* Pixel agent: two mode cards OR recipe table */}
             {agentId === "social" ? (
+              showRecipeTable ? (
+                /* ── Recipe Schedule Table ── */
+                <div className="w-full max-w-2xl mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-foreground">📋 دستور عمل تولید محتوا</h2>
+                    <Button variant="ghost" size="sm" onClick={() => setShowRecipeTable(false)}>
+                      ← بازگشت
+                    </Button>
+                  </div>
+                  <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/50">
+                          <th className="px-4 py-3 text-right font-semibold text-foreground">ساعت</th>
+                          <th className="px-4 py-3 text-right font-semibold text-foreground">موضوع</th>
+                          <th className="px-4 py-3 text-right font-semibold text-foreground">محصول</th>
+                          <th className="px-4 py-3 text-center font-semibold text-foreground">عملیات</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { time: "۶:۳۰", theme: "انگیزشی / قدرت", product: "خاموت میلگرد", slot: 1 },
+                          { time: "۷:۳۰", theme: "تبلیغاتی خلاقانه", product: "کیج میلگرد", slot: 2 },
+                          { time: "۸:۰۰", theme: "استحکام و مقیاس", product: "میلگرد فایبرگلاس", slot: 3 },
+                          { time: "۱۲:۳۰", theme: "نوآوری و بهره‌وری", product: "مش سیمی", slot: 4 },
+                          { time: "۲:۰۰", theme: "تبلیغ محصول", product: "دوبل میلگرد", slot: 5 },
+                        ].map((row) => (
+                          <tr key={row.slot} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3 text-right font-mono font-medium text-foreground">{row.time}</td>
+                            <td className="px-4 py-3 text-right text-muted-foreground">{row.theme}</td>
+                            <td className="px-4 py-3 text-right text-foreground font-medium">{row.product}</td>
+                            <td className="px-4 py-3 text-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  setShowRecipeTable(false);
+                                  handleSendInternal(`Content schedule for today`, row.slot);
+                                }}
+                              >
+                                ساخت
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      className="gap-2"
+                      onClick={() => {
+                        setShowRecipeTable(false);
+                        handleSend("Content schedule for today");
+                      }}
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                      ساخت همه اسلات‌ها
+                    </Button>
+                  </div>
+                </div>
+              ) : (
               <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xl mb-6">
                 {/* Card 1: Free chat mode */}
                 <button
@@ -692,7 +755,7 @@ export default function AgentWorkspace() {
 
                 {/* Card 2: Recipe / 5-slot schedule mode */}
                 <button
-                  onClick={() => handleSend("Content schedule for today")}
+                  onClick={() => setShowRecipeTable(true)}
                   className="flex-1 bg-card border border-border rounded-xl p-6 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer text-center group"
                 >
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3 group-hover:bg-primary/20 transition-colors">
@@ -702,6 +765,7 @@ export default function AgentWorkspace() {
                   <p className="text-sm text-muted-foreground">۵ پست آماده برای محصولات مختلف</p>
                 </button>
               </div>
+              )
             ) : (
               <>
                 <div className="flex justify-center mb-3">
