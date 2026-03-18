@@ -201,11 +201,17 @@ export function useSalesQuotations() {
   // Log audit event
   const logAuditEvent = useMutation({
     mutationFn: async (event: { quotation_id: string; event_type: string; previous_value?: string; new_value?: string; notes?: string; metadata?: Record<string, unknown> }) => {
+      const user = (await supabase.auth.getUser()).data.user;
       const { error } = await supabase.from("quote_audit_log").insert({
-        ...event,
+        quotation_id: event.quotation_id,
+        event_type: event.event_type,
+        previous_value: event.previous_value || null,
+        new_value: event.new_value || null,
+        notes: event.notes || null,
+        metadata: event.metadata || null,
         company_id: companyId!,
-        performed_by: (await supabase.auth.getUser()).data.user?.id,
-      } as any);
+        performed_by: user?.id || null,
+      });
       if (error) throw error;
     },
   });
