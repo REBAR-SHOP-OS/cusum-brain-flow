@@ -145,13 +145,15 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   const togglePurchased = useCallback(async (itemId: string, currentValue: boolean) => {
     if (!user) return;
-    const updateData: any = {
-      is_purchased: !currentValue,
-      is_rejected: false,
-      purchased_by: !currentValue ? user.id : null,
-      purchased_at: !currentValue ? new Date().toISOString() : null,
-    };
-    const { error } = await (supabase.from("purchasing_list_items") as any).update(updateData).eq("id", itemId);
+    const { error } = await supabase
+      .from("purchasing_list_items")
+      .update({
+        is_purchased: !currentValue,
+        is_rejected: false,
+        purchased_by: !currentValue ? user.id : null,
+        purchased_at: !currentValue ? new Date().toISOString() : null,
+      })
+      .eq("id", itemId);
     if (error) {
       toast.error("Error updating");
       console.error(error);
@@ -160,15 +162,13 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   const toggleRejected = useCallback(async (itemId: string, currentValue: boolean) => {
     if (!user) return;
-    const updateData: any = {
-      is_rejected: !currentValue,
-      is_purchased: false,
-      purchased_by: null,
-      purchased_at: null,
-    };
-    const { error } = await (supabase.from("purchasing_list_items") as any).update(updateData).eq("id", itemId);
+    // Reject = delete the record so the item disappears from the list
+    const { error } = await supabase
+      .from("purchasing_list_items")
+      .delete()
+      .eq("id", itemId);
     if (error) {
-      toast.error("Error updating");
+      toast.error("Error removing item");
       console.error(error);
     }
   }, [user]);
@@ -189,8 +189,8 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
     if (!profile?.company_id) return;
 
-    const { error } = await (supabase
-      .from("purchasing_list_items") as any)
+    const { error } = await supabase
+      .from("purchasing_list_items")
       .update({ due_date: date })
       .eq("company_id", profile.company_id)
       .is("due_date", null);

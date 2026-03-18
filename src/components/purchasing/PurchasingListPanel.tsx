@@ -229,13 +229,8 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={cn(
-                    "h-7 w-7 rounded-full",
-                    item.is_rejected
-                      ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-                      : "text-muted-foreground hover:text-red-500"
-                  )}
-                  onClick={() => toggleRejected(item.id, item.is_rejected)}
+                  className="h-7 w-7 rounded-full text-muted-foreground hover:text-red-500"
+                  onClick={() => deleteItem(item.id)}
                 >
                   <X className="w-3.5 h-3.5" />
                 </Button>
