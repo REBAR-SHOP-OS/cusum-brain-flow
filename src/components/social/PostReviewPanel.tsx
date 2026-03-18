@@ -202,9 +202,23 @@ export function PostReviewPanel({
       setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
     }
     setLocalContentType(post.content_type || "post");
-    // Sync text fields from post data
+    // Sync text fields from post data — strip Persian block from editable content
     setLocalTitle(post.title || "");
-    setLocalContent(post.content || "");
+    const rawC = post.content || "";
+    const persianSepIdx = rawC.indexOf("---PERSIAN---");
+    if (persianSepIdx !== -1) {
+      setLocalContent(rawC.slice(0, persianSepIdx).trim());
+      const pBlock = rawC.slice(persianSepIdx + "---PERSIAN---".length).trim();
+      // Parse image text and caption translation from Persian block
+      const imgMatch = pBlock.match(/🖼️\s*متن روی عکس:\s*([\s\S]*?)(?=📝|$)/);
+      const capMatch = pBlock.match(/📝\s*ترجمه کپشن:\s*([\s\S]*?)$/);
+      setPersianImageText(imgMatch?.[1]?.trim() || pBlock);
+      setPersianCaptionText(capMatch?.[1]?.trim() || "");
+    } else {
+      setLocalContent(rawC);
+      setPersianImageText("");
+      setPersianCaptionText("");
+    }
     setLocalHashtags(post.hashtags?.join(", ") || "");
     setSaveStatus("idle");
   }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages, post?.title, post?.content, post?.hashtags]);
