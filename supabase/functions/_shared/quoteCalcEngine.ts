@@ -256,8 +256,11 @@ export function validateEstimateRequest(
 ): string[] {
   const questions: string[] = [];
 
+  // Defensive: normalize scope arrays
+  const scope = normalizeScope(req.scope);
+
   // Check straight bars exist in config
-  for (const line of req.scope.straight_rebar_lines) {
+  for (const line of scope.straight_rebar_lines) {
     if (line.quantity <= 0) {
       questions.push(`Straight bar ${line.line_id}: quantity is 0 or missing.`);
     }
