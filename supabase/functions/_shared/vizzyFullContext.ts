@@ -339,6 +339,78 @@ export async function buildFullVizzyContext(
         .join("\n")
     : "  No saved memories yet";
 
+  // ═══ EMPLOYEE PERFORMANCE (aggregated from real data) ═══
+  const profileUserIdMap = new Map(
+    (profiles || []).map((p: any) => [p.user_id, p.full_name || "Unknown"])
+  );
+
+  // Work order performance per employee today
+  const woByAssignee: Record<string, { total: number; completed: number; inProgress: number }> = {};
+  for (const wo of (workOrdersToday || [])) {
+    const assignee = wo.assigned_to;
+    if (!assignee) continue;
+    const name = profileIdMap.get(assignee) || "Unknown";
+    if (!woByAssignee[name]) woByAssignee[name] = { total: 0, completed: 0, inProgress: 0 };
+    woByAssignee[name].total++;
+    if (wo.status === "completed" || wo.status === "done") woByAssignee[name].completed++;
+    if (wo.status === "in_progress" || wo.status === "in-progress") woByAssignee[name].inProgress++;
+  }
+  const woPerformanceLines = Object.entries(woByAssignee)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([name, stats]) =>
+      `  • ${name}: ${stats.total} WOs (${stats.completed} done, ${stats.inProgress} active)`
+    )
+    .join("\n");
+
+  // Agent usage per employee today (from chat_sessions)
+  const agentUsageByUser: Record<string, { sessions: number; agents: Set<string>; lastTopic: string }> = {};
+  for (const s of (agentSessions || [])) {
+    const name = profileUserIdMap.get(s.user_id) || "Unknown";
+    if (!agentUsageByUser[name]) agentUsageByUser[name] = { sessions: 0, agents: new Set(), lastTopic: "" };
+    agentUsageByUser[name].sessions++;
+    agentUsageByUser[name].agents.add(s.agent_name);
+    if (!agentUsageByUser[name].lastTopic) agentUsageByUser[name].lastTopic = s.title || "";
+  }
+  const agentUsageLines = Object.entries(agentUsageByUser)
+    .sort((a, b) => b[1].sessions - a[1].sessions)
+    .map(([name, u]) =>
+      `  • ${name}: ${u.sessions} sessions across ${Array.from(u.agents).join(", ")}${u.lastTopic ? ` (last: "${u.lastTopic}")` : ""}`
+    )
+    .join("\n");
+
+  // Agent actions per user today
+  const actionsByUser: Record<string, { count: number; types: Set<string> }> = {};
+  for (const a of (agentActions || [])) {
+    const name = profileUserIdMap.get(a.user_id) || "Unknown";
+    if (!actionsByUser[name]) actionsByUser[name] = { count: 0, types: new Set() };
+    actionsByUser[name].count++;
+    actionsByUser[name].types.add(a.action_type);
+  }
+  const actionsLines = Object.entries(actionsByUser)
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([name, a]) =>
+      `  • ${name}: ${a.count} actions (${Array.from(a.types).slice(0, 4).join(", ")})`
+    )
+    .join("\n");
+
+  // Machine operators currently active
+  const operatorLines = (machineOps || [])
+    .map((m: any) => `  • ${profileIdMap.get(m.current_operator_profile_id) || "Unknown"} → ${m.name} [${m.status}]`)
+    .join("\n");
+
+  // Hours worked today per employee
+  const hoursWorked: Record<string, number> = {};
+  for (const t of clockEntries) {
+    const name = profileIdMap.get(t.profile_id) || "Unknown";
+    const clockOut = t.clock_out ? new Date(t.clock_out).getTime() : Date.now();
+    const hrs = (clockOut - new Date(t.clock_in).getTime()) / 3600000;
+    hoursWorked[name] = (hoursWorked[name] || 0) + hrs;
+  }
+  const hoursLines = Object.entries(hoursWorked)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, hrs]) => `  • ${name}: ${hrs.toFixed(1)} hrs`)
+    .join("\n");
+
   return `═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
 
 ${includeFinancials ? `📊 FINANCIALS
@@ -371,8 +443,19 @@ ${hotLeads || "    None"}
 
 👷 TEAM (${totalStaff} staff)
 
-⏱️ TEAM PRESENCE
+⏱️ TEAM PRESENCE & HOURS TODAY
 ${presenceLines.length > 0 ? presenceLines.join("\n") : "  No time clock entries today"}
+${hoursLines ? `\n  Hours Worked Today:\n${hoursLines}` : ""}
+
+📊 EMPLOYEE PERFORMANCE (TODAY — REAL DATA)
+  Work Order Activity:
+${woPerformanceLines || "    No work orders with assignees today"}
+  Machine Operators Active:
+${operatorLines || "    No operators currently assigned"}
+  AI Agent Usage by Employee:
+${agentUsageLines || "    No agent sessions today"}
+  Agent Actions by Employee:
+${actionsLines || "    No agent actions today"}
 
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
