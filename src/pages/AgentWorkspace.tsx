@@ -153,10 +153,7 @@ export default function AgentWorkspace() {
     setMessages([]);
     setActiveSessionId(null);
     setAutoBriefingSent(true); // don't auto-brief on manual new chat
-    // Auto-show schedule for Pixel agent
-    if (agentId === "social") {
-      setTimeout(() => sendRef.current?.("Content schedule for today"), 100);
-    }
+    // Pixel agent: no longer auto-send; user picks mode from empty state
     // Reset purchasing state so user sees fresh default list
     if (agentId === "purchasing") {
       setPurchasingDate(undefined);
