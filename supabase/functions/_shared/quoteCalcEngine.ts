@@ -563,7 +563,7 @@ export function generateQuote(
 
   // 9. Totals
   const subtotal = lineItems.reduce((s, li) => s + li.extended_price_cad, 0);
-  const tax = round2(subtotal * (req.scope.tax_rate || 0));
+  const tax = round2(subtotal * (scope.tax_rate || 0));
   const grandTotal = round2(subtotal + tax);
 
   // 10. Spreadsheet table
