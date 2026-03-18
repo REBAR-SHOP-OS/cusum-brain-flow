@@ -240,7 +240,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
     // 3. Save snapshot to purchasing_confirmed_lists
     const { error: snapError } = await supabase
-      .from("purchasing_confirmed_lists" as any)
+      .from("purchasing_confirmed_lists")
       .insert({
         company_id: profile.company_id,
         confirmed_by: user.id,
