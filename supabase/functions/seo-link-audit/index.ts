@@ -116,6 +116,7 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
   type PendingRecord = { record: any; needsCheck: boolean };
   const pending: PendingRecord[] = [];
   const checkedUrls = new Map<string, { status: string; suggestion: string | null }>();
+  const urlsToCheckSet = new Set<string>();
 
   for (const item of allContent) {
     const pageUrl = item.link || `${siteUrl}/?p=${item.id}`;
