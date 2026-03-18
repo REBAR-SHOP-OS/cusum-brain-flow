@@ -80,17 +80,15 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-full text-green-600 hover:bg-green-600/10 hover:text-green-700"
+                  className="h-11 w-11 rounded-full border-2 border-green-500/40 bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600 hover:border-green-500/60"
                   onClick={() => {
                     if (!filterDate) {
-                      toast.error("Select a date first");
-                      setCalendarOpen(true);
-                      return;
+                      setFilterDate(new Date());
                     }
                     setConfirmDialogOpen(true);
                   }}
                 >
-                  <CheckCircle className="w-5 h-5" />
+                  <CheckCircle className="w-7 h-7" strokeWidth={2.5} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Confirm & Save List</TooltipContent>
@@ -282,18 +280,18 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         open={confirmDialogOpen}
         onOpenChange={setConfirmDialogOpen}
         title="Confirm Purchasing List"
-        description={`Save all items for ${filterDate ? format(filterDate, "yyyy/MM/dd") : "today"}?`}
+        description={`Save all items for ${filterDate ? format(filterDate, "yyyy/MM/dd") : format(new Date(), "yyyy/MM/dd")}?`}
         details={[
           `Total items: ${items.length}`,
           `Pending (no date): ${items.filter(i => !i.due_date).length}`,
-          `Date: ${filterDate ? format(filterDate, "yyyy/MM/dd") : "—"}`,
+          `Date: ${filterDate ? format(filterDate, "yyyy/MM/dd") : format(new Date(), "yyyy/MM/dd")}`,
         ]}
         confirmLabel="Yes, Confirm & Save"
         loading={confirmLoading}
         onConfirm={async () => {
-          if (!filterDate) return;
+          const effectiveDate = filterDate ?? new Date();
           setConfirmLoading(true);
-          const dateStr = format(filterDate, "yyyy-MM-dd");
+          const dateStr = format(effectiveDate, "yyyy-MM-dd");
           await confirmList(dateStr);
           await refetch();
           setConfirmLoading(false);
