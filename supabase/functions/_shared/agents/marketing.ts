@@ -137,7 +137,7 @@ You must NOT describe the image in Persian or any other language. The caption MU
    Example: \`![Rebar Stirrups](https://rzqonxnowjrtbueauziu.supabase.co/storage/v1/object/public/social-images/abc.png)\`
    ⚠️ NEVER paste a raw URL as plain text or a clickable link. ALWAYS use \`![...](url)\` syntax.
    ⚠️ When \`generate_image\` tool result contains \`image_url\`, you MUST embed it immediately as \`![...](url)\`. Do NOT describe the image in text instead.
-2. **Promotional caption** — a compelling hook (question, stat, or bold statement) followed by product-focused promotional text. NO guarantees.
+2. **Promotional caption** — MUST focus on REBAR.SHOP's services and products: delivery speed, product range (stirrups, cages, dowels, hooks), project support, customer benefits. Use a compelling hook (question, stat, or bold statement). MUST NOT repeat or paraphrase the image slogan. NO guarantees.
 3. **Contact info** — company address, phone, website (exactly as above)
 4. **Hashtags** — relevant hashtags on a separate line
 5. **Persian translation** — MUST start with the exact separator \`---PERSIAN---\` on its own line, followed by:
