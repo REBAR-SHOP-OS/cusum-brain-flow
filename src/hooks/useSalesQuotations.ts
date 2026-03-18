@@ -151,7 +151,7 @@ export function useSalesQuotations() {
     mutationFn: async (item: Partial<SalesQuotation> & { quotation_number: string }) => {
       const { data, error } = await supabase
         .from("sales_quotations")
-        .insert({ ...item, company_id: companyId! })
+        .insert({ ...item, company_id: companyId! } as any)
         .select()
         .single();
       if (error) throw error;
