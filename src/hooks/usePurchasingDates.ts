@@ -27,14 +27,16 @@ export function usePurchasingDates() {
 
     // Fetch confirmed lists (primary source for RECENTS)
     const { data: confirmed, error: confError } = await supabase
-      .from("purchasing_confirmed_lists" as any)
+      .from("purchasing_confirmed_lists")
       .select("id, due_date, confirmed_at, confirmed_by, snapshot")
       .eq("company_id", profile.company_id)
       .order("confirmed_at", { ascending: false });
 
-    if (!confError && confirmed) {
+    if (confError) {
+      console.error("Error fetching confirmed lists:", confError);
+    } else if (confirmed) {
       setConfirmedLists(confirmed as unknown as ConfirmedListRecord[]);
-      const uniqueDates = [...new Set((confirmed as any[]).map((r) => r.due_date as string))];
+      const uniqueDates = [...new Set(confirmed.map((r) => r.due_date as string))];
       setDates(uniqueDates);
     }
     setLoading(false);
