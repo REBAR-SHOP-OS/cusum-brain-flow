@@ -685,7 +685,7 @@ export function generateExplanation(
   if (fabItems.length > 0) {
     lines.push("### Fabricated Bars");
     lines.push(
-      `Total fabricated weight (after ${req.scope.scrap_percent_override ?? config.default_scrap_percent}% scrap): ${result.weights_summary.fabricated_kg} kg = ${round3(result.weights_summary.fabricated_kg / 1000)} tons.`
+      `Total fabricated weight (after ${req.scope?.scrap_percent_override ?? config.default_scrap_percent}% scrap): ${result.weights_summary.fabricated_kg} kg = ${round3(result.weights_summary.fabricated_kg / 1000)} tons.`
     );
     lines.push(`Tonnage bracket selected: ${result.pricing_method_summary.tonnage_bracket_used}`);
     if (result.pricing_method_summary.coating_multiplier > 1) {
