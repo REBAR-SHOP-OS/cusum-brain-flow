@@ -155,7 +155,7 @@ export function SeoLinks() {
   };
 
   const handleApproveAll = () => {
-    const validIds = proposals.filter(p => !p.error && p.before_paragraph && p.after_paragraph).map(p => p.id);
+    const validIds = proposals.filter(p => !p.error && (p.before_paragraph || (p.action === "replace" && p.replacement_url))).map(p => p.id);
     if (validIds.length === 0) {
       toast.error("No valid proposals to apply");
       return;
