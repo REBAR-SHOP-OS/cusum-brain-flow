@@ -1,0 +1,1 @@
+ALTER TABLE public.seo_link_audit ADD COLUMN IF NOT EXISTS wp_item_id integer, ADD COLUMN IF NOT EXISTS wp_item_type text;
