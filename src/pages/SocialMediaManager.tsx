@@ -176,16 +176,17 @@ export default function SocialMediaManager() {
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleting(true);
 
-    // Only delete the posts the user explicitly selected — no sibling expansion
-    // This prevents accidental deletion of scheduled/published posts
-    for (const id of selectedPostIds) {
+    // Filter out protected posts as a safety net
+    const deletableIds = [...selectedPostIds].filter((id) => !isProtectedPost(id));
+
+    for (const id of deletableIds) {
       await deletePost.mutateAsync(id);
     }
 
     setBulkDeleting(false);
     setShowDeleteConfirm(false);
     exitSelectionMode();
-  }, [selectedPostIds, deletePost, exitSelectionMode]);
+  }, [selectedPostIds, deletePost, exitSelectionMode, isProtectedPost]);
 
   const weekPosts = useMemo(() => {
     const wEnd = addDays(weekStart, 7);
