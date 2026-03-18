@@ -93,6 +93,27 @@ Deno.serve(async (req) => {
         rebarSizes as RebarSizeRow[]
       );
 
+      // ─── $0 QUOTE GUARD ───
+      // Never persist a "successful" quote with $0 total — that's a pricing failure
+      if (result.summary.grand_total <= 0 && result.line_items.length > 0) {
+        return new Response(
+          JSON.stringify({
+            error: "Pricing resulted in $0 total despite having line items. This is a pricing failure, not a valid quote.",
+            pricing_status: "failed",
+            failure_reason: "grand_total_zero",
+            failure_details: {
+              line_items_count: result.line_items.length,
+              subtotal: result.summary.subtotal,
+              grand_total: result.summary.grand_total,
+              missing_inputs: result.missing_inputs_questions,
+              weights: result.weights_summary,
+            },
+            result, // Include for debugging
+          }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // Persist to quotes table
       const quoteNumber = `QE-${Date.now().toString(36).toUpperCase()}`;
       try {
@@ -103,7 +124,7 @@ Deno.serve(async (req) => {
             company_id,
             total_amount: result.summary.grand_total,
             source: "quote_engine",
-            status: "draft",
+            status: result.summary.grand_total > 0 ? "draft" : "pricing_failed",
             metadata: {
               estimate_request,
               result,
