@@ -35,6 +35,7 @@ export function SeoOverview() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
   const { syncDomain, fullExport } = useSemrushSync();
+  const { syncAll: wincherSync } = useWincherSync();
 
   // Check Google connection status
   useEffect(() => {
