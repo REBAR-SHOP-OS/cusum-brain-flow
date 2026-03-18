@@ -4,6 +4,7 @@ import { useAgentSuggestions } from "@/hooks/useAgentSuggestions";
 import { Send, Loader2, Minimize2, Maximize2, Shrink, Mail, DollarSign, ListChecks, PhoneOff, Paperclip, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendAgentMessage, ChatMessage, AttachedFile } from "@/lib/agent";
+import { backgroundAgentService } from "@/lib/backgroundAgentService";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
