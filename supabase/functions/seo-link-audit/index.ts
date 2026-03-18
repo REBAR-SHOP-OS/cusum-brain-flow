@@ -85,7 +85,7 @@ async function checkLink(href: string, siteUrl: string): Promise<{ status: numbe
     const res = await fetch(url, {
       method: "HEAD",
       redirect: "follow",
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(2000),
     });
     return { status: res.status, error: res.status >= 400 };
   } catch {
