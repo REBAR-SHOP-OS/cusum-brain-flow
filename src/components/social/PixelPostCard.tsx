@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CheckCircle2, RefreshCw, ZoomIn, Languages } from "lucide-react";
+import { CheckCircle2, RefreshCw, ZoomIn, Languages, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
