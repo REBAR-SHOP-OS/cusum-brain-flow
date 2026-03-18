@@ -745,21 +745,66 @@ export default function Tasks() {
   const reopenWithIssue = async (task: TaskRow, reason: string) => {
     if (!reason.trim()) { toast.error("Please describe the issue"); return; }
     try {
-      // Reopen task
+      const { data: { user } } = await supabase.auth.getUser();
+      const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
+      const companyId = companyRes.data?.company_id;
+
+      // --- Feedback-specific branch: create new task for developers ---
+      if ((task as any).source === "screenshot_feedback") {
+        const originalTitle = task.title?.replace(/^🔄 مشکل حل نشده: /, "").replace(/^Feedback: /, "") || task.title;
+        const originalDesc = task.description || "";
+        const attachmentUrl = (task as any).attachment_url || null;
+
+        for (const recipientId of FEEDBACK_RECIPIENTS) {
+          await supabase.from("tasks").insert({
+            title: `🔄 مشکل حل نشده: ${originalTitle}`,
+            description: `${originalDesc}\n\n--- دلیل بازگشت ---\n${reason}`.trim(),
+            assigned_to: recipientId,
+            created_by_profile_id: currentProfileId,
+            priority: "high",
+            status: "open",
+            company_id: companyId,
+            source: "screenshot_feedback",
+            attachment_url: attachmentUrl,
+          } as any);
+        }
+
+        // Keep the current task completed
+        await supabase.from("tasks").update({
+          status: "completed",
+          updated_at: new Date().toISOString(),
+        }).eq("id", task.id);
+
+        // Resolve the approval human_task
+        await supabase
+          .from("human_tasks" as any)
+          .update({ status: "resolved", resolved_at: new Date().toISOString() })
+          .eq("entity_type", "task")
+          .eq("entity_id", task.id)
+          .eq("category", "task_approval")
+          .eq("status", "open");
+
+        await dismissTaskNotifications(task.id);
+        await writeAudit(task.id, "re_reported_with_reason", "status", "completed", "completed");
+        toast.success("مشکل دوباره گزارش شد 🔄");
+        setReopenDialogOpen(false);
+        setReopenReason("");
+        loadData();
+        return;
+      }
+
+      // --- Standard (non-feedback) tasks: reopen as before ---
       await supabase.from("tasks").update({
         status: "open",
         completed_at: null,
         updated_at: new Date().toISOString(),
       }).eq("id", task.id);
 
-      // Add comment with the issue description
-      const { data: { user } } = await supabase.auth.getUser();
-      const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
       await supabase.from("task_comments" as any).insert({
         task_id: task.id,
         profile_id: currentProfileId,
         content: `🔄 Reopened with issue:\n${reason}`,
-        company_id: companyRes.data?.company_id,
+        company_id: companyId,
       });
 
       // Resolve the approval human_task
@@ -777,7 +822,6 @@ export default function Tasks() {
       setReopenDialogOpen(false);
       setReopenReason("");
       loadData();
-      // Refresh comments
       if (selectedTask?.id === task.id) {
         loadComments(task.id);
       }
