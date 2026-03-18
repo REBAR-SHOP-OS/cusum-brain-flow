@@ -5,9 +5,13 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { AzinVoiceChatButton } from "@/components/azin/AzinVoiceChatButton";
+import { VizzyVoiceChat } from "@/components/vizzy/VizzyVoiceChat";
+import { AnimatePresence } from "framer-motion";
 
 export default function AzinInterpreter() {
   const navigate = useNavigate();
+  const [showVoiceChat, setShowVoiceChat] = useState(false);
   const {
     isConnected,
     isConnecting,
@@ -54,15 +58,18 @@ export default function AzinInterpreter() {
             <p className={cn("text-sm font-medium", statusColor)}>{statusLabel}</p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={clearTranscripts}
-          disabled={committedTranscripts.length === 0}
-          className="text-muted-foreground hover:text-destructive"
-        >
-          <Trash2 className="w-5 h-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <AzinVoiceChatButton onClick={() => setShowVoiceChat(true)} />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={clearTranscripts}
+            disabled={committedTranscripts.length === 0}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
 
       {/* Split columns */}
@@ -137,6 +144,13 @@ export default function AzinInterpreter() {
           )}
         </button>
       </div>
+
+      {/* Voice Chat Overlay */}
+      <AnimatePresence>
+        {showVoiceChat && (
+          <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
