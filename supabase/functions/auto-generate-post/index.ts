@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
-import { buildEventPromptBlock } from "../_shared/eventCalendar.ts";
+// buildEventPromptBlock removed — events are opt-in via chat only
 
 /** Resolve company logo URL from storage (same as Pixel agent) */
 async function resolveLogoUrl(): Promise<string | null> {
