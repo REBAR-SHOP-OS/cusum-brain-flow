@@ -393,6 +393,12 @@ export function SeoLinks() {
                 AI is analyzing your content...
               </div>
             )}
+            {proposals.length > 0 && proposals.every(p => !!p.error) && (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-sm text-destructive">
+                <p className="font-semibold mb-1">All {proposals.length} items failed to resolve</p>
+                <p className="text-xs">{proposals[0]?.error}. Try re-running the link audit to refresh WordPress page mappings.</p>
+              </div>
+            )}
             {proposals.map((p, i) => (
               <Card key={p.id} className="border-border">
                 <CardContent className="pt-4 space-y-3">

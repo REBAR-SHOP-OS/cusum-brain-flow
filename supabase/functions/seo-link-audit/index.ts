@@ -534,22 +534,48 @@ async function fetchAllWPProducts(wp: WPClient): Promise<any[]> {
   return all;
 }
 
-async function findWPItem(wp: WPClient, pageUrl: string): Promise<any | null> {
-  const url = new URL(pageUrl);
+/** Try to resolve WP item using stored wp_item_id first, then slug fallback */
+async function findWPItemFromRecord(wp: WPClient, record: any): Promise<any | null> {
+  // 1) Direct ID lookup if stored during crawl
+  if (record.wp_item_id) {
+    try {
+      const itemType = record.wp_item_type || "page";
+      if (itemType === "page") {
+        const page = await wp.getPage(String(record.wp_item_id));
+        if (page) return { ...page, type: "page" };
+      } else if (itemType === "post") {
+        const post = await wp.getPost(String(record.wp_item_id));
+        if (post) return { ...post, type: "post" };
+      } else if (itemType === "product") {
+        const product = await wp.getProduct(String(record.wp_item_id));
+        if (product) return { ...product, type: "product", content: { rendered: product.description || "" } };
+      }
+    } catch (e) {
+      console.warn(`Direct WP item lookup failed for ID ${record.wp_item_id}:`, e);
+    }
+  }
+
+  // 2) Slug-based fallback
+  return findWPItemBySlug(wp, record.page_url);
+}
+
+async function findWPItemBySlug(wp: WPClient, pageUrl: string): Promise<any | null> {
+  let url: URL;
+  try { url = new URL(pageUrl); } catch { return null; }
   const slug = url.pathname.replace(/^\/|\/$/g, "").split("/").pop() || "";
 
   // Handle homepage (empty slug)
   if (!slug) {
     try {
+      // Try common homepage slugs
       for (const trySlug of ["home", "homepage", "front-page"]) {
         const pages = await wp.listPages({ slug: trySlug, per_page: "1" });
         if (pages && pages.length > 0) return { ...pages[0], type: "page" };
       }
-      const idMatch = pageUrl.match(/[?&]p=(\d+)/);
-      if (idMatch) {
-        const page = await wp.getPage(idMatch[1]);
-        if (page) return { ...page, type: "page" };
-      }
+      // Try fetching the front page (page on front in WP settings — usually ID from reading settings)
+      // Fallback: get the first page ordered by menu_order
+      const frontPages = await wp.listPages({ orderby: "menu_order", order: "asc", per_page: "1" });
+      if (frontPages && frontPages.length > 0) return { ...frontPages[0], type: "page" };
     } catch { /* ignore */ }
     console.warn(`findWPItem: Could not resolve homepage for ${pageUrl}`);
     return null;
