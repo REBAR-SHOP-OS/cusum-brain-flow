@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 
 const BUCKET = "social-media-assets";
 
@@ -30,12 +31,10 @@ export async function uploadSocialMediaAsset(
   const ext = type === "video" ? "mp4" : (blob.type.includes("png") ? "png" : "jpg");
   const fileName = `${type}s/${crypto.randomUUID()}.${ext}`;
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(fileName, blob, {
-      contentType: blob.type || (type === "video" ? "video/mp4" : "image/png"),
-      upsert: false,
-    });
+  const { error } = await uploadToStorage(BUCKET, fileName, blob, {
+    contentType: blob.type || (type === "video" ? "video/mp4" : "image/png"),
+    upsert: false,
+  });
 
   if (error) {
     console.error("Storage upload error:", error);

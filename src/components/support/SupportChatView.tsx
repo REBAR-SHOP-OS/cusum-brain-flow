@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -177,7 +178,7 @@ export function SupportChatView({ conversationId }: Props) {
     try {
       const ext = file.name.split(".").pop() || "png";
       const path = `${conversationId}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("support-attachments").upload(path, file);
+      const { error: upErr } = await uploadToStorage("support-attachments", path, file);
       if (upErr) throw upErr;
 
       const { data: urlData } = supabase.storage.from("support-attachments").getPublicUrl(path);

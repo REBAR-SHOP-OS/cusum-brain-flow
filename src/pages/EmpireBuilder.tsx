@@ -11,6 +11,7 @@ import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { MessageActions } from "@/components/chat/MessageActions";
 import { PatchReview } from "@/components/chat/PatchReview";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { analyzeZip } from "@/lib/zipAnalyzer";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -214,7 +215,7 @@ export default function EmpireBuilder() {
           for (const url of result.imageUrls) attachedFiles.push({ name: `${pf.file.name}-image`, url });
         } else if (pf.type === "image" || pf.type === "pdf") {
           const path = `chat-uploads/${Date.now()}-${pf.file.name}`;
-          const { error } = await supabase.storage.from("clearance-photos").upload(path, pf.file);
+          const { error } = await uploadToStorage("clearance-photos", path, pf.file);
           if (error) { console.error("Upload error:", error); continue; }
           const { data: urlData } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 3600);
           if (urlData?.signedUrl) attachedFiles.push({ name: pf.file.name, url: urlData.signedUrl });

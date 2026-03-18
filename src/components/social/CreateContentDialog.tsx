@@ -11,6 +11,7 @@ import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useSocialPosts } from "@/hooks/useSocialPosts";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { getSignedFileUrl } from "@/lib/storageUtils";
 
 interface CreateContentDialogProps {
@@ -82,7 +83,7 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
       // Upload to storage
       const ext = file.name.split(".").pop();
       const filePath = `social-media/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage.from("estimation-files").upload(filePath, file);
+      const { error } = await uploadToStorage("estimation-files", filePath, file);
       if (error) {
         toast({ title: "Upload failed", description: error.message, variant: "destructive" });
         continue;

@@ -5,6 +5,7 @@ import { FiberglassIcon, StirrupIcon, CageIcon, HookIcon, DowelIcon, WireMeshIco
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -220,7 +221,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
         const fileName = `${crypto.randomUUID()}.${fileExt}`;
         const filePath = `${user.id}/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage.from("estimation-files").upload(filePath, file);
+        const { error: uploadError } = await uploadToStorage("estimation-files", filePath, file);
         if (uploadError) {
           toast({ title: "Upload failed", description: `${file.name}: ${uploadError.message}`, variant: "destructive" });
           continue;

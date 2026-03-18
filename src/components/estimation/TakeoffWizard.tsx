@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { FileText, Upload, ArrowRight, ArrowLeft, Users, Briefcase, Sparkles, Loader2 } from "lucide-react";
 import TakeoffPipeline from "./TakeoffPipeline";
@@ -68,7 +69,7 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
       const urls: string[] = [];
       for (const file of initialFiles) {
         const path = `estimation/${Date.now()}_${file.name}`;
-        const { error } = await supabase.storage.from("estimation-files").upload(path, file);
+        const { error } = await uploadToStorage("estimation-files", path, file);
         if (error) { toast.error(`Upload failed: ${file.name}`); continue; }
         const { data: urlData } = supabase.storage.from("estimation-files").getPublicUrl(path);
         urls.push(urlData.publicUrl);
@@ -134,7 +135,7 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
     const urls: string[] = [];
     for (const file of Array.from(files)) {
       const path = `estimation/${Date.now()}_${file.name}`;
-      const { error } = await supabase.storage.from("estimation-files").upload(path, file);
+      const { error } = await uploadToStorage("estimation-files", path, file);
       if (error) { toast.error(`Upload failed: ${file.name}`); continue; }
       const { data: urlData } = supabase.storage.from("estimation-files").getPublicUrl(path);
       urls.push(urlData.publicUrl);

@@ -7,6 +7,7 @@ import { useAdminChat } from "@/hooks/useAdminChat";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { analyzeZip } from "@/lib/zipAnalyzer";
 
@@ -93,7 +94,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
 
   const uploadFile = async (file: File): Promise<string | null> => {
     const path = `chat-uploads/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("clearance-photos").upload(path, file);
+    const { error } = await uploadToStorage("clearance-photos", path, file);
     if (error) {
       console.error("Upload failed:", error);
       return null;

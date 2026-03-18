@@ -11,6 +11,7 @@ import { useTeamMessages, useSendMessage, useMyProfile } from "@/hooks/useTeamCh
 import { useProfiles } from "@/hooks/useProfiles";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { getPublicFileUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks } from "@/lib/chatFileUtils";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
@@ -189,7 +190,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     const results: Array<{ name: string; url: string; type: string; size: number }> = [];
     for (const pf of pendingFiles) {
       const path = `chat-uploads/${channelId}/${Date.now()}-${pf.name}`;
-      const { error } = await supabase.storage.from("team-chat-files").upload(path, pf.file);
+      const { error } = await uploadToStorage("team-chat-files", path, pf.file);
       if (error) throw new Error(`Upload failed for ${pf.name}: ${error.message}`);
       const publicUrl = getPublicFileUrl(path);
       results.push({

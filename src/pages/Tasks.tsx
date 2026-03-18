@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { cn } from "@/lib/utils";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { format, isPast, isToday, startOfDay } from "date-fns";
@@ -458,7 +459,7 @@ export default function Tasks() {
         setUploadingCommentFiles(true);
         for (const { file } of commentFiles) {
           const path = `${user?.id}/${crypto.randomUUID()}.png`;
-          const { error: uploadError } = await supabase.storage.from("estimation-files").upload(path, file);
+          const { error: uploadError } = await uploadToStorage("estimation-files", path, file);
           if (!uploadError) {
             const { data: { publicUrl } } = supabase.storage.from("estimation-files").getPublicUrl(path);
             content += (content ? "\n" : "") + publicUrl;
@@ -882,7 +883,7 @@ export default function Tasks() {
         const urls: string[] = [];
         for (const file of pendingFiles) {
           const path = `task-attachments/${data.id}/${Date.now()}-${file.name}`;
-          const { error: upErr } = await supabase.storage.from("clearance-photos").upload(path, file);
+          const { error: upErr } = await uploadToStorage("clearance-photos", path, file);
           if (!upErr) {
             const { data: signed } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 60 * 60 * 24 * 365);
             if (signed?.signedUrl) urls.push(signed.signedUrl);
@@ -923,7 +924,7 @@ export default function Tasks() {
     const newUrls: string[] = [];
     for (const file of files) {
       const path = `task-attachments/${selectedTask.id}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage.from("clearance-photos").upload(path, file);
+      const { error: upErr } = await uploadToStorage("clearance-photos", path, file);
       if (!upErr) {
         const { data: signed } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 60 * 60 * 24 * 365);
         if (signed?.signedUrl) newUrls.push(signed.signedUrl);

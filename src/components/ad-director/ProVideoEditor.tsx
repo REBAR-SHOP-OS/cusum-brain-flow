@@ -33,6 +33,7 @@ import { TransitionsTab } from "./editor/TransitionsTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
 import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 
 type EditorTab = "media" | "record" | "text" | "music" | "stock-video" | "stock-images" | "templates" | "graphics" | "transitions" | "brand-kit" | "script" | "settings" | "card-editor";
 
@@ -1002,7 +1003,7 @@ export function ProVideoEditor({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const path = `${user.id}/logo-${Date.now()}.${file.name.split('.').pop()}`;
-      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true });
+      const { error } = await uploadToStorage("brand-assets", path, file, { upsert: true });
       if (error) throw error;
       const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
       onUpdateBrand?.({ ...brand, logoUrl: data.publicUrl });
