@@ -13,6 +13,9 @@ import { DockChatProvider } from "@/contexts/DockChatContext";
 import { DockChatBar } from "@/components/chat/DockChatBar";
 import { useAuth } from "@/lib/auth";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { logNavigation } from "@/lib/activityLogger";
+import { useLocation } from "react-router-dom";
+import { useEffect } from "react";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -25,6 +28,14 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { user } = useAuth();
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const { isSuperAdmin } = useSuperAdmin();
+  const location = useLocation();
+
+  // Log navigation for all authenticated users
+  useEffect(() => {
+    if (user) {
+      logNavigation(location.pathname);
+    }
+  }, [location.pathname, user]);
 
   return (
     <RoleGuard>
@@ -65,8 +76,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             {/* Mobile bottom nav */}
             <MobileNavV2 />
 
-            {/* Floating Vizzy avatar — always visible for super admin */}
-            {isSuperAdmin && <FloatingVizzyButton />}
+            {/* Floating Vizzy avatar — visible for all @rebar.shop employees */}
+            {isInternal && <FloatingVizzyButton />}
 
             {/* Screenshot Feedback button — internal @rebar.shop users only */}
             {isInternal && <ScreenshotFeedbackButton />}

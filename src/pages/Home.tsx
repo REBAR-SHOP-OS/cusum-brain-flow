@@ -121,7 +121,7 @@ export default function Home() {
 
   // Reorder helpers: primary agent first
   const orderedHelpers = useMemo(() => {
-    let filtered = isSuperAdmin ? helpers : helpers.filter((h) => h.id !== "assistant");
+    let filtered = [...helpers]; // Vizzy now available to all employees
     // Hide accounting agent (Penny) from users without admin/accounting role
     if (!hasRole("admin") && !hasRole("accounting")) {
       filtered = filtered.filter((h) => h.id !== "accounting");

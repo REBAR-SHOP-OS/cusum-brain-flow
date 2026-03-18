@@ -67,12 +67,7 @@ export default function AgentWorkspace() {
     };
   }, [agentId, isSuperAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Block non-super-admins from accessing Vizzy
-  useEffect(() => {
-    if (agentId === "assistant" && !isSuperAdmin) {
-      navigate("/home", { replace: true });
-    }
-  }, [agentId, isSuperAdmin, navigate]);
+  // Vizzy now open to all @rebar.shop employees (admin-chat handles role-based context scoping)
 
   // Block users without required roles from restricted agents
   useEffect(() => {
