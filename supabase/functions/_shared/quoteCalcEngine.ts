@@ -772,6 +772,7 @@ export function generateExplanation(
   config: PricingConfig
 ): string {
   const lines: string[] = [];
+  const shipping = req.shipping || { delivery_required: false, distance_km: 0, truck_capacity_tons: 0, notes: "" };
   lines.push(`## Quote Explanation — ${result.summary.project_name}`);
   lines.push("");
 
@@ -812,7 +813,7 @@ export function generateExplanation(
   if (shipItems.length > 0) {
     lines.push("### Shipping");
     lines.push(
-      `${req.shipping?.distance_km ?? 0} km × $${config.shipping_per_km_cad}/km × ${result.pricing_method_summary.shipping_trips} trip(s) = $${shipItems[0].extended_price_cad}`
+      `${shipping.distance_km ?? 0} km × $${config.shipping_per_km_cad}/km × ${result.pricing_method_summary.shipping_trips} trip(s) = $${shipItems[0].extended_price_cad}`
     );
     lines.push("");
   }
