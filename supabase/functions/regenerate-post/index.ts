@@ -459,6 +459,40 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
     if (!newContent.caption || !newContent.imageText) throw new Error("Missing required fields in caption response");
     console.log("Generated content:", JSON.stringify({ title: newContent.title, imageText: newContent.imageText }));
 
+    // Post-processing: enforce slogan/caption separation
+    const sloganLower = (newContent.imageText || "").toLowerCase().trim();
+    const captionLower = (newContent.caption || "").toLowerCase();
+    if (sloganLower && captionLower) {
+      const sloganWords = sloganLower.split(/\s+/).filter((w: string) => w.length > 3);
+      const captionWords = captionLower.split(/\s+/);
+      const overlap = sloganWords.filter((w: string) => captionWords.includes(w));
+      const overlapRatio = sloganWords.length > 0 ? overlap.length / sloganWords.length : 0;
+      if (overlapRatio > 0.4) {
+        console.warn(`⚠️ [regenerate] Slogan/caption overlap: ${Math.round(overlapRatio * 100)}% — "${newContent.imageText}" vs caption. Requesting rewrite...`);
+        // Quick rewrite: ask AI for a new caption that avoids the slogan
+        try {
+          const rewriteRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [{ role: "user", content: `The image slogan is: "${newContent.imageText}". Write a COMPLETELY DIFFERENT promotional caption (2-3 sentences) for REBAR.SHOP rebar company in Ontario. The caption MUST describe services, delivery speed, product range, or customer benefits. It MUST NOT use ANY words from the slogan. Include 📍 9 Cedar Ave, Thornhill, Ontario 📞 647-260-9403 🌐 www.rebar.shop. Respond with ONLY the caption text, nothing else.` }],
+            }),
+          });
+          if (rewriteRes.ok) {
+            const rewriteData = await rewriteRes.json();
+            const rewrittenCaption = rewriteData.choices?.[0]?.message?.content?.trim();
+            if (rewrittenCaption && rewrittenCaption.length > 30) {
+              console.log(`✅ Caption rewritten to avoid slogan overlap.`);
+              newContent.caption = rewrittenCaption;
+            }
+          }
+        } catch (e) {
+          console.warn("Caption rewrite failed (non-critical):", e);
+        }
+      }
+    }
+
     // 3. Generate image using exact Pixel pipeline
     const logoUrl = await resolveLogoUrl();
 
