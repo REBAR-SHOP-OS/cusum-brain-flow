@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { CheckCircle2, RefreshCw, ZoomIn, Languages } from "lucide-react";
+import { CheckCircle2, RefreshCw, ZoomIn, Languages, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ImageEditDialog } from "./ImageEditDialog";
 
 export interface PixelPostData {
   id: string;
@@ -25,12 +26,15 @@ interface PixelPostCardProps {
   onView?: (post: PixelPostData) => void;
   onApprove?: (post: PixelPostData) => void;
   onRegenerate?: (post: PixelPostData) => void;
+  onEditImage?: (post: PixelPostData, newUrl: string) => void;
 }
 
 const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
-  ({ post, onView, onApprove, onRegenerate }, ref) => {
+  ({ post, onView, onApprove, onRegenerate, onEditImage }, ref) => {
     const [approved, setApproved] = useState(false);
     const [imageZoomOpen, setImageZoomOpen] = useState(false);
+    const [showImageEdit, setShowImageEdit] = useState(false);
+    const [currentImageUrl, setCurrentImageUrl] = useState(post.imageUrl);
 
     const handleApprove = () => {
       if (!approved) {
@@ -53,32 +57,52 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
         ref={ref}
         className="rounded-xl border border-border bg-card my-2 shadow-sm overflow-hidden max-w-sm"
       >
-        {/* 1. Image with zoom overlay */}
+        {/* 1. Image with zoom & edit overlay */}
         <div className="relative group cursor-pointer" onClick={() => setImageZoomOpen(true)}>
           <img
-            src={post.imageUrl}
+            src={currentImageUrl}
             alt="Post preview"
             className="w-full aspect-square object-cover"
           />
-          <button
-            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-            aria-label="Zoom image"
-            onClick={(e) => { e.stopPropagation(); setImageZoomOpen(true); }}
-          >
-            <ZoomIn className="w-5 h-5" />
-          </button>
+          <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              className="p-1.5 rounded-lg bg-black/50 text-white"
+              aria-label="Edit image"
+              onClick={(e) => { e.stopPropagation(); setShowImageEdit(true); }}
+            >
+              <Pencil className="w-5 h-5" />
+            </button>
+            <button
+              className="p-1.5 rounded-lg bg-black/50 text-white"
+              aria-label="Zoom image"
+              onClick={(e) => { e.stopPropagation(); setImageZoomOpen(true); }}
+            >
+              <ZoomIn className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Image zoom dialog */}
         <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
           <DialogContent className="max-w-[60vw] max-h-[70vh] p-2 border-none bg-background/95 backdrop-blur-sm flex items-center justify-center">
             <img
-              src={post.imageUrl}
+              src={currentImageUrl}
               alt="Zoomed preview"
               className="max-w-full max-h-[65vh] object-contain rounded-lg"
             />
           </DialogContent>
         </Dialog>
+
+        {/* Image edit dialog */}
+        <ImageEditDialog
+          open={showImageEdit}
+          onOpenChange={setShowImageEdit}
+          imageUrl={currentImageUrl}
+          onImageReady={(newUrl) => {
+            setCurrentImageUrl(newUrl);
+            onEditImage?.(post, newUrl);
+          }}
+        />
 
         {/* 2. Caption */}
         <div className="px-3 pt-3 pb-1">
