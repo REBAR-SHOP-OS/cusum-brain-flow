@@ -2,7 +2,7 @@ import { format } from "date-fns";
 import { CheckCircle, XCircle, Clock, Package, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { jsPDF } from "jspdf";
+const loadJsPDF = () => import("jspdf").then(m => m.jsPDF);
 import type { ConfirmedListRecord } from "@/hooks/usePurchasingDates";
 
 interface PurchasingConfirmedViewProps {
