@@ -115,6 +115,13 @@ export interface CageLine {
   total_cage_weight_kg: number;
   quantity: number;
   notes?: string;
+  // Structural details for auto-weight estimation when total_cage_weight_kg is 0
+  tie_bar_size?: string;
+  tie_diameter_inch?: number;
+  tie_quantity?: number;
+  vertical_bar_size?: string;
+  vertical_length_ft?: number;
+  vertical_quantity?: number;
 }
 
 export interface MeshLine {
@@ -315,18 +322,63 @@ export function computeShopDrawingCost(
   return { cost: 0, description: "No shop drawing pricing configured" };
 }
 
+/**
+ * Estimate cage weight from structural details when total_cage_weight_kg is 0.
+ * Ties weight = π × (diameter_inch × 0.0254) × mass_kg_per_m(tie_bar_size) × tie_quantity
+ * Verticals weight = vertical_length_ft × 0.3048 × mass_kg_per_m(vertical_bar_size) × vertical_quantity
+ */
+function estimateCageWeightKg(cage: CageLine, rebarSizes: RebarSizeRow[]): number {
+  let weight = 0;
+
+  // Ties/hoops weight
+  const tieDia = toNum(cage.tie_diameter_inch);
+  const tieQty = toNum(cage.tie_quantity);
+  const tieSize = cage.tie_bar_size ? normalizeBarSize(cage.tie_bar_size) : null;
+  if (tieDia > 0 && tieQty > 0 && tieSize) {
+    const sizeData = rebarSizes.find((r) => normalizeBarSize(r.bar_code) === tieSize);
+    if (sizeData) {
+      const circumferenceM = Math.PI * tieDia * 0.0254; // inches → meters
+      weight += circumferenceM * sizeData.mass_kg_per_m * tieQty;
+    }
+  }
+
+  // Vertical bars weight
+  const vertLen = toNum(cage.vertical_length_ft);
+  const vertQty = toNum(cage.vertical_quantity);
+  const vertSize = cage.vertical_bar_size ? normalizeBarSize(cage.vertical_bar_size) : null;
+  if (vertLen > 0 && vertQty > 0 && vertSize) {
+    const sizeData = rebarSizes.find((r) => normalizeBarSize(r.bar_code) === vertSize);
+    if (sizeData) {
+      weight += vertLen * 0.3048 * sizeData.mass_kg_per_m * vertQty;
+    }
+  }
+
+  return round3(weight);
+}
+
 export function computeCagePrice(
   cage: CageLine,
   config: PricingConfig,
-  scrapPct: number
-): { weight_kg: number; tonnage: number; cost: number } {
-  const raw_kg = toNum(cage.total_cage_weight_kg) * toNum(cage.quantity);
+  scrapPct: number,
+  rebarSizes?: RebarSizeRow[]
+): { weight_kg: number; tonnage: number; cost: number; auto_estimated: boolean } {
+  let perCageKg = toNum(cage.total_cage_weight_kg);
+  let autoEstimated = false;
+
+  // Auto-estimate weight if not provided but structural details exist
+  if (perCageKg <= 0 && rebarSizes) {
+    perCageKg = estimateCageWeightKg(cage, rebarSizes);
+    autoEstimated = perCageKg > 0;
+  }
+
+  const raw_kg = perCageKg * toNum(cage.quantity);
   const with_scrap = applyScrap(raw_kg, scrapPct);
   const tonnage = with_scrap / 1000;
   return {
     weight_kg: round3(with_scrap),
     tonnage: round3(tonnage),
     cost: round2(tonnage * config.cage_price_per_ton_cad),
+    auto_estimated: autoEstimated,
   };
 }
 
@@ -379,7 +431,7 @@ function normalizeScope(scope: any): EstimateRequest["scope"] {
     return arr.map((item: any) => {
       const out = { ...item };
       // Coerce known numeric fields
-      for (const key of ["quantity", "length_ft", "cut_length_ft", "total_cage_weight_kg", "unit_price_cad"]) {
+      for (const key of ["quantity", "length_ft", "cut_length_ft", "total_cage_weight_kg", "unit_price_cad", "tie_diameter_inch", "tie_quantity", "vertical_length_ft", "vertical_quantity"]) {
         if (key in out) out[key] = toNum(out[key]);
       }
       // Normalize bar_size if present
@@ -641,19 +693,23 @@ export function generateQuote(
 
   // 5. Cages
   for (const cage of scope.cages) {
-    const cageResult = computeCagePrice(cage, config, scrapPct);
+    const cageResult = computeCagePrice(cage, config, scrapPct, rebarSizes);
     cageWeightKg += cageResult.weight_kg;
+    const perCageKg = cage.quantity > 0 ? round3(cageResult.weight_kg / cage.quantity / (1 + scrapPct / 100)) : 0;
+    const weightLabel = cageResult.auto_estimated
+      ? `~${perCageKg} kg/cage (auto-estimated)`
+      : `${cage.total_cage_weight_kg} kg/cage`;
     lineItems.push({
       category: "Cages",
-      description: `${cage.cage_type} (${cage.total_cage_weight_kg} kg/cage × ${cage.quantity})`,
+      description: `${cage.cage_type} (${weightLabel} × ${cage.quantity})`,
       bar_size: "—",
       qty: cage.quantity,
-      length_or_weight: `${cage.total_cage_weight_kg} kg`,
+      length_or_weight: `${perCageKg} kg`,
       weight_kg: cageResult.weight_kg,
       tonnage: cageResult.tonnage,
-      unit_price_cad: round2(cageResult.cost / cage.quantity),
+      unit_price_cad: cage.quantity > 0 ? round2(cageResult.cost / cage.quantity) : 0,
       extended_price_cad: cageResult.cost,
-      notes: `$${config.cage_price_per_ton_cad}/ton + ${scrapPct}% scrap`,
+      notes: `$${config.cage_price_per_ton_cad}/ton + ${scrapPct}% scrap${cageResult.auto_estimated ? " (weight auto-estimated from structural details)" : ""}`,
     });
   }
 
