@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Mic, Loader2, Volume2 } from "lucide-react";
+import { X, Mic, Loader2 } from "lucide-react";
 import { useAzinVoiceInterpreter, InterpreterTranscript } from "@/hooks/useAzinVoiceInterpreter";
 import { cn } from "@/lib/utils";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
-import { Slider } from "@/components/ui/slider";
 
 interface Props {
   onClose: () => void;
@@ -14,13 +13,9 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
   const {
     state, transcripts, isSpeaking, mode,
     startSession, endSession,
-    getInputVolume, getOutputVolume, setVolume,
   } = useAzinVoiceInterpreter();
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [inputLevel, setInputLevel] = useState(0);
-  const [outputLevel, setOutputLevel] = useState(0);
-  const [volumeVal, setVolumeVal] = useState(80);
   const [connectingElapsed, setConnectingElapsed] = useState(0);
 
   // Auto-start
@@ -34,23 +29,6 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcripts]);
-
-  // Audio levels
-  useEffect(() => {
-    let animId: number;
-    const tick = () => {
-      setInputLevel(getInputVolume());
-      setOutputLevel(getOutputVolume());
-      animId = requestAnimationFrame(tick);
-    };
-    if (state === "connected") {
-      animId = requestAnimationFrame(tick);
-    } else {
-      setInputLevel(0);
-      setOutputLevel(0);
-    }
-    return () => { if (animId) cancelAnimationFrame(animId); };
-  }, [state, getInputVolume, getOutputVolume]);
 
   // Connecting timer
   useEffect(() => {
@@ -66,12 +44,6 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
   const handleClose = () => { endSession(); onClose(); };
 
-  const handleVolumeChange = (val: number[]) => {
-    const v = val[0];
-    setVolumeVal(v);
-    setVolume(v / 100);
-  };
-
   const statusLabel =
     state === "connecting"
       ? connectingElapsed >= 10 ? "Taking longer than expected..." : "Connecting to AZIN..."
@@ -80,8 +52,8 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
       : state === "connected" ? "Listening..."
       : "";
 
-  const glowIntensity = Math.max(outputLevel, inputLevel);
-  const orbScale = 1 + outputLevel * 0.25 + inputLevel * 0.1;
+  const isActive = mode === "speaking" || isSpeaking;
+  const orbScale = isActive ? 1.15 : 1;
 
   return (
     <motion.div
@@ -100,30 +72,34 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
       {/* Orb */}
       <div className="flex-1 flex flex-col items-center justify-center gap-6">
         <div className="relative">
-          <div className="absolute rounded-full transition-none" style={{
+          {/* Glow ring */}
+          <div className="absolute rounded-full transition-all duration-300" style={{
             inset: "-32px", borderRadius: "50%",
-            background: `radial-gradient(circle, hsl(var(--primary) / ${0.05 + glowIntensity * 0.25}) 0%, transparent 70%)`,
-            transform: `scale(${1 + glowIntensity * 0.4})`,
+            background: isActive
+              ? "radial-gradient(circle, hsl(var(--primary) / 0.3) 0%, transparent 70%)"
+              : "radial-gradient(circle, hsl(var(--primary) / 0.05) 0%, transparent 70%)",
+            transform: `scale(${isActive ? 1.3 : 1})`,
           }} />
-          <div className="absolute rounded-full border-2 transition-none" style={{
+          {/* Pulse ring */}
+          <div className="absolute rounded-full border-2 transition-all duration-300" style={{
             inset: "-24px", borderRadius: "50%",
-            borderColor: `hsl(172 66% 50% / ${0.3 + glowIntensity * 0.5})`,
-            transform: `scale(${1 + glowIntensity * 0.15})`,
+            borderColor: isActive ? "hsl(172 66% 50% / 0.7)" : "hsl(172 66% 50% / 0.3)",
+            transform: `scale(${isActive ? 1.1 : 1})`,
           }} />
           {state === "connecting" && (
             <div className="absolute inset-0 rounded-full animate-ping" style={{ margin: "-20px", borderRadius: "50%", background: "hsl(172 66% 50% / 0.15)" }} />
           )}
           <div
             className={cn(
-              "w-28 h-28 rounded-full overflow-hidden shadow-2xl transition-none",
+              "w-28 h-28 rounded-full overflow-hidden shadow-2xl transition-all duration-200",
               state === "connected" ? "ring-4 ring-primary/60" :
               state === "connecting" ? "ring-4 ring-primary/30" :
               state === "error" ? "ring-4 ring-destructive/50" : "ring-4 ring-muted"
             )}
             style={{
               transform: `scale(${state === "connected" ? orbScale : 1})`,
-              boxShadow: state === "connected"
-                ? `0 0 ${40 + glowIntensity * 60}px ${glowIntensity * 20}px hsl(172 66% 50% / ${0.15 + glowIntensity * 0.35})`
+              boxShadow: state === "connected" && isActive
+                ? "0 0 60px 15px hsl(172 66% 50% / 0.4)"
                 : state === "error" ? "0 0 20px 5px hsl(var(--destructive) / 0.3)" : "none",
             }}
           >
@@ -139,24 +115,6 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
         <p className={cn("text-sm font-medium transition-colors", state === "error" ? "text-destructive" : "text-muted-foreground")}>
           {statusLabel}
         </p>
-
-        {/* Audio levels */}
-        {state === "connected" && (
-          <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <Mic className="w-3 h-3" />
-              <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full transition-none" style={{ width: `${Math.min(inputLevel * 100, 100)}%` }} />
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Volume2 className="w-3 h-3" />
-              <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-none" style={{ width: `${Math.min(outputLevel * 100, 100)}%`, background: "hsl(172 66% 50%)" }} />
-              </div>
-            </div>
-          </div>
-        )}
 
         {state === "error" && (
           <button onClick={startSession} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
@@ -196,14 +154,8 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Volume + End */}
+      {/* End Call */}
       <div className="pb-8 flex flex-col items-center gap-4">
-        {state === "connected" && (
-          <div className="flex items-center gap-3 w-48">
-            <Volume2 className="w-4 h-4 text-muted-foreground shrink-0" />
-            <Slider value={[volumeVal]} onValueChange={handleVolumeChange} max={100} min={0} step={1} className="flex-1" />
-          </div>
-        )}
         <button onClick={handleClose} className="flex items-center gap-2 px-6 py-3 rounded-full bg-destructive text-destructive-foreground font-medium shadow-lg hover:bg-destructive/90 transition-colors">
           <Mic className="w-5 h-5" />
           End Call
