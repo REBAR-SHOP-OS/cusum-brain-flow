@@ -9,6 +9,7 @@ import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
 import { sendAgentMessage, AgentType, ChatMessage as AgentChatMessage, PixelPost, AttachedFile } from "@/lib/agent";
+import { backgroundAgentService } from "@/lib/backgroundAgentService";
 import { UploadedFile } from "@/components/chat/ChatInput";
 import { AgentSuggestions } from "@/components/agent/AgentSuggestions";
 import { agentSuggestions } from "@/components/agent/agentSuggestionsData";
