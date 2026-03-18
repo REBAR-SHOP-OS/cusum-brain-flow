@@ -458,7 +458,7 @@ export default function Tasks() {
         setUploadingCommentFiles(true);
         for (const { file } of commentFiles) {
           const path = `${user?.id}/${crypto.randomUUID()}.png`;
-          const { error: uploadError } = await supabase.storage.from("estimation-files").upload(path, file);
+          const { error: uploadError } = await uploadToStorage("estimation-files", path, file);
           if (!uploadError) {
             const { data: { publicUrl } } = supabase.storage.from("estimation-files").getPublicUrl(path);
             content += (content ? "\n" : "") + publicUrl;
