@@ -522,10 +522,11 @@ export function SeoKeywords() {
                   <div className="space-y-2">
                     {columnOrder.map((columnId) => {
                       const column = columnDefs.find((item) => item.id === columnId)!;
+                      const isLocked = columnId === "keyword";
                       return (
                         <div
                           key={columnId}
-                          draggable={!column.alwaysVisible}
+                          draggable={!isLocked}
                           onDragStart={() => setDraggedColumn(columnId)}
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={() => {
@@ -543,7 +544,7 @@ export function SeoKeywords() {
                             <Button type="button" variant="ghost" size="sm" onClick={() => moveColumn(columnId, 1)}>↓</Button>
                             <Switch
                               checked={columnVisibility[columnId]}
-                              disabled={column.alwaysVisible}
+                              disabled={isLocked}
                               onCheckedChange={(checked) => setColumnVisibility((current) => ({ ...current, [columnId]: checked }))}
                             />
                           </div>
