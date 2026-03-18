@@ -1,121 +1,96 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+## Vizzy Full Audit — All Problems Found
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+### CRITICAL BUGS
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+**1. Stale Closure: ERP context never reaches OpenAI (voice sessions start without data)**
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+In `useVizzyVoiceEngine.ts`, `startSession` calls `setErpContext(data.briefing)` then waits 150ms and calls `originalStartSession()`. But `originalStartSession` is captured from `engine.startSession`, which closes over the `fullInstructions` computed *before* `setErpContext` triggers a re-render. The 150ms delay isn't enough — React hasn't re-rendered yet, so the `useVoiceEngine` config still has the old instructions (without ERP data). The voice session connects to OpenAI with only the base prompt, zero business data.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+**Fix:** Use a ref to hold the latest instructions, and pass the instructions directly to `startSession` rather than relying on React state propagation. Or restructure to await the state update by moving the fetch *before* constructing the engine, or by passing instructions as a parameter to `voice-engine-token` at call time (which it already supports).
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+**2. `voice-engine-token` has NO authentication**
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+The edge function (`supabase/functions/voice-engine-token/index.ts`) does not validate the JWT or check auth at all. Anyone with the anon key can mint unlimited OpenAI Realtime ephemeral tokens. This is a direct cost vulnerability — each token creates an OpenAI billing session. Config confirms `verify_jwt = false` and the function code has zero auth checks.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+**Fix:** Add JWT verification in-code: extract the Bearer token, validate with `supabase.auth.getUser()`, and optionally check admin role.
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+**3. `vizzy-daily-brief` sends full system prompt to OpenAI through `voice-engine-token`**
 
-### Changes
+The entire `VIZZY_INSTRUCTIONS` + ERP briefing (potentially 50KB+) is sent as `instructions` in the body to `voice-engine-token`, which forwards it to OpenAI's session creation. This means the full ERP data (customer names, financials, AR/AP) is transmitted client→edge→OpenAI in a single POST body. If the context is very large, it may exceed OpenAI's session instruction limits.
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+---
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+### MODERATE ISSUES
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+**4. `vizzy-daily-brief` rate limit comment is wrong**
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+Line comment says "Rate limit: 5 per 10 minutes" but the actual RPC call uses `_max_requests: 10, _window_seconds: 300` (10 per 5 minutes). Misleading for maintenance.
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+**5. `VizzyDailyBriefing` fetches via `supabase.functions.invoke` but `useVizzyVoiceEngine` uses `invokeEdgeFunction`**
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+Two different invocation methods for the same edge function. `invokeEdgeFunction` has retry/timeout logic; `supabase.functions.invoke` does not. If the briefing takes >10s (Gemini processing a full ERP snapshot), the daily briefing widget may silently fail without retry.
 
-## Completed: Odoo Mirror Pipeline + Sales Department Patch
+**6. `VizzyPhotoButton` is not used in `VizzyVoiceChat`**
 
-### Assessment
-Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+The photo analysis button component exists but is not rendered inside the voice chat UI. The import exists in `VizzyPhotoButton.tsx` but is never imported by `VizzyVoiceChat.tsx`. Users cannot send photos during voice sessions.
 
-### Changes Implemented
+**7. `vizzyAutoReport` uses `as any` type casts for `vizzy_fix_requests`**
 
-**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
-- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
-- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
-- 30s cooldown per lead to prevent API rate limiting
-- Shows "Syncing…" indicator in header during refresh
-- Invalidates all lead-related query keys on completion
+The table is referenced via `as any` in both `vizzyAutoReport.ts` and `FixRequestQueue.tsx`, suggesting it may not be in the generated types. This means no type safety on inserts/selects and silent failures if schema changes.
 
-**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
-- New `mode: "single"` + `odoo_id` parameter
-- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
-- Logs stage change events if stage differs
-- Returns fast without touching other leads
+**8. `FixRequestQueue` dedup `.then(() => {})` fire-and-forget**
 
-**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
-- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
-- Logs reconciliation events with reason
-- Only archives non-terminal leads (skips already won/lost)
+Line 110: duplicate resolution is fire-and-forget with no error handling. If the update fails, duplicates persist and accumulate silently.
 
-**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
-- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
-- Improves timeline readability
+---
 
-**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
-- Footer shows "Synced X minutes ago" with color-coded status dot
-- Green: <5min, Yellow: <30min, Red: >30min
+### MINOR / UX ISSUES
 
-### Files Changed
-- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
-- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
-- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+**9. Floating button visible on all pages including `/vizzy` full-screen route**
 
-### No Changes Needed (Already Existed)
-- Sales Department sidebar, routes, pages, tables, hooks
-- Odoo chatter sync single mode (already existed)
-- OdooChatter unified timeline (already existed)
+The `FloatingVizzyButton` doesn't check `location.pathname === "/vizzy"` to hide itself. When the user navigates to `/vizzy` (full-screen voice chat), the floating button remains visible underneath.
 
-### Risks
-- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
-- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
+**10. Voice chat `orbitAngle` animation runs `requestAnimationFrame` infinitely**
+
+In `VizzyVoiceChat.tsx`, the orbit animation runs even when the component is backgrounded or the session has ended. While it has cleanup, it updates state on every frame (~60 setState/sec), which is wasteful. Should use CSS animation instead.
+
+**11. No session duration limit**
+
+Voice sessions have no max-duration timeout. An accidentally-open session could run indefinitely, consuming OpenAI Realtime billing continuously.
+
+---
+
+### Plan Summary
+
+| # | Issue | Severity | Files |
+|---|-------|----------|-------|
+| 1 | Stale closure — ERP data never sent to OpenAI | Critical | `useVizzyVoiceEngine.ts` |
+| 2 | No auth on `voice-engine-token` | Critical | `voice-engine-token/index.ts` |
+| 3 | Full ERP in instructions body (size risk) | Moderate | `useVizzyVoiceEngine.ts` |
+| 4 | Rate limit comment mismatch | Minor | `vizzy-daily-brief/index.ts` |
+| 5 | Inconsistent edge function invocation | Moderate | `VizzyDailyBriefing.tsx` |
+| 6 | Photo button not wired into voice chat | Minor | `VizzyVoiceChat.tsx` |
+| 7 | `as any` on vizzy_fix_requests | Minor | Multiple files |
+| 8 | Fire-and-forget dedup update | Minor | `FixRequestQueue.tsx` |
+| 9 | Floating button visible on /vizzy | Minor | `FloatingVizzyButton.tsx` |
+| 10 | RAF-based orbit animation (perf) | Minor | `VizzyVoiceChat.tsx` |
+| 11 | No voice session duration cap | Moderate | `useVoiceEngine.ts` |
+
+### Recommended Fix Priority
+
+**Phase 1 (Critical — do now):**
+- Fix #2: Add auth to `voice-engine-token` — validate JWT, check user exists
+- Fix #1: Restructure `useVizzyVoiceEngine` to use a ref for instructions so the engine always has the latest context when connecting
+
+**Phase 2 (Moderate — next):**
+- Fix #5: Switch `VizzyDailyBriefing` to use `invokeEdgeFunction` for retry/timeout
+- Fix #11: Add 30-minute max session timeout to `useVoiceEngine`
+- Fix #4: Correct the rate limit comment
+
+**Phase 3 (Polish):**
+- Fix #9: Hide floating button on `/vizzy`
+- Fix #10: Replace RAF orbit with CSS animation
+- Fix #6: Wire `VizzyPhotoButton` into voice chat UI
+
