@@ -12,12 +12,8 @@ interface VizzyVoiceChatProps {
 export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const {
     state: voiceState, transcripts, isSpeaking, mode,
-    startSession, endSession,
+    startSession, endSession, contextLoading,
   } = useVizzyVoiceEngine();
-  const { user } = useAuth();
-  const agent = getUserPrimaryAgent(user?.email);
-  const avatarImg = agent?.image || assistantHelper;
-  const agentName = agent?.name || "Vizzy";
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const [connectingElapsed, setConnectingElapsed] = useState(0);
