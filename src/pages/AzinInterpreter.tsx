@@ -58,15 +58,18 @@ export default function AzinInterpreter() {
             <p className={cn("text-sm font-medium", statusColor)}>{statusLabel}</p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={clearTranscripts}
-          disabled={committedTranscripts.length === 0}
-          className="text-muted-foreground hover:text-destructive"
-        >
-          <Trash2 className="w-5 h-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <AzinVoiceChatButton onClick={() => setShowVoiceChat(true)} />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={clearTranscripts}
+            disabled={committedTranscripts.length === 0}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
 
       {/* Split columns */}
