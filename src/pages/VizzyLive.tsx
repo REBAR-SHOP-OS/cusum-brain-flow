@@ -21,17 +21,13 @@ export default function VizzyLive() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(0);
 
-  // Super admin gate — redirect non-admins
-  if (!isSuperAdmin) {
-    return <Navigate to="/home" replace />;
-  }
-
   // Auto-start session on mount
   useEffect(() => {
+    if (!isSuperAdmin) return;
     startSession();
     return () => { endSession(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isSuperAdmin]);
 
   // Auto-scroll
   useEffect(() => {
@@ -54,6 +50,11 @@ export default function VizzyLive() {
     endSession();
     navigate("/home");
   }, [endSession, navigate]);
+
+  // Super admin gate — redirect non-admins
+  if (!isSuperAdmin) {
+    return <Navigate to="/home" replace />;
+  }
 
   const isActive = mode === "speaking" || isSpeaking;
   const isListening = state === "connected" && mode === "listening";
