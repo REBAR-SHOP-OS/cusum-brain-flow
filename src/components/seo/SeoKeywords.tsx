@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { GripVertical, Loader2, Minus, Search, Settings2, Sparkles, TrendingDown, TrendingUp, LayoutDashboard } from "lucide-react";
+import { GripVertical, Loader2, Minus, Search, Settings2, Sparkles, TrendingDown, TrendingUp, LayoutDashboard, Upload } from "lucide-react";
 import { useSemrushSync } from "@/hooks/useSemrushApi";
 import { SeoKeywordDetailsDialog } from "@/components/seo/SeoKeywordDetailsDialog";
+import { toast } from "sonner";
+import { read, utils } from "@e965/xlsx";
 
 const statusColors: Record<string, string> = {
   winner: "bg-success/10 text-success",
