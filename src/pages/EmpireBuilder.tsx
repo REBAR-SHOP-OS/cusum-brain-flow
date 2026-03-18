@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Plus, ArrowUp, X, FileText, Image as ImageIcon, Archive, Globe, Boxes, Activity, Brain, Bug, ChevronDown, ChevronRight, Copy, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { Message } from "@/components/chat/ChatMessage";
 import { sendAgentMessage, ChatMessage as AgentChatMessage, AttachedFile } from "@/lib/agent";
+import { backgroundAgentService } from "@/lib/backgroundAgentService";
 import { useChatSessions } from "@/hooks/useChatSessions";
 import { useAuth } from "@/lib/auth";
 import { agentConfigs } from "@/components/agent/agentConfigs";
