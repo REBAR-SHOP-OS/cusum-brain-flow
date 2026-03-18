@@ -370,6 +370,7 @@ async function generatePixelImage(
           model: attempt.model,
           messages: [{ role: "user", content: contentParts }],
           modalities: ["image", "text"],
+          ...(aspectRatio && aspectRatio !== "1:1" ? { image_generation_config: { aspectRatio } } : {}),
         }),
       });
 
