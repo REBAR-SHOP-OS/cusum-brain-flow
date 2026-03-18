@@ -221,8 +221,28 @@ export default function SocialMediaManager() {
   const handlePrevWeek = () => setWeekStart((prev) => addDays(prev, -7));
   const handleNextWeek = () => setWeekStart((prev) => addDays(prev, 7));
 
-  const handleSchedule = (post: SocialPost) => {
-    updatePost.mutate({ id: post.id, qa_status: "approved", status: "scheduled" });
+  const handleSchedule = async (post: SocialPost) => {
+    if (post.platform === "unassigned") {
+      // Use schedulePost with delete_original to clone into platform-specific posts and remove unassigned card
+      const { schedulePost } = await import("@/lib/schedulePost");
+      const result = await schedulePost({
+        post_id: post.id,
+        scheduled_date: post.scheduled_date || new Date().toISOString(),
+        qa_status: "scheduled",
+        status: "scheduled",
+        platform: post.platform,
+        page_name: post.page_name,
+        delete_original: true,
+        title: post.title,
+        extra_combos: post.page_name ? [{ platform: post.platform, page: post.page_name }] : [],
+      });
+      if (!result.success) {
+        console.error("[handleSchedule] schedulePost failed for unassigned:", result.error);
+      }
+      queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+    } else {
+      updatePost.mutate({ id: post.id, qa_status: "approved", status: "scheduled" });
+    }
     setSelectedPost(null);
   };
 
