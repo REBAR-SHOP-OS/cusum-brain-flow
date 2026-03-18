@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       query = query.in("id", keyword_ids);
     }
 
-    const { data: keywords } = await query.limit(100);
+    const { data: keywords } = await query.limit(2000);
     if (!keywords?.length) {
       return new Response(JSON.stringify({ success: true, checked: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

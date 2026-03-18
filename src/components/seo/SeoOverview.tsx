@@ -122,7 +122,8 @@ export function SeoOverview() {
       const { data } = await supabase
         .from("seo_page_ai")
         .select("sessions, conversions, revenue, seo_score")
-        .eq("domain_id", domain!.id);
+        .eq("domain_id", domain!.id)
+        .range(0, 9999);
       const all = data || [];
       const totalSessions = all.reduce((s: number, p: any) => s + (p.sessions || 0), 0);
       const totalConversions = all.reduce((s: number, p: any) => s + (p.conversions || 0), 0);

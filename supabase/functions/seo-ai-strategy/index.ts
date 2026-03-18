@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
         .select("*")
         .eq("domain_id", domain_id)
         .order("seo_score", { ascending: true })
-        .limit(100),
+        .limit(5000),
       supabase
         .from("seo_tasks")
         .select("title, status")
