@@ -134,8 +134,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             }}
           >
             <img
-              src={avatarImg}
-              alt={agentName}
+               src={vizzyAvatar}
+               alt="Vizzy"
               className="w-full h-full object-cover"
               draggable={false}
             />
