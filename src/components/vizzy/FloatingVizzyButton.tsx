@@ -4,10 +4,8 @@ import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useAuth } from "@/lib/auth";
-import { getUserPrimaryAgent } from "@/lib/userAgentMap";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
-import assistantHelper from "@/assets/helpers/assistant-helper.png";
+import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { VizzyVoiceChat } from "./VizzyVoiceChat";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
