@@ -20,6 +20,7 @@ import { Message } from "./ChatMessage";
 import { CalChatMessage } from "./CalChatMessage";
 import { CalStepProgress } from "./CalStepProgress";
 import { sendAgentMessage } from "@/lib/agent";
+import { backgroundAgentService } from "@/lib/backgroundAgentService";
 import { UploadedFile } from "./ChatInput";
 
 type CalculationMode = "smart" | "step-by-step" | null;
