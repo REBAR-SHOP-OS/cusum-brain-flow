@@ -311,9 +311,39 @@ export async function executeToolCall(
 
       if (qeRes.ok) {
         const qeData = await qeRes.json();
-        result.result = { success: true, ...qeData };
+        // ── $0 quote interception: block "successful" quotes with zero total ──
+        const grandTotal = qeData?.summary?.grand_total ?? qeData?.grand_total ?? 0;
+        const hasLineItems = (er?.scope?.straight_rebar_lines?.length > 0 ||
+          er?.scope?.fabricated_rebar_lines?.length > 0 ||
+          er?.scope?.cages?.length > 0 ||
+          er?.scope?.ties_circular?.length > 0 ||
+          er?.scope?.dowels?.length > 0 ||
+          er?.scope?.mesh?.length > 0);
+        if (grandTotal <= 0 && hasLineItems) {
+          console.warn("[generate_sales_quote] $0 quote intercepted despite line items in request");
+          result.result = {
+            success: false,
+            quote_recovery: true,
+            pricing_status: "failed",
+            failure_reason: "grand_total_zero",
+            missing_inputs: qeData?.missing_inputs_questions || [],
+            message: "The quote returned $0 despite having line items. This usually means required details are missing (e.g. cage weight, bar size not in pricing). Please ask the customer for the missing information and try again.",
+            original_result: qeData,
+          };
+        } else {
+          result.result = { success: true, ...qeData };
+        }
       } else {
-        result.result = { success: false, error: await qeRes.text() };
+        const errBody = await qeRes.text();
+        let parsedErr: any = {};
+        try { parsedErr = JSON.parse(errBody); } catch {}
+        result.result = {
+          success: false,
+          quote_recovery: true,
+          error: parsedErr?.error || errBody,
+          missing_inputs: parsedErr?.failure_details?.missing_inputs || [],
+          failure_reason: parsedErr?.failure_reason || "engine_error",
+        };
       }
     }
 

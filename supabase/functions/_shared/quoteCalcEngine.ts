@@ -479,11 +479,19 @@ export function validateEstimateRequest(
   }
 
   for (const cage of scope.cages) {
+    const cid = cage.line_id || "unknown";
     if (toNum(cage.total_cage_weight_kg) <= 0) {
-      questions.push(`Cage ${cage.line_id}: total_cage_weight_kg is 0 or missing.`);
+      questions.push(`Cage ${cid}: total_cage_weight_kg is 0 or missing. Please provide the estimated weight per cage in kg.`);
     }
     if (cage.quantity <= 0) {
-      questions.push(`Cage ${cage.line_id}: quantity is 0 or missing.`);
+      questions.push(`Cage ${cid}: quantity is 0 or missing.`);
+    }
+    // Require key fabrication details instead of silently accepting incomplete cages
+    if (!cage.tie_bar_size) {
+      questions.push(`Cage ${cid}: tie_bar_size is missing. What bar size are the ties/hoops? (e.g. 10M, 15M)`);
+    }
+    if (!cage.vertical_bar_size) {
+      questions.push(`Cage ${cid}: vertical_bar_size is missing. What bar size are the vertical bars? (e.g. 20M, 25M)`);
     }
   }
 
