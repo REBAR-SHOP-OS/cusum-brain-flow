@@ -57,20 +57,29 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
         ref={ref}
         className="rounded-xl border border-border bg-card my-2 shadow-sm overflow-hidden max-w-sm"
       >
-        {/* 1. Image with zoom overlay */}
+        {/* 1. Image with zoom & edit overlay */}
         <div className="relative group cursor-pointer" onClick={() => setImageZoomOpen(true)}>
           <img
-            src={post.imageUrl}
+            src={currentImageUrl}
             alt="Post preview"
             className="w-full aspect-square object-cover"
           />
-          <button
-            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-            aria-label="Zoom image"
-            onClick={(e) => { e.stopPropagation(); setImageZoomOpen(true); }}
-          >
-            <ZoomIn className="w-5 h-5" />
-          </button>
+          <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              className="p-1.5 rounded-lg bg-black/50 text-white"
+              aria-label="Edit image"
+              onClick={(e) => { e.stopPropagation(); setShowImageEdit(true); }}
+            >
+              <Pencil className="w-5 h-5" />
+            </button>
+            <button
+              className="p-1.5 rounded-lg bg-black/50 text-white"
+              aria-label="Zoom image"
+              onClick={(e) => { e.stopPropagation(); setImageZoomOpen(true); }}
+            >
+              <ZoomIn className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Image zoom dialog */}
