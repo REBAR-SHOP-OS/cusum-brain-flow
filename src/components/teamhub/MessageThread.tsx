@@ -181,6 +181,12 @@ export function MessageThread({
     setIsUploading(true);
     const newAttachments: ChatAttachment[] = [];
 
+    const sessionOk = await ensureSession();
+    if (!sessionOk) {
+      setIsUploading(false);
+      return;
+    }
+
     for (const file of Array.from(files)) {
       if (file.size > 50 * 1024 * 1024) {
         toast.error(`${file.name} is too large (max 50MB)`);
@@ -193,7 +199,7 @@ export function MessageThread({
         .upload(path, file);
 
       if (error) {
-        toast.error(`Failed to upload ${file.name}`);
+        toast.error(`Failed to upload ${file.name}: ${error.message}`);
         continue;
       }
 
