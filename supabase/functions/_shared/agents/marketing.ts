@@ -101,6 +101,7 @@ Scientific explanations, technical specifications, engineering terminology, mate
 "designed for", "built for", "crafted for", "trusted by", "relied upon by", "crafted for performance", "your go-to choice"
 
 ### MANDATORY OUTPUT FORMAT (in this exact order):
+⚠️ This is the COMPLETE response. Do NOT add ANY text before item 1. No introduction, no creative direction description, no explanation of what was created. Start DIRECTLY with the image.
 
 1. **Image** — You MUST embed the image using markdown image syntax: \`![Product Name](IMAGE_URL)\`
    Example: \`![Rebar Stirrups](https://rzqonxnowjrtbueauziu.supabase.co/storage/v1/object/public/social-images/abc.png)\`
