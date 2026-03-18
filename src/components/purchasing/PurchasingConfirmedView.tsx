@@ -17,8 +17,9 @@ type SnapshotItem = {
   priority: string;
 };
 
-function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+async function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
+  const JsPDF = await loadJsPDF();
+  const doc = new JsPDF({ unit: "mm", format: "a4" });
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
   const margin = 15;
