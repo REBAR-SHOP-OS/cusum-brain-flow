@@ -73,14 +73,32 @@ export function SeoLinks() {
   const crawlMutation = useMutation({
     mutationFn: async () => {
       if (!domain) throw new Error("No domain configured");
-      return await invokeEdgeFunction("seo-link-audit", {
+
+      // Phase 1: Crawl all pages and extract links
+      toast.info("Phase 1/2: Extracting links from all pages...");
+      await invokeEdgeFunction("seo-link-audit", {
         phase: "crawl",
         domain_id: domain.id,
         company_id: domain.company_id,
       }, { timeoutMs: 120000 });
+
+      // Phase 2: Check external links for broken status (iterative)
+      toast.info("Phase 2/2: Checking external links...");
+      let remaining = 1;
+      let totalBroken = 0;
+      while (remaining > 0) {
+        const checkResult = await invokeEdgeFunction<{ broken: number; remaining: number }>("seo-link-audit", {
+          phase: "check_broken",
+          domain_id: domain.id,
+        }, { timeoutMs: 60000 });
+        totalBroken += checkResult.broken || 0;
+        remaining = checkResult.remaining || 0;
+      }
+
+      return { totalBroken };
     },
-    onSuccess: (data: any) => {
-      toast.success(`Audit complete: ${data.stats?.total || 0} links found, ${data.stats?.broken || 0} broken, ${data.stats?.opportunities || 0} opportunities`);
+    onSuccess: (data) => {
+      toast.success(`Audit complete! Found ${data.totalBroken} broken links.`);
       qc.invalidateQueries({ queryKey: ["seo-link-audits"] });
     },
     onError: (e) => toast.error(`Crawl failed: ${e.message}`),
