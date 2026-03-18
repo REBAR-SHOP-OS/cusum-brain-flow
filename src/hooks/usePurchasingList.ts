@@ -75,8 +75,22 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     return () => { supabase.removeChannel(channel); };
   }, [fetchItems]);
 
+  const refreshSessionIfNeeded = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      const { error } = await supabase.auth.refreshSession();
+      if (error) {
+        toast.error("Session expired – please log in again");
+        await supabase.auth.signOut({ scope: "local" });
+        return false;
+      }
+    }
+    return true;
+  }, []);
+
   const addItem = useCallback(async (title: string, quantity = 1, category?: string, priority = "medium", dueDate?: string) => {
     if (!user) return;
+    if (!(await refreshSessionIfNeeded())) return false;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
@@ -90,13 +104,13 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       created_by: user.id,
     });
     if (error) {
-      toast.error("Error adding item");
+      toast.error(`Error adding item: ${error.message}`);
       console.error("addItem error:", error);
       return false;
     }
     toast.success("Item added");
     return true;
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const addItemAsRejected = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
