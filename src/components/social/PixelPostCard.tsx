@@ -6,6 +6,7 @@ import {
   DialogContent,
 } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ImageEditDialog } from "./ImageEditDialog";
 
 export interface PixelPostData {
   id: string;
