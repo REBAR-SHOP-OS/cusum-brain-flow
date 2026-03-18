@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useSalesQuotations, SalesQuotation, generateQuotationNumber } from "@/hooks/useSalesQuotations";
+import { useSalesQuotations, SalesQuotation, generateQuotationNumber, getStatusInfo } from "@/hooks/useSalesQuotations";
 import { Button } from "@/components/ui/button";
 import { Plus, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
