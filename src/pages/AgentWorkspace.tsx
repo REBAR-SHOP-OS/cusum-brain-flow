@@ -761,8 +761,8 @@ export default function AgentWorkspace() {
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3 group-hover:bg-primary/20 transition-colors">
                     <LayoutGrid className="w-6 h-6 text-primary" />
                   </div>
-                  <h3 className="text-base font-bold text-foreground mb-1">📋 ساخت عکس براساس دستور عمل</h3>
-                  <p className="text-sm text-muted-foreground">۵ پست آماده برای محصولات مختلف</p>
+                  <h3 className="text-base font-bold text-foreground mb-1">📋 Create Images from Recipe</h3>
+                  <p className="text-sm text-muted-foreground">5 ready-made posts for different products</p>
                 </button>
               </div>
               )
