@@ -431,7 +431,7 @@ function normalizeScope(scope: any): EstimateRequest["scope"] {
     return arr.map((item: any) => {
       const out = { ...item };
       // Coerce known numeric fields
-      for (const key of ["quantity", "length_ft", "cut_length_ft", "total_cage_weight_kg", "unit_price_cad"]) {
+      for (const key of ["quantity", "length_ft", "cut_length_ft", "total_cage_weight_kg", "unit_price_cad", "tie_diameter_inch", "tie_quantity", "vertical_length_ft", "vertical_quantity"]) {
         if (key in out) out[key] = toNum(out[key]);
       }
       // Normalize bar_size if present
