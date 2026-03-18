@@ -550,21 +550,23 @@ export function MessageThread({
                                 </div>
                               )
 
-                          {/* Translation indicator */}
-                          {!isMine && msg.original_language !== myLang && msg.translations[myLang] && (
-                            <button
-                              onClick={() => toggleOriginal(msg.id)}
-                              className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-                            >
-                              <Languages className="w-3 h-3" />
-                              {showOriginal.has(msg.id) ? (
-                                <span>Showing original ({senderLangInfo.flag} {senderLangInfo.name}) · Show translation</span>
-                              ) : (
-                                <span>Translated from {senderLangInfo.flag} {senderLangInfo.name} · Show original</span>
+                              {/* Translation indicator */}
+                              {!isMine && msg.original_language !== myLang && msg.translations[myLang] && (
+                                <button
+                                  onClick={() => toggleOriginal(msg.id)}
+                                  className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                                >
+                                  <Languages className="w-3 h-3" />
+                                  {showOriginal.has(msg.id) ? (
+                                    <span>Showing original ({senderLangInfo.flag} {senderLangInfo.name}) · Show translation</span>
+                                  ) : (
+                                    <span>Translated from {senderLangInfo.flag} {senderLangInfo.name} · Show original</span>
+                                  )}
+                                </button>
                               )}
-                            </button>
-                          )}
-                        </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Message actions (on hover) */}
