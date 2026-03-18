@@ -13,6 +13,9 @@ import { DockChatProvider } from "@/contexts/DockChatContext";
 import { DockChatBar } from "@/components/chat/DockChatBar";
 import { useAuth } from "@/lib/auth";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { logNavigation } from "@/lib/activityLogger";
+import { useLocation } from "react-router-dom";
+import { useEffect } from "react";
 
 interface AppLayoutProps {
   children: React.ReactNode;
