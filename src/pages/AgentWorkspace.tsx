@@ -552,13 +552,17 @@ export default function AgentWorkspace() {
             <span className="text-xs text-muted-foreground">— {config.role}</span>
             <div className="flex-1" />
           </div>
-          <PurchasingListPanel
-            filterDate={purchasingDate}
-            onFilterDateChange={(d) => {
-              setPurchasingDate(d);
-              setActivePurchasingDateStr(d ? d.toISOString().split("T")[0] : null);
-            }}
-          />
+          {activePurchasingDateStr && getConfirmedSnapshot(activePurchasingDateStr) ? (
+            <PurchasingConfirmedView record={getConfirmedSnapshot(activePurchasingDateStr)!} />
+          ) : (
+            <PurchasingListPanel
+              filterDate={purchasingDate}
+              onFilterDateChange={(d) => {
+                setPurchasingDate(d);
+                setActivePurchasingDateStr(d ? d.toISOString().split("T")[0] : null);
+              }}
+            />
+          )}
         </div>
       ) : (
       <div className="flex-1 flex flex-col min-w-0">
