@@ -115,6 +115,13 @@ export interface CageLine {
   total_cage_weight_kg: number;
   quantity: number;
   notes?: string;
+  // Structural details for auto-weight estimation when total_cage_weight_kg is 0
+  tie_bar_size?: string;
+  tie_diameter_inch?: number;
+  tie_quantity?: number;
+  vertical_bar_size?: string;
+  vertical_length_ft?: number;
+  vertical_quantity?: number;
 }
 
 export interface MeshLine {
