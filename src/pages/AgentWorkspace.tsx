@@ -934,14 +934,27 @@ function EventCalendarSection({ onGenerate }: { onGenerate: (event: CalendarEven
                 </div>
 
                 {/* Expanded detail panel */}
-                {isExpanded && event.description && (
+                {isExpanded && (event.description || PERSIAN_EVENT_INFO[event.name]) && (
                   <div className="px-4 pb-3 pt-1 bg-muted/30 border-t border-border">
                     <p className="text-xs font-semibold text-primary mb-1">
                       📅 {formatFullDate(event.month, event.day)}
                     </p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {event.description}
-                    </p>
+                    {event.description && (
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {event.description}
+                      </p>
+                    )}
+                    {PERSIAN_EVENT_INFO[event.name] && (
+                      <>
+                        <Separator className="my-2" />
+                        <p className="text-xs font-semibold text-primary mb-1" dir="rtl">
+                          🇮🇷 {PERSIAN_EVENT_INFO[event.name].summary}
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-relaxed" dir="rtl">
+                          {PERSIAN_EVENT_INFO[event.name].details}
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
