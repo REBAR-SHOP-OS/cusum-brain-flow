@@ -333,3 +333,9 @@
     visibility: visible !important;
   }
 }
+
+/* Vizzy orbiting dot animation */
+@keyframes vizzy-orbit {
+  from { transform: rotate(0deg) translateX(72px) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(72px) rotate(-360deg); }
+}

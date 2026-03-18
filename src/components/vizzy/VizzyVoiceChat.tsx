@@ -149,7 +149,6 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
                 background: "hsl(172 66% 55%)",
                 boxShadow: "0 0 12px 3px hsl(172 66% 50% / 0.6)",
                 animation: "vizzy-orbit 5s linear infinite",
-                offsetPath: "circle(72px)",
               }}
             />
           )}
