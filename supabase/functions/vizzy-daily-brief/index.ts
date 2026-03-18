@@ -40,8 +40,8 @@ serve(async (req) => {
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
       _user_id: user.id,
       _function_name: "vizzy-daily-brief",
-      _max_requests: 5,
-      _window_seconds: 600,
+      _max_requests: 10,
+      _window_seconds: 300,
     });
     if (allowed === false) {
       return new Response(

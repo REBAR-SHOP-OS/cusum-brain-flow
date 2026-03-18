@@ -44,7 +44,12 @@ export function DockChatBar() {
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
   const { unreadSenderIds } = useUnreadSenders();
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const [launcherOpen, setLauncherOpen] = useState(false);
+
+  useEffect(() => {
+    setPortalContainer(getFloatingPortalContainer());
+  }, []);
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
     storageKey: "dock-chat-pos",
@@ -117,6 +122,8 @@ export function DockChatBar() {
   // Calculate visible (non-minimized) boxes for positioning
   const BOX_WIDTH = 330;
   const LAUNCHER_OFFSET = 80; // space for the launcher pill
+
+  if (!portalContainer) return null;
 
   return createPortal(
     <>
