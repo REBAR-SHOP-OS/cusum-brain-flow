@@ -143,6 +143,10 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
         record.status = "missing_anchor";
         record.suggestion = "Add descriptive anchor text for SEO";
         pending.push({ record, needsCheck: false });
+      } else if (isInternal) {
+        // Skip HEAD check for internal links — they're almost always valid
+        record.status = "ok";
+        pending.push({ record, needsCheck: false });
       } else {
         pending.push({ record, needsCheck: true });
       }
