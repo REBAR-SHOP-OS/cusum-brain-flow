@@ -48,7 +48,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
     state === "connecting"
       ? connectingElapsed >= 10 ? "Taking longer than expected..." : "Connecting to AZIN..."
       : state === "error" ? "Connection failed"
-      : mode === "speaking" || isSpeaking ? "AZIN is translating..."
+      : mode === "speaking" || isSpeaking ? "Translating..."
       : state === "connected" ? "Listening..."
       : "";
 
@@ -76,30 +76,30 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
           <div className="absolute rounded-full transition-all duration-300" style={{
             inset: "-32px", borderRadius: "50%",
             background: isActive
-              ? "radial-gradient(circle, hsl(var(--primary) / 0.3) 0%, transparent 70%)"
-              : "radial-gradient(circle, hsl(var(--primary) / 0.05) 0%, transparent 70%)",
+              ? "radial-gradient(circle, hsl(245 58% 55% / 0.3) 0%, transparent 70%)"
+              : "radial-gradient(circle, hsl(245 58% 55% / 0.05) 0%, transparent 70%)",
             transform: `scale(${isActive ? 1.3 : 1})`,
           }} />
           {/* Pulse ring */}
           <div className="absolute rounded-full border-2 transition-all duration-300" style={{
             inset: "-24px", borderRadius: "50%",
-            borderColor: isActive ? "hsl(172 66% 50% / 0.7)" : "hsl(172 66% 50% / 0.3)",
+            borderColor: isActive ? "hsl(245 58% 55% / 0.7)" : "hsl(245 58% 55% / 0.3)",
             transform: `scale(${isActive ? 1.1 : 1})`,
           }} />
           {state === "connecting" && (
-            <div className="absolute inset-0 rounded-full animate-ping" style={{ margin: "-20px", borderRadius: "50%", background: "hsl(172 66% 50% / 0.15)" }} />
+            <div className="absolute inset-0 rounded-full animate-ping" style={{ margin: "-20px", borderRadius: "50%", background: "hsl(245 58% 55% / 0.15)" }} />
           )}
           <div
             className={cn(
               "w-28 h-28 rounded-full overflow-hidden shadow-2xl transition-all duration-200",
-              state === "connected" ? "ring-4 ring-primary/60" :
-              state === "connecting" ? "ring-4 ring-primary/30" :
+              state === "connected" ? "ring-4 ring-indigo-500/60" :
+              state === "connecting" ? "ring-4 ring-indigo-500/30" :
               state === "error" ? "ring-4 ring-destructive/50" : "ring-4 ring-muted"
             )}
             style={{
               transform: `scale(${state === "connected" ? orbScale : 1})`,
               boxShadow: state === "connected" && isActive
-                ? "0 0 60px 15px hsl(172 66% 50% / 0.4)"
+                ? "0 0 60px 15px hsl(245 58% 55% / 0.4)"
                 : state === "error" ? "0 0 20px 5px hsl(var(--destructive) / 0.3)" : "none",
             }}
           >
@@ -145,7 +145,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
               )}
             >
               <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
-                {t.role === "user" ? "You" : "AZIN"}
+                {t.role === "user" ? "🎙️ Original" : "🔄 Translation"}
               </span>
               {t.text}
             </motion.div>

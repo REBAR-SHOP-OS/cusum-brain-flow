@@ -108,7 +108,7 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      ctx.strokeStyle = "hsla(217, 91%, 60%, 0.3)";
+      ctx.strokeStyle = "hsla(245, 58%, 55%, 0.3)";
       ctx.lineWidth = 2.5 * dpr;
       ctx.lineCap = "round";
       ctx.stroke();
@@ -144,8 +144,8 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
       const y2 = cy + Math.sin(angle) * (innerR + barH);
 
       // Gradient from blue to cyan based on amplitude
-      const hue = 210 + value * 30;
-      const lightness = 55 + value * 15;
+      const hue = 245 + value * 20;
+      const lightness = 50 + value * 15;
       const alpha = 0.5 + value * 0.5;
 
       ctx.beginPath();
@@ -183,12 +183,12 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
       {isConnected && (
         <>
           <motion.div
-            className="absolute w-24 h-24 rounded-full border-2 border-blue-400/20"
+            className="absolute w-24 h-24 rounded-full border-2 border-indigo-400/20"
             animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0, 0.4] }}
             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute w-28 h-28 rounded-full border border-blue-400/10"
+            className="absolute w-28 h-28 rounded-full border border-indigo-400/10"
             animate={{ scale: [1, 1.4, 1], opacity: [0.3, 0, 0.3] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
           />
@@ -203,8 +203,8 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
         className={cn(
           "relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 focus:outline-none",
           isConnected
-            ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-[0_0_30px_rgba(59,130,246,0.5)]"
-            : "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-105",
+            ? "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-[0_0_30px_rgba(99,102,241,0.5)]"
+            : "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105",
           isConnecting && "opacity-60 cursor-wait animate-pulse"
         )}
       >
