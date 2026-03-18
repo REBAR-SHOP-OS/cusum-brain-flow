@@ -739,6 +739,14 @@ export default function AgentWorkspace() {
                       Generate All Slots
                     </Button>
                   </div>
+
+                  {/* ── Event Calendar Section ── */}
+                  <EventCalendarSection
+                    onGenerate={(event) => {
+                      setShowRecipeTable(false);
+                      handleSend(`Generate a post for ${event.name} — theme: ${event.contentTheme}`);
+                    }}
+                  />
                 </div>
               ) : (
               <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xl mb-6">
