@@ -681,33 +681,33 @@ export default function AgentWorkspace() {
                 /* ── Recipe Schedule Table ── */
                 <div className="w-full max-w-2xl mb-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-foreground">📋 دستور عمل تولید محتوا</h2>
+                    <h2 className="text-lg font-bold text-foreground">📋 Content Generation Recipe</h2>
                     <Button variant="ghost" size="sm" onClick={() => setShowRecipeTable(false)}>
-                      ← بازگشت
+                      ← Back
                     </Button>
                   </div>
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border bg-muted/50">
-                          <th className="px-4 py-3 text-right font-semibold text-foreground">ساعت</th>
-                          <th className="px-4 py-3 text-right font-semibold text-foreground">موضوع</th>
-                          <th className="px-4 py-3 text-right font-semibold text-foreground">محصول</th>
-                          <th className="px-4 py-3 text-center font-semibold text-foreground">عملیات</th>
+                          <th className="px-4 py-3 text-left font-semibold text-foreground">Time</th>
+                          <th className="px-4 py-3 text-left font-semibold text-foreground">Theme</th>
+                          <th className="px-4 py-3 text-left font-semibold text-foreground">Product</th>
+                          <th className="px-4 py-3 text-center font-semibold text-foreground">Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {[
-                          { time: "۶:۳۰", theme: "انگیزشی / قدرت", product: "خاموت میلگرد", slot: 1 },
-                          { time: "۷:۳۰", theme: "تبلیغاتی خلاقانه", product: "کیج میلگرد", slot: 2 },
-                          { time: "۸:۰۰", theme: "استحکام و مقیاس", product: "میلگرد فایبرگلاس", slot: 3 },
-                          { time: "۱۲:۳۰", theme: "نوآوری و بهره‌وری", product: "مش سیمی", slot: 4 },
-                          { time: "۲:۰۰", theme: "تبلیغ محصول", product: "دوبل میلگرد", slot: 5 },
+                          { time: "06:30", theme: "Motivational / Power", product: "Stirrups", slot: 1 },
+                          { time: "07:30", theme: "Creative Promo", product: "Cages", slot: 2 },
+                          { time: "08:00", theme: "Strength & Scale", product: "GFRP", slot: 3 },
+                          { time: "12:30", theme: "Innovation", product: "Wire Mesh", slot: 4 },
+                          { time: "14:00", theme: "Product Promo", product: "Dowels", slot: 5 },
                         ].map((row) => (
                           <tr key={row.slot} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                            <td className="px-4 py-3 text-right font-mono font-medium text-foreground">{row.time}</td>
-                            <td className="px-4 py-3 text-right text-muted-foreground">{row.theme}</td>
-                            <td className="px-4 py-3 text-right text-foreground font-medium">{row.product}</td>
+                            <td className="px-4 py-3 text-left font-mono font-medium text-foreground">{row.time}</td>
+                            <td className="px-4 py-3 text-left text-muted-foreground">{row.theme}</td>
+                            <td className="px-4 py-3 text-left text-foreground font-medium">{row.product}</td>
                             <td className="px-4 py-3 text-center">
                               <Button
                                 size="sm"
@@ -715,10 +715,10 @@ export default function AgentWorkspace() {
                                 className="h-7 text-xs"
                                 onClick={() => {
                                   setShowRecipeTable(false);
-                                  handleSendInternal(`Content schedule for today`, row.slot);
+                                  handleSendInternal(`Generate slot ${row.slot} now`, row.slot);
                                 }}
                               >
-                                ساخت
+                                Generate
                               </Button>
                             </td>
                           </tr>
@@ -731,11 +731,11 @@ export default function AgentWorkspace() {
                       className="gap-2"
                       onClick={() => {
                         setShowRecipeTable(false);
-                        handleSend("Content schedule for today");
+                        handleSend("Generate all 5 slots now");
                       }}
                     >
                       <LayoutGrid className="w-4 h-4" />
-                      ساخت همه اسلات‌ها
+                      Generate All Slots
                     </Button>
                   </div>
                 </div>
