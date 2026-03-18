@@ -84,6 +84,7 @@ function DefaultRow({
   onMarkRejected,
   onTogglePurchased,
   onToggleRejected,
+  onDeleteItem,
 }: {
   def: DefaultItem;
   dbMatch: PurchasingItem | undefined;
@@ -91,6 +92,7 @@ function DefaultRow({
   onMarkRejected: (title: string, category: string) => void;
   onTogglePurchased?: (itemId: string, current: boolean) => void;
   onToggleRejected?: (itemId: string, current: boolean) => void;
+  onDeleteItem?: (itemId: string) => void;
 }) {
   const isPurchased = dbMatch?.is_purchased ?? false;
   const isRejected = dbMatch?.is_rejected ?? false;
@@ -150,6 +152,16 @@ function DefaultRow({
       )}>
         {def.title}
       </span>
+      {dbMatch && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+          onClick={() => onDeleteItem?.(dbMatch.id)}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      )}
     </div>
   );
 }
@@ -210,6 +222,7 @@ export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased
             onMarkRejected={onMarkRejected}
             onTogglePurchased={onTogglePurchased}
             onToggleRejected={onToggleRejected}
+            onDeleteItem={onDeleteItem}
           />
         ))}
         {groupCustom.map(item => renderCustomRow(item))}
