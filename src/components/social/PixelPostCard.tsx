@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { CheckCircle2, RefreshCw, ZoomIn } from "lucide-react";
+import { CheckCircle2, RefreshCw, ZoomIn, Languages } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export interface PixelPostData {
   id: string;
