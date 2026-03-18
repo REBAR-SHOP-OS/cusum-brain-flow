@@ -222,6 +222,7 @@ export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased
             onMarkRejected={onMarkRejected}
             onTogglePurchased={onTogglePurchased}
             onToggleRejected={onToggleRejected}
+            onDeleteItem={onDeleteItem}
           />
         ))}
         {groupCustom.map(item => renderCustomRow(item))}
