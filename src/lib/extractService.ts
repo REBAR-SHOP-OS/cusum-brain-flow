@@ -198,24 +198,24 @@ export async function runExtract(params: {
     .update({ status: "extracting", progress: 0 } as any)
     .eq("id", params.sessionId);
 
-  // Fire-and-forget: edge function runs synchronously (up to 150s),
-  // client polls extract_sessions for progress/completion
-  supabase.functions.invoke("extract-manifest", {
+  // Await the edge function so errors propagate to the caller
+  const res = await supabase.functions.invoke("extract-manifest", {
     body: {
       sessionId: params.sessionId,
       fileUrl: params.fileUrl,
       fileName: params.fileName,
       manifestContext: params.manifestContext,
     },
-  }).then((res) => {
-    if (res.error) {
-      console.error("Extract invoke error:", res.error);
-    } else if (res.data?.status === "error") {
-      console.error("Extract returned error:", res.data.error);
-    }
-  }).catch((err) => {
-    console.error("Extract invoke failed:", err);
   });
+
+  if (res.error) {
+    console.error("Extract invoke error:", res.error);
+    throw new Error(res.error.message || "Extract invocation failed");
+  }
+  if (res.data?.status === "error") {
+    console.error("Extract returned error:", res.data.error);
+    throw new Error(res.data.error || "Extraction failed");
+  }
 }
 
 export interface DuplicatePreviewItem {
