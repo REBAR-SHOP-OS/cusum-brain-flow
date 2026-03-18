@@ -1469,6 +1469,70 @@ export function AIExtractView() {
           </div>
         )}
 
+        {/* Error state — extraction failed */}
+        {activeSession && activeSession.status === "error" && (
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardContent className="flex flex-col items-center gap-4 py-10">
+              <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                <XCircle className="w-8 h-8 text-destructive" />
+              </div>
+              <div className="text-center space-y-1">
+                <h3 className="text-sm font-bold text-foreground">Extraction Failed</h3>
+                <p className="text-xs text-muted-foreground max-w-md">
+                  {(activeSession as any).error_message || "An unknown error occurred during extraction."}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={processing}
+                  onClick={async () => {
+                    try {
+                      setProcessing(true);
+                      setProcessingStep("Retrying extraction...");
+                      const { data: rawFile } = await supabase
+                        .from("extract_raw_files")
+                        .select("file_url, file_name")
+                        .eq("session_id", activeSession.id)
+                        .order("created_at", { ascending: false })
+                        .limit(1)
+                        .single();
+                      if (!rawFile) throw new Error("No file found for this session");
+                      await supabase
+                        .from("extract_sessions")
+                        .update({ status: "extracting", error_message: null } as any)
+                        .eq("id", activeSession.id);
+                      await refreshSessions();
+                      await runExtract({
+                        sessionId: activeSession.id,
+                        fileUrl: (rawFile as any).file_url,
+                        fileName: (rawFile as any).file_name,
+                        manifestContext: {
+                          name: activeSession.name,
+                          customer: activeSession.customer || "",
+                          address: activeSession.site_address || "",
+                          type: activeSession.manifest_type,
+                        },
+                      });
+                      toast({ title: "Extraction restarted", description: "The AI is re-processing your file." });
+                      await refreshSessions();
+                    } catch (err: any) {
+                      toast({ title: "Retry failed", description: err.message, variant: "destructive" });
+                    } finally {
+                      setProcessing(false);
+                      setProcessingStep("");
+                    }
+                  }}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Retry Extraction
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
 
         {/* Optimization Strategy Selection — shown when extracted but no mode chosen */}
         {activeSession && currentStepIndex === 2 && (
