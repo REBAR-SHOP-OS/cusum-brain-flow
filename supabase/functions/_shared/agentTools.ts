@@ -547,6 +547,22 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
             required: ["quotation_id", "to_email", "customer_name"]
           }
         }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "convert_quotation_to_invoice",
+          description: "Convert an approved quotation to a sales invoice, generate a Stripe payment link, and send a professional invoice email with a Pay Now button. Use when the customer has accepted the quote.",
+          parameters: {
+            type: "object",
+            properties: {
+              quotation_id: { type: "string", description: "UUID of the approved quotation to convert" },
+              customer_email: { type: "string", description: "Customer email to send the invoice to" },
+              due_date: { type: "string", description: "Invoice due date YYYY-MM-DD (default: 30 days from now)" }
+            },
+            required: ["quotation_id", "customer_email"]
+          }
+        }
       }
     );
   }

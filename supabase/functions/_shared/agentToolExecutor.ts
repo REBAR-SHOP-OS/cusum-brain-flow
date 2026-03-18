@@ -1469,6 +1469,205 @@ export async function executeToolCall(
       }
     }
 
+    // ═══════════════════════════════════════════════════
+    // Convert Quotation to Invoice + Stripe + Email
+    // ═══════════════════════════════════════════════════
+    else if (name === "convert_quotation_to_invoice") {
+      const quotationId = args.quotation_id;
+      const customerEmail = args.customer_email;
+
+      // 1. Fetch quotation
+      const { data: quote, error: qFetchErr } = await svcClient
+        .from("sales_quotations")
+        .select("*")
+        .eq("id", quotationId)
+        .single();
+
+      if (qFetchErr || !quote) {
+        result.result = { error: qFetchErr?.message || "Quotation not found" };
+      } else {
+        // 2. Generate invoice number INV-{YYYY}{NNNN}
+        const year = new Date().getFullYear();
+        const { data: latestInv } = await svcClient
+          .from("sales_invoices")
+          .select("invoice_number")
+          .like("invoice_number", `INV-${year}%`)
+          .order("invoice_number", { ascending: false })
+          .limit(1);
+
+        let invSeq = 1;
+        if (latestInv && latestInv.length > 0) {
+          const lastNum = parseInt(latestInv[0].invoice_number.replace(`INV-${year}`, ""), 10);
+          if (!isNaN(lastNum)) invSeq = lastNum + 1;
+        }
+        const invoiceNumber = `INV-${year}${String(invSeq).padStart(4, "0")}`;
+
+        const issuedDate = new Date().toISOString().split("T")[0];
+        const dueDate = args.due_date || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+
+        // 3. Insert sales invoice
+        const { data: newInvoice, error: invErr } = await svcClient
+          .from("sales_invoices")
+          .insert({
+            company_id: companyId,
+            invoice_number: invoiceNumber,
+            quotation_id: quotationId,
+            customer_name: quote.customer_name,
+            customer_company: quote.customer_company,
+            amount: quote.amount,
+            status: "sent",
+            issued_date: issuedDate,
+            due_date: dueDate,
+            notes: quote.notes,
+            sales_lead_id: quote.lead_id || null,
+          })
+          .select()
+          .single();
+
+        if (invErr) {
+          result.result = { error: `Invoice creation failed: ${invErr.message}` };
+        } else {
+          // 4. Generate Stripe payment link
+          let stripePaymentUrl = "";
+          let stripeError = "";
+          try {
+            const stripeRes = await fetch(
+              `${supabaseUrl}/functions/v1/stripe-payment`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": authHeader },
+                body: JSON.stringify({
+                  action: "create-payment-link",
+                  amount: quote.amount,
+                  currency: "cad",
+                  invoiceNumber: invoiceNumber,
+                  customerName: quote.customer_name || quote.customer_company || "Customer",
+                  qbInvoiceId: newInvoice.id,
+                }),
+              }
+            );
+            if (stripeRes.ok) {
+              const stripeData = await stripeRes.json();
+              stripePaymentUrl = stripeData.paymentLink?.stripe_url || "";
+            } else {
+              stripeError = await stripeRes.text();
+              console.warn("Stripe payment link failed:", stripeError);
+            }
+          } catch (e) {
+            stripeError = e instanceof Error ? e.message : String(e);
+            console.warn("Stripe payment link error:", stripeError);
+          }
+
+          // 5. Build professional invoice email HTML
+          const senderName = context?.currentUser?.name || "Sales Team";
+          const senderEmail = context?.currentUser?.email || "sales@rebar.shop";
+          const customerName = quote.customer_name || "Valued Customer";
+
+          const lineItemsHtml = quote.notes?.includes("--- Line Items ---")
+            ? quote.notes.split("--- Line Items ---")[1]
+                .trim()
+                .split("\n")
+                .filter((l: string) => l.startsWith("•"))
+                .map((l: string) => `<tr><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#333;">${l.replace("• ", "")}</td></tr>`)
+                .join("")
+            : "";
+
+          const payNowButton = stripePaymentUrl
+            ? `<div style="text-align:center;margin:32px 0;">
+                <a href="${stripePaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#e94560 0%,#c23152 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(233,69,96,0.4);">💳 Pay Now</a>
+                <p style="color:#888;font-size:12px;margin-top:10px;">Secure payment powered by Stripe</p>
+               </div>`
+            : "";
+
+          const htmlBody = `
+<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:680px;margin:0 auto;background:#ffffff;">
+  <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:32px;text-align:center;">
+    <h1 style="color:#e94560;font-size:28px;margin:0;letter-spacing:2px;">REBAR.SHOP</h1>
+    <p style="color:#a8b2d1;font-size:13px;margin:6px 0 0;">Premium Steel Reinforcement — Ontario, Canada</p>
+  </div>
+  <div style="padding:32px;">
+    <p style="font-size:16px;color:#333;">Dear ${customerName},</p>
+    <p style="font-size:15px;color:#555;line-height:1.6;">Thank you for confirming your order. Please find your invoice below.</p>
+    
+    <div style="background:#f8f9fc;border-radius:8px;padding:20px;margin:24px 0;border-left:4px solid #e94560;">
+      <table style="width:100%;">
+        <tr><td style="color:#888;font-size:13px;padding:4px 0;">Invoice #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${invoiceNumber}</td></tr>
+        <tr><td style="color:#888;font-size:13px;padding:4px 0;">Amount Due</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:22px;">$${(quote.amount || 0).toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+        <tr><td style="color:#888;font-size:13px;padding:4px 0;">Issue Date</td><td style="text-align:right;color:#1a1a2e;">${issuedDate}</td></tr>
+        <tr><td style="color:#888;font-size:13px;padding:4px 0;">Due Date</td><td style="text-align:right;color:#1a1a2e;font-weight:600;">${dueDate}</td></tr>
+      </table>
+    </div>
+
+    ${lineItemsHtml ? `
+    <h3 style="color:#1a1a2e;font-size:16px;margin:24px 0 12px;">Invoice Details</h3>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr><th style="text-align:left;padding:10px 14px;background:#f1f3f9;color:#555;font-size:13px;border-bottom:2px solid #e5e7eb;">Item</th></tr></thead>
+      <tbody>${lineItemsHtml}</tbody>
+    </table>` : ""}
+
+    ${payNowButton}
+
+    <p style="font-size:14px;color:#555;line-height:1.6;margin-top:24px;">
+      All amounts are in Canadian Dollars (CAD). Applicable taxes (13% HST) will be added at checkout.
+      Payment is due by <strong>${dueDate}</strong>.
+    </p>
+    <p style="font-size:14px;color:#555;">If you have any questions about this invoice, please don't hesitate to reach out.</p>
+    
+    <div style="margin-top:32px;padding-top:20px;border-top:1px solid #e5e7eb;">
+      <p style="margin:0;font-weight:600;color:#1a1a2e;">${senderName}</p>
+      <p style="margin:2px 0;color:#e94560;font-size:13px;">Sales Representative</p>
+      <p style="margin:2px 0;color:#888;font-size:13px;">REBAR.SHOP — Premium Steel Reinforcement</p>
+      <p style="margin:2px 0;color:#888;font-size:13px;">📞 (905) 761-1311 &nbsp;|&nbsp; ✉️ ${senderEmail}</p>
+      <p style="margin:2px 0;color:#888;font-size:13px;">🌐 www.rebar.shop &nbsp;|&nbsp; 📍 Vaughan, Ontario</p>
+    </div>
+  </div>
+  <div style="background:#1a1a2e;padding:16px;text-align:center;">
+    <p style="color:#a8b2d1;font-size:11px;margin:0;">© ${new Date().getFullYear()} REBAR.SHOP — All rights reserved</p>
+  </div>
+</div>`;
+
+          // 6. Send invoice email via Gmail
+          const emailRes = await fetch(
+            `${supabaseUrl}/functions/v1/gmail-send`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": authHeader },
+              body: JSON.stringify({
+                to: customerEmail,
+                subject: `Invoice ${invoiceNumber} — REBAR.SHOP`,
+                body: htmlBody,
+              }),
+            }
+          );
+
+          // 7. Update quotation status to approved
+          await svcClient
+            .from("sales_quotations")
+            .update({ status: "approved" })
+            .eq("id", quotationId);
+
+          if (emailRes.ok) {
+            result.result = {
+              success: true,
+              invoice_id: newInvoice.id,
+              invoice_number: invoiceNumber,
+              payment_link: stripePaymentUrl || "Payment link generation failed — invoice sent without it",
+              message: `✅ Invoice ${invoiceNumber} created and sent to ${customerEmail}${stripePaymentUrl ? " with payment link" : ""}`,
+            };
+            result.sideEffects.emails = [{ to: customerEmail }];
+          } else {
+            const emailError = await emailRes.text();
+            result.result = {
+              success: false,
+              invoice_id: newInvoice.id,
+              invoice_number: invoiceNumber,
+              error: `Invoice created but email failed: ${emailError}`,
+            };
+          }
+        }
+      }
+    }
+
     // Default fallback
     else {
       result.result = { success: true, message: "Tool executed (simulated)" };
