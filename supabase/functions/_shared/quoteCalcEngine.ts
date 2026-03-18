@@ -461,7 +461,7 @@ export function generateQuote(
   }
 
   // 5. Cages — always separate from fabrication tonnage
-  for (const cage of req.scope.cages) {
+  for (const cage of scope.cages) {
     const cageResult = computeCagePrice(cage, config, scrapPct);
     cageWeightKg += cageResult.weight_kg;
     lineItems.push({
