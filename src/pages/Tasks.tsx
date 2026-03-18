@@ -1116,15 +1116,20 @@ export default function Tasks() {
                               {task.review_status === "rejected" && (
                                 <Badge variant="outline" className="text-[10px] shrink-0 text-destructive border-destructive/30">❌ Rejected</Badge>
                               )}
-                              {!task.review_status && task.assigned_to === RADIN_PROFILE_ID && currentProfileId === NEEL_PROFILE_ID && (
+                              {!task.review_status && (
+                                (task.assigned_to === RADIN_PROFILE_ID && currentProfileId === NEEL_PROFILE_ID) ||
+                                (task.assigned_to === currentProfileId)
+                              ) && (
                                 <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); reviewTask(task.id, "approved"); }}
-                                    className="p-0.5 rounded hover:bg-green-500/20 text-green-600 transition-colors"
-                                    title="Approve"
-                                  >
-                                    <Check className="w-4 h-4" />
-                                  </button>
+                                  {task.assigned_to === RADIN_PROFILE_ID && currentProfileId === NEEL_PROFILE_ID && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); reviewTask(task.id, "approved"); }}
+                                      className="p-0.5 rounded hover:bg-green-500/20 text-green-600 transition-colors"
+                                      title="Approve"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={(e) => { e.stopPropagation(); reviewTask(task.id, "rejected"); }}
                                     className="p-0.5 rounded hover:bg-destructive/20 text-destructive transition-colors"
