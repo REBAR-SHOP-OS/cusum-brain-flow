@@ -9785,6 +9785,36 @@ export type Database = {
         }
         Relationships: []
       }
+      purchasing_confirmed_lists: {
+        Row: {
+          company_id: string
+          confirmed_at: string
+          confirmed_by: string | null
+          created_at: string
+          due_date: string
+          id: string
+          snapshot: Json
+        }
+        Insert: {
+          company_id: string
+          confirmed_at?: string
+          confirmed_by?: string | null
+          created_at?: string
+          due_date: string
+          id?: string
+          snapshot?: Json
+        }
+        Update: {
+          company_id?: string
+          confirmed_at?: string
+          confirmed_by?: string | null
+          created_at?: string
+          due_date?: string
+          id?: string
+          snapshot?: Json
+        }
+        Relationships: []
+      }
       purchasing_list_items: {
         Row: {
           category: string | null
