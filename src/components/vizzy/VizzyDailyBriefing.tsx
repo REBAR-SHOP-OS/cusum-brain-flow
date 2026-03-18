@@ -56,16 +56,17 @@ export function VizzyDailyBriefing() {
 
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token || cancelled) return;
-
-        const res = await supabase.functions.invoke("vizzy-daily-brief", {});
+        const data = await invokeEdgeFunction<{ briefing: string }>(
+          "vizzy-daily-brief",
+          {},
+          { timeoutMs: 30000 }
+        );
         if (cancelled) return;
-        if (res.error || !res.data?.briefing) {
+        if (!data?.briefing) {
           setError(true);
         } else {
-          setBriefing(res.data.briefing);
-          cacheBriefing(res.data.briefing);
+          setBriefing(data.briefing);
+          cacheBriefing(data.briefing);
         }
       } catch {
         if (!cancelled) setError(true);

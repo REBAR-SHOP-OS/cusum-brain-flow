@@ -36,7 +36,7 @@ serve(async (req) => {
       });
     }
 
-    // Rate limit: 5 per 10 minutes
+    // Rate limit: 10 per 5 minutes
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
       _user_id: user.id,
       _function_name: "vizzy-daily-brief",

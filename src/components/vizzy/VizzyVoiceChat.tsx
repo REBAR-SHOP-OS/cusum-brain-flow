@@ -70,21 +70,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     ? "Listening..."
     : "";
 
-  // Orbiting dot animation angle
-  const [orbitAngle, setOrbitAngle] = useState(0);
-  useEffect(() => {
-    let raf: number;
-    const animate = () => {
-      setOrbitAngle((a) => (a + 1.2) % 360);
-      raf = requestAnimationFrame(animate);
-    };
-    raf = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  const orbRadius = 72;
-  const dotX = Math.cos((orbitAngle * Math.PI) / 180) * orbRadius;
-  const dotY = Math.sin((orbitAngle * Math.PI) / 180) * orbRadius;
+  // Orbit animation handled via CSS keyframes instead of RAF state updates
 
   return (
     <motion.div
