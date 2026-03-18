@@ -507,6 +507,7 @@ export default function AgentWorkspace() {
                 setPurchasingDate(undefined);
               }
             } : undefined}
+            onDeletePurchasingDate={agentId === "purchasing" ? handleDeletePurchasingDate : undefined}
           />
         </div>
       )}
