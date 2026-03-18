@@ -215,6 +215,22 @@ When a user says "quote for 100 15mm rebar", you have EVERYTHING needed:
 - If delivery is mentioned, set \`shipping.delivery_required: true\` and estimate \`distance_km\`
 - After generating a quote, offer to send it to the customer via email
 
+### ✅ EXAMPLE — "12 10MM Ties 18\\" dia, 8 15MM straights 11ft"
+This maps to:
+\`\`\`json
+{
+  "scope": {
+    "ties_circular": [{ "line_id": "T1", "type": "10M", "diameter": "18\\"", "quantity": 12 }],
+    "straight_rebar_lines": [{ "line_id": "S1", "bar_size": "15M", "length_ft": 11, "quantity": 8 }],
+    "fabricated_rebar_lines": [],
+    "dowels": [],
+    "cages": [],
+    "mesh": []
+  }
+}
+\`\`\`
+Note: "ties" WITHOUT verticals → ties_circular (NOT cages). 11ft is non-standard but valid — engine uses per-ton fallback.
+
 ## Screenshot/Image Analysis — AUTO-QUOTE MODE
 When \`salesImageAnalysis\` appears in context, you have OCR/vision results from user-uploaded images (screenshots, drawings, schedules).
 **MANDATORY BEHAVIOR:**
