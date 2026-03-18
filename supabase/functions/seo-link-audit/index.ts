@@ -27,6 +27,8 @@ serve(async (req) => {
 
     if (phase === "crawl") {
       return await handleCrawl(sb, domain_id, company_id);
+    } else if (phase === "check_broken") {
+      return await handleCheckBroken(sb, domain_id);
     } else if (phase === "preview") {
       return await handlePreview(sb, audit_ids, company_id);
     } else if (phase === "fix") {
@@ -93,10 +95,12 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
   ]);
 
   const allContent = [...pages, ...posts, ...products];
+  const siteUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "";
   console.log(`Crawling ${allContent.length} pages/posts/products`);
 
   const results: any[] = [];
-  const siteUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "";
+  let siteHostname = "";
+  try { siteHostname = siteUrl ? new URL(siteUrl).hostname : ""; } catch { /* ignore */ }
 
   for (const item of allContent) {
     const pageUrl = item.link || `${siteUrl}/?p=${item.id}`;
@@ -106,41 +110,26 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
     const links = extractLinks(html);
 
     for (const link of links) {
+      if (!link.href || link.href.startsWith("#") || link.href.startsWith("mailto:") || link.href.startsWith("tel:")) {
+        continue;
+      }
+
+      const isInternal = link.href.startsWith("/") || (siteHostname && link.href.includes(siteHostname));
       const record: any = {
         domain_id: domainId,
         page_url: pageUrl,
         link_href: link.href,
         anchor_text: link.text || null,
+        link_type: isInternal ? "internal" : "external",
         company_id: companyId,
       };
-
-      if (!link.href || link.href.startsWith("#") || link.href.startsWith("mailto:") || link.href.startsWith("tel:")) {
-        continue;
-      }
-
-      const isInternal = link.href.startsWith("/") || (siteUrl && link.href.includes(new URL(siteUrl).hostname));
-      record.link_type = isInternal ? "internal" : "external";
 
       if (!link.text || link.text.trim() === "") {
         record.status = "missing_anchor";
         record.suggestion = "Add descriptive anchor text for SEO";
       } else {
-        try {
-          const headRes = await fetch(link.href.startsWith("/") ? `${siteUrl}${link.href}` : link.href, {
-            method: "HEAD",
-            redirect: "follow",
-            signal: AbortSignal.timeout(5000),
-          });
-          if (headRes.status >= 400) {
-            record.status = "broken";
-            record.suggestion = `Link returns ${headRes.status}. Fix or remove.`;
-          } else {
-            record.status = "ok";
-          }
-        } catch {
-          record.status = "broken";
-          record.suggestion = "Link unreachable or timed out";
-        }
+        // Mark as "ok" initially; broken link detection happens in a separate check phase
+        record.status = "ok";
       }
 
       results.push(record);
@@ -174,6 +163,8 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
     }
   }
 
+  console.log(`Collected ${results.length} link records, inserting...`);
+
   if (results.length > 0) {
     const batchSize = 100;
     for (let i = 0; i < results.length; i += batchSize) {
@@ -191,7 +182,79 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
     ok: results.filter((r) => r.status === "ok").length,
   };
 
+  console.log(`Crawl complete:`, stats);
+
   return new Response(JSON.stringify({ success: true, stats }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ─── CHECK BROKEN PHASE ───
+
+async function handleCheckBroken(sb: any, domainId: string) {
+  // Get all external links that are currently "ok" (not yet checked)
+  const { data: links } = await sb
+    .from("seo_link_audit")
+    .select("id, link_href")
+    .eq("domain_id", domainId)
+    .eq("link_type", "external")
+    .eq("status", "ok")
+    .limit(50); // Process 50 at a time
+
+  if (!links || links.length === 0) {
+    return new Response(JSON.stringify({ success: true, checked: 0, broken: 0, remaining: 0 }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Deduplicate URLs
+  const urlMap = new Map<string, string[]>(); // href -> [ids]
+  for (const link of links) {
+    if (!link.link_href) continue;
+    const existing = urlMap.get(link.link_href) || [];
+    existing.push(link.id);
+    urlMap.set(link.link_href, existing);
+  }
+
+  let brokenCount = 0;
+  const uniqueUrls = Array.from(urlMap.keys());
+
+  // Check in batches of 20 concurrently
+  const BATCH = 20;
+  for (let i = 0; i < uniqueUrls.length; i += BATCH) {
+    const batch = uniqueUrls.slice(i, i + BATCH);
+    const checks = await Promise.all(batch.map(async (url) => {
+      try {
+        const res = await fetch(url, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(3000) });
+        return { url, broken: res.status >= 400, status: res.status };
+      } catch {
+        return { url, broken: true, status: null };
+      }
+    }));
+
+    for (const check of checks) {
+      if (check.broken) {
+        const ids = urlMap.get(check.url) || [];
+        const suggestion = check.status ? `Link returns ${check.status}. Fix or remove.` : "Link unreachable or timed out";
+        for (const id of ids) {
+          await sb.from("seo_link_audit").update({ status: "broken", suggestion }).eq("id", id);
+        }
+        brokenCount += ids.length;
+      }
+    }
+  }
+
+  // Check how many remain
+  const { count } = await sb
+    .from("seo_link_audit")
+    .select("id", { count: "exact", head: true })
+    .eq("domain_id", domainId)
+    .eq("link_type", "external")
+    .eq("status", "ok");
+
+  console.log(`Check complete: ${brokenCount} broken found, ${count || 0} remaining`);
+
+  return new Response(JSON.stringify({ success: true, checked: links.length, broken: brokenCount, remaining: count || 0 }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
