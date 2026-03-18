@@ -269,15 +269,14 @@ serve(async (req) => {
       // Pick diverse styles for each slot
       const shuffledStyles = [...VISUAL_STYLES].sort(() => Math.random() - 0.5);
 
-      // Inject upcoming event context
-      const eventBlock = buildEventPromptBlock(new Date(postDate), 3);
+      // Event context removed from auto-generate — posts are purely promotional by default
+      // Events are only used when user explicitly requests them via chat
 
       const systemPrompt = `You are **Pixel**, a professional social media content generator for REBAR.SHOP — an AI-driven rebar fabrication company in Ontario.
 
 ${brandKit}
 
 ${intelligence}
-${eventBlock}
 
 ## CONTACT INFO (MUST appear in EVERY post caption — exactly as shown):
 📍 9 Cedar Ave, Thornhill, Ontario
