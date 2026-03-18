@@ -54,6 +54,7 @@ export default function SocialMediaManager() {
   const { generatePosts, generating } = useAutoGenerate();
   const { posts, isLoading, updatePost, deletePost, createPost } = useSocialPosts();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { completedChecklist, toggleChecklist } = useStrategyChecklist();
   const { pendingApprovals } = useSocialApprovals();
   const [showApprovals, setShowApprovals] = useState(false);
