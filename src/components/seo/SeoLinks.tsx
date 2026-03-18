@@ -403,10 +403,16 @@ export function SeoLinks() {
             {proposals.map((p, i) => (
               <Card key={p.id} className="border-border">
                 <CardContent className="pt-4 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <Badge variant="outline" className={p.type === "broken" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}>
                       {p.type === "broken" ? `Broken Link Fix${p.action ? ` (${p.action})` : ""}` : "Opportunity Placement"}
                     </Badge>
+                    {p.action === "replace" && p.replacement_url && (
+                      <a href={p.replacement_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 max-w-[300px] truncate">
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        {p.replacement_url}
+                      </a>
+                    )}
                     {p.error && <Badge variant="destructive">Error</Badge>}
                   </div>
 

@@ -369,6 +369,51 @@ async function generateBrokenLinkProposal(html: string, record: any) {
     }
   } catch { /* ignore */ }
 
+  // ── Smart replacement: search for real replacement URLs via Firecrawl ──
+  let searchCandidates: { url: string; title: string; description: string }[] = [];
+  try {
+    const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
+    if (firecrawlKey) {
+      const anchorText = record.anchor_text || "";
+      // Build a search query from anchor text + broken URL domain for context
+      let searchDomain = "";
+      try { searchDomain = new URL(record.link_href).hostname.replace("www.", ""); } catch { /* ignore */ }
+      const searchQuery = `${anchorText} ${searchDomain}`.trim();
+
+      if (searchQuery.length > 2) {
+        console.log(`Firecrawl search for replacement: "${searchQuery}"`);
+        const searchRes = await fetch("https://api.firecrawl.dev/v1/search", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${firecrawlKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query: searchQuery, limit: 5 }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          const results = searchData?.data || searchData?.results || [];
+          searchCandidates = results
+            .filter((r: any) => r.url && r.url !== record.link_href)
+            .slice(0, 3)
+            .map((r: any) => ({
+              url: r.url,
+              title: r.title || r.metadata?.title || "",
+              description: r.description || r.metadata?.description || "",
+            }));
+          console.log(`Found ${searchCandidates.length} replacement candidates`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Firecrawl search failed (non-fatal):", e instanceof Error ? e.message : e);
+  }
+
+  const candidatesBlock = searchCandidates.length > 0
+    ? `\nReplacement candidates found via web search:\n${searchCandidates.map((c, i) => `  ${i + 1}. ${c.url} — "${c.title}" — ${c.description}`).join("\n")}`
+    : "\nNo replacement candidates found via web search.";
+
   const prompt = `You are an SEO expert fixing a broken link on a webpage.
 
 Broken link: ${record.link_href}
@@ -376,19 +421,24 @@ Anchor text: ${record.anchor_text || "(no anchor text)"}
 Broken link HTML: ${brokenLinkHtml}
 Containing paragraph: ${containingParagraph}
 ${archiveUrl ? `Wayback Machine archive found: ${archiveUrl}` : "No Wayback Machine archive available."}
+${candidatesBlock}
 
 Decide the BEST action:
-1. "remove" — Remove the <a> tag but keep the text content (if the link adds no value)
-2. "archive" — Replace href with the Wayback Machine archive URL (only if archive exists)
-3. "unlink" — Remove the entire link and its text (if it's spam or irrelevant)
+1. "replace" — Replace href with one of the replacement candidate URLs (ONLY if a candidate is relevant and high-quality)
+2. "archive" — Replace href with the Wayback Machine archive URL (only if archive exists and no good replacement candidate)
+3. "remove" — Remove the <a> tag but keep the text content (if no replacement or archive exists)
+4. "unlink" — Remove the entire link and its text (only if it's spam or irrelevant)
 
 Rules:
-- Prefer "archive" if an archive URL exists and the link is valuable
-- Prefer "remove" (keep text, drop link) if the text is useful but no archive exists
+- PREFER "replace" if a replacement candidate is relevant — this preserves SEO link equity
+- If replacing, use the BEST matching candidate URL
+- Use "archive" only if no good replacement exists but archive does
+- Use "remove" (keep text, drop link) if no replacement or archive
 - Use "unlink" only for spam or completely irrelevant links
 
 Return ONLY a JSON object:
-- "action": "remove" | "archive" | "unlink"
+- "action": "replace" | "archive" | "remove" | "unlink"
+- "replacement_url": the chosen replacement URL (only if action is "replace")
 - "before_paragraph": the original paragraph HTML
 - "after_paragraph": the modified paragraph HTML with the fix applied
 - "reasoning": one sentence explaining the decision
