@@ -299,7 +299,7 @@ export function PostReviewPanel({
       { onSuccess: () => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); },
         onError: () => setSaveStatus("idle") }
     );
-  }, [post?.id, localTitle, localContent, localHashtags, updatePost]);
+  }, [post?.id, localTitle, localContent, localHashtags, persianImageText, persianCaptionText, updatePost]);
 
   const flushRef = useRef(flushSave);
   flushRef.current = flushSave;
