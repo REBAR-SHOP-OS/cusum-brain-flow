@@ -223,31 +223,29 @@ export function SeoKeywords() {
                           ) : kw.keyword}
                         </td>
                         <td className="p-3 text-center font-mono">{kw.avg_position ? Number(kw.avg_position).toFixed(1) : "—"}</td>
+                        <td className="p-3 text-center font-mono">
+                          {kw.wincher_position ?? "—"}
+                        </td>
+                        <td className="p-3 text-center font-mono text-xs">
+                          {kw.wincher_position_change != null ? (
+                            <span className={kw.wincher_position_change > 0 ? "text-green-600" : kw.wincher_position_change < 0 ? "text-destructive" : ""}>
+                              {kw.wincher_position_change > 0 ? "+" : ""}{kw.wincher_position_change}
+                            </span>
+                          ) : "—"}
+                        </td>
                         <td className="p-3 text-center">{trendIcon(kw.trend_score)}</td>
                         <td className="p-3 text-center">
-                          <Badge className={`text-[10px] ${intentColors[kw.intent] || ""}`}>{kw.intent}</Badge>
+                          <Badge className={`text-[10px] ${intentColors[kw.intent] || ""}`}>{kw.intent || "—"}</Badge>
                         </td>
-                        <td className="p-3 text-xs text-muted-foreground truncate max-w-[120px]">{kw.topic_cluster || "—"}</td>
+                        <td className="p-3 text-center font-mono text-xs">{kw.volume ? Number(kw.volume).toLocaleString() : "—"}</td>
+                        <td className="p-3 text-center font-mono text-xs">{kw.wincher_difficulty ?? "—"}</td>
+                        <td className="p-3 text-center font-mono text-xs">{kw.wincher_cpc != null ? `$${Number(kw.wincher_cpc).toFixed(2)}` : "—"}</td>
                         <td className="p-3 text-center">
                           <div className="flex items-center gap-1 justify-center">
                             <div className="w-12 h-2 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-primary"
-                                style={{ width: `${Math.min(100, kw.opportunity_score || 0)}%` }}
-                              />
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, kw.opportunity_score || 0)}%` }} />
                             </div>
                             <span className="text-xs font-mono">{Number(kw.opportunity_score || 0).toFixed(0)}</span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center gap-1 justify-center">
-                            <div className="w-12 h-2 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-green-500"
-                                style={{ width: `${Math.min(100, kw.business_relevance || 0)}%` }}
-                              />
-                            </div>
-                            <span className="text-xs font-mono">{Number(kw.business_relevance || 0).toFixed(0)}</span>
                           </div>
                         </td>
                         <td className="p-3 text-center">
@@ -260,10 +258,9 @@ export function SeoKeywords() {
                                 {src}
                               </Badge>
                             ))}
-                            {!(kw.sources || []).length && <span className="text-xs text-muted-foreground">—</span>}
                           </div>
                         </td>
-                        <td className="p-3 text-right font-mono text-xs">{kw.clicks_28d || 0}</td>
+                        <td className="p-3 text-right font-mono text-xs">{kw.wincher_traffic != null ? Number(kw.wincher_traffic).toFixed(0) : (kw.clicks_28d || 0)}</td>
                       </tr>
                     ))
                   )}
