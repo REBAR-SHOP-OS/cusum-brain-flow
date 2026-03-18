@@ -325,6 +325,21 @@ Scientific explanations, technical specifications, engineering terminology, mate
 - Use Brain files (logo & content reference) when available
 ${brainInstructionsText}${instructionsText}
 
+## 🚨 SLOGAN vs CAPTION — ZERO OVERLAP RULE 🚨
+The "image_slogan" is a SHORT billboard tagline (max 6 words) printed ON the image.
+The "content" is a FULL promotional paragraph (2-4 sentences) about REBAR.SHOP services.
+They MUST have ZERO overlapping phrases. They MUST convey COMPLETELY DIFFERENT messages.
+
+❌ VIOLATION EXAMPLE (FORBIDDEN):
+  image_slogan: "Spring into Action!"
+  content: "Spring into action with Ontario Steels! New beginnings, stronger builds!"
+  → THIS IS A VIOLATION because the caption repeats/paraphrases the slogan.
+
+✅ CORRECT EXAMPLE:
+  image_slogan: "Steel That Builds Dreams"
+  content: "From stirrups to dowels, REBAR.SHOP delivers everything your project needs — fast, reliable, right to your site. Browse our full range at www.rebar.shop 📞 647-260-9403"
+  → The slogan is a catchy tagline. The caption describes services and products. ZERO overlap.
+
 Return valid JSON only. No markdown, no code blocks.
 Return an array of 5 objects:
 [
@@ -332,12 +347,13 @@ Return an array of 5 objects:
     "time_slot": "06:30",
     "product": "Rebar Stirrups",
     "title": "Short engaging title",
-    "content": "Full caption with hook + promo text + contact info (📍📞🌐) + CTA — MUST be a DIFFERENT message from the image slogan. Do NOT repeat or paraphrase the slogan.",
-    "farsi_translation": "---PERSIAN---\\n🖼️ متن روی عکس: [Premium-quality fluent Farsi of image text — NOT literal translation, must sound like native Persian copywriting]\\n📝 ترجمه کپشن: [Premium-quality fluent Farsi of caption — elegant, professional Persian that reads as if originally written by a native Persian advertising copywriter]",
+    "image_slogan": "Max 6 words billboard tagline for image overlay — catchy, emotional, NO technical jargon",
+    "content": "Full promotional caption (2-4 sentences) describing REBAR.SHOP services, delivery speed, product range, customer benefits + contact info (📍📞🌐) + CTA. MUST be COMPLETELY DIFFERENT from image_slogan — ZERO overlapping words or phrases.",
+    "farsi_translation": "---PERSIAN---\\n🖼️ متن روی عکس: [Premium-quality fluent Farsi of image slogan — NOT literal translation, must sound like native Persian copywriting]\\n📝 ترجمه کپشن: [Premium-quality fluent Farsi of caption — elegant, professional Persian that reads as if originally written by a native Persian advertising copywriter]",
     "hashtags": ["#RebarShop", "#ConstructionToronto", "..."],
-    "image_prompt": "PHOTOREALISTIC: [detailed scene with specific visual style, product, REBAR.SHOP logo, and a SHORT billboard-style English advertising slogan (MAX 6 words, simple, catchy, beautiful, grammatically perfect, NO technical jargon, NO guarantees, NO scientific claims — e.g. 'Steel That Builds Dreams')]"
+    "image_prompt": "PHOTOREALISTIC: [detailed scene with specific visual style, product, REBAR.SHOP logo, and the EXACT text from image_slogan rendered in clean bold font]"
   }
-]`;
+]
 
       try {
         const aiResult = await callAI({
@@ -362,6 +378,35 @@ Return an array of 5 objects:
         }
 
         if (!Array.isArray(generatedPosts) || generatedPosts.length === 0) continue;
+
+        // Post-processing: enforce slogan/caption separation
+        for (const post of generatedPosts) {
+          // If AI returned image_slogan, ensure content doesn't overlap
+          const slogan = (post.image_slogan || "").toLowerCase().trim();
+          const caption = (post.content || "").toLowerCase();
+          if (slogan && caption) {
+            const sloganWords = slogan.split(/\s+/).filter((w: string) => w.length > 3);
+            const captionWords = caption.split(/\s+/);
+            const overlap = sloganWords.filter((w: string) => captionWords.includes(w));
+            const overlapRatio = sloganWords.length > 0 ? overlap.length / sloganWords.length : 0;
+            if (overlapRatio > 0.4) {
+              console.warn(`⚠️ Slogan/caption overlap detected (${Math.round(overlapRatio * 100)}%): "${post.image_slogan}" vs caption. Stripping slogan phrases from caption.`);
+              // Remove slogan phrases from caption start
+              let cleaned = post.content;
+              for (const word of sloganWords) {
+                const re = new RegExp(`\\b${word}\\b`, "gi");
+                const firstSentenceEnd = cleaned.indexOf(". ");
+                if (firstSentenceEnd > 0 && firstSentenceEnd < 80) {
+                  const firstSentence = cleaned.slice(0, firstSentenceEnd);
+                  if (firstSentence.toLowerCase().includes(word)) {
+                    cleaned = cleaned.slice(firstSentenceEnd + 2);
+                  }
+                }
+              }
+              post.content = cleaned.trim() || post.content;
+            }
+          }
+        }
 
         // Create posts and generate images via Lovable AI
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
