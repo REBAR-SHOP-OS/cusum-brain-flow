@@ -80,17 +80,15 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-full text-green-600 hover:bg-green-600/10 hover:text-green-700"
+                  className="h-11 w-11 rounded-full border-2 border-green-500/40 bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600 hover:border-green-500/60"
                   onClick={() => {
                     if (!filterDate) {
-                      toast.error("Select a date first");
-                      setCalendarOpen(true);
-                      return;
+                      setFilterDate(new Date());
                     }
                     setConfirmDialogOpen(true);
                   }}
                 >
-                  <CheckCircle className="w-5 h-5" />
+                  <CheckCircle className="w-7 h-7" strokeWidth={2.5} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Confirm & Save List</TooltipContent>
