@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from "react";
 import { useRealtimeTranscribe } from "@/hooks/useRealtimeTranscribe";
-import { Mic, MicOff, Trash2, ArrowLeft } from "lucide-react";
+import { Trash2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AzinVoiceOrb } from "@/components/azin/AzinVoiceOrb";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
