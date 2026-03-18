@@ -101,7 +101,8 @@ CRITICAL RULES:
 - Be creative, bold, and specific to the product
 - IMAGE SLOGAN RULES: Must be a simple, beautiful advertising phrase. Maximum 6 words. No technical jargon. No guarantees. No scientific claims. Must be grammatically perfect English. Think billboard advertising.
 - ABSOLUTELY FORBIDDEN: Do NOT mention ANY time of day, hour, clock time, AM/PM, morning, afternoon, evening, dawn, sunrise, sunset, or any time-related phrases in the caption, slogan, or translations. This is a STRICT RULE with ZERO exceptions.
-- Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, seasonal relevance, etc.${regenerateInstruction}
+- Use a unique creative angle each time: humor, statistics, metaphors, customer benefits, industry facts, material science, engineering excellence, etc.${regenerateInstruction}
+- STRICTLY FORBIDDEN: Do NOT reference any holidays, cultural events, occasions, or seasonal celebrations (e.g., Nowruz, Christmas, St. Patrick's Day). Focus ONLY on the product and its construction/industrial benefits. Event-themed content is handled separately.
 - SESSION CREATIVE SEED: ${sessionSeed || crypto.randomUUID()} — You MUST use this seed to drive a COMPLETELY UNIQUE creative direction. No two sessions should ever produce similar styles, angles, metaphors, or visual concepts. Treat this seed as your creative DNA for this specific session.
 ${brainContext ? "- You MUST follow any brand guidelines, tone, or language preferences from the Brain Context above" : ""}
 
