@@ -82,7 +82,7 @@ class BackgroundAgentService {
           role: "agent",
           content: `⚠️ ${errText}`,
           agent_type: agentType,
-        }).catch(() => {});
+        }).then(() => {});
 
         const listener = this.listeners.get(sessionId);
         if (listener) {
