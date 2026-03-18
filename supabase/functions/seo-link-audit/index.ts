@@ -159,6 +159,8 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
           suggested_href: resource.href,
           suggested_anchor: resource.anchor,
           company_id: companyId,
+          wp_item_id: item.id,
+          wp_item_type: item.type || "page",
         });
         rsicCount++;
       }
