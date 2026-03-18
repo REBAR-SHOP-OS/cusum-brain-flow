@@ -12434,6 +12434,8 @@ export type Database = {
           suggested_anchor: string | null
           suggested_href: string | null
           suggestion: string | null
+          wp_item_id: number | null
+          wp_item_type: string | null
         }
         Insert: {
           anchor_text?: string | null
@@ -12449,6 +12451,8 @@ export type Database = {
           suggested_anchor?: string | null
           suggested_href?: string | null
           suggestion?: string | null
+          wp_item_id?: number | null
+          wp_item_type?: string | null
         }
         Update: {
           anchor_text?: string | null
@@ -12464,6 +12468,8 @@ export type Database = {
           suggested_anchor?: string | null
           suggested_href?: string | null
           suggestion?: string | null
+          wp_item_id?: number | null
+          wp_item_type?: string | null
         }
         Relationships: [
           {
