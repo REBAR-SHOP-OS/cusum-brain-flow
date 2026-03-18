@@ -36,7 +36,7 @@ export async function logActivity(opts: LogOptions): Promise<void> {
       source: opts.source ?? "app",
       actor_id: user.id,
       actor_type: "user",
-      metadata: opts.metadata ?? null,
+      metadata: (opts.metadata as any) ?? null,
       dedupe_key: `${user.id}:${opts.eventType}:${opts.entityId ?? ""}:${new Date().toISOString().slice(0, 16)}`,
     }]);
   } catch {
