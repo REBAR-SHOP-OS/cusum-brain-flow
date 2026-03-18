@@ -170,7 +170,7 @@ export function useSalesQuotations() {
           throw new Error(`Cannot transition from "${current.status}" to "${updates.status}". Allowed: ${getAvailableTransitions(current.status).join(", ") || "none"}`);
         }
       }
-      const { error } = await supabase.from("sales_quotations").update(updates).eq("id", id);
+      const { error } = await supabase.from("sales_quotations").update(updates as any).eq("id", id);
       if (error) {
         // Parse DB trigger errors for user-friendly messages
         if (error.message.includes("Invalid quotation status transition")) {
