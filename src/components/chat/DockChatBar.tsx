@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { DockChatBox } from "./DockChatBox";
 import { useTeamChannels, useMyProfile } from "@/hooks/useTeamChat";
