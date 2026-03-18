@@ -27,6 +27,8 @@ serve(async (req) => {
 
     if (phase === "crawl") {
       return await handleCrawl(sb, domain_id, company_id);
+    } else if (phase === "preview") {
+      return await handlePreview(sb, audit_ids, company_id);
     } else if (phase === "fix") {
       return await handleFix(sb, audit_ids, company_id);
     }
@@ -43,6 +45,37 @@ serve(async (req) => {
     });
   }
 });
+
+// ─── AI HELPER ───
+
+async function callAI(prompt: string, systemPrompt: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const t = await response.text();
+    console.error("AI gateway error:", response.status, t);
+    throw new Error(`AI error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
+}
 
 // ─── CRAWL PHASE ───
 
@@ -70,7 +103,6 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
     const html = item.content?.rendered || "";
     if (!html) continue;
 
-    // Extract links from HTML
     const links = extractLinks(html);
 
     for (const link of links) {
@@ -82,7 +114,6 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
         company_id: companyId,
       };
 
-      // Classify link
       if (!link.href || link.href.startsWith("#") || link.href.startsWith("mailto:") || link.href.startsWith("tel:")) {
         continue;
       }
@@ -90,12 +121,10 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
       const isInternal = link.href.startsWith("/") || (siteUrl && link.href.includes(new URL(siteUrl).hostname));
       record.link_type = isInternal ? "internal" : "external";
 
-      // Check status
       if (!link.text || link.text.trim() === "") {
         record.status = "missing_anchor";
         record.suggestion = "Add descriptive anchor text for SEO";
       } else {
-        // Try HEAD request to check for broken links
         try {
           const headRes = await fetch(link.href.startsWith("/") ? `${siteUrl}${link.href}` : link.href, {
             method: "HEAD",
@@ -117,7 +146,7 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
       results.push(record);
     }
 
-    // AI-powered RSIC opportunity detection
+    // RSIC opportunity detection
     const textContent = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
     const existingHrefs = links.map((l) => l.href);
 
@@ -145,7 +174,6 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
     }
   }
 
-  // Batch insert
   if (results.length > 0) {
     const batchSize = 100;
     for (let i = 0; i < results.length; i += batchSize) {
@@ -168,7 +196,160 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
   });
 }
 
-// ─── FIX PHASE ───
+// ─── PREVIEW PHASE (AI-powered) ───
+
+async function handlePreview(sb: any, auditIds: string[], _companyId: string) {
+  const wp = new WPClient();
+  const proposals: any[] = [];
+
+  for (const id of auditIds) {
+    const { data: record } = await sb.from("seo_link_audit").select("*").eq("id", id).single();
+    if (!record || record.is_fixed) continue;
+
+    try {
+      const wpItem = await findWPItem(wp, record.page_url);
+      if (!wpItem) {
+        proposals.push({ id, error: "Could not find WordPress page/post" });
+        continue;
+      }
+
+      const content = wpItem.content.rendered;
+
+      if (record.status === "opportunity" && record.suggested_href) {
+        // AI-powered opportunity placement
+        const proposal = await generateOpportunityProposal(content, record);
+        proposals.push({ id, type: "opportunity", ...proposal });
+      } else if (record.status === "broken" && record.link_href) {
+        // AI-powered broken link resolution
+        const proposal = await generateBrokenLinkProposal(content, record);
+        proposals.push({ id, type: "broken", ...proposal });
+      }
+    } catch (e) {
+      console.error(`Preview error for ${id}:`, e);
+      proposals.push({ id, error: e instanceof Error ? e.message : "Unknown error" });
+    }
+  }
+
+  return new Response(JSON.stringify({ success: true, proposals }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+async function generateOpportunityProposal(html: string, record: any) {
+  // Extract just the text paragraphs for context (limit size)
+  const paragraphs = html.match(/<p[^>]*>[\s\S]*?<\/p>/gi) || [];
+  const contextHtml = paragraphs.slice(0, 20).join("\n");
+
+  const prompt = `You are an SEO expert. I need to add a link to "${record.suggested_href}" with anchor text "${record.suggested_anchor}" into this page content.
+
+Here are the paragraphs of the page:
+${contextHtml}
+
+Rules:
+1. Find the MOST contextually relevant paragraph for this link
+2. Insert the link naturally within the existing text — do NOT add new sentences
+3. The link should feel like it was always part of the content
+4. Use the anchor text "${record.suggested_anchor}" or a natural variation that fits the sentence
+5. Return ONLY a JSON object with these fields:
+   - "before_paragraph": the original paragraph HTML (exact match)
+   - "after_paragraph": the modified paragraph HTML with the link inserted
+   - "reasoning": one sentence explaining why this placement was chosen
+
+Return ONLY valid JSON, no markdown fences.`;
+
+  const systemPrompt = "You are an SEO content editor. Return only valid JSON. No markdown.";
+  const raw = await callAI(prompt, systemPrompt);
+  return parseAIJson(raw);
+}
+
+async function generateBrokenLinkProposal(html: string, record: any) {
+  // Find the surrounding context of the broken link
+  const linkPattern = new RegExp(
+    `<a[^>]*href=["']${escapeRegex(record.link_href)}["'][^>]*>[\\s\\S]*?<\\/a>`,
+    "gi"
+  );
+  const match = linkPattern.exec(html);
+  const brokenLinkHtml = match ? match[0] : "";
+
+  // Find the paragraph containing the broken link
+  const paragraphs = html.match(/<p[^>]*>[\s\S]*?<\/p>/gi) || [];
+  const containingParagraph = paragraphs.find(p => p.includes(record.link_href)) || "";
+
+  // Try Wayback Machine lookup
+  let archiveUrl: string | null = null;
+  try {
+    const wbRes = await fetch(
+      `https://archive.org/wayback/available?url=${encodeURIComponent(record.link_href)}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (wbRes.ok) {
+      const wbData = await wbRes.json();
+      archiveUrl = wbData?.archived_snapshots?.closest?.url || null;
+    }
+  } catch { /* ignore */ }
+
+  const prompt = `You are an SEO expert fixing a broken link on a webpage.
+
+Broken link: ${record.link_href}
+Anchor text: ${record.anchor_text || "(no anchor text)"}
+Broken link HTML: ${brokenLinkHtml}
+Containing paragraph: ${containingParagraph}
+${archiveUrl ? `Wayback Machine archive found: ${archiveUrl}` : "No Wayback Machine archive available."}
+
+Decide the BEST action:
+1. "remove" — Remove the <a> tag but keep the text content (if the link adds no value)
+2. "archive" — Replace href with the Wayback Machine archive URL (only if archive exists)
+3. "unlink" — Remove the entire link and its text (if it's spam or irrelevant)
+
+Rules:
+- Prefer "archive" if an archive URL exists and the link is valuable
+- Prefer "remove" (keep text, drop link) if the text is useful but no archive exists
+- Use "unlink" only for spam or completely irrelevant links
+
+Return ONLY a JSON object:
+- "action": "remove" | "archive" | "unlink"
+- "before_paragraph": the original paragraph HTML
+- "after_paragraph": the modified paragraph HTML with the fix applied
+- "reasoning": one sentence explaining the decision
+
+Return ONLY valid JSON, no markdown fences.`;
+
+  const systemPrompt = "You are an SEO content editor. Return only valid JSON. No markdown.";
+  const raw = await callAI(prompt, systemPrompt);
+  return parseAIJson(raw);
+}
+
+function parseAIJson(raw: string): any {
+  // Strip markdown fences if present
+  let cleaned = raw.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+  }
+  // Find JSON boundaries
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1) {
+    return { error: "AI returned invalid format", raw_response: raw.slice(0, 500) };
+  }
+  const jsonStr = cleaned.slice(firstBrace, lastBrace + 1);
+  try {
+    return JSON.parse(jsonStr);
+  } catch {
+    // Try removing trailing commas
+    const repaired = jsonStr.replace(/,\s*([}\]])/g, "$1");
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      return { error: "Could not parse AI response", raw_response: raw.slice(0, 500) };
+    }
+  }
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// ─── FIX PHASE (AI-powered) ───
 
 async function handleFix(sb: any, auditIds: string[], companyId: string) {
   const wp = new WPClient();
@@ -180,37 +361,32 @@ async function handleFix(sb: any, auditIds: string[], companyId: string) {
     if (!record || record.is_fixed) continue;
 
     try {
+      const wpItem = await findWPItem(wp, record.page_url);
+      if (!wpItem) {
+        errors.push(id);
+        continue;
+      }
+
+      const content = wpItem.content.rendered;
+      let updatedContent = content;
+
       if (record.status === "opportunity" && record.suggested_href) {
-        // Find the WP page/post and inject the RSIC link
-        const wpItem = await findWPItem(wp, record.page_url);
-        if (wpItem) {
-          const newLink = `<a href="${record.suggested_href}" target="_blank" rel="noopener noreferrer">${record.suggested_anchor}</a>`;
-          const content = wpItem.content.rendered;
-
-          // Find the first paragraph that contains a matching keyword
-          const resource = RSIC_RESOURCES.find((r) => r.href === record.suggested_href);
-          let updatedContent = content;
-
-          if (resource) {
-            const textLower = content.toLowerCase();
-            for (const kw of resource.keywords) {
-              const idx = textLower.indexOf(kw);
-              if (idx !== -1) {
-                // Find the end of the sentence/paragraph containing this keyword
-                const periodIdx = content.indexOf(".", idx);
-                if (periodIdx !== -1) {
-                  updatedContent = content.slice(0, periodIdx + 1) + " " + newLink + content.slice(periodIdx + 1);
-                  break;
-                }
-              }
-            }
-          }
-
-          if (updatedContent !== content) {
-            await updateWPContent(wp, wpItem, updatedContent);
-            await logChange(sb, companyId, wpItem, "rsic_link_added", record.suggested_href);
-          }
+        const proposal = await generateOpportunityProposal(content, record);
+        if (proposal.before_paragraph && proposal.after_paragraph && !proposal.error) {
+          updatedContent = content.replace(proposal.before_paragraph, proposal.after_paragraph);
         }
+      } else if (record.status === "broken" && record.link_href) {
+        const proposal = await generateBrokenLinkProposal(content, record);
+        if (proposal.before_paragraph && proposal.after_paragraph && !proposal.error) {
+          updatedContent = content.replace(proposal.before_paragraph, proposal.after_paragraph);
+        }
+      }
+
+      if (updatedContent !== content) {
+        await updateWPContent(wp, wpItem, updatedContent);
+        const changeType = record.status === "broken" ? "broken_link_fixed" : "rsic_link_added";
+        const detail = record.status === "broken" ? record.link_href : record.suggested_href;
+        await logChange(sb, companyId, wpItem, changeType, detail);
       }
 
       await sb.from("seo_link_audit").update({ is_fixed: true }).eq("id", id);
@@ -267,7 +443,6 @@ async function fetchAllWPProducts(wp: WPClient): Promise<any[]> {
     try {
       const items = await wp.listProducts({ per_page: "50", page: String(page) });
       if (!items || items.length === 0) break;
-      // Products use description instead of content
       all.push(...items.map((p: any) => ({ ...p, content: { rendered: p.description || "" } })));
       if (items.length < 50) break;
       page++;
@@ -279,7 +454,6 @@ async function fetchAllWPProducts(wp: WPClient): Promise<any[]> {
 }
 
 async function findWPItem(wp: WPClient, pageUrl: string): Promise<any | null> {
-  // Try to find by slug
   const url = new URL(pageUrl);
   const slug = url.pathname.replace(/^\/|\/$/g, "").split("/").pop() || "";
   if (!slug) return null;
@@ -311,7 +485,7 @@ async function logChange(sb: any, companyId: string, item: any, changeType: stri
     entity_type: item.type || "page",
     entity_id: String(item.id),
     change_type: changeType,
-    change_summary: `Added RSIC link: ${detail}`,
+    change_summary: `SEO fix: ${detail}`,
     changed_by: "seo-link-audit",
   }).then(({ error }: any) => {
     if (error) console.error("Log error:", error.message);
