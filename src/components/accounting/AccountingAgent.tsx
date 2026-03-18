@@ -61,6 +61,7 @@ export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentP
   const [rescheduledVersion, setRescheduledVersion] = useState(0);
   const prevCallStatusRef = useRef<string | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [pennySessionId, setPennySessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [internalMode, setInternalMode] = useState<ViewMode>("default");
