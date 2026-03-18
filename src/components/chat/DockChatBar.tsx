@@ -145,16 +145,16 @@ export function DockChatBar() {
       {/* Draggable floating chat button */}
       <div
         data-feedback-btn="true"
-        className="fixed z-[9999] pointer-events-auto"
+        className="fixed z-[9999] pointer-events-auto cursor-grab active:cursor-grabbing select-none"
         style={{ left: pos.x, top: pos.y, touchAction: "none" }}
+        onPointerDown={(e) => { e.nativeEvent.stopImmediatePropagation(); handlers.onPointerDown(e); }}
+        onPointerMove={handlers.onPointerMove}
+        onPointerUp={handlePointerUp}
       >
         <Popover open={launcherOpen}>
           <PopoverAnchor asChild>
             <button
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlers.onPointerMove}
-              onPointerUp={handlePointerUp}
-              className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing select-none hover:scale-110 transition-transform ring-2 ring-primary/30"
+              className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:scale-110 transition-transform ring-2 ring-primary/30 pointer-events-none"
               aria-label="Open Chat"
             >
               <MessageSquare className="w-6 h-6 pointer-events-none" />
