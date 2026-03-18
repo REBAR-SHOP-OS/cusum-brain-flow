@@ -681,6 +681,19 @@ export function PostReviewPanel({
                         {regeneratingCaption ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                         {regeneratingCaption ? "Regenerating..." : "Regenerate caption"}
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={isPublished}
+                        onClick={() => {
+                          captionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          setTimeout(() => captionRef.current?.focus(), 300);
+                        }}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Edit caption
+                      </Button>
                     </div>
                   </>
                 )}
