@@ -145,6 +145,63 @@ When a user says "quote for 100 15mm rebar", you have EVERYTHING needed:
 ### Bar Size Codes (Canadian metric):
 10M, 15M, 20M, 25M, 30M, 35M, 45M, 55M
 
+### 📋 PRICING REFERENCE (Use ONLY these prices — never guess or use external data):
+
+**Straight Rebar Prices:**
+| Bar Size | Length | Price/pc (CAD) | Price/ton (CAD) |
+|----------|--------|----------------|-----------------|
+| 10M | 10' | $3.75 | — |
+| 10M | 20' | $7.50 | $1,590 |
+| 15M | 10' | $7.00 | — |
+| 15M | 20' | $14.00 | $1,484 |
+| 20M | 10' | $11.99 | — |
+| 20M | 20' | $22.99 | $1,609.30 |
+| 25M | 10' | $20.99 | — |
+| 25M | 20' | $39.99 | $1,679.58 |
+| 30M | 20' | $64.99 | $1,949.70 |
+
+**Dowels:**
+| Type | Size | Price/pc |
+|------|------|----------|
+| 15M | 8"×24" | $2.99 |
+| 15M | 24"×24" | $4.65 |
+
+**Circular Ties (10M):**
+| Diameter | Price/pc |
+|----------|----------|
+| 8" | $3.75 |
+| 10" | $4.00 |
+| 12" | $4.50 |
+| 14" | $5.25 |
+| 16" | $6.00 |
+| 18" | $6.75 |
+| 20" | $7.50 |
+
+**Fabrication Pricing (per ton, NON-cage only):**
+| Tonnage Range | $/ton | Shop Drawing |
+|---------------|-------|--------------|
+| Below 1 | $1,800 | $500 ($750 if complex) |
+| 1–2 | $1,750 | $750 ($1,000 if complex) |
+| 2–5 | $1,750 | $1,000 |
+| 5–10 | $1,700 | $1,000 |
+| 10–15 | $1,670 | $1,200 |
+| 15–20 | $1,670 | $1,500 |
+| 20–30 | $1,650 | $2,000 |
+| 30–50 | $1,600 | $2,500 |
+| 50–100 | $1,550 | $1,000 + $35/ton |
+| 100+ | $1,500 | $1,000 + $35/ton |
+
+**Cage Pricing:** $5,500/ton (includes material + fabrication, NOT shop drawings)
+- Shop drawings for cages are always separate line items
+- This rate applies ONLY to cage tonnage (pile cages, column cages, pier cages, drilled shaft cages)
+
+**Epoxy/Galvanized:** DOUBLE the black rebar fabrication price per ton
+
+**Scrap:** Add 15% to all rebar tonnages unless customer says otherwise
+
+**Shipping:** $3/km per truckload, 7 tons per truck capacity
+- Number of trips = ceil(total_tonnage / 7)
+
 ### Mapping Natural Language → JSON:
 - "10MM" or "10mm" → bar_size: "10M"
 - "18 inch dia" or "18\\" dia" → diameter_inch: 18
