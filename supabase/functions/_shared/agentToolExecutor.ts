@@ -277,6 +277,11 @@ export async function executeToolCall(
         er.scope.cages = Array.isArray(er.scope.cages) ? er.scope.cages : [];
         er.scope.mesh = Array.isArray(er.scope.mesh) ? er.scope.mesh : [];
       }
+      // Defensive: ensure shipping/project/meta exist
+      if (!er.shipping) er.shipping = { delivery_required: false, distance_km: 0, truck_capacity_tons: 7 };
+      if (!er.project) er.project = { project_name: "Quick Quote", location: "Ontario" };
+      if (!er.meta) er.meta = { units: "imperial", currency: "CAD" };
+
       const body = {
         action: args.action || "quote",
         estimate_request: er,
