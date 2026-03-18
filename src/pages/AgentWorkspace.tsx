@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PurchasingListPanel } from "@/components/purchasing/PurchasingListPanel";
 import { getEventsForMonth, type CalendarEvent } from "@/components/social/contentStrategyData";
+import { PERSIAN_EVENT_INFO } from "@/components/social/ContentStrategyPanel";
 import { PurchasingConfirmedView } from "@/components/purchasing/PurchasingConfirmedView";
 import { usePurchasingDates } from "@/hooks/usePurchasingDates";
 
