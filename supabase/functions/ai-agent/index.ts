@@ -1090,6 +1090,14 @@ Deno.serve(async (req) => {
       
       const nextMessages = [...messages, ...accumulatedTurns];
       
+      // Inject structured output reminder for social agent before follow-up call
+      if (agent === "social") {
+        nextMessages.push({
+          role: "user" as const,
+          content: "SYSTEM REMINDER: Your response MUST be ONLY: ![Product](URL) then English caption, then contact info (📍📞🌐), then hashtags, then ---PERSIAN--- translation block. NO Persian text outside ---PERSIAN---. NO descriptions. NO narration. NO explanations."
+        });
+      }
+
       // Follow-up AI call (with fallback to ensure tool loops survive GPT failures)
       aiResult = await callAI({
         provider: modelConfig.provider,
