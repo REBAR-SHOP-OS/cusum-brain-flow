@@ -92,8 +92,8 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
           <div
             className={cn(
               "w-28 h-28 rounded-full overflow-hidden shadow-2xl transition-all duration-200",
-              state === "connected" ? "ring-4 ring-primary/60" :
-              state === "connecting" ? "ring-4 ring-primary/30" :
+              state === "connected" ? "ring-4 ring-indigo-500/60" :
+              state === "connecting" ? "ring-4 ring-indigo-500/30" :
               state === "error" ? "ring-4 ring-destructive/50" : "ring-4 ring-muted"
             )}
             style={{

@@ -203,8 +203,8 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
         className={cn(
           "relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 focus:outline-none",
           isConnected
-            ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-[0_0_30px_rgba(59,130,246,0.5)]"
-            : "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-105",
+            ? "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-[0_0_30px_rgba(99,102,241,0.5)]"
+            : "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105",
           isConnecting && "opacity-60 cursor-wait animate-pulse"
         )}
       >
