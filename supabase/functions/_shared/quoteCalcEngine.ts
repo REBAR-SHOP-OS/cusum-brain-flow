@@ -7,10 +7,23 @@
 // ─── Types ───
 
 export interface PricingConfig {
-  straight_rebars: { bar_size: string; length_ft: number; price_each_cad: number }[];
+  straight_rebars: {
+    bar_size: string;
+    length_ft: number;
+    price_each_cad: number;
+    price_per_ton_cad?: number | null;
+  }[];
   fabrication_pricing: {
-    price_table: { min_ton: number; max_ton: number; price_per_ton_cad: number }[];
-    shop_drawing_per_ton_cad: number;
+    price_table: {
+      min_ton: number;
+      max_ton: number;
+      price_per_ton_cad: number;
+      shop_drawing_cad?: number;
+      shop_drawing_complex_cad?: number;
+      shop_drawing_cad_formula?: { base: number; per_ton: number };
+    }[];
+    /** @deprecated — kept for backward compat; tiered bracket pricing preferred */
+    shop_drawing_per_ton_cad?: number;
   };
   dowels: { type: string; size: string; price_each_cad: number }[];
   ties_circular: { type: string; diameter: string; price_each_cad: number }[];
@@ -157,34 +170,92 @@ export interface QuoteResult {
   missing_inputs_questions: string[] | null;
 }
 
+// ─── Normalization Helpers ───
+
+/**
+ * Normalize bar size strings from various AI formats to canonical Canadian form.
+ * "15mm" → "15M", "15m" → "15M", "#15" → "15M", "15M" → "15M"
+ */
+export function normalizeBarSize(raw: string): string {
+  if (!raw) return raw;
+  let s = raw.trim();
+  // Strip leading "#" (American style)
+  if (s.startsWith("#")) s = s.slice(1);
+  // Match patterns like "15mm", "15MM", "15m", "15M", "15 M", "15 mm"
+  const match = s.match(/^(\d+)\s*(?:mm|MM|m|M)?$/i);
+  if (match) {
+    return `${match[1]}M`;
+  }
+  // Already in correct form or unrecognized — return uppercase
+  return s.toUpperCase();
+}
+
+/**
+ * Coerce a value to a number. Handles strings, nulls, undefined.
+ */
+function toNum(v: unknown): number {
+  if (v === null || v === undefined || v === "") return 0;
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+}
+
 // ─── Core Calculation Functions ───
 
 export function computeStraightBarPrice(
   line: StraightLine,
-  config: PricingConfig
+  config: PricingConfig,
+  rebarSizes?: RebarSizeRow[]
 ): { unit_price: number; extended: number; found: boolean } {
+  const normSize = normalizeBarSize(line.bar_size);
+  const normLength = toNum(line.length_ft);
+  const qty = toNum(line.quantity);
+
+  // Try exact match (normalized)
   const match = config.straight_rebars.find(
-    (r) => r.bar_size === line.bar_size && r.length_ft === line.length_ft
+    (r) => normalizeBarSize(r.bar_size) === normSize && toNum(r.length_ft) === normLength
   );
-  if (!match) return { unit_price: 0, extended: 0, found: false };
-  return {
-    unit_price: match.price_each_cad,
-    extended: round2(match.price_each_cad * line.quantity),
-    found: true,
-  };
+  if (match) {
+    return {
+      unit_price: match.price_each_cad,
+      extended: round2(match.price_each_cad * qty),
+      found: true,
+    };
+  }
+
+  // Fallback: find a price_per_ton for this bar_size and compute from weight
+  const tonMatch = config.straight_rebars.find(
+    (r) => normalizeBarSize(r.bar_size) === normSize && r.price_per_ton_cad && r.price_per_ton_cad > 0
+  );
+  if (tonMatch && tonMatch.price_per_ton_cad && rebarSizes) {
+    const sizeData = rebarSizes.find((r) => normalizeBarSize(r.bar_code) === normSize);
+    if (sizeData) {
+      const lengthM = normLength * 0.3048;
+      const weightPerBar = lengthM * sizeData.mass_kg_per_m;
+      const unitPrice = round2((weightPerBar / 1000) * tonMatch.price_per_ton_cad);
+      return {
+        unit_price: unitPrice,
+        extended: round2(unitPrice * qty),
+        found: true,
+      };
+    }
+  }
+
+  return { unit_price: 0, extended: 0, found: false };
 }
 
 export function computeFabricatedWeight(
   line: FabricatedLine,
   rebarSizes: RebarSizeRow[]
 ): { weight_per_bar_kg: number; total_weight_kg: number; found: boolean } {
-  const size = rebarSizes.find((r) => r.bar_code === line.bar_size);
+  const normSize = normalizeBarSize(line.bar_size);
+  const size = rebarSizes.find((r) => normalizeBarSize(r.bar_code) === normSize);
   if (!size) return { weight_per_bar_kg: 0, total_weight_kg: 0, found: false };
-  const length_m = line.cut_length_ft * 0.3048;
+  const length_m = toNum(line.cut_length_ft) * 0.3048;
   const weight_per_bar_kg = length_m * size.mass_kg_per_m;
+  const qty = toNum(line.quantity);
   return {
     weight_per_bar_kg: round3(weight_per_bar_kg),
-    total_weight_kg: round3(weight_per_bar_kg * line.quantity),
+    total_weight_kg: round3(weight_per_bar_kg * qty),
     found: true,
   };
 }
@@ -192,12 +263,13 @@ export function computeFabricatedWeight(
 export function selectTonnageBracket(
   totalTons: number,
   priceTable: PricingConfig["fabrication_pricing"]["price_table"]
-): { price_per_ton: number; bracket_label: string } {
+): { price_per_ton: number; bracket_label: string; bracket: PricingConfig["fabrication_pricing"]["price_table"][0] } {
   for (const b of priceTable) {
     if (totalTons >= b.min_ton && totalTons < b.max_ton) {
       return {
         price_per_ton: b.price_per_ton_cad,
         bracket_label: `${b.min_ton}–${b.max_ton}t @ $${b.price_per_ton_cad}/t`,
+        bracket: b,
       };
     }
   }
@@ -206,7 +278,41 @@ export function selectTonnageBracket(
   return {
     price_per_ton: last.price_per_ton_cad,
     bracket_label: `${last.min_ton}+t @ $${last.price_per_ton_cad}/t`,
+    bracket: last,
   };
+}
+
+/**
+ * Compute shop drawing cost from the tiered bracket.
+ * Supports: flat `shop_drawing_cad`, formula `{base, per_ton}`, or legacy flat rate.
+ */
+export function computeShopDrawingCost(
+  bracket: PricingConfig["fabrication_pricing"]["price_table"][0],
+  tonnage: number,
+  legacyPerTon?: number
+): { cost: number; description: string } {
+  // Tiered flat amount
+  if (bracket.shop_drawing_cad !== undefined && bracket.shop_drawing_cad !== null) {
+    return {
+      cost: bracket.shop_drawing_cad,
+      description: `$${bracket.shop_drawing_cad} (bracket ${bracket.min_ton}–${bracket.max_ton}t)`,
+    };
+  }
+  // Formula: base + per_ton × tonnage
+  if (bracket.shop_drawing_cad_formula) {
+    const { base, per_ton } = bracket.shop_drawing_cad_formula;
+    const cost = round2(base + per_ton * tonnage);
+    return {
+      cost,
+      description: `$${base} + $${per_ton}/ton × ${round3(tonnage)}t = $${cost}`,
+    };
+  }
+  // Legacy flat per-ton rate
+  if (legacyPerTon && legacyPerTon > 0) {
+    const cost = round2(tonnage * legacyPerTon);
+    return { cost, description: `$${legacyPerTon}/ton × ${round3(tonnage)}t` };
+  }
+  return { cost: 0, description: "No shop drawing pricing configured" };
 }
 
 export function computeCagePrice(
@@ -214,7 +320,7 @@ export function computeCagePrice(
   config: PricingConfig,
   scrapPct: number
 ): { weight_kg: number; tonnage: number; cost: number } {
-  const raw_kg = cage.total_cage_weight_kg * cage.quantity;
+  const raw_kg = toNum(cage.total_cage_weight_kg) * toNum(cage.quantity);
   const with_scrap = applyScrap(raw_kg, scrapPct);
   const tonnage = with_scrap / 1000;
   return {
@@ -251,17 +357,37 @@ export function applyScrap(weightKg: number, scrapPct: number): number {
 // ─── Scope Normalizer ───
 
 function normalizeScope(scope: any): EstimateRequest["scope"] {
+  // Coerce all numeric fields in scope line items
+  const coerceLines = <T extends Record<string, unknown>>(arr: unknown): T[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((item: any) => {
+      const out = { ...item };
+      // Coerce known numeric fields
+      for (const key of ["quantity", "length_ft", "cut_length_ft", "total_cage_weight_kg", "unit_price_cad"]) {
+        if (key in out) out[key] = toNum(out[key]);
+      }
+      // Normalize bar_size if present
+      if ("bar_size" in out && typeof out.bar_size === "string") {
+        out.bar_size = normalizeBarSize(out.bar_size);
+      }
+      if ("type" in out && typeof out.type === "string") {
+        out.type = normalizeBarSize(out.type);
+      }
+      return out as T;
+    });
+  };
+
   return {
-    straight_rebar_lines: Array.isArray(scope?.straight_rebar_lines) ? scope.straight_rebar_lines : [],
-    fabricated_rebar_lines: Array.isArray(scope?.fabricated_rebar_lines) ? scope.fabricated_rebar_lines : [],
-    dowels: Array.isArray(scope?.dowels) ? scope.dowels : [],
-    ties_circular: Array.isArray(scope?.ties_circular) ? scope.ties_circular : [],
-    cages: Array.isArray(scope?.cages) ? scope.cages : [],
-    mesh: Array.isArray(scope?.mesh) ? scope.mesh : [],
+    straight_rebar_lines: coerceLines<StraightLine>(scope?.straight_rebar_lines),
+    fabricated_rebar_lines: coerceLines<FabricatedLine>(scope?.fabricated_rebar_lines),
+    dowels: coerceLines<DowelLine>(scope?.dowels),
+    ties_circular: coerceLines<TieLine>(scope?.ties_circular),
+    cages: coerceLines<CageLine>(scope?.cages),
+    mesh: coerceLines<MeshLine>(scope?.mesh),
     coating_type: scope?.coating_type || "black",
     shop_drawings_required: scope?.shop_drawings_required || false,
     scrap_percent_override: scope?.scrap_percent_override ?? null,
-    tax_rate: scope?.tax_rate ?? 13,
+    tax_rate: toNum(scope?.tax_rate) || 0,
   };
 }
 
@@ -272,36 +398,37 @@ export function validateEstimateRequest(
   config: PricingConfig
 ): string[] {
   const questions: string[] = [];
-
-  // Defensive: normalize scope arrays
   const scope = normalizeScope(req.scope);
 
-  // Check straight bars exist in config
   for (const line of scope.straight_rebar_lines) {
     if (line.quantity <= 0) {
       questions.push(`Straight bar ${line.line_id}: quantity is 0 or missing.`);
     }
+    const normSize = normalizeBarSize(line.bar_size);
+    const normLength = toNum(line.length_ft);
     const match = config.straight_rebars.find(
-      (r) => r.bar_size === line.bar_size && r.length_ft === line.length_ft
+      (r) => normalizeBarSize(r.bar_size) === normSize && toNum(r.length_ft) === normLength
     );
-    if (!match && line.quantity > 0) {
+    // Also check per-ton fallback
+    const tonMatch = config.straight_rebars.find(
+      (r) => normalizeBarSize(r.bar_size) === normSize && r.price_per_ton_cad && r.price_per_ton_cad > 0
+    );
+    if (!match && !tonMatch && line.quantity > 0) {
       questions.push(
         `Straight bar ${line.line_id}: ${line.bar_size} @ ${line.length_ft}ft not found in pricing config.`
       );
     }
   }
 
-  // Check fabricated bars
   for (const line of scope.fabricated_rebar_lines) {
     if (line.quantity <= 0) {
       questions.push(`Fabricated bar ${line.line_id}: quantity is 0 or missing.`);
     }
-    if (line.cut_length_ft <= 0) {
+    if (toNum(line.cut_length_ft) <= 0) {
       questions.push(`Fabricated bar ${line.line_id}: cut_length_ft is 0 or missing.`);
     }
   }
 
-  // Check dowels
   for (const line of scope.dowels) {
     if (line.quantity <= 0) {
       questions.push(`Dowel ${line.line_id}: quantity is 0 or missing.`);
@@ -316,7 +443,6 @@ export function validateEstimateRequest(
     }
   }
 
-  // Check ties
   for (const line of scope.ties_circular) {
     if (line.quantity <= 0) {
       questions.push(`Tie ${line.line_id}: quantity is 0 or missing.`);
@@ -331,9 +457,8 @@ export function validateEstimateRequest(
     }
   }
 
-  // Check cages
   for (const cage of scope.cages) {
-    if (cage.total_cage_weight_kg <= 0) {
+    if (toNum(cage.total_cage_weight_kg) <= 0) {
       questions.push(`Cage ${cage.line_id}: total_cage_weight_kg is 0 or missing.`);
     }
     if (cage.quantity <= 0) {
@@ -341,8 +466,8 @@ export function validateEstimateRequest(
     }
   }
 
-  // Shipping
-  if (req.shipping.delivery_required && req.shipping.distance_km <= 0) {
+  const shipping = req.shipping || { delivery_required: false, distance_km: 0 };
+  if (shipping.delivery_required && toNum(shipping.distance_km) <= 0) {
     questions.push("Shipping: delivery is required but distance_km is 0 or missing.");
   }
 
@@ -356,13 +481,11 @@ export function generateQuote(
   config: PricingConfig,
   rebarSizes: RebarSizeRow[]
 ): QuoteResult {
-  // Defensive: normalize scope arrays to prevent "not iterable" crashes
   const scope = normalizeScope(req.scope);
 
-  // Defensive defaults for optional top-level objects
   const shipping = req.shipping || { delivery_required: false, distance_km: 0, truck_capacity_tons: 0, notes: "" };
   const project = req.project || { project_name: "", customer_name: "", site_address: "", quote_date: "", notes: "" };
-  const meta = req.meta || { request_id: "", quote_type: "quick" as const, currency: "CAD", created_by: "agent", created_at: new Date().toISOString() };
+  const meta = req.meta || { request_id: "", quote_type: "quick", currency: "CAD", created_by: "agent", created_at: new Date().toISOString() };
 
   const scrapPct = scope.scrap_percent_override ?? config.default_scrap_percent;
   const coatingType = scope.coating_type || "black";
@@ -375,11 +498,11 @@ export function generateQuote(
 
   // 1. Straight bars
   for (const line of scope.straight_rebar_lines) {
-    const priceResult = computeStraightBarPrice(line, config);
-    // Estimate weight for straight bars for shipping calc
-    const sizeData = rebarSizes.find((r) => r.bar_code === line.bar_size);
+    const priceResult = computeStraightBarPrice(line, config, rebarSizes);
+    const normSize = normalizeBarSize(line.bar_size);
+    const sizeData = rebarSizes.find((r) => normalizeBarSize(r.bar_code) === normSize);
     const weightKg = sizeData
-      ? round3(line.length_ft * 0.3048 * sizeData.mass_kg_per_m * line.quantity)
+      ? round3(toNum(line.length_ft) * 0.3048 * sizeData.mass_kg_per_m * toNum(line.quantity))
       : 0;
     straightWeightKg += weightKg;
 
@@ -397,32 +520,23 @@ export function generateQuote(
     });
   }
 
-  // 2. Fabricated bars — compute weight, then price by tonnage bracket
+  // 2. Fabricated bars
   let totalFabWeightKg = 0;
-  const fabLineDetails: {
-    line: FabricatedLine;
-    weightKg: number;
-    found: boolean;
-  }[] = [];
+  const fabLineDetails: { line: FabricatedLine; weightKg: number; found: boolean }[] = [];
 
   for (const line of scope.fabricated_rebar_lines) {
     const wResult = computeFabricatedWeight(line, rebarSizes);
     totalFabWeightKg += wResult.total_weight_kg;
-    fabLineDetails.push({
-      line,
-      weightKg: wResult.total_weight_kg,
-      found: wResult.found,
-    });
+    fabLineDetails.push({ line, weightKg: wResult.total_weight_kg, found: wResult.found });
   }
 
   const fabWithScrap = applyScrap(totalFabWeightKg, scrapPct);
   const fabTonnage = fabWithScrap / 1000;
-  const bracket = selectTonnageBracket(fabTonnage, config.fabrication_pricing.price_table);
-  const fabBaseCost = round2(fabTonnage * bracket.price_per_ton);
+  const bracketResult = selectTonnageBracket(fabTonnage, config.fabrication_pricing.price_table);
+  const fabBaseCost = round2(fabTonnage * bracketResult.price_per_ton);
   const fabCostWithCoating = applyCoatingMultiplier(fabBaseCost, coatingType, config.coating_multipliers);
   fabricatedWeightKg = fabWithScrap;
 
-  // Distribute fabrication cost proportionally across lines
   for (const detail of fabLineDetails) {
     const proportion = totalFabWeightKg > 0 ? detail.weightKg / totalFabWeightKg : 0;
     const lineCost = round2(fabCostWithCoating * proportion);
@@ -438,15 +552,13 @@ export function generateQuote(
       tonnage: round3(lineScrapWeight / 1000),
       unit_price_cad: round2(lineCost / detail.line.quantity),
       extended_price_cad: lineCost,
-      notes: detail.found ? `Bracket: ${bracket.bracket_label}` : "BAR SIZE NOT FOUND",
+      notes: detail.found ? `Bracket: ${bracketResult.bracket_label}` : "BAR SIZE NOT FOUND",
     });
   }
 
   // 3. Dowels
   for (const line of scope.dowels) {
-    const match = config.dowels.find(
-      (d) => d.type === line.type && d.size === line.size
-    );
+    const match = config.dowels.find((d) => d.type === line.type && d.size === line.size);
     const unitPrice = match?.price_each_cad ?? 0;
     lineItems.push({
       category: "Dowels",
@@ -464,9 +576,7 @@ export function generateQuote(
 
   // 4. Ties circular
   for (const line of scope.ties_circular) {
-    const match = config.ties_circular.find(
-      (t) => t.type === line.type && t.diameter === line.diameter
-    );
+    const match = config.ties_circular.find((t) => t.type === line.type && t.diameter === line.diameter);
     const unitPrice = match?.price_each_cad ?? 0;
     lineItems.push({
       category: "Ties (Circular)",
@@ -482,7 +592,7 @@ export function generateQuote(
     });
   }
 
-  // 5. Cages — always separate from fabrication tonnage
+  // 5. Cages
   for (const cage of scope.cages) {
     const cageResult = computeCagePrice(cage, config, scrapPct);
     cageWeightKg += cageResult.weight_kg;
@@ -518,11 +628,13 @@ export function generateQuote(
     }
   }
 
-  // 7. Shop drawings
+  // 7. Shop drawings — tiered pricing from bracket
   const nonCageTonnage = round3((straightWeightKg + fabricatedWeightKg) / 1000);
   if (scope.shop_drawings_required) {
-    const sdCost = round2(
-      nonCageTonnage * config.fabrication_pricing.shop_drawing_per_ton_cad
+    const sdResult = computeShopDrawingCost(
+      bracketResult.bracket,
+      nonCageTonnage,
+      config.fabrication_pricing.shop_drawing_per_ton_cad
     );
     lineItems.push({
       category: "Shop Drawings",
@@ -532,21 +644,21 @@ export function generateQuote(
       length_or_weight: `${nonCageTonnage} t`,
       weight_kg: 0,
       tonnage: 0,
-      unit_price_cad: sdCost,
-      extended_price_cad: sdCost,
-      notes: `$${config.fabrication_pricing.shop_drawing_per_ton_cad}/ton`,
+      unit_price_cad: sdResult.cost,
+      extended_price_cad: sdResult.cost,
+      notes: sdResult.description,
     });
   }
 
   // 8. Shipping
   const totalWeightKg = straightWeightKg + fabricatedWeightKg + cageWeightKg;
   const totalTonnage = totalWeightKg / 1000;
-  const truckCap = shipping.truck_capacity_tons || config.default_truck_capacity_tons;
+  const truckCap = toNum(shipping.truck_capacity_tons) || config.default_truck_capacity_tons;
   let shippingTrips = 0;
 
-  if (shipping.delivery_required && shipping.distance_km > 0) {
+  if (shipping.delivery_required && toNum(shipping.distance_km) > 0) {
     const ship = computeShipping(
-      shipping.distance_km,
+      toNum(shipping.distance_km),
       totalTonnage,
       truckCap,
       config.shipping_per_km_cad
@@ -560,7 +672,7 @@ export function generateQuote(
       length_or_weight: `${shipping.distance_km} km`,
       weight_kg: 0,
       tonnage: round3(totalTonnage),
-      unit_price_cad: round2(shipping.distance_km * config.shipping_per_km_cad),
+      unit_price_cad: round2(toNum(shipping.distance_km) * config.shipping_per_km_cad),
       extended_price_cad: ship.cost,
       notes: `ceil(${round3(totalTonnage)}t / ${truckCap}t) = ${ship.trips} trips`,
     });
@@ -568,7 +680,8 @@ export function generateQuote(
 
   // 9. Totals
   const subtotal = lineItems.reduce((s, li) => s + li.extended_price_cad, 0);
-  const tax = round2(subtotal * (scope.tax_rate || 0));
+  const taxRate = toNum(scope.tax_rate);
+  const tax = round2(subtotal * taxRate);
   const grandTotal = round2(subtotal + tax);
 
   // 10. Spreadsheet table
@@ -601,7 +714,7 @@ export function generateQuote(
       scrap_tons: round3(Math.max(0, scrapTons)),
     },
     pricing_method_summary: {
-      tonnage_bracket_used: bracket.bracket_label,
+      tonnage_bracket_used: bracketResult.bracket_label,
       cage_rate: config.cage_price_per_ton_cad,
       coating_multiplier: coatingMult,
       shipping_trips: shippingTrips,
@@ -615,23 +728,11 @@ export function generateQuote(
 
 export function buildSpreadsheetTable(lineItems: QuoteLineItem[]): string[][] {
   const header = [
-    "Category",
-    "Description",
-    "Bar Size",
-    "Qty",
-    "Length/Weight",
-    "Weight (kg)",
-    "Tonnage (t)",
-    "Unit Price (CAD)",
-    "Extended Price (CAD)",
-    "Notes",
+    "Category", "Description", "Bar Size", "Qty", "Length/Weight",
+    "Weight (kg)", "Tonnage (t)", "Unit Price (CAD)", "Extended Price (CAD)", "Notes",
   ];
   const rows = lineItems.map((li) => [
-    li.category,
-    li.description,
-    li.bar_size,
-    String(li.qty),
-    li.length_or_weight,
+    li.category, li.description, li.bar_size, String(li.qty), li.length_or_weight,
     li.weight_kg > 0 ? String(li.weight_kg) : "—",
     li.tonnage > 0 ? String(li.tonnage) : "—",
     `$${li.unit_price_cad.toFixed(2)}`,
@@ -653,14 +754,14 @@ export function buildAssumptions(
     `Cage pricing at CAD $${config.cage_price_per_ton_cad}/ton — separate from fabrication brackets.`,
     `Shipping rate: CAD $${config.shipping_per_km_cad}/km per truckload (${config.default_truck_capacity_tons}t capacity).`,
     req.scope?.shop_drawings_required
-      ? `Shop drawings included at $${config.fabrication_pricing.shop_drawing_per_ton_cad}/ton.`
+      ? "Shop drawings included (tiered pricing by tonnage bracket)."
       : "Shop drawings NOT included.",
     "Prices are based on current pricing config and subject to confirmation.",
     "This quote does not include engineering, structural design, or site labour.",
     "All weights are calculated using CSA G30.18 standard bar masses.",
     "Mesh pricing is placeholder unless explicitly configured.",
-    (req.scope?.tax_rate ?? 0) > 0
-      ? `Tax rate: ${((req.scope?.tax_rate ?? 0) * 100).toFixed(1)}%.`
+    (toNum(req.scope?.tax_rate) > 0)
+      ? `Tax rate: ${(toNum(req.scope?.tax_rate) * 100).toFixed(1)}%.`
       : "No tax applied.",
   ];
 }
@@ -674,7 +775,6 @@ export function generateExplanation(
   lines.push(`## Quote Explanation — ${result.summary.project_name}`);
   lines.push("");
 
-  // Straight bars
   const straightItems = result.line_items.filter((li) => li.category === "Straight Bars");
   if (straightItems.length > 0) {
     lines.push("### Straight Bars");
@@ -685,7 +785,6 @@ export function generateExplanation(
     lines.push("");
   }
 
-  // Fabricated
   const fabItems = result.line_items.filter((li) => li.category === "Fabricated Bars");
   if (fabItems.length > 0) {
     lines.push("### Fabricated Bars");
@@ -699,7 +798,6 @@ export function generateExplanation(
     lines.push("");
   }
 
-  // Cages
   const cageItems = result.line_items.filter((li) => li.category === "Cages");
   if (cageItems.length > 0) {
     lines.push("### Cages");
@@ -710,13 +808,19 @@ export function generateExplanation(
     lines.push("");
   }
 
-  // Shipping
   const shipItems = result.line_items.filter((li) => li.category === "Shipping");
   if (shipItems.length > 0) {
     lines.push("### Shipping");
     lines.push(
       `${req.shipping?.distance_km ?? 0} km × $${config.shipping_per_km_cad}/km × ${result.pricing_method_summary.shipping_trips} trip(s) = $${shipItems[0].extended_price_cad}`
     );
+    lines.push("");
+  }
+
+  const sdItems = result.line_items.filter((li) => li.category === "Shop Drawings");
+  if (sdItems.length > 0) {
+    lines.push("### Shop Drawings");
+    lines.push(`- ${sdItems[0].notes}`);
     lines.push("");
   }
 
