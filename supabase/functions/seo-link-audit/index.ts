@@ -79,6 +79,20 @@ async function callAI(prompt: string, systemPrompt: string): Promise<string> {
 
 // ─── CRAWL PHASE ───
 
+async function checkLink(href: string, siteUrl: string): Promise<{ status: number | null; error: boolean }> {
+  try {
+    const url = href.startsWith("/") ? `${siteUrl}${href}` : href;
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(3000),
+    });
+    return { status: res.status, error: res.status >= 400 };
+  } catch {
+    return { status: null, error: true };
+  }
+}
+
 async function handleCrawl(sb: any, domainId: string, companyId: string) {
   const wp = new WPClient();
 
@@ -98,6 +112,11 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
   const results: any[] = [];
   const siteUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "";
 
+  // Collect all link records first (no network calls yet)
+  type PendingRecord = { record: any; needsCheck: boolean };
+  const pending: PendingRecord[] = [];
+  const checkedUrls = new Map<string, { status: string; suggestion: string | null }>();
+
   for (const item of allContent) {
     const pageUrl = item.link || `${siteUrl}/?p=${item.id}`;
     const html = item.content?.rendered || "";
@@ -106,44 +125,27 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
     const links = extractLinks(html);
 
     for (const link of links) {
-      const record: any = {
-        domain_id: domainId,
-        page_url: pageUrl,
-        link_href: link.href,
-        anchor_text: link.text || null,
-        company_id: companyId,
-      };
-
       if (!link.href || link.href.startsWith("#") || link.href.startsWith("mailto:") || link.href.startsWith("tel:")) {
         continue;
       }
 
       const isInternal = link.href.startsWith("/") || (siteUrl && link.href.includes(new URL(siteUrl).hostname));
-      record.link_type = isInternal ? "internal" : "external";
+      const record: any = {
+        domain_id: domainId,
+        page_url: pageUrl,
+        link_href: link.href,
+        anchor_text: link.text || null,
+        link_type: isInternal ? "internal" : "external",
+        company_id: companyId,
+      };
 
       if (!link.text || link.text.trim() === "") {
         record.status = "missing_anchor";
         record.suggestion = "Add descriptive anchor text for SEO";
+        pending.push({ record, needsCheck: false });
       } else {
-        try {
-          const headRes = await fetch(link.href.startsWith("/") ? `${siteUrl}${link.href}` : link.href, {
-            method: "HEAD",
-            redirect: "follow",
-            signal: AbortSignal.timeout(5000),
-          });
-          if (headRes.status >= 400) {
-            record.status = "broken";
-            record.suggestion = `Link returns ${headRes.status}. Fix or remove.`;
-          } else {
-            record.status = "ok";
-          }
-        } catch {
-          record.status = "broken";
-          record.suggestion = "Link unreachable or timed out";
-        }
+        pending.push({ record, needsCheck: true });
       }
-
-      results.push(record);
     }
 
     // RSIC opportunity detection
@@ -157,21 +159,63 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
 
       const matched = resource.keywords.some((kw) => textContent.includes(kw));
       if (matched) {
-        results.push({
-          domain_id: domainId,
-          page_url: pageUrl,
-          link_href: null,
-          anchor_text: null,
-          link_type: "rsic_opportunity",
-          status: "opportunity",
-          suggestion: `Add outbound link to "${resource.anchor}" — keyword match found in content`,
-          suggested_href: resource.href,
-          suggested_anchor: resource.anchor,
-          company_id: companyId,
+        pending.push({
+          record: {
+            domain_id: domainId,
+            page_url: pageUrl,
+            link_href: null,
+            anchor_text: null,
+            link_type: "rsic_opportunity",
+            status: "opportunity",
+            suggestion: `Add outbound link to "${resource.anchor}" — keyword match found in content`,
+            suggested_href: resource.href,
+            suggested_anchor: resource.anchor,
+            company_id: companyId,
+          },
+          needsCheck: false,
         });
         rsicCount++;
       }
     }
+  }
+
+  console.log(`Collected ${pending.length} link records, checking status concurrently...`);
+
+  // Deduplicate URLs to check
+  const urlsToCheck = new Set<string>();
+  for (const p of pending) {
+    if (p.needsCheck && p.record.link_href) urlsToCheck.add(p.record.link_href);
+  }
+
+  // Check URLs in concurrent batches of 15
+  const BATCH_SIZE = 15;
+  const uniqueUrls = Array.from(urlsToCheck);
+  for (let i = 0; i < uniqueUrls.length; i += BATCH_SIZE) {
+    const batch = uniqueUrls.slice(i, i + BATCH_SIZE);
+    const checks = await Promise.all(batch.map((url) => checkLink(url, siteUrl)));
+    for (let j = 0; j < batch.length; j++) {
+      const check = checks[j];
+      if (check.error) {
+        const suggestion = check.status ? `Link returns ${check.status}. Fix or remove.` : "Link unreachable or timed out";
+        checkedUrls.set(batch[j], { status: "broken", suggestion });
+      } else {
+        checkedUrls.set(batch[j], { status: "ok", suggestion: null });
+      }
+    }
+  }
+
+  // Apply check results to records
+  for (const p of pending) {
+    if (p.needsCheck && p.record.link_href) {
+      const result = checkedUrls.get(p.record.link_href);
+      if (result) {
+        p.record.status = result.status;
+        p.record.suggestion = result.suggestion;
+      } else {
+        p.record.status = "ok";
+      }
+    }
+    results.push(p.record);
   }
 
   if (results.length > 0) {
@@ -190,6 +234,8 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
     missing_anchor: results.filter((r) => r.status === "missing_anchor").length,
     ok: results.filter((r) => r.status === "ok").length,
   };
+
+  console.log(`Crawl complete:`, stats);
 
   return new Response(JSON.stringify({ success: true, stats }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
