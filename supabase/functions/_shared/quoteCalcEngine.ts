@@ -689,7 +689,7 @@ export function generateExplanation(
     );
     lines.push(`Tonnage bracket selected: ${result.pricing_method_summary.tonnage_bracket_used}`);
     if (result.pricing_method_summary.coating_multiplier > 1) {
-      lines.push(`Coating multiplier (${req.scope.coating_type}): ${result.pricing_method_summary.coating_multiplier}×`);
+      lines.push(`Coating multiplier (${req.scope?.coating_type || "black"}): ${result.pricing_method_summary.coating_multiplier}×`);
     }
     lines.push("");
   }

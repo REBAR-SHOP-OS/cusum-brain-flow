@@ -267,9 +267,19 @@ export async function executeToolCall(
     // 11. Generate Sales Quote
     // ═══════════════════════════════════════════════════
     else if (name === "generate_sales_quote") {
+      const er = args.estimate_request || args;
+      // Defensive: normalize scope arrays to prevent "not iterable" crashes
+      if (er?.scope) {
+        er.scope.straight_rebar_lines = Array.isArray(er.scope.straight_rebar_lines) ? er.scope.straight_rebar_lines : [];
+        er.scope.fabricated_rebar_lines = Array.isArray(er.scope.fabricated_rebar_lines) ? er.scope.fabricated_rebar_lines : [];
+        er.scope.dowels = Array.isArray(er.scope.dowels) ? er.scope.dowels : [];
+        er.scope.ties_circular = Array.isArray(er.scope.ties_circular) ? er.scope.ties_circular : [];
+        er.scope.cages = Array.isArray(er.scope.cages) ? er.scope.cages : [];
+        er.scope.mesh = Array.isArray(er.scope.mesh) ? er.scope.mesh : [];
+      }
       const body = {
         action: args.action || "quote",
-        estimate_request: args.estimate_request || args,
+        estimate_request: er,
         company_id: companyId,
       };
 
