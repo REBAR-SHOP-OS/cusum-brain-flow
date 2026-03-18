@@ -438,6 +438,11 @@ export function SeoKeywords() {
                 <LayoutDashboard className="mr-1 h-4 w-4" />
                 Wincher dashboard
               </Button>
+              <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleExcelImport} />
+              <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing || !domain?.id}>
+                {importing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}
+                Import Excel
+              </Button>
             </div>
           </CardContent>
           {researchKeyword.data && (
