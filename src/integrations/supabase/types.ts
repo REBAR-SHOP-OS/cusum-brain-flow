@@ -12042,6 +12042,13 @@ export type Database = {
           visitors_change_pct: number | null
           visits_change_pct: number | null
           visits_monthly: number | null
+          wincher_annotations_json: Json | null
+          wincher_competitors_json: Json | null
+          wincher_data_json: Json | null
+          wincher_groups_json: Json | null
+          wincher_rank_history_json: Json | null
+          wincher_synced_at: string | null
+          wincher_website_id: number | null
         }
         Insert: {
           avg_position?: number | null
@@ -12070,6 +12077,13 @@ export type Database = {
           visitors_change_pct?: number | null
           visits_change_pct?: number | null
           visits_monthly?: number | null
+          wincher_annotations_json?: Json | null
+          wincher_competitors_json?: Json | null
+          wincher_data_json?: Json | null
+          wincher_groups_json?: Json | null
+          wincher_rank_history_json?: Json | null
+          wincher_synced_at?: string | null
+          wincher_website_id?: number | null
         }
         Update: {
           avg_position?: number | null
@@ -12098,6 +12112,13 @@ export type Database = {
           visitors_change_pct?: number | null
           visits_change_pct?: number | null
           visits_monthly?: number | null
+          wincher_annotations_json?: Json | null
+          wincher_competitors_json?: Json | null
+          wincher_data_json?: Json | null
+          wincher_groups_json?: Json | null
+          wincher_rank_history_json?: Json | null
+          wincher_synced_at?: string | null
+          wincher_website_id?: number | null
         }
         Relationships: []
       }
@@ -12225,6 +12246,17 @@ export type Database = {
           top_page: string | null
           topic_cluster: string | null
           trend_score: number | null
+          wincher_best_position: number | null
+          wincher_cpc: number | null
+          wincher_difficulty: number | null
+          wincher_keyword_id: number | null
+          wincher_position: number | null
+          wincher_position_change: number | null
+          wincher_position_history_json: Json | null
+          wincher_ranking_pages_json: Json | null
+          wincher_serp_features_json: Json | null
+          wincher_synced_at: string | null
+          wincher_traffic: number | null
         }
         Insert: {
           avg_position?: number | null
@@ -12248,6 +12280,17 @@ export type Database = {
           top_page?: string | null
           topic_cluster?: string | null
           trend_score?: number | null
+          wincher_best_position?: number | null
+          wincher_cpc?: number | null
+          wincher_difficulty?: number | null
+          wincher_keyword_id?: number | null
+          wincher_position?: number | null
+          wincher_position_change?: number | null
+          wincher_position_history_json?: Json | null
+          wincher_ranking_pages_json?: Json | null
+          wincher_serp_features_json?: Json | null
+          wincher_synced_at?: string | null
+          wincher_traffic?: number | null
         }
         Update: {
           avg_position?: number | null
@@ -12271,6 +12314,17 @@ export type Database = {
           top_page?: string | null
           topic_cluster?: string | null
           trend_score?: number | null
+          wincher_best_position?: number | null
+          wincher_cpc?: number | null
+          wincher_difficulty?: number | null
+          wincher_keyword_id?: number | null
+          wincher_position?: number | null
+          wincher_position_change?: number | null
+          wincher_position_history_json?: Json | null
+          wincher_ranking_pages_json?: Json | null
+          wincher_serp_features_json?: Json | null
+          wincher_synced_at?: string | null
+          wincher_traffic?: number | null
         }
         Relationships: [
           {
