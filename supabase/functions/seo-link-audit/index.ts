@@ -233,13 +233,18 @@ async function handleCheckBroken(sb: any, domainId: string) {
     }));
 
     for (const check of checks) {
+      const ids = urlMap.get(check.url) || [];
       if (check.broken) {
-        const ids = urlMap.get(check.url) || [];
         const suggestion = check.status ? `Link returns ${check.status}. Fix or remove.` : "Link unreachable or timed out";
         for (const id of ids) {
           await sb.from("seo_link_audit").update({ status: "broken", suggestion }).eq("id", id);
         }
         brokenCount += ids.length;
+      } else {
+        // Mark as "checked" so it won't be re-fetched in the next iteration
+        for (const id of ids) {
+          await sb.from("seo_link_audit").update({ status: "checked" }).eq("id", id);
+        }
       }
     }
   }
