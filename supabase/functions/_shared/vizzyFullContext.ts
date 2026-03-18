@@ -263,6 +263,7 @@ export async function buildFullVizzyContext(
 
   // CRM
   const openLeads = (leads || []).length;
+  const totalCustomerCount = totalCustomers ?? 0;
   const hotLeads = (leads || [])
     .filter((l: any) => (l.win_prob_score || 0) >= 70)
     .slice(0, 5)
@@ -488,7 +489,12 @@ export async function buildFullVizzyContext(
     .map(([name, stats]) => `  • ${name}: ${stats.count} actions (${Array.from(stats.types).slice(0, 5).join(", ")})`)
     .join("\n");
 
-  return `═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
+  // Build structured facts block for anti-hallucination anchoring
+  const factsBlock = `[FACTS] staff=${totalStaff}, customers=${totalCustomerCount}, open_leads=${openLeads}, AR=${fmt(totalReceivable)}, AP=${fmt(totalPayable)}, scheduled_deliveries=${scheduledToday}, in_transit=${inTransit} [/FACTS]`;
+
+  return `${factsBlock}
+
+═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
 
 ${includeFinancials ? `📊 FINANCIALS
   Accounts Receivable: ${fmt(totalReceivable)}
