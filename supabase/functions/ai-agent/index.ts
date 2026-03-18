@@ -1090,6 +1090,14 @@ Deno.serve(async (req) => {
       
       const nextMessages = [...messages, ...accumulatedTurns];
       
+      // Inject structured output reminder for social agent before follow-up call
+      if (agent === "social") {
+        nextMessages.push({
+          role: "user" as const,
+          content: "SYSTEM REMINDER: Your response MUST be ONLY: ![Product](URL) then English caption, then contact info (📍📞🌐), then hashtags, then ---PERSIAN--- translation block. NO Persian text outside ---PERSIAN---. NO descriptions. NO narration. NO explanations."
+        });
+      }
+
       // Follow-up AI call (with fallback to ensure tool loops survive GPT failures)
       aiResult = await callAI({
         provider: modelConfig.provider,
@@ -1143,15 +1151,47 @@ Deno.serve(async (req) => {
       reply = "I processed the data but couldn't generate a text response. Please try again or rephrase your question.";
     }
 
-    // Post-processing safety net: strip verbose pre-image text for social agent
+    // Post-processing safety net: strip verbose text for social agent
     if (agent === "social" && reply) {
       const imageMarkdownIdx = reply.indexOf("![");
       if (imageMarkdownIdx > 0) {
-        // Check if text before image is verbose (>30 chars of non-whitespace)
         const preImageText = reply.slice(0, imageMarkdownIdx).trim();
         if (preImageText.length > 30) {
           console.log(`🧹 Social agent: stripping ${preImageText.length} chars of pre-image text`);
           reply = reply.slice(imageMarkdownIdx);
+        }
+      }
+
+      // Strip Persian/Arabic text that appears AFTER image but BEFORE ---PERSIAN---
+      const persianSepIdx = reply.indexOf("---PERSIAN---");
+      if (imageMarkdownIdx >= 0 && persianSepIdx > 0) {
+        // Find end of image markdown line
+        const imgLineEnd = reply.indexOf("\n", imageMarkdownIdx);
+        if (imgLineEnd > 0 && imgLineEnd < persianSepIdx) {
+          const imageLine = reply.slice(imageMarkdownIdx, imgLineEnd + 1);
+          const betweenText = reply.slice(imgLineEnd + 1, persianSepIdx);
+          const persianBlock = reply.slice(persianSepIdx);
+
+          // Detect Persian/Arabic characters in the between-text
+          const persianCharRegex = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g;
+          const persianChars = betweenText.match(persianCharRegex);
+          const totalChars = betweenText.replace(/\s/g, "").length;
+
+          // If >20% of non-whitespace chars are Persian, extract only English lines
+          if (persianChars && totalChars > 0 && persianChars.length / totalChars > 0.2) {
+            const lines = betweenText.split("\n");
+            const englishLines = lines.filter(line => {
+              const trimmed = line.trim();
+              if (!trimmed) return true; // keep blank lines
+              // Keep lines that are contact info, hashtags, or mostly English
+              if (/^[📍📞🌐#]/.test(trimmed)) return true;
+              const persianInLine = (trimmed.match(persianCharRegex) || []).length;
+              return persianInLine / trimmed.replace(/\s/g, "").length < 0.2;
+            });
+            const cleanedBetween = englishLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+            console.log(`🧹 Social agent: stripped Persian narration between image and ---PERSIAN--- block`);
+            reply = imageLine + (cleanedBetween ? "\n" + cleanedBetween + "\n\n" : "\n\n") + persianBlock;
+          }
         }
       }
     }
