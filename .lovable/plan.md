@@ -1,92 +1,121 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Plan: Connect Wincher API and Pull All Data into SEO Module
+## Completed: Add All Wan 2.6 Capabilities
 
-### Step 1: Store the Wincher API Token
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-You have a Wincher Personal Access Token (from the screenshot). I will securely store it as `WINCHER_API_KEY` using the secrets tool, so it is available to backend functions.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### Step 2: Create Edge Function `wincher-sync`
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-A new edge function `supabase/functions/wincher-sync/index.ts` that calls the Wincher REST API (`https://api.wincher.com/v1`) with `Authorization: Bearer {token}`.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-**Actions the function will support:**
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-| Action | Wincher Endpoint | What it pulls | Saves to |
-|--------|-----------------|---------------|----------|
-| `list_websites` | `GET /websites?include_ranking=true` | All websites with ranking summaries | `seo_domains` (wincher_json) |
-| `list_keywords` | `GET /websites/{id}/keywords?include_ranking=true&limit=1000` | All keywords with positions, volume, CPC, difficulty, intent, traffic, SERP features, best position, ranking pages | `seo_keyword_ai` |
-| `ranking_history` | `POST /websites/{id}/ranking-history` | Bulk historical position data (up to 2000 days) | `seo_domains` (wincher_rank_history_json) |
-| `keyword_history` | `GET /websites/{id}/keyword/{kw_id}/ranking-history` | Per-keyword historical positions | `seo_keyword_ai` (position_history_json) |
-| `list_competitors` | `GET /websites/{id}/competitors` | Competitor domains | `seo_domains` (wincher_competitors_json) |
-| `competitor_summaries` | `GET /websites/{id}/competitors/ranking-summaries?include_ranking=true` | Competitor ranking data vs yours | `seo_domains` (wincher_competitors_json) |
-| `competitor_positions` | `GET /websites/{id}/competitors/keyword-positions` | Competitor positions per keyword | `seo_domains` (wincher_competitors_json) |
-| `list_serps` | `GET /websites/{id}/keywords/{kw_id}/serps` | SERP snapshots (top 10 results per keyword) | `seo_keyword_ai` (serp_json) |
-| `list_groups` | `GET /websites/{id}/groups?include_ranking=true` | Keyword groups with rankings | stored as JSON |
-| `list_annotations` | `GET /websites/{id}/annotations` | Timeline annotations | stored as JSON |
-| `full_export` | All of the above in parallel | Everything | All tables |
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-The function will paginate through all keywords (using `limit` + `offset`) and handle 429 rate limits with retry backoff.
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
 
-### Step 3: Database Migration
+## Completed: Pipeline Unified Timeline & Data Quality Patch
 
-Add columns to store Wincher-specific data:
+### Changes
 
-- `seo_domains`: `wincher_website_id` (integer), `wincher_data_json` (JSONB), `wincher_rank_history_json` (JSONB), `wincher_competitors_json` (JSONB), `wincher_groups_json` (JSONB), `wincher_annotations_json` (JSONB), `wincher_synced_at` (timestamptz)
-- `seo_keyword_ai`: `wincher_keyword_id` (integer), `wincher_position` (integer), `wincher_position_change` (integer), `wincher_traffic` (numeric), `wincher_difficulty` (integer), `wincher_cpc` (numeric), `wincher_best_position` (integer), `wincher_serp_features_json` (JSONB), `wincher_ranking_pages_json` (JSONB), `wincher_position_history_json` (JSONB), `wincher_synced_at` (timestamptz)
+**Backend — Sync Fixes:**
+- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
+- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
+- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
 
-### Step 4: Frontend Hook `useWincherSync`
+**Frontend — Lead Detail:**
+- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
 
-New hook `src/hooks/useWincherSync.ts` with mutations:
-- `syncAll` -- calls `full_export` action, pulls everything from Wincher in one click
-- Progress toast notifications showing keyword count, history days pulled, etc.
+**Frontend — Pipeline Board:**
+- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
 
-### Step 5: Add Wincher Sync Button to SEO Overview
+**Migration:**
+- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
+- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
 
-In `SeoOverview.tsx`, add a "Sync Wincher" button alongside the existing SEMrush sync button. This triggers the full export and shows progress.
+### Known Risks
+- Priority re-mapping changes existing lead priorities on next sync (intentional)
+- File linkage fix uses both int/string ID matching — monitor results after next sync
+- Stage group filter is additive/safe — "Show all" restores full board
 
-### Step 6: Display Wincher Data in SEO Module
+### Follow-up
+- Run a full Odoo sync to apply priority and revenue fixes to existing data
+- Monitor file linkage stats in chatter sync response after deployment
 
-Enrich existing SEO views:
-- **Keywords tab**: Show Wincher position, position change, difficulty, traffic, CPC, SERP features alongside existing data
-- **Overview tab**: Show Wincher ranking trends (avg position, traffic, share of voice history charts)
-- **Links tab**: Show competitor ranking comparisons from Wincher
+## Completed: Odoo Mirror Pipeline + Sales Department Patch
 
-### Data We Will Pull (complete list)
+### Assessment
+Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
 
-Per website:
-- Domain ranking summary (avg position, traffic, traffic value, volume, share of voice + full history)
-- Position distribution (1-3, 4-10, 11-20, 21-30)
-- SERP feature ownership counts
-- Keyword count history
-- Competitors list + their ranking summaries + keyword positions
+### Changes Implemented
 
-Per keyword (all of them, paginated):
-- Current position + change + change_status
-- Search volume + volume history
-- CPC (high/low) + CPC history
-- Keyword difficulty
-- Search intents (NAVIGATIONAL, INFORMATIONAL, etc. with probabilities)
-- Competition level
-- Ranking pages (which URLs rank)
-- SERP features (PAID, AI_OVERVIEW, LOCAL_PACK, etc.)
-- Best position ever
-- Historical position data (up to 2000 days back)
+**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
+- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
+- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
+- 30s cooldown per lead to prevent API rate limiting
+- Shows "Syncing…" indicator in header during refresh
+- Invalidates all lead-related query keys on completion
 
-Per keyword SERP (top keywords):
-- Full SERP snapshot: URLs, titles, descriptions, positions, traffic, SEO scores
+**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
+- New `mode: "single"` + `odoo_id` parameter
+- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
+- Logs stage change events if stage differs
+- Returns fast without touching other leads
 
-Keyword groups with their aggregate rankings
+**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
+- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
+- Logs reconciliation events with reason
+- Only archives non-terminal leads (skips already won/lost)
 
-Annotations (timeline events)
+**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
+- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
+- Improves timeline readability
 
-### Files to Create/Modify
+**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
+- Footer shows "Synced X minutes ago" with color-coded status dot
+- Green: <5min, Yellow: <30min, Red: >30min
 
-| File | Action |
-|------|--------|
-| `supabase/functions/wincher-sync/index.ts` | Create |
-| `src/hooks/useWincherSync.ts` | Create |
-| `src/components/seo/SeoOverview.tsx` | Modify (add Wincher sync button) |
-| `src/components/seo/SeoKeywords.tsx` | Modify (show Wincher columns) |
-| Database migration | Add Wincher columns to `seo_domains` and `seo_keyword_ai` |
+### Files Changed
+- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
+- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
+- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
 
+### No Changes Needed (Already Existed)
+- Sales Department sidebar, routes, pages, tables, hooks
+- Odoo chatter sync single mode (already existed)
+- OdooChatter unified timeline (already existed)
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
+- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)

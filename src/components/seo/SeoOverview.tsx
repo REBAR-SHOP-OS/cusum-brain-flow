@@ -10,6 +10,7 @@ import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useSemrushSync } from "@/hooks/useSemrushApi";
+import { useWincherSync } from "@/hooks/useWincherSync";
 import * as XLSX from "@e965/xlsx";
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -34,6 +35,7 @@ export function SeoOverview() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
   const { syncDomain, fullExport } = useSemrushSync();
+  const { syncAll: wincherSync } = useWincherSync();
 
   // Check Google connection status
   useEffect(() => {
@@ -355,7 +357,11 @@ export function SeoOverview() {
           <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => domain && fullExport.mutate({ domain_id: domain.id, domain: domain.domain })} disabled={fullExport.isPending || !domain}>
             {fullExport.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
             {fullExport.isPending ? "Pulling All Data…" : "Pull All SEMrush Data"}
-          </Button>
+           </Button>
+           <Button variant="outline" size="sm" className="border-emerald-500/30 text-emerald-700 hover:bg-emerald-50" onClick={() => domain && wincherSync.mutate({ domain_id: domain.id })} disabled={wincherSync.isPending || !domain}>
+             {wincherSync.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
+             {wincherSync.isPending ? "Pulling Wincher…" : "Pull All Wincher Data"}
+           </Button>
           <Button variant="outline" size="sm" onClick={() => syncGsc.mutate()} disabled={syncGsc.isPending || !domain || googleStatus !== "connected"}>
             {syncGsc.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
             Sync Search Console

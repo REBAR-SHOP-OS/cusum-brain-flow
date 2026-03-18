@@ -186,23 +186,26 @@ export function SeoKeywords() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left p-3 font-medium">Keyword</th>
-                    <th className="text-center p-3 font-medium w-20">Position</th>
-                    <th className="text-center p-3 font-medium w-16">Trend</th>
-                    <th className="text-center p-3 font-medium w-24">Intent</th>
-                    <th className="text-left p-3 font-medium w-28">Cluster</th>
-                    <th className="text-center p-3 font-medium w-24">Opportunity</th>
-                    <th className="text-center p-3 font-medium w-24">Relevance</th>
-                    <th className="text-center p-3 font-medium w-24">Status</th>
-                    <th className="text-center p-3 font-medium w-32">Sources</th>
-                    <th className="text-right p-3 font-medium w-16">Clicks</th>
-                  </tr>
+                     <th className="text-left p-3 font-medium">Keyword</th>
+                     <th className="text-center p-3 font-medium w-20">Position</th>
+                     <th className="text-center p-3 font-medium w-20">W.Pos</th>
+                     <th className="text-center p-3 font-medium w-16">W.Δ</th>
+                     <th className="text-center p-3 font-medium w-16">Trend</th>
+                     <th className="text-center p-3 font-medium w-24">Intent</th>
+                     <th className="text-center p-3 font-medium w-20">Volume</th>
+                     <th className="text-center p-3 font-medium w-16">KD</th>
+                     <th className="text-center p-3 font-medium w-16">CPC</th>
+                     <th className="text-center p-3 font-medium w-24">Opportunity</th>
+                     <th className="text-center p-3 font-medium w-24">Status</th>
+                     <th className="text-center p-3 font-medium w-32">Sources</th>
+                     <th className="text-right p-3 font-medium w-16">Traffic</th>
+                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
-                  ) : !filtered.length ? (
-                    <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">No keywords yet. Run a full analysis to discover keyword opportunities.</td></tr>
+                   <tr><td colSpan={13} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
+                   ) : !filtered.length ? (
+                     <tr><td colSpan={13} className="p-8 text-center text-muted-foreground">No keywords yet. Run a full analysis to discover keyword opportunities.</td></tr>
                   ) : (
                     filtered.map((kw: any) => (
                       <tr key={kw.id} className="border-b hover:bg-muted/30 transition-colors">
@@ -220,31 +223,29 @@ export function SeoKeywords() {
                           ) : kw.keyword}
                         </td>
                         <td className="p-3 text-center font-mono">{kw.avg_position ? Number(kw.avg_position).toFixed(1) : "—"}</td>
+                        <td className="p-3 text-center font-mono">
+                          {kw.wincher_position ?? "—"}
+                        </td>
+                        <td className="p-3 text-center font-mono text-xs">
+                          {kw.wincher_position_change != null ? (
+                            <span className={kw.wincher_position_change > 0 ? "text-green-600" : kw.wincher_position_change < 0 ? "text-destructive" : ""}>
+                              {kw.wincher_position_change > 0 ? "+" : ""}{kw.wincher_position_change}
+                            </span>
+                          ) : "—"}
+                        </td>
                         <td className="p-3 text-center">{trendIcon(kw.trend_score)}</td>
                         <td className="p-3 text-center">
-                          <Badge className={`text-[10px] ${intentColors[kw.intent] || ""}`}>{kw.intent}</Badge>
+                          <Badge className={`text-[10px] ${intentColors[kw.intent] || ""}`}>{kw.intent || "—"}</Badge>
                         </td>
-                        <td className="p-3 text-xs text-muted-foreground truncate max-w-[120px]">{kw.topic_cluster || "—"}</td>
+                        <td className="p-3 text-center font-mono text-xs">{kw.volume ? Number(kw.volume).toLocaleString() : "—"}</td>
+                        <td className="p-3 text-center font-mono text-xs">{kw.wincher_difficulty ?? "—"}</td>
+                        <td className="p-3 text-center font-mono text-xs">{kw.wincher_cpc != null ? `$${Number(kw.wincher_cpc).toFixed(2)}` : "—"}</td>
                         <td className="p-3 text-center">
                           <div className="flex items-center gap-1 justify-center">
                             <div className="w-12 h-2 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-primary"
-                                style={{ width: `${Math.min(100, kw.opportunity_score || 0)}%` }}
-                              />
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, kw.opportunity_score || 0)}%` }} />
                             </div>
                             <span className="text-xs font-mono">{Number(kw.opportunity_score || 0).toFixed(0)}</span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center gap-1 justify-center">
-                            <div className="w-12 h-2 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-green-500"
-                                style={{ width: `${Math.min(100, kw.business_relevance || 0)}%` }}
-                              />
-                            </div>
-                            <span className="text-xs font-mono">{Number(kw.business_relevance || 0).toFixed(0)}</span>
                           </div>
                         </td>
                         <td className="p-3 text-center">
@@ -257,10 +258,9 @@ export function SeoKeywords() {
                                 {src}
                               </Badge>
                             ))}
-                            {!(kw.sources || []).length && <span className="text-xs text-muted-foreground">—</span>}
                           </div>
                         </td>
-                        <td className="p-3 text-right font-mono text-xs">{kw.clicks_28d || 0}</td>
+                        <td className="p-3 text-right font-mono text-xs">{kw.wincher_traffic != null ? Number(kw.wincher_traffic).toFixed(0) : (kw.clicks_28d || 0)}</td>
                       </tr>
                     ))
                   )}
