@@ -130,16 +130,17 @@ When a user says "quote for 100 15mm rebar", you have EVERYTHING needed:
 **fabricated_rebar_lines** — Bent/shaped bars:
 \`{ "line_id": "F1", "bar_size": "15M", "shape_code": "S1", "cut_length_ft": 8, "quantity": 100 }\`
 
-**ties_circular** — Circular ties:
-\`{ "line_id": "T1", "type": "circular", "bar_size": "10M", "diameter_inch": 18, "quantity": 16 }\`
+**ties_circular** — Circular ties (standalone, NOT part of a cage assembly):
+\`{ "line_id": "T1", "type": "10M", "diameter": "18\\"", "quantity": 12 }\`
+⚠️ CRITICAL: "type" must be the BAR SIZE (e.g. "10M"), NOT "circular". "diameter" must be a STRING with inch mark (e.g. "18\\"", "12\\""), NOT a number.
 
 **ties_rectangular** — Rectangular ties:
-\`{ "line_id": "T2", "type": "rectangular", "bar_size": "10M", "width_inch": 12, "height_inch": 18, "quantity": 20 }\`
+\`{ "line_id": "T2", "type": "10M", "diameter": "12\\"x18\\"", "quantity": 20 }\`
 
 **dowels** — Straight dowel bars:
 \`{ "line_id": "D1", "bar_size": "15M", "length_ft": 2, "quantity": 100 }\`
 
-**cages** — Assembled rebar cages (ties + verticals):
+**cages** — ONLY for fully assembled rebar cages (ties + verticals + cage assembly). Use ONLY when customer explicitly says "cage" with BOTH ties AND vertical bars described together as a single assembled unit:
 \`{ "line_id": "C1", "cage_type": "circular", "tie_bar_size": "10M", "tie_diameter_inch": 18, "tie_quantity": 16, "vertical_bar_size": "15M", "vertical_length_ft": 10, "vertical_quantity": 8, "total_cage_weight_kg": 0, "quantity": 1 }\`
 
 ### Bar Size Codes (Canadian metric):
