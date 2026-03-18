@@ -44,7 +44,11 @@ export function DockChatBar() {
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
   const { unreadSenderIds } = useUnreadSenders();
-  const [launcherOpen, setLauncherOpen] = useState(false);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalContainer(getFloatingPortalContainer());
+  }, []);
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
     storageKey: "dock-chat-pos",
