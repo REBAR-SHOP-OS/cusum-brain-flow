@@ -15,6 +15,14 @@ export function getFloatingPortalContainer(): HTMLElement {
     "position:fixed;inset:0;z-index:99999;pointer-events:none;";
   document.body.appendChild(container);
 
+  // Prevent Radix UI from detecting pointerdown on floating buttons as "outside click"
+  container.addEventListener("pointerdown", (e) => {
+    const target = e.target as HTMLElement;
+    if (target?.closest?.("[data-feedback-btn]")) {
+      e.stopImmediatePropagation();
+    }
+  }, true);
+
   // Re-append whenever Radix portals push new elements after us
   const observer = new MutationObserver(() => {
     if (container && container !== document.body.lastElementChild) {
