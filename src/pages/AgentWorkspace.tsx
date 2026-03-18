@@ -161,6 +161,7 @@ export default function AgentWorkspace() {
     setMessages([]);
     setActiveSessionId(null);
     setAutoBriefingSent(true); // don't auto-brief on manual new chat
+    setShowRecipeTable(false);
     // Pixel agent: no longer auto-send; user picks mode from empty state
     // Reset purchasing state so user sees fresh default list
     if (agentId === "purchasing") {
