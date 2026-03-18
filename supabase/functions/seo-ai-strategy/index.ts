@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
         .select("*")
         .eq("domain_id", domain_id)
         .order("opportunity_score", { ascending: false })
-        .limit(200),
+        .limit(5000),
       supabase
         .from("seo_page_ai")
         .select("*")
