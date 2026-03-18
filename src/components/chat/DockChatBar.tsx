@@ -60,11 +60,6 @@ export function DockChatBar() {
     }),
   });
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    handlers.onPointerDown(e);
-  }, [handlers]);
-
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     handlers.onPointerUp(e);
     if (!wasDragged.current) {

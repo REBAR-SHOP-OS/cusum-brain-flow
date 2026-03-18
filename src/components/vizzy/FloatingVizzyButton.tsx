@@ -51,6 +51,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     }, []);
 
     const handleContainerPointerDown = useCallback((e: React.PointerEvent) => {
+      e.nativeEvent.stopImmediatePropagation();
       handlers.onPointerDown(e);
     }, [handlers]);
 
