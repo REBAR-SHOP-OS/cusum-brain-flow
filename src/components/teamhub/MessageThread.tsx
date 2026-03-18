@@ -584,6 +584,7 @@ export function MessageThread({
                         </button>
                         <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
                       </div>
+                      </div>
                     </div>
                   );
                 }
