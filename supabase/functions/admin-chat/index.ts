@@ -525,9 +525,41 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Employee Activity & Email Query Tools ───
+  {
+    type: "function",
+    function: {
+      name: "get_employee_activity",
+      description: "Query activity logs for a specific employee by name or for all employees. Returns what they did, when, and on which entity. Use to answer 'what did X do today?' questions.",
+      parameters: {
+        type: "object",
+        properties: {
+          employee_name: { type: "string", description: "Employee name (partial match). Leave empty for all employees." },
+          date: { type: "string", description: "Date filter YYYY-MM-DD. Defaults to today." },
+          limit: { type: "number", description: "Max results (default 50)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_employee_emails",
+      description: "Query emails sent or received by a specific employee. Returns subjects, recipients, timestamps. Use to answer 'what emails did X send?' questions.",
+      parameters: {
+        type: "object",
+        properties: {
+          employee_name: { type: "string", description: "Employee name (partial match). Leave empty for all." },
+          date: { type: "string", description: "Date filter YYYY-MM-DD. Defaults to today." },
+          direction: { type: "string", enum: ["inbound", "outbound", "all"], description: "Email direction filter. Default: all" },
+          limit: { type: "number", description: "Max results (default 30)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
-
-// ═══ READ TOOL EXECUTION ═══
 
 async function executeReadTool(supabase: any, toolName: string, args: any): Promise<string> {
   switch (toolName) {
