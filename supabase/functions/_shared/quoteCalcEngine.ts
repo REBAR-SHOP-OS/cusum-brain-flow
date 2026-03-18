@@ -359,6 +359,11 @@ export function generateQuote(
   // Defensive: normalize scope arrays to prevent "not iterable" crashes
   const scope = normalizeScope(req.scope);
 
+  // Defensive defaults for optional top-level objects
+  const shipping = req.shipping || { delivery_required: false, distance_km: 0, truck_capacity_tons: 0, notes: "" };
+  const project = req.project || { project_name: "", customer_name: "", site_address: "", quote_date: "", notes: "" };
+  const meta = req.meta || { request_id: "", quote_type: "quick" as const, currency: "CAD", created_by: "agent", created_at: new Date().toISOString() };
+
   const scrapPct = scope.scrap_percent_override ?? config.default_scrap_percent;
   const coatingType = scope.coating_type || "black";
   const coatingMult = config.coating_multipliers[coatingType] ?? 1;
@@ -536,12 +541,12 @@ export function generateQuote(
   // 8. Shipping
   const totalWeightKg = straightWeightKg + fabricatedWeightKg + cageWeightKg;
   const totalTonnage = totalWeightKg / 1000;
-  const truckCap = req.shipping.truck_capacity_tons || config.default_truck_capacity_tons;
+  const truckCap = shipping.truck_capacity_tons || config.default_truck_capacity_tons;
   let shippingTrips = 0;
 
-  if (req.shipping.delivery_required && req.shipping.distance_km > 0) {
+  if (shipping.delivery_required && shipping.distance_km > 0) {
     const ship = computeShipping(
-      req.shipping.distance_km,
+      shipping.distance_km,
       totalTonnage,
       truckCap,
       config.shipping_per_km_cad
@@ -549,13 +554,13 @@ export function generateQuote(
     shippingTrips = ship.trips;
     lineItems.push({
       category: "Shipping",
-      description: `Delivery ${req.shipping.distance_km} km × ${ship.trips} trip(s)`,
+      description: `Delivery ${shipping.distance_km} km × ${ship.trips} trip(s)`,
       bar_size: "—",
       qty: ship.trips,
-      length_or_weight: `${req.shipping.distance_km} km`,
+      length_or_weight: `${shipping.distance_km} km`,
       weight_kg: 0,
       tonnage: round3(totalTonnage),
-      unit_price_cad: round2(req.shipping.distance_km * config.shipping_per_km_cad),
+      unit_price_cad: round2(shipping.distance_km * config.shipping_per_km_cad),
       extended_price_cad: ship.cost,
       notes: `ceil(${round3(totalTonnage)}t / ${truckCap}t) = ${ship.trips} trips`,
     });
@@ -577,9 +582,9 @@ export function generateQuote(
   return {
     quote_id: null,
     summary: {
-      project_name: req.project.project_name,
-      customer_name: req.project.customer_name,
-      quote_date: req.project.quote_date,
+      project_name: project.project_name,
+      customer_name: project.customer_name,
+      quote_date: project.quote_date,
       coating_type: coatingType,
       subtotal: round2(subtotal),
       tax,
@@ -710,7 +715,7 @@ export function generateExplanation(
   if (shipItems.length > 0) {
     lines.push("### Shipping");
     lines.push(
-      `${req.shipping.distance_km} km × $${config.shipping_per_km_cad}/km × ${result.pricing_method_summary.shipping_trips} trip(s) = $${shipItems[0].extended_price_cad}`
+      `${req.shipping?.distance_km ?? 0} km × $${config.shipping_per_km_cad}/km × ${result.pricing_method_summary.shipping_trips} trip(s) = $${shipItems[0].extended_price_cad}`
     );
     lines.push("");
   }
