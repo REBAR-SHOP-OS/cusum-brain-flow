@@ -1,113 +1,121 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-## Fix: کارت علامت سؤال باید بعد از Schedule کاملا حذف شود
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-### چیزی که پیدا کردم
-این مشکل فقط ظاهری نیست؛ واقعا رکوردهای `unassigned` داخل دیتابیس باقی مانده‌اند.
+## Completed: Add All Wan 2.6 Capabilities
 
-- در دیتابیس برای همین عنوان/تاریخ، هم کارت‌های `instagram` وجود دارد و هم 4 کارت `unassigned`
-- در لاگ‌های بک‌اند، `schedule-post` چند بار با این ورودی صدا زده شده:
-```text
-platform=unassigned
-delete_original=true
-page=undefined
-```
-یعنی زمان Schedule، هنوز پلتفرم `unassigned` وارد جریان شده است.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-### ریشه اصلی باگ
-در `PostReviewPanel.tsx` دو ایراد کنار هم باعث این رفتار شده‌اند:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-1. **پلتفرم hidden `unassigned` داخل state می‌ماند**
-   - `localPlatforms` برای کارت علامت سؤال با `["unassigned"]` شروع می‌شود
-   - در UI گزینه `unassigned` اصلا نمایش داده نمی‌شود
-   - وقتی کاربر مثلا Instagram را انتخاب می‌کند، state عملا می‌تواند بشود:
-     ```text
-     ["unassigned", "instagram"]
-     ```
-   - بعد `handlePlatformsSaveMulti` آیتم اول را به عنوان پلتفرم اصلی ذخیره می‌کند، که همچنان `unassigned` می‌شود
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-2. **مسیر Schedule برخلاف Publish، `unassigned` را فیلتر نمی‌کند**
-   - در Publish این فیلتر وجود دارد:
-     ```text
-     currentPlatforms.filter(p => p !== "unassigned")
-     ```
-   - اما در Schedule مستقیما از `localPlatforms` برای ساخت comboها استفاده می‌شود
-   - نتیجه: برای هر page یک رکورد scheduled با `platform = unassigned` ساخته می‌شود
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### چرا الان کارت سوالی هنوز مانده؟
-چون رکورد اصلی شاید حذف شده باشد، اما قبلش چند **clone با `platform=unassigned`** ساخته شده‌اند؛ پس در تقویم هنوز گروه سوالی دیده می‌شود.
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
----
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-## برنامه اجرا
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
 
-### 1) نرمال‌سازی انتخاب پلتفرم در `src/components/social/PostReviewPanel.tsx`
-در هر جایی که state پلتفرم از روی پست مقداردهی می‌شود، `unassigned` را به عنوان انتخاب واقعی وارد UI نکنیم.
+## Completed: Pipeline Unified Timeline & Data Quality Patch
 
-پیاده‌سازی:
-- اگر `post.platform === "unassigned"`:
-  - `localPlatforms` را خالی بگذاریم یا فقط پلتفرم‌های واقعی را نگه داریم
-- در `handlePlatformsSaveMulti(values)`:
-  - قبل از ذخیره، `values` را sanitize کنیم:
-    ```text
-    realPlatforms = values.filter(v => v !== "unassigned")
-    ```
-  - فقط `realPlatforms` را در state و update ذخیره کنیم
-  - اگر خالی بود، خطا بدهیم یا Save را غیرفعال کنیم
+### Changes
 
-### 2) اصلاح منطق Schedule در همان فایل
-در دکمه Schedule، مثل Publish عمل کنیم:
+**Backend — Sync Fixes:**
+- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
+- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
+- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
 
-- قبل از ساخت comboها:
-  ```text
-  schedulablePlatforms = localPlatforms.filter(p => p !== "unassigned")
-  ```
-- اگر خالی بود:
-  - پیام خطا: «لطفا یک پلتفرم واقعی انتخاب کنید»
-- فقط از `schedulablePlatforms` برای ساخت platform×page combo استفاده شود
+**Frontend — Lead Detail:**
+- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
 
-این بخش جلوی تولید دوباره کارت‌های سوالی را می‌گیرد.
+**Frontend — Pipeline Board:**
+- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
 
-### 3) دفاع سمت بک‌اند در `supabase/functions/schedule-post/index.ts`
-حتی اگر فرانت‌اند اشتباه کرد، بک‌اند نباید رکورد `unassigned` بسازد.
+**Migration:**
+- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
+- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
 
-در unassigned flow:
-- `extra_combos` را sanitize کنیم و هر combo با `platform = "unassigned"` را حذف کنیم
-- اگر بعد از sanitize چیزی نماند، درخواست را reject کنیم
-- فقط platformهای واقعی clone شوند
+### Known Risks
+- Priority re-mapping changes existing lead priorities on next sync (intentional)
+- File linkage fix uses both int/string ID matching — monitor results after next sync
+- Stage group filter is additive/safe — "Show all" restores full board
 
-این باعث می‌شود باگ از سمت سرور هم بسته شود.
+### Follow-up
+- Run a full Odoo sync to apply priority and revenue fixes to existing data
+- Monitor file linkage stats in chatter sync response after deployment
 
-### 4) پاکسازی رکوردهای خراب قبلی
-چون الان چند رکورد خراب از قبل ساخته شده‌اند، فقط fix کردن UI کافی نیست. باید داده‌های orphan هم پاک شوند.
+## Completed: Odoo Mirror Pipeline + Sales Department Patch
 
-یک پاکسازی هدفمند لازم است:
-- حذف رکوردهای `social_posts` که:
-  - `platform = 'unassigned'`
-  - `status = 'scheduled'`
-  - و برای همان `user_id + title + day (+ page_name)` یک sibling واقعی با پلتفرم غیر-`unassigned` وجود دارد
+### Assessment
+Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
 
-این cleanup فقط placeholderهای خراب را حذف می‌کند و به کارت‌های واقعی scheduled/published دست نمی‌زند.
+### Changes Implemented
 
-### 5) اعتبارسنجی نهایی
-بعد از پیاده‌سازی باید این سناریو تست شود:
+**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
+- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
+- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
+- 30s cooldown per lead to prevent API rate limiting
+- Shows "Syncing…" indicator in header during refresh
+- Invalidates all lead-related query keys on completion
 
-```text
-Question-mark post
-→ select Instagram + pages + time
-→ Schedule
-Expected:
-- فقط کارت‌های platform-specific بمانند
-- هیچ کارت unassigned در همان title/day باقی نماند
-```
+**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
+- New `mode: "single"` + `odoo_id` parameter
+- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
+- Logs stage change events if stage differs
+- Returns fast without touching other leads
 
-### فایل‌هایی که باید تغییر کنند
-- `src/components/social/PostReviewPanel.tsx`
-- `supabase/functions/schedule-post/index.ts`
-- یک migration برای cleanup داده‌های خراب فعلی
+**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
+- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
+- Logs reconciliation events with reason
+- Only archives non-terminal leads (skips already won/lost)
 
-### نتیجه مورد انتظار
-بعد از این اصلاح:
-- انتخاب پلتفرم دیگر `unassigned` مخفی را با خودش حمل نمی‌کند
-- Schedule دیگر clone سوالی نمی‌سازد
-- کارت‌های سوالی خراب قبلی هم از تقویم حذف می‌شوند
-- وقتی کاربر پلتفرم و page و ساعت را مشخص کرد، فقط همان کارت‌های واقعی باقی می‌مانند
+**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
+- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
+- Improves timeline readability
+
+**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
+- Footer shows "Synced X minutes ago" with color-coded status dot
+- Green: <5min, Yellow: <30min, Red: >30min
+
+### Files Changed
+- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
+- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
+- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+
+### No Changes Needed (Already Existed)
+- Sales Department sidebar, routes, pages, tables, hooks
+- Odoo chatter sync single mode (already existed)
+- OdooChatter unified timeline (already existed)
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
+- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)

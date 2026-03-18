@@ -42,11 +42,16 @@ Deno.serve(async (req) => {
     const isUnassigned = delete_original === true || fullPost.platform === "unassigned";
     const cloned: string[] = [];
 
-    if (isUnassigned && extra_combos && Array.isArray(extra_combos) && extra_combos.length > 0) {
+    // Sanitize extra_combos: never create clones with platform "unassigned"
+    const sanitizedCombos = (extra_combos && Array.isArray(extra_combos))
+      ? extra_combos.filter((c: any) => c.platform && c.platform !== "unassigned")
+      : [];
+
+    if (isUnassigned && sanitizedCombos.length > 0) {
       // UNASSIGNED flow: clone for ALL combos, then delete original
       const scheduledDay = scheduled_date.substring(0, 10);
 
-      for (const combo of extra_combos) {
+      for (const combo of sanitizedCombos) {
         // Duplicate check
         const { data: existing } = await serviceClient
           .from("social_posts")
@@ -151,9 +156,9 @@ Deno.serve(async (req) => {
     console.log(`[schedule-post] PRIMARY updated:`, JSON.stringify(data));
 
     // Handle extra platform×page combos (clone post for each)
-    if (extra_combos && Array.isArray(extra_combos) && extra_combos.length > 0 && fullPost) {
+    if (sanitizedCombos.length > 0 && fullPost) {
       const scheduledDay = scheduled_date.substring(0, 10);
-      for (const combo of extra_combos) {
+      for (const combo of sanitizedCombos) {
         const { data: existing } = await serviceClient
           .from("social_posts")
           .select("id")

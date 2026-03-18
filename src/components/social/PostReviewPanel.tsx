@@ -335,13 +335,16 @@ export function PostReviewPanel({
   };
 
   const handlePlatformsSaveMulti = (values: string[]) => {
-    setLocalPlatforms(values);
+    // Sanitize: strip "unassigned" when real platforms are selected
+    const realValues = values.filter(v => v !== "unassigned");
+    const sanitized = realValues.length > 0 ? realValues : values;
+    setLocalPlatforms(sanitized);
     // Reset pages to only valid ones for new platform selection
-    const validPages = new Set(values.flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value)));
+    const validPages = new Set(sanitized.flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value)));
     setLocalPages(prev => prev.filter(p => validPages.has(p)));
     // Update the primary post's platform to the first selected
-    if (values.length > 0) {
-      const dbPlatform = platformMap[values[0]] || values[0];
+    if (sanitized.length > 0) {
+      const dbPlatform = platformMap[sanitized[0]] || sanitized[0];
       updatePost.mutate({ id: post.id, platform: dbPlatform as SocialPost["platform"] });
     }
     setSubPanel(null);
@@ -986,9 +989,14 @@ export function PostReviewPanel({
                           return;
                         }
 
-                        // Build all platform×page combos
+                        // Build all platform×page combos — filter out "unassigned"
+                        const schedulablePlatforms = localPlatforms.filter(p => p !== "unassigned");
+                        if (schedulablePlatforms.length === 0) {
+                          toast({ title: "No valid platform", description: "Please select a real platform before scheduling.", variant: "destructive" });
+                          return;
+                        }
                         const combos: { platform: string; page: string }[] = [];
-                        for (const plat of localPlatforms) {
+                        for (const plat of schedulablePlatforms) {
                           const dbPlat = platformMap[plat] || plat;
                           for (const page of localPages) {
                             combos.push({ platform: dbPlat, page });
