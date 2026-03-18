@@ -208,10 +208,10 @@ export function useSalesQuotations() {
         previous_value: event.previous_value || null,
         new_value: event.new_value || null,
         notes: event.notes || null,
-        metadata: event.metadata || null,
+        metadata: (event.metadata || null) as any,
         company_id: companyId!,
         performed_by: user?.id || null,
-      });
+      } as any);
       if (error) throw error;
     },
   });
