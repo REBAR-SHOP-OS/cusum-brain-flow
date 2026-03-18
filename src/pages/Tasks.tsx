@@ -1349,7 +1349,7 @@ export default function Tasks() {
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Created By</span>
-                  <p className="mt-0.5 text-sm">{getTaskCreatorName(selectedTask) || "ناشناس"}</p>
+                  <p className="mt-0.5 text-sm">{getTaskCreatorName(selectedTask) || "Unknown"}</p>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Due Date</span>
