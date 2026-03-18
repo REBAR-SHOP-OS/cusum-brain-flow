@@ -45,6 +45,7 @@ export function DockChatBar() {
   const isMobile = useIsMobile();
   const { unreadSenderIds } = useUnreadSenders();
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  const [launcherOpen, setLauncherOpen] = useState(false);
 
   useEffect(() => {
     setPortalContainer(getFloatingPortalContainer());
