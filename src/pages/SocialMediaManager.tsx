@@ -22,6 +22,7 @@ import { SocialCalendar } from "@/components/social/SocialCalendar";
 import { ContentStrategyPanel } from "@/components/social/ContentStrategyPanel";
 import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
@@ -51,6 +52,7 @@ export default function SocialMediaManager() {
   const navigate = useNavigate();
   const { generatePosts, generating } = useAutoGenerate();
   const { posts, isLoading, updatePost, deletePost, createPost } = useSocialPosts();
+  const { toast } = useToast();
   const { completedChecklist, toggleChecklist } = useStrategyChecklist();
   const { pendingApprovals } = useSocialApprovals();
   const [showApprovals, setShowApprovals] = useState(false);
@@ -80,13 +82,22 @@ export default function SocialMediaManager() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const isProtectedPost = useCallback((id: string) => {
+    const post = posts.find((p) => p.id === id);
+    return post?.status === "scheduled" || post?.status === "published";
+  }, [posts]);
+
   const toggleSelectPost = useCallback((id: string) => {
+    if (isProtectedPost(id)) {
+      toast({ title: "پست‌های زمان‌بندی شده و منتشر شده قابل حذف نیستند", variant: "destructive" });
+      return;
+    }
     setSelectedPostIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  }, []);
+  }, [isProtectedPost, toast]);
 
   const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
@@ -140,39 +151,42 @@ export default function SocialMediaManager() {
   }, [posts, platformFilter, statusFilter, searchQuery]);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedPostIds.size === filteredPosts.length) {
+    const selectableIds = filteredPosts.filter((p) => p.status !== "scheduled" && p.status !== "published").map((p) => p.id);
+    if (selectableIds.length > 0 && selectableIds.every((id) => selectedPostIds.has(id))) {
       setSelectedPostIds(new Set());
     } else {
-      setSelectedPostIds(new Set(filteredPosts.map((p) => p.id)));
+      setSelectedPostIds(new Set(selectableIds));
     }
-  }, [filteredPosts, selectedPostIds.size]);
+  }, [filteredPosts, selectedPostIds]);
 
   const handleSelectDay = useCallback((dayPostIds: string[]) => {
+    const safeIds = dayPostIds.filter((id) => !isProtectedPost(id));
     setSelectedPostIds((prev) => {
-      const allSelected = dayPostIds.every((id) => prev.has(id));
+      const allSelected = safeIds.every((id) => prev.has(id));
       const next = new Set(prev);
       if (allSelected) {
-        for (const id of dayPostIds) next.delete(id);
+        for (const id of safeIds) next.delete(id);
       } else {
-        for (const id of dayPostIds) next.add(id);
+        for (const id of safeIds) next.add(id);
       }
       return next;
     });
-  }, []);
+  }, [isProtectedPost]);
 
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleting(true);
 
-    // Only delete the posts the user explicitly selected — no sibling expansion
-    // This prevents accidental deletion of scheduled/published posts
-    for (const id of selectedPostIds) {
+    // Filter out protected posts as a safety net
+    const deletableIds = [...selectedPostIds].filter((id) => !isProtectedPost(id));
+
+    for (const id of deletableIds) {
       await deletePost.mutateAsync(id);
     }
 
     setBulkDeleting(false);
     setShowDeleteConfirm(false);
     exitSelectionMode();
-  }, [selectedPostIds, deletePost, exitSelectionMode]);
+  }, [selectedPostIds, deletePost, exitSelectionMode, isProtectedPost]);
 
   const weekPosts = useMemo(() => {
     const wEnd = addDays(weekStart, 7);
