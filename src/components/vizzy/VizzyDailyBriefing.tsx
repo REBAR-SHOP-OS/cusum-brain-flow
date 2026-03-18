@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, MessageCircle, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { getUserPrimaryAgent } from "@/lib/userAgentMap";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import assistantHelper from "@/assets/helpers/assistant-helper.png";
 
