@@ -10,35 +10,49 @@ export async function fetchExecutiveContext(
   const today = new Date().toISOString().split("T")[0];
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
 
+  const { cachedQuery } = await import("./cache.ts");
+
+  // --- Cached queries (slow-changing) ---
+  const [totalCustomers, arData, apData] = await Promise.all([
+    cachedQuery(`exec:${companyId}:customerCount`, 10 * 60_000, async () => {
+      const { count } = await supabase
+        .from("customers")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      return count;
+    }),
+    cachedQuery(`exec:${companyId}:ar`, 2 * 60_000, async () => {
+      const { data } = await supabase
+        .from("accounting_mirror")
+        .select("balance, data")
+        .eq("entity_type", "Invoice")
+        .eq("company_id", companyId)
+        .gt("balance", 0)
+        .limit(200);
+      return data;
+    }),
+    cachedQuery(`exec:${companyId}:ap`, 2 * 60_000, async () => {
+      const { data } = await supabase
+        .from("accounting_mirror")
+        .select("balance, data")
+        .eq("entity_type", "Vendor")
+        .eq("company_id", companyId)
+        .gt("balance", 0)
+        .limit(200);
+      return data;
+    }),
+  ]);
+
+  // --- Uncached queries (realtime) ---
   const [
-    { data: arData },
-    { data: apData },
     { data: pipelineLeads },
     { count: openTickets },
     { data: productionItems },
     { data: deliveries },
     { data: recentOrders },
-    { count: totalCustomers },
     { data: weeklyEvents },
     { data: agentActivity },
   ] = await Promise.all([
-    // AR: open invoices
-    supabase
-      .from("accounting_mirror")
-      .select("balance, data")
-      .eq("entity_type", "Invoice")
-      .eq("company_id", companyId)
-      .gt("balance", 0)
-      .limit(200),
-    // AP: open bills
-    supabase
-      .from("accounting_mirror")
-      .select("balance, data")
-      .eq("entity_type", "Vendor")
-      .eq("company_id", companyId)
-      .gt("balance", 0)
-      .limit(200),
-    // Pipeline: active leads
     supabase
       .from("leads")
       .select("id, expected_value, status, stage, lead_score")
@@ -46,38 +60,28 @@ export async function fetchExecutiveContext(
       .in("status", ["new", "contacted", "qualified", "proposal"])
       .order("lead_score", { ascending: false })
       .limit(50),
-    // Support: open tickets
     supabase
       .from("support_conversations")
       .select("*", { count: "exact", head: true })
       .eq("company_id", companyId)
       .in("status", ["open", "assigned", "pending"]),
-    // Production: active cut plan items
     supabase
       .from("cut_plan_items")
       .select("id, phase, completed_pieces, total_pieces, bar_code")
       .in("phase", ["queued", "cutting", "bending", "cut_done"])
       .limit(500),
-    // Delivery: this week
     supabase
       .from("deliveries")
       .select("id, status, scheduled_date")
       .eq("company_id", companyId)
       .gte("scheduled_date", weekAgo)
       .limit(100),
-    // Orders: recent week
     supabase
       .from("orders")
       .select("id, total_amount, status, order_date")
       .eq("company_id", companyId)
       .gte("order_date", weekAgo)
       .limit(50),
-    // Customer count
-    supabase
-      .from("customers")
-      .select("*", { count: "exact", head: true })
-      .eq("company_id", companyId),
-    // Activity events this week
     supabase
       .from("activity_events")
       .select("event_type, entity_type, description, created_at")
@@ -85,7 +89,6 @@ export async function fetchExecutiveContext(
       .gte("created_at", weekAgo + "T00:00:00")
       .order("created_at", { ascending: false })
       .limit(30),
-    // Agent usage this week
     supabase
       .from("chat_sessions")
       .select("agent_name, user_id, created_at")

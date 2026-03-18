@@ -17,12 +17,16 @@ export async function fetchContext(
   const context: Record<string, unknown> = {};
   const svc = svcClient || supabase; // Fallback
 
+  // Import cache helper
+  const { cachedQuery } = await import("./cache.ts");
+  const cid = companyId || "default";
+
   try {
     // Skip heavy context for social/Pixel agent — it only needs Brain knowledge + employees
     if (agent === "social") {
       // Jump straight to employees + brain block (handled below)
     } else {
-      // 1. Basic Communications (Last 15 emails)
+      // 1. Basic Communications (Last 15 emails) — realtime, no cache
       const { data: comms } = await supabase
         .from("communications")
         .select("id, subject, from_address, to_address, body_preview, status, source, received_at, customer_id")
@@ -30,12 +34,14 @@ export async function fetchContext(
         .limit(15);
       context.recentEmails = comms;
 
-      // 2. Customers (Top 15)
-      const { data: customers } = await supabase
-        .from("customers")
-        .select("id, name, company_name, status, payment_terms, credit_limit")
-        .limit(15);
-      context.customers = customers;
+      // 2. Customers (Top 15) — cached 5 min
+      context.customers = await cachedQuery(`agent:${cid}:customers`, 5 * 60_000, async () => {
+        const { data } = await supabase
+          .from("customers")
+          .select("id, name, company_name, status, payment_terms, credit_limit")
+          .limit(15);
+        return data;
+      });
     }
 
     // 3. Agent-Specific Data Loading
@@ -139,21 +145,28 @@ export async function fetchContext(
 
     // --- Estimation (Gauge) ---
     if (agent === "estimation") {
-      // Rebar Standards
-      const { data: standards } = await supabase.from("rebar_standards").select("*");
-      context.rebarStandards = standards;
+      // Rebar Standards — cached 10 min (rarely changes)
+      context.rebarStandards = await cachedQuery(`agent:${cid}:rebarStandards`, 10 * 60_000, async () => {
+        const { data } = await supabase.from("rebar_standards").select("*");
+        return data;
+      });
       
-      // Validation Rules
-      const { data: rules } = await supabase.from("validation_rules").select("*");
-      context.validationRules = rules;
+      // Validation Rules — cached 10 min
+      context.validationRules = await cachedQuery(`agent:${cid}:validationRules`, 10 * 60_000, async () => {
+        const { data } = await supabase.from("validation_rules").select("*");
+        return data;
+      });
     }
 
-    // --- Available Employees (Shared for all agents) ---
-    const { data: employees } = await svc
-      .from("profiles")
-      .select("id, full_name, title, department")
-      .eq("is_active", true)
-      .order("full_name");
+    // --- Available Employees (Shared, cached 5 min) ---
+    const employees = await cachedQuery(`agent:${cid}:employees`, 5 * 60_000, async () => {
+      const { data } = await svc
+        .from("profiles")
+        .select("id, full_name, title, department")
+        .eq("is_active", true)
+        .order("full_name");
+      return data;
+    });
     context.availableEmployees = (employees || []).map((e: any) => ({
       id: e.id, name: e.full_name, title: e.title, department: e.department,
     }));
@@ -173,12 +186,16 @@ ENFORCEMENT RULES:
 
     // --- Brain Knowledge Block Construction ---
     try {
-      const { data: brainDocs } = await svc
-        .from("knowledge")
-        .select("title, content, category, metadata, source_url")
-        .in("category", ["company-playbook", "agent-strategy"])
-        .eq("company_id", companyId)
-        .order("created_at", { ascending: false });
+      // Brain knowledge — cached 5 min (changes infrequently)
+      const brainDocs = await cachedQuery(`agent:${cid}:brainDocs`, 5 * 60_000, async () => {
+        const { data } = await svc
+          .from("knowledge")
+          .select("title, content, category, metadata, source_url")
+          .in("category", ["company-playbook", "agent-strategy"])
+          .eq("company_id", companyId)
+          .order("created_at", { ascending: false });
+        return data;
+      });
       
       let brainBlock = "";
       if (brainDocs) {

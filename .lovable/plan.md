@@ -1,51 +1,121 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Plan: Add Server-Side In-Memory Cache for Edge Functions
+## Completed: Add All Wan 2.6 Capabilities
 
-### Problem
-Edge functions like `buildFullVizzyContext`, `fetchExecutiveContext`, and agent context builders hit PostgreSQL with 10-18 parallel queries on every invocation. For data that changes infrequently (company settings, machine lists, customer counts, knowledge base), this creates unnecessary database load and adds latency.
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-### Approach
-Create a shared in-memory cache module for Deno edge functions. Deno workers persist between invocations (warm starts), making module-level `Map` objects an effective TTL cache — no external infrastructure needed.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
+
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
+
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
+
+## Completed: Pipeline Unified Timeline & Data Quality Patch
 
 ### Changes
 
-**1. New file: `supabase/functions/_shared/cache.ts`**
-- Simple TTL cache using a module-level `Map<string, { data: any; expiresAt: number }>`
-- Exports: `cacheGet(key)`, `cacheSet(key, data, ttlMs)`, `cachedQuery(key, ttlMs, fetchFn)` — the last one is a cache-through helper
-- Default TTL: 60 seconds (configurable per call)
-- Max entries cap (~500) with LRU eviction to prevent memory leaks
-- Keys scoped by `companyId` to maintain tenant isolation
+**Backend — Sync Fixes:**
+- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
+- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
+- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
 
-**2. Update: `supabase/functions/_shared/vizzyFullContext.ts`**
-- Wrap slow-changing queries (machines, knowledge, profiles, stock summary) with `cachedQuery()` using 2-5 minute TTLs
-- Keep fast-changing queries (active orders, recent events, time clock) uncached
-- Expected: reduce from ~18 DB queries to ~8 on warm cache hits
+**Frontend — Lead Detail:**
+- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
 
-**3. Update: `supabase/functions/_shared/agentExecutiveContext.ts`**
-- Cache customer count (10 min TTL), accounting mirror aggregates (2 min TTL)
-- Keep realtime data (activity events, chat sessions) uncached
+**Frontend — Pipeline Board:**
+- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
 
-**4. Update: `supabase/functions/_shared/agentContext.ts`** (if exists)
-- Apply same pattern to agent-specific context fetches for company playbooks, strategies
+**Migration:**
+- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
+- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
 
-### TTL Strategy
-| Data Type | TTL | Reason |
-|-----------|-----|--------|
-| Machine list | 5 min | Rarely changes |
-| Knowledge base | 10 min | Updated infrequently |
-| Customer/profile counts | 10 min | Slow-moving |
-| Stock summary | 2 min | Changes with production |
-| AR/AP aggregates | 2 min | Changes with invoicing |
-| Active orders, events | 0 (no cache) | Must be realtime |
+### Known Risks
+- Priority re-mapping changes existing lead priorities on next sync (intentional)
+- File linkage fix uses both int/string ID matching — monitor results after next sync
+- Stage group filter is additive/safe — "Show all" restores full board
 
-### Technical Details
-- Deno isolates persist module state across warm invocations — this is the standard caching pattern for Supabase Edge Functions
-- No database tables, no Redis, no external dependencies
-- Cache is per-isolate so it's automatically cleared on cold starts or redeployments
-- Tenant safety: all cache keys prefixed with `companyId`
-- The `cachedQuery` helper signature: `cachedQuery<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T>`
+### Follow-up
+- Run a full Odoo sync to apply priority and revenue fixes to existing data
+- Monitor file linkage stats in chatter sync response after deployment
 
-### Client-Side (Already Handled)
-The React hooks already use `staleTime` and `refetchInterval` effectively — no changes needed on the frontend.
+## Completed: Odoo Mirror Pipeline + Sales Department Patch
 
+### Assessment
+Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+
+### Changes Implemented
+
+**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
+- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
+- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
+- 30s cooldown per lead to prevent API rate limiting
+- Shows "Syncing…" indicator in header during refresh
+- Invalidates all lead-related query keys on completion
+
+**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
+- New `mode: "single"` + `odoo_id` parameter
+- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
+- Logs stage change events if stage differs
+- Returns fast without touching other leads
+
+**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
+- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
+- Logs reconciliation events with reason
+- Only archives non-terminal leads (skips already won/lost)
+
+**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
+- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
+- Improves timeline readability
+
+**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
+- Footer shows "Synced X minutes ago" with color-coded status dot
+- Green: <5min, Yellow: <30min, Red: >30min
+
+### Files Changed
+- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
+- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
+- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+
+### No Changes Needed (Already Existed)
+- Sales Department sidebar, routes, pages, tables, hooks
+- Odoo chatter sync single mode (already existed)
+- OdooChatter unified timeline (already existed)
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
+- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
