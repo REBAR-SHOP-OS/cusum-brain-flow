@@ -292,7 +292,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     <div
       style={containerStyle}
       className={cn(
-        "fixed bottom-0 z-[9998] w-[320px] flex flex-col bg-background border border-border rounded-t-xl shadow-2xl transition-colors",
+        "fixed bottom-0 z-[9998] w-[320px] flex flex-col bg-background border border-border rounded-t-xl shadow-2xl transition-colors pointer-events-auto",
         dragOver && "ring-2 ring-primary border-primary"
       )}
       onDragOver={handleDragOver}
