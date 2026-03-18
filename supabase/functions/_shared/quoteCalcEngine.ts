@@ -441,7 +441,7 @@ export function generateQuote(
   }
 
   // 4. Ties circular
-  for (const line of req.scope.ties_circular) {
+  for (const line of scope.ties_circular) {
     const match = config.ties_circular.find(
       (t) => t.type === line.type && t.diameter === line.diameter
     );
