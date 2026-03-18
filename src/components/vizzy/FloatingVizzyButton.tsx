@@ -31,9 +31,6 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       }),
     });
 
-    // Hide on /vizzy full-screen route to avoid overlap
-    if (location.pathname === "/vizzy") return null;
-
     // Stop pulse after 10 seconds
     useEffect(() => {
       const t = setTimeout(() => setPulseActive(false), 10000);
@@ -60,6 +57,9 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
         navigate("/chat");
       }
     }, [location.pathname, navigate]);
+
+    // Hide on /vizzy full-screen route to avoid overlap
+    if (location.pathname === "/vizzy") return null;
 
     return createPortal(
       <>
