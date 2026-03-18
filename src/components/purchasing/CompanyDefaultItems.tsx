@@ -84,6 +84,7 @@ function DefaultRow({
   onMarkRejected,
   onTogglePurchased,
   onToggleRejected,
+  onDeleteItem,
 }: {
   def: DefaultItem;
   dbMatch: PurchasingItem | undefined;
@@ -91,6 +92,7 @@ function DefaultRow({
   onMarkRejected: (title: string, category: string) => void;
   onTogglePurchased?: (itemId: string, current: boolean) => void;
   onToggleRejected?: (itemId: string, current: boolean) => void;
+  onDeleteItem?: (itemId: string) => void;
 }) {
   const isPurchased = dbMatch?.is_purchased ?? false;
   const isRejected = dbMatch?.is_rejected ?? false;
