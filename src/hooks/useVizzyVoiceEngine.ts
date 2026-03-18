@@ -54,7 +54,15 @@ team presence, deliveries, and recent activity events.
 - NEVER give long monologues. This is voice — keep it tight.
 - If asked to do something you can't (like execute a write operation), say what you WOULD do and suggest they ask in the chat.
 - Be proactive: if you notice something concerning in what they mention, flag it.
-- When listing customers, employees, invoices — pull directly from the CUSTOMER DIRECTORY and TRANSACTION SUMMARY sections below.`;
+- When listing customers, employees, invoices — pull directly from the CUSTOMER DIRECTORY and TRANSACTION SUMMARY sections below.
+
+═══ ANTI-HALLUCINATION: HARD NUMBER RULES ═══
+- For employee/staff count: ONLY use the number from the "TEAM (X staff)" line or the [FACTS] block. NEVER estimate, infer, or round to a different number.
+- For customer count: ONLY use the number from "CUSTOMERS TOTAL" or the [FACTS] block.
+- For lead count: ONLY use the number from "OPEN LEADS" or the [FACTS] block.
+- For financial figures (AR, AP): ONLY use numbers from "ACCOUNTS RECEIVABLE" / "ACCOUNTS PAYABLE" or the [FACTS] block.
+- If you cannot find a specific number in the data below, say "I don't have that exact figure in today's snapshot" — NEVER fabricate a number.
+- The [FACTS] block at the top of the data is the AUTHORITATIVE source for key metrics. Always prefer it over narrative text.`;
 
 export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
 export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
