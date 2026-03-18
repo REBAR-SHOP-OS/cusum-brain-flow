@@ -52,7 +52,7 @@ export default function SocialMediaManager() {
   const navigate = useNavigate();
   const { generatePosts, generating } = useAutoGenerate();
   const { posts, isLoading, updatePost, deletePost, createPost } = useSocialPosts();
-  const { completedChecklist, toggleChecklist } = useStrategyChecklist();
+  const { toast } = useToast();
   const { pendingApprovals } = useSocialApprovals();
   const [showApprovals, setShowApprovals] = useState(false);
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
