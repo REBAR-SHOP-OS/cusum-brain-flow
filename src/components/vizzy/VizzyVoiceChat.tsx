@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, Mic, Loader2, Volume2 } from "lucide-react";
 import { useVizzyVoiceEngine, VizzyVoiceTranscript } from "@/hooks/useVizzyVoiceEngine";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth";
-import { getUserPrimaryAgent } from "@/lib/userAgentMap";
-import assistantHelper from "@/assets/helpers/assistant-helper.png";
+import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface VizzyVoiceChatProps {
