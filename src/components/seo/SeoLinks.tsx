@@ -73,13 +73,13 @@ export function SeoLinks() {
   const crawlMutation = useMutation({
     mutationFn: async () => {
       if (!domain) throw new Error("No domain configured");
-      const { data, error } = await supabase.functions.invoke("seo-link-audit", {
-        body: { phase: "crawl", domain_id: domain.id, company_id: domain.company_id },
-      });
-      if (error) throw error;
-      return data;
+      return await invokeEdgeFunction("seo-link-audit", {
+        phase: "crawl",
+        domain_id: domain.id,
+        company_id: domain.company_id,
+      }, { timeoutMs: 120000 });
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       toast.success(`Audit complete: ${data.stats?.total || 0} links found, ${data.stats?.broken || 0} broken, ${data.stats?.opportunities || 0} opportunities`);
       qc.invalidateQueries({ queryKey: ["seo-link-audits"] });
     },
