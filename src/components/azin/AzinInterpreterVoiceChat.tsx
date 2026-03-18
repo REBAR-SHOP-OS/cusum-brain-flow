@@ -145,7 +145,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
               )}
             >
               <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
-                {t.role === "user" ? "You" : "AZIN"}
+                {t.role === "user" ? "🎙️ Original" : "🔄 Translation"}
               </span>
               {t.text}
             </motion.div>
