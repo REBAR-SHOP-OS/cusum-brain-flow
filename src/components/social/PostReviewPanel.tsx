@@ -307,10 +307,17 @@ export function PostReviewPanel({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      // Only delete this specific post — never auto-expand to siblings
-      // to prevent accidental deletion of scheduled/published posts
-      await deletePost.mutateAsync(post.id);
-      toast({ title: "Deleted", description: "Post deleted." });
+      // Find all sibling posts in the same calendar card (same platform + title + day)
+      const postDay = post.scheduled_date?.substring(0, 10);
+      const siblings = allPosts.filter(p =>
+        p.platform === post.platform &&
+        p.title === post.title &&
+        p.scheduled_date?.substring(0, 10) === postDay
+      );
+      const idsToDelete = siblings.length > 0 ? siblings.map(s => s.id) : [post.id];
+
+      await Promise.all(idsToDelete.map(id => deletePost.mutateAsync(id)));
+      toast({ title: "Deleted", description: `${idsToDelete.length} post(s) deleted.` });
     } finally {
       setDeleting(false);
       onClose();
