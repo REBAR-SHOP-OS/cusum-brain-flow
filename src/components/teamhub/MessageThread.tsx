@@ -457,7 +457,6 @@ export function MessageThread({
                           </div>
                         )}
 
-                        <div>
                         {/* Message Body */}
                         {(() => {
                           const { cleanText, parsedAttachments } = parseAttachmentLinks(displayText);
