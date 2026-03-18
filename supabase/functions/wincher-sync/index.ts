@@ -108,6 +108,7 @@ Deno.serve(async (req) => {
 
         const ranking = kw.ranking || {};
         const upsertData: Record<string, unknown> = {
+          company_id: companyId,
           domain_id,
           keyword,
           wincher_keyword_id: kw.id,
