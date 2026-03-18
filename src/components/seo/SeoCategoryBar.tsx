@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { BarChart3, FileText, Megaphone, Sparkles, MapPin, ScrollArea } from "lucide-react";
+import { BarChart3, FileText, Megaphone, Sparkles, MapPin } from "lucide-react";
 import type { SeoCategory } from "@/pages/SeoModule";
 
 const categories: { id: SeoCategory; label: string; description: string; icon: React.ElementType; iconColor: string }[] = [
