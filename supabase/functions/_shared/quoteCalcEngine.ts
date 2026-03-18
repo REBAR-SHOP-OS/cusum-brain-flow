@@ -359,6 +359,11 @@ export function generateQuote(
   // Defensive: normalize scope arrays to prevent "not iterable" crashes
   const scope = normalizeScope(req.scope);
 
+  // Defensive defaults for optional top-level objects
+  const shipping = req.shipping || { delivery_required: false, distance_km: 0, truck_capacity_tons: 0, notes: "" };
+  const project = req.project || { project_name: "", customer_name: "", site_address: "", quote_date: "", notes: "" };
+  const meta = req.meta || { request_id: "", quote_type: "quick" as const, currency: "CAD", created_by: "agent", created_at: new Date().toISOString() };
+
   const scrapPct = scope.scrap_percent_override ?? config.default_scrap_percent;
   const coatingType = scope.coating_type || "black";
   const coatingMult = config.coating_multipliers[coatingType] ?? 1;
