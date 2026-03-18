@@ -1,9 +1,11 @@
+import { useCallback, useRef, useState } from "react";
 import { useVoiceEngine } from "./useVoiceEngine";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 /**
  * Vizzy Voice Engine — thin wrapper around useVoiceEngine
  * with Vizzy's executive intelligence system prompt.
- * Uses OpenAI Realtime WebRTC (same as AZIN interpreter).
+ * Fetches live ERP data on session start and injects it into voice instructions.
  */
 
 const VIZZY_INSTRUCTIONS = `You are VIZZY — the Executive Intelligence System for Rebar.shop. You operate as a COO + CFO hybrid AI voice assistant.
@@ -20,6 +22,8 @@ const VIZZY_INSTRUCTIONS = `You are VIZZY — the Executive Intelligence System 
 You think in SYSTEMS, not events. You detect patterns, anomalies, and inefficiencies.
 You prioritize based on BUSINESS IMPACT, not recency.
 You provide STRATEGIC RECOMMENDATIONS, not summaries.
+You MUST use the LIVE BUSINESS DATA provided below to answer questions with real numbers.
+If asked about financials, orders, leads, production, or team — reference the actual data, never guess.
 
 ═══ RESPONSE FORMAT (VOICE) ═══
 For analytical questions:
@@ -36,11 +40,13 @@ Keep it under 30 seconds of speech. Be punchy.
 - Match formality to their tone
 
 ═══ CAPABILITIES ═══
-You have knowledge of rebar fabrication, steel reinforcement manufacturing, ERP operations, QuickBooks financials, sales pipeline, production scheduling, and delivery logistics.
-You can discuss orders, leads, customers, invoices, production status, machine utilization, and financial health.
+You have LIVE access to the ERP brain data below. Use it to answer with real numbers about:
+orders, leads, customers, invoices, production status, machine utilization, financial health,
+team presence, deliveries, and recent activity events.
 
 ═══ RULES ═══
-- NEVER say "I don't have access to that data" — if you genuinely don't know, say "I'd need to check the system for exact numbers"
+- ALWAYS reference the live data below when answering business questions
+- If the data doesn't cover something specific, say "I'd need to check the system for that specific detail"
 - NEVER give long monologues. This is voice — keep it tight.
 - If asked to do something you can't (like execute a write operation), say what you WOULD do and suggest they ask in the chat.
 - Be proactive: if you notice something concerning in what they mention, flag it.`;
@@ -49,8 +55,17 @@ export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
 export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
 
 export function useVizzyVoiceEngine() {
-  return useVoiceEngine({
-    instructions: VIZZY_INSTRUCTIONS,
+  const [erpContext, setErpContext] = useState<string | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const contextFetched = useRef(false);
+
+  // Build full instructions with ERP data
+  const fullInstructions = erpContext
+    ? `${VIZZY_INSTRUCTIONS}\n\n═══ LIVE BUSINESS DATA (as of now) ═══\n${erpContext}`
+    : VIZZY_INSTRUCTIONS;
+
+  const engine = useVoiceEngine({
+    instructions: fullInstructions,
     voice: "shimmer",
     model: "gpt-4o-mini-realtime-preview",
     vadThreshold: 0.5,
@@ -58,4 +73,38 @@ export function useVizzyVoiceEngine() {
     prefixPaddingMs: 300,
     connectionTimeoutMs: 15_000,
   });
+
+  const originalStartSession = engine.startSession;
+
+  const startSession = useCallback(async () => {
+    // Fetch ERP context first (only once)
+    if (!contextFetched.current) {
+      contextFetched.current = true;
+      setContextLoading(true);
+      try {
+        const data = await invokeEdgeFunction<{ briefing: string }>(
+          "vizzy-daily-brief",
+          {},
+          { timeoutMs: 20000 }
+        );
+        if (data?.briefing) {
+          setErpContext(data.briefing);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch ERP context for Vizzy:", err);
+        // Continue without context — Vizzy still works, just less informed
+      } finally {
+        setContextLoading(false);
+      }
+    }
+    // Small delay to let state update with context before connecting
+    await new Promise(r => setTimeout(r, 100));
+    originalStartSession();
+  }, [originalStartSession]);
+
+  return {
+    ...engine,
+    startSession,
+    contextLoading,
+  };
 }

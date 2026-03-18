@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Mic, MicOff, Loader2, ArrowLeft } from "lucide-react";
 import { useVizzyVoiceEngine, VizzyVoiceTranscript } from "@/hooks/useVizzyVoiceEngine";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import assistantHelper from "@/assets/helpers/assistant-helper.png";
 
 /**
@@ -11,6 +12,7 @@ import assistantHelper from "@/assets/helpers/assistant-helper.png";
  */
 export default function VizzyLive() {
   const navigate = useNavigate();
+  const { isSuperAdmin } = useSuperAdmin();
   const {
     state, transcripts, isSpeaking, mode,
     startSession, endSession, clearTranscripts,
@@ -21,10 +23,11 @@ export default function VizzyLive() {
 
   // Auto-start session on mount
   useEffect(() => {
+    if (!isSuperAdmin) return;
     startSession();
     return () => { endSession(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isSuperAdmin]);
 
   // Auto-scroll
   useEffect(() => {
@@ -47,6 +50,11 @@ export default function VizzyLive() {
     endSession();
     navigate("/home");
   }, [endSession, navigate]);
+
+  // Super admin gate — redirect non-admins
+  if (!isSuperAdmin) {
+    return <Navigate to="/home" replace />;
+  }
 
   const isActive = mode === "speaking" || isSpeaking;
   const isListening = state === "connected" && mode === "listening";
