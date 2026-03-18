@@ -495,6 +495,62 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     );
   }
 
+  // Save sales quotation — available to sales and commander
+  if (agent === "sales" || agent === "commander") {
+    tools.push(
+      {
+        type: "function" as const,
+        function: {
+          name: "save_sales_quotation",
+          description: "Save an approved quotation to the Sales Quotations system. Returns the quotation ID and number.",
+          parameters: {
+            type: "object",
+            properties: {
+              customer_name: { type: "string", description: "Customer contact name" },
+              customer_company: { type: "string", description: "Customer company name" },
+              amount: { type: "number", description: "Total quotation amount in CAD" },
+              notes: { type: "string", description: "Quotation details and line items summary" },
+              expiry_date: { type: "string", description: "Quotation expiry date YYYY-MM-DD (default: 30 days from now)" },
+              lead_id: { type: "string", description: "Optional linked lead ID" },
+              line_items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    quantity: { type: "number" },
+                    unit: { type: "string" },
+                    unit_price: { type: "number" },
+                    total: { type: "number" }
+                  }
+                },
+                description: "Detailed line items from the quote"
+              }
+            },
+            required: ["amount", "notes"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "send_quotation_email",
+          description: "Send a professional branded quotation email to a customer. Generates a beautiful HTML email with REBAR.SHOP branding, line items table, totals, validity period, and professional signature.",
+          parameters: {
+            type: "object",
+            properties: {
+              quotation_id: { type: "string", description: "UUID of the saved quotation" },
+              to_email: { type: "string", description: "Customer email address" },
+              customer_name: { type: "string", description: "Customer name for greeting" },
+              subject: { type: "string", description: "Email subject (optional — auto-generated if not provided)" }
+            },
+            required: ["quotation_id", "to_email", "customer_name"]
+          }
+        }
+      }
+    );
+  }
+
   // Quote engine tool — available to estimation and sales agents
   if (agent === "estimation" || agent === "sales" || agent === "commander") {
     tools.push({
