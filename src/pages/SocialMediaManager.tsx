@@ -151,12 +151,13 @@ export default function SocialMediaManager() {
   }, [posts, platformFilter, statusFilter, searchQuery]);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedPostIds.size === filteredPosts.length) {
+    const selectableIds = filteredPosts.filter((p) => p.status !== "scheduled" && p.status !== "published").map((p) => p.id);
+    if (selectableIds.length > 0 && selectableIds.every((id) => selectedPostIds.has(id))) {
       setSelectedPostIds(new Set());
     } else {
-      setSelectedPostIds(new Set(filteredPosts.map((p) => p.id)));
+      setSelectedPostIds(new Set(selectableIds));
     }
-  }, [filteredPosts, selectedPostIds.size]);
+  }, [filteredPosts, selectedPostIds]);
 
   const handleSelectDay = useCallback((dayPostIds: string[]) => {
     setSelectedPostIds((prev) => {
