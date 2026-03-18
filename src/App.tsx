@@ -240,7 +240,7 @@ const App = () => (
 
                     {/* Full-screen live chat */}
                     <Route path="/chat" element={<P><LiveChat /></P>} />
-                    <Route path="/vizzy" element={<P><VizzyLive /></P>} />
+                    
 
                     {/* Legacy redirects */}
                     <Route path="/inbox-manager" element={<P><InboxManager /></P>} />
