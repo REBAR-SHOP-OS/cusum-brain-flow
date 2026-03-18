@@ -107,11 +107,11 @@ export function SeoLinks() {
     onError: (e) => toast.error(`Crawl failed: ${e.message}`),
   });
 
-  // Preview mutation — gets AI proposals without applying
+  // Preview mutation — gets AI proposals without applying (batched to 10)
   const previewMutation = useMutation({
     mutationFn: async (ids: string[]) => {
       if (!domain) throw new Error("No domain");
-      return await invokeEdgeFunction<{ proposals: Proposal[] }>("seo-link-audit", {
+      return await invokeEdgeFunction<{ proposals: Proposal[]; total_requested: number; processed: number; remaining: number }>("seo-link-audit", {
         phase: "preview",
         audit_ids: ids,
         company_id: domain.company_id,
@@ -121,6 +121,9 @@ export function SeoLinks() {
       setProposals(data.proposals || []);
       setPendingFixIds(ids);
       setPreviewOpen(true);
+      if (data.remaining > 0) {
+        toast.info(`Showing first ${data.processed} of ${data.total_requested} items. Run again for more.`);
+      }
     },
     onError: (e) => toast.error(`Preview failed: ${e.message}`),
   });
