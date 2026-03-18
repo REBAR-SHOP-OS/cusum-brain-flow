@@ -447,9 +447,11 @@ export function validateEstimateRequest(
     if (line.quantity <= 0) {
       questions.push(`Tie ${line.line_id}: quantity is 0 or missing.`);
     }
-    const match = config.ties_circular.find(
-      (t) => t.type === line.type && t.diameter === line.diameter
-    );
+    const normDiam = String(line.diameter).replace(/["\s]|inch/gi, "").trim();
+    const match = config.ties_circular.find((t) => {
+      const configDiam = String(t.diameter).replace(/["\s]|inch/gi, "").trim();
+      return t.type === line.type && configDiam === normDiam;
+    });
     if (!match && line.quantity > 0) {
       questions.push(
         `Tie ${line.line_id}: ${line.type} / ${line.diameter} not found in pricing config.`
@@ -576,14 +578,19 @@ export function generateQuote(
 
   // 4. Ties circular
   for (const line of scope.ties_circular) {
-    const match = config.ties_circular.find((t) => t.type === line.type && t.diameter === line.diameter);
+    // Normalize diameter: accept "18\"", "18", 18, "18 inch" etc.
+    const normDiam = String(line.diameter).replace(/["\s]|inch/gi, "").trim();
+    const match = config.ties_circular.find((t) => {
+      const configDiam = String(t.diameter).replace(/["\s]|inch/gi, "").trim();
+      return t.type === line.type && configDiam === normDiam;
+    });
     const unitPrice = match?.price_each_cad ?? 0;
     lineItems.push({
       category: "Ties (Circular)",
       description: `${line.type} Tie ⌀${line.diameter}`,
       bar_size: line.type,
       qty: line.quantity,
-      length_or_weight: line.diameter,
+      length_or_weight: String(line.diameter),
       weight_kg: 0,
       tonnage: 0,
       unit_price_cad: unitPrice,

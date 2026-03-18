@@ -130,16 +130,17 @@ When a user says "quote for 100 15mm rebar", you have EVERYTHING needed:
 **fabricated_rebar_lines** — Bent/shaped bars:
 \`{ "line_id": "F1", "bar_size": "15M", "shape_code": "S1", "cut_length_ft": 8, "quantity": 100 }\`
 
-**ties_circular** — Circular ties:
-\`{ "line_id": "T1", "type": "circular", "bar_size": "10M", "diameter_inch": 18, "quantity": 16 }\`
+**ties_circular** — Circular ties (standalone, NOT part of a cage assembly):
+\`{ "line_id": "T1", "type": "10M", "diameter": "18\\"", "quantity": 12 }\`
+⚠️ CRITICAL: "type" must be the BAR SIZE (e.g. "10M"), NOT "circular". "diameter" must be a STRING with inch mark (e.g. "18\\"", "12\\""), NOT a number.
 
 **ties_rectangular** — Rectangular ties:
-\`{ "line_id": "T2", "type": "rectangular", "bar_size": "10M", "width_inch": 12, "height_inch": 18, "quantity": 20 }\`
+\`{ "line_id": "T2", "type": "10M", "diameter": "12\\"x18\\"", "quantity": 20 }\`
 
 **dowels** — Straight dowel bars:
 \`{ "line_id": "D1", "bar_size": "15M", "length_ft": 2, "quantity": 100 }\`
 
-**cages** — Assembled rebar cages (ties + verticals):
+**cages** — ONLY for fully assembled rebar cages (ties + verticals + cage assembly). Use ONLY when customer explicitly says "cage" with BOTH ties AND vertical bars described together as a single assembled unit:
 \`{ "line_id": "C1", "cage_type": "circular", "tie_bar_size": "10M", "tie_diameter_inch": 18, "tie_quantity": 16, "vertical_bar_size": "15M", "vertical_length_ft": 10, "vertical_quantity": 8, "total_cage_weight_kg": 0, "quantity": 1 }\`
 
 ### Bar Size Codes (Canadian metric):
@@ -204,13 +205,31 @@ When a user says "quote for 100 15mm rebar", you have EVERYTHING needed:
 
 ### Mapping Natural Language → JSON:
 - "10MM" or "10mm" → bar_size: "10M"
-- "18 inch dia" or "18\\" dia" → diameter_inch: 18
+- "18 inch dia" or "18\\" dia" → diameter: "18\\""  (string with inch mark)
 - "10 foot" or "10'" → length_ft: 10
-- If customer says "cage" with ties and verticals, populate the \`cages\` array
-- If customer only mentions ties without cage assembly, use \`ties_circular\` or \`ties_rectangular\`
+- "ties" alone (e.g. "12 10MM ties 18\\" dia") → use \`ties_circular\` with type="10M", diameter="18\\"", quantity=12
+- "cage" with BOTH ties AND verticals described → use \`cages\` array
+- If customer mentions "ties" WITHOUT describing verticals, ALWAYS use \`ties_circular\`, NEVER \`cages\`
+- Non-standard lengths (e.g. 11ft) are valid — the engine will use per-ton fallback pricing
 - Leave unused scope arrays as empty \`[]\`
 - If delivery is mentioned, set \`shipping.delivery_required: true\` and estimate \`distance_km\`
 - After generating a quote, offer to send it to the customer via email
+
+### ✅ EXAMPLE — "12 10MM Ties 18\\" dia, 8 15MM straights 11ft"
+This maps to:
+\`\`\`json
+{
+  "scope": {
+    "ties_circular": [{ "line_id": "T1", "type": "10M", "diameter": "18\\"", "quantity": 12 }],
+    "straight_rebar_lines": [{ "line_id": "S1", "bar_size": "15M", "length_ft": 11, "quantity": 8 }],
+    "fabricated_rebar_lines": [],
+    "dowels": [],
+    "cages": [],
+    "mesh": []
+  }
+}
+\`\`\`
+Note: "ties" WITHOUT verticals → ties_circular (NOT cages). 11ft is non-standard but valid — engine uses per-ton fallback.
 
 ## Screenshot/Image Analysis — AUTO-QUOTE MODE
 When \`salesImageAnalysis\` appears in context, you have OCR/vision results from user-uploaded images (screenshots, drawings, schedules).
