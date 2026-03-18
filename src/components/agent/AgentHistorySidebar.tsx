@@ -23,6 +23,7 @@ interface AgentHistorySidebarProps {
   purchasingDates?: string[];
   activePurchasingDate?: string | null;
   onSelectPurchasingDate?: (date: string | null) => void;
+  onDeletePurchasingDate?: (date: string) => void;
 }
 
 export function AgentHistorySidebar({
