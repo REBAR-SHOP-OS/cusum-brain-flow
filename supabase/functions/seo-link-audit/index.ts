@@ -524,7 +524,23 @@ async function fetchAllWPProducts(wp: WPClient): Promise<any[]> {
 async function findWPItem(wp: WPClient, pageUrl: string): Promise<any | null> {
   const url = new URL(pageUrl);
   const slug = url.pathname.replace(/^\/|\/$/g, "").split("/").pop() || "";
-  if (!slug) return null;
+
+  // Handle homepage (empty slug)
+  if (!slug) {
+    try {
+      for (const trySlug of ["home", "homepage", "front-page"]) {
+        const pages = await wp.listPages({ slug: trySlug, per_page: "1" });
+        if (pages && pages.length > 0) return { ...pages[0], type: "page" };
+      }
+      const idMatch = pageUrl.match(/[?&]p=(\d+)/);
+      if (idMatch) {
+        const page = await wp.getPage(idMatch[1]);
+        if (page) return { ...page, type: "page" };
+      }
+    } catch { /* ignore */ }
+    console.warn(`findWPItem: Could not resolve homepage for ${pageUrl}`);
+    return null;
+  }
 
   try {
     const pages = await wp.listPages({ slug, per_page: "1" });
