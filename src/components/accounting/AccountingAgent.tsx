@@ -249,74 +249,95 @@ RULES:
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
+    const msgContent = userMsg.content;
     setInputValue("");
     setIsTyping(true);
 
-    try {
-      const history: ChatMessage[] = messages.map((m) => ({
-        role: m.role === "user" ? "user" : "assistant",
-        content: m.content,
-      }));
+    // Create session if needed
+    let sessionId = pennySessionId;
+    if (!sessionId) {
+      const { data } = await supabase
+        .from("chat_sessions")
+        .insert({ user_id: user?.id, title: msgContent.slice(0, 100), agent_name: "Penny", agent_color: "bg-purple-500" })
+        .select("id")
+        .single();
+      if (data) { sessionId = data.id; setPennySessionId(sessionId); }
+    }
 
-      const qbContext: Record<string, unknown> = qbSummary ? {
-        totalReceivable: qbSummary.totalReceivable,
-        totalPayable: qbSummary.totalPayable,
-        overdueInvoices: qbSummary.overdueInvoices.slice(0, 20).map(i => ({
-          doc: i.DocNumber, customer: i.CustomerRef?.name, balance: i.Balance, due: i.DueDate,
-        })),
-        overdueBills: qbSummary.overdueBills.slice(0, 20).map(b => ({
-          doc: b.DocNumber, vendor: b.VendorRef?.name, balance: b.Balance, due: b.DueDate,
-        })),
-        bankAccounts: qbSummary.accounts
-          .filter(a => a.AccountType === "Bank")
-          .map(a => ({ name: a.Name, balance: a.CurrentBalance })),
-        recentPayments: qbSummary.payments.slice(0, 10).map(p => ({
-          amount: p.TotalAmt, date: p.TxnDate,
-        })),
-        unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
-        unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
-        pennySuggestions: pennySuggestions.slice(0, 10).map(s => ({
-          title: s.title, description: s.description, impact: s.impact, severity: s.severity, category: s.category,
-        })),
-      } : {};
+    // Persist user message
+    if (sessionId) {
+      await supabase.from("chat_messages").insert({ session_id: sessionId, role: "user", content: msgContent });
+    }
 
-      const response = await sendAgentMessage(
+    const history: ChatMessage[] = messages.map((m) => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.content,
+    }));
+
+    const qbContext: Record<string, unknown> = qbSummary ? {
+      totalReceivable: qbSummary.totalReceivable,
+      totalPayable: qbSummary.totalPayable,
+      overdueInvoices: qbSummary.overdueInvoices.slice(0, 20).map(i => ({
+        doc: i.DocNumber, customer: i.CustomerRef?.name, balance: i.Balance, due: i.DueDate,
+      })),
+      overdueBills: qbSummary.overdueBills.slice(0, 20).map(b => ({
+        doc: b.DocNumber, vendor: b.VendorRef?.name, balance: b.Balance, due: b.DueDate,
+      })),
+      bankAccounts: qbSummary.accounts
+        .filter(a => a.AccountType === "Bank")
+        .map(a => ({ name: a.Name, balance: a.CurrentBalance })),
+      recentPayments: qbSummary.payments.slice(0, 10).map(p => ({
+        amount: p.TotalAmt, date: p.TxnDate,
+      })),
+      unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
+      unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
+      pennySuggestions: pennySuggestions.slice(0, 10).map(s => ({
+        title: s.title, description: s.description, impact: s.impact, severity: s.severity, category: s.category,
+      })),
+    } : {};
+
+    if (sessionId) {
+      backgroundAgentService.subscribe(sessionId, (response) => {
+        let replyContent = response.reply;
+        if (response.createdNotifications && response.createdNotifications.length > 0) {
+          const notifSummary = response.createdNotifications
+            .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
+            .join("\n");
+          replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
+        }
+        const { cleanText, calls } = parsePennyCalls(replyContent);
+        setMessages((prev) => [...prev, {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: cleanText,
+          timestamp: new Date(),
+          calls: calls.length > 0 ? calls : undefined,
+        }]);
+        setIsTyping(false);
+      });
+
+      backgroundAgentService.enqueue(
+        sessionId,
         "accounting",
-        userMsg.content,
+        "Penny",
+        msgContent,
         history,
         qbContext,
-        attachedFiles
+        attachedFiles,
       );
-
-      let replyContent = response.reply;
-      if (response.createdNotifications && response.createdNotifications.length > 0) {
-        const notifSummary = response.createdNotifications
-          .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
-          .join("\n");
-        replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
+    } else {
+      // Fallback: direct call if session creation failed
+      try {
+        const response = await sendAgentMessage("accounting", msgContent, history, qbContext, attachedFiles);
+        const { cleanText, calls } = parsePennyCalls(response.reply);
+        setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "agent", content: cleanText, timestamp: new Date(), calls: calls.length > 0 ? calls : undefined }]);
+      } catch (error) {
+        toast({ title: "Penny unavailable", description: error instanceof Error ? error.message : "Failed to get response", variant: "destructive" });
+      } finally {
+        setIsTyping(false);
       }
-
-      const { cleanText, calls } = parsePennyCalls(replyContent);
-      const agentMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "agent",
-        content: cleanText,
-        timestamp: new Date(),
-        calls: calls.length > 0 ? calls : undefined,
-      };
-      setMessages((prev) => [...prev, agentMsg]);
-    } catch (error) {
-      console.error("Penny error:", error);
-      toast({
-        title: "Penny unavailable",
-        description:
-          error instanceof Error ? error.message : "Failed to get response",
-        variant: "destructive",
-      });
-    } finally {
-      setIsTyping(false);
     }
-  }, [inputValue, isTyping, messages, toast, attachments]);
+  }, [inputValue, isTyping, messages, toast, attachments, pennySessionId, user, qbSummary, pennySuggestions]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
