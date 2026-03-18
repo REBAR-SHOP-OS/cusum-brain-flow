@@ -654,8 +654,8 @@ export function buildAssumptions(
     "This quote does not include engineering, structural design, or site labour.",
     "All weights are calculated using CSA G30.18 standard bar masses.",
     "Mesh pricing is placeholder unless explicitly configured.",
-    req.scope.tax_rate > 0
-      ? `Tax rate: ${(req.scope.tax_rate * 100).toFixed(1)}%.`
+    (req.scope?.tax_rate ?? 0) > 0
+      ? `Tax rate: ${((req.scope?.tax_rate ?? 0) * 100).toFixed(1)}%.`
       : "No tax applied.",
   ];
 }
