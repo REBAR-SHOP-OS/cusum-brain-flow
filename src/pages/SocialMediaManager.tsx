@@ -25,10 +25,10 @@ import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { schedulePost } from "@/lib/schedulePost";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
-import { ApprovalsPanel } from "@/components/social/ApprovalsPanel";
 
 const platformFilters = [
   { id: "all", label: "All" },
