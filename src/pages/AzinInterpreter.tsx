@@ -12,6 +12,7 @@ import { AnimatePresence } from "framer-motion";
 export default function AzinInterpreter() {
   const navigate = useNavigate();
   const [showVoiceChat, setShowVoiceChat] = useState(false);
+  const {
     isConnected,
     isConnecting,
     partialText,
