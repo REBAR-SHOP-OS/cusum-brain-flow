@@ -882,7 +882,7 @@ export default function Tasks() {
         const urls: string[] = [];
         for (const file of pendingFiles) {
           const path = `task-attachments/${data.id}/${Date.now()}-${file.name}`;
-          const { error: upErr } = await supabase.storage.from("clearance-photos").upload(path, file);
+          const { error: upErr } = await uploadToStorage("clearance-photos", path, file);
           if (!upErr) {
             const { data: signed } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 60 * 60 * 24 * 365);
             if (signed?.signedUrl) urls.push(signed.signedUrl);
