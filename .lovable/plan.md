@@ -1,51 +1,121 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## SEO Link Audit: Fix "0 Fixes" + Improvements
+## Completed: Add All Wan 2.6 Capabilities
 
-### Root Cause
-The "Preview Fix" and "AI Fix Opportunities" buttons return 0 fixes because:
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-1. **Homepage resolution fails**: Most opportunities are on page_url `/` (homepage). `findWPItem` extracts an empty slug and tries "home", "homepage", "front-page" — but if the WordPress site uses a different slug or a static front page, none match. All 53 proposals return `{ error: "Could not find WordPress page/post" }`.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-2. **No batch limiting**: All 53 audit IDs are sent to preview at once, each making an AI call sequentially. This risks edge function timeout (120s).
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-3. **Error proposals invisible**: The dialog renders error proposals but the "Apply N Fixes" button shows 0 and the errors are easy to miss.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### Plan
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-**File: `supabase/functions/seo-link-audit/index.ts`**
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-1. **Fix `findWPItem` for homepage**: After trying slug-based lookups, fetch the WordPress front page ID from the site settings endpoint (`/wp/v2/settings` or parse the homepage from the site URL). Also try fetching page ID=2 (common WP default for sample page) and page with `?orderby=menu_order&order=asc` as fallback.
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
 
-2. **Store WP item ID during crawl**: When crawling, save the WordPress `item.id` and `item.type` (page/post/product) as `wp_item_id` and `wp_item_type` on the `seo_link_audit` record. This eliminates the need for slug-based lookups during preview/fix — direct ID fetch instead.
+## Completed: Pipeline Unified Timeline & Data Quality Patch
 
-3. **Limit preview batch**: Cap preview to 10 items per call. The frontend should show a message if more are available.
+### Changes
 
-**File: `src/components/seo/SeoLinks.tsx`**
+**Backend — Sync Fixes:**
+- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
+- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
+- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
 
-4. **Batch preview requests**: When clicking "AI Fix Opportunities (53)", only send the first 10 IDs. Show count of remaining.
+**Frontend — Lead Detail:**
+- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
 
-5. **Show error feedback in dialog**: When all proposals are errors, display a clear message explaining what went wrong (e.g., "Could not resolve WordPress pages"). Show error count prominently.
+**Frontend — Pipeline Board:**
+- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
 
-6. **Add per-item "Preview Fix" progress**: Show which item is being processed (spinner on the row).
+**Migration:**
+- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
+- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
 
-### Technical Details
+### Known Risks
+- Priority re-mapping changes existing lead priorities on next sync (intentional)
+- File linkage fix uses both int/string ID matching — monitor results after next sync
+- Stage group filter is additive/safe — "Show all" restores full board
 
-```text
-Crawl phase change:
-  Before: record = { page_url, link_href, ... }
-  After:  record = { page_url, link_href, wp_item_id: item.id, wp_item_type: "page"|"post", ... }
+### Follow-up
+- Run a full Odoo sync to apply priority and revenue fixes to existing data
+- Monitor file linkage stats in chatter sync response after deployment
 
-findWPItem change:
-  Before: slug lookup only → fails for "/"
-  After:  1) Check wp_item_id from record (direct fetch)
-          2) Slug lookup
-          3) Fallback: fetch front page via /wp/v2/pages?orderby=menu_order
+## Completed: Odoo Mirror Pipeline + Sales Department Patch
 
-Preview batch:
-  Before: Send all 53 IDs → timeout + 53 AI calls
-  After:  Send max 10 IDs → manageable
-```
+### Assessment
+Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
 
-**Database migration needed**: Add `wp_item_id` (integer, nullable) and `wp_item_type` (text, nullable) columns to `seo_link_audit` table.
+### Changes Implemented
 
+**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
+- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
+- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
+- 30s cooldown per lead to prevent API rate limiting
+- Shows "Syncing…" indicator in header during refresh
+- Invalidates all lead-related query keys on completion
+
+**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
+- New `mode: "single"` + `odoo_id` parameter
+- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
+- Logs stage change events if stage differs
+- Returns fast without touching other leads
+
+**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
+- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
+- Logs reconciliation events with reason
+- Only archives non-terminal leads (skips already won/lost)
+
+**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
+- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
+- Improves timeline readability
+
+**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
+- Footer shows "Synced X minutes ago" with color-coded status dot
+- Green: <5min, Yellow: <30min, Red: >30min
+
+### Files Changed
+- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
+- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
+- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+
+### No Changes Needed (Already Existed)
+- Sales Department sidebar, routes, pages, tables, hooks
+- Odoo chatter sync single mode (already existed)
+- OdooChatter unified timeline (already existed)
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
+- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)

@@ -107,11 +107,11 @@ export function SeoLinks() {
     onError: (e) => toast.error(`Crawl failed: ${e.message}`),
   });
 
-  // Preview mutation — gets AI proposals without applying
+  // Preview mutation — gets AI proposals without applying (batched to 10)
   const previewMutation = useMutation({
     mutationFn: async (ids: string[]) => {
       if (!domain) throw new Error("No domain");
-      return await invokeEdgeFunction<{ proposals: Proposal[] }>("seo-link-audit", {
+      return await invokeEdgeFunction<{ proposals: Proposal[]; total_requested: number; processed: number; remaining: number }>("seo-link-audit", {
         phase: "preview",
         audit_ids: ids,
         company_id: domain.company_id,
@@ -121,6 +121,9 @@ export function SeoLinks() {
       setProposals(data.proposals || []);
       setPendingFixIds(ids);
       setPreviewOpen(true);
+      if (data.remaining > 0) {
+        toast.info(`Showing first ${data.processed} of ${data.total_requested} items. Run again for more.`);
+      }
     },
     onError: (e) => toast.error(`Preview failed: ${e.message}`),
   });
@@ -388,6 +391,12 @@ export function SeoLinks() {
               <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin" />
                 AI is analyzing your content...
+              </div>
+            )}
+            {proposals.length > 0 && proposals.every(p => !!p.error) && (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-sm text-destructive">
+                <p className="font-semibold mb-1">All {proposals.length} items failed to resolve</p>
+                <p className="text-xs">{proposals[0]?.error}. Try re-running the link audit to refresh WordPress page mappings.</p>
               </div>
             )}
             {proposals.map((p, i) => (

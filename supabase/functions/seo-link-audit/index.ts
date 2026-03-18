@@ -122,6 +122,8 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
         anchor_text: link.text || null,
         link_type: isInternal ? "internal" : "external",
         company_id: companyId,
+        wp_item_id: item.id,
+        wp_item_type: item.type || (item.link?.includes("/product/") ? "product" : "page"),
       };
 
       if (!link.text || link.text.trim() === "") {
@@ -157,6 +159,8 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
           suggested_href: resource.href,
           suggested_anchor: resource.anchor,
           company_id: companyId,
+          wp_item_id: item.id,
+          wp_item_type: item.type || "page",
         });
         rsicCount++;
       }
@@ -270,14 +274,17 @@ async function handlePreview(sb: any, auditIds: string[], _companyId: string) {
   const wp = new WPClient();
   const proposals: any[] = [];
 
-  for (const id of auditIds) {
+  // Cap at 10 items per call to prevent timeouts
+  const capped = auditIds.slice(0, 10);
+
+  for (const id of capped) {
     const { data: record } = await sb.from("seo_link_audit").select("*").eq("id", id).single();
     if (!record || record.is_fixed) continue;
 
     try {
-      const wpItem = await findWPItem(wp, record.page_url);
+      const wpItem = await findWPItemFromRecord(wp, record);
       if (!wpItem) {
-        proposals.push({ id, error: "Could not find WordPress page/post" });
+        proposals.push({ id, error: "Could not find WordPress page/post for: " + record.page_url });
         continue;
       }
 
@@ -298,7 +305,13 @@ async function handlePreview(sb: any, auditIds: string[], _companyId: string) {
     }
   }
 
-  return new Response(JSON.stringify({ success: true, proposals }), {
+  return new Response(JSON.stringify({ 
+    success: true, 
+    proposals,
+    total_requested: auditIds.length,
+    processed: capped.length,
+    remaining: Math.max(0, auditIds.length - 10),
+  }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
@@ -429,7 +442,7 @@ async function handleFix(sb: any, auditIds: string[], companyId: string) {
     if (!record || record.is_fixed) continue;
 
     try {
-      const wpItem = await findWPItem(wp, record.page_url);
+      const wpItem = await findWPItemFromRecord(wp, record);
       if (!wpItem) {
         errors.push(id);
         continue;
@@ -521,22 +534,48 @@ async function fetchAllWPProducts(wp: WPClient): Promise<any[]> {
   return all;
 }
 
-async function findWPItem(wp: WPClient, pageUrl: string): Promise<any | null> {
-  const url = new URL(pageUrl);
+/** Try to resolve WP item using stored wp_item_id first, then slug fallback */
+async function findWPItemFromRecord(wp: WPClient, record: any): Promise<any | null> {
+  // 1) Direct ID lookup if stored during crawl
+  if (record.wp_item_id) {
+    try {
+      const itemType = record.wp_item_type || "page";
+      if (itemType === "page") {
+        const page = await wp.getPage(String(record.wp_item_id));
+        if (page) return { ...page, type: "page" };
+      } else if (itemType === "post") {
+        const post = await wp.getPost(String(record.wp_item_id));
+        if (post) return { ...post, type: "post" };
+      } else if (itemType === "product") {
+        const product = await wp.getProduct(String(record.wp_item_id));
+        if (product) return { ...product, type: "product", content: { rendered: product.description || "" } };
+      }
+    } catch (e) {
+      console.warn(`Direct WP item lookup failed for ID ${record.wp_item_id}:`, e);
+    }
+  }
+
+  // 2) Slug-based fallback
+  return findWPItemBySlug(wp, record.page_url);
+}
+
+async function findWPItemBySlug(wp: WPClient, pageUrl: string): Promise<any | null> {
+  let url: URL;
+  try { url = new URL(pageUrl); } catch { return null; }
   const slug = url.pathname.replace(/^\/|\/$/g, "").split("/").pop() || "";
 
   // Handle homepage (empty slug)
   if (!slug) {
     try {
+      // Try common homepage slugs
       for (const trySlug of ["home", "homepage", "front-page"]) {
         const pages = await wp.listPages({ slug: trySlug, per_page: "1" });
         if (pages && pages.length > 0) return { ...pages[0], type: "page" };
       }
-      const idMatch = pageUrl.match(/[?&]p=(\d+)/);
-      if (idMatch) {
-        const page = await wp.getPage(idMatch[1]);
-        if (page) return { ...page, type: "page" };
-      }
+      // Try fetching the front page (page on front in WP settings — usually ID from reading settings)
+      // Fallback: get the first page ordered by menu_order
+      const frontPages = await wp.listPages({ orderby: "menu_order", order: "asc", per_page: "1" });
+      if (frontPages && frontPages.length > 0) return { ...frontPages[0], type: "page" };
     } catch { /* ignore */ }
     console.warn(`findWPItem: Could not resolve homepage for ${pageUrl}`);
     return null;
