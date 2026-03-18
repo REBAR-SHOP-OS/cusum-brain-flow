@@ -44,7 +44,8 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
       }
     };
 
-    const hasInternalRef = post.imageTextTranslation || post.captionTranslation;
+    // Strip hashtags from caption to avoid duplication with hashtags field
+    const cleanCaption = (post.caption || "").replace(/#[a-zA-Z]\w*/g, "").replace(/\s{2,}/g, " ").trim();
 
     return (
       <div
@@ -81,7 +82,7 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
         {/* 2. Caption */}
         <div className="px-3 pt-3 pb-1">
           <p className="text-sm text-foreground leading-snug whitespace-pre-line">
-            {post.caption || "Untitled post"}
+            {cleanCaption || "Untitled post"}
           </p>
         </div>
 
@@ -103,30 +104,24 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
           </div>
         )}
 
-        {/* 5. Internal Reference Box */}
-        {hasInternalRef && (
-          <div className="mx-3 my-2 p-2.5 rounded-lg bg-muted/50 border border-border/50">
-            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
-              🔒 Internal reference only — not published
+        {/* 5. Internal Reference Box — always visible */}
+        <div className="mx-3 my-2 p-2.5 rounded-lg bg-muted/50 border border-border/50">
+          <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
+            🔒 Internal reference only — not published
+          </p>
+          <div className="mb-1.5">
+            <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+              {post.imageTextTranslation || "ترجمه‌ای موجود نیست"}
             </p>
-            {post.imageTextTranslation && (
-              <div className="mb-1.5">
-                <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
-                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                  {post.imageTextTranslation}
-                </p>
-              </div>
-            )}
-            {post.captionTranslation && (
-              <div>
-                <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
-                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                  {post.captionTranslation}
-                </p>
-              </div>
-            )}
           </div>
-        )}
+          <div>
+            <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+              {post.captionTranslation || "ترجمه‌ای موجود نیست"}
+            </p>
+          </div>
+        </div>
 
         {/* 6. Action buttons */}
         <div className="flex items-center gap-3 px-4 pb-4 pt-1">

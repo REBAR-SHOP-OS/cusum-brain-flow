@@ -121,6 +121,8 @@ function extractPostData(content: string): ExtractedPost[] {
   textContent = textContent.replace(/\*\*Hashtags:\*\*/g, "");
   textContent = textContent.replace(/^[\s]*#[a-zA-Z]\w*(\s+#[a-zA-Z]\w*)*[\s]*$/gm, "");
   textContent = textContent.replace(/\n{3,}/g, "\n\n").trim();
+  // Strip hashtag tokens from caption since they're already in allHashtags
+  textContent = textContent.replace(/#[a-zA-Z]\w*/g, "").replace(/\s{2,}/g, " ").trim();
 
   // Assign extracted data to all posts
   results.forEach((r) => {
