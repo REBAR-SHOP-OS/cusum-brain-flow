@@ -148,7 +148,7 @@ export default function SalesQuotations() {
                 <TableRow key={q.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setDrawerQuotation(q)}>
                   <TableCell className="font-medium font-mono">{q.quotation_number}</TableCell>
                   <TableCell>{q.customer_name || q.customer_company || "—"}</TableCell>
-                  <TableCell><Badge className={STATUS_COLORS[q.status] || ""}>{q.status}</Badge></TableCell>
+                  <TableCell><Badge className={getStatusInfo(q.status).color}>{getStatusInfo(q.status).label}</Badge></TableCell>
                   <TableCell className="text-right">{q.amount ? `$ ${Number(q.amount).toLocaleString()}` : "—"}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">{format(new Date(q.created_at), "MMM d, yyyy")}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">{q.expiry_date ? format(new Date(q.expiry_date), "MMM d, yyyy") : "—"}</TableCell>
