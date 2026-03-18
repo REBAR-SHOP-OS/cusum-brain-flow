@@ -145,13 +145,17 @@ export async function fetchContext(
 
     // --- Estimation (Gauge) ---
     if (agent === "estimation") {
-      // Rebar Standards
-      const { data: standards } = await supabase.from("rebar_standards").select("*");
-      context.rebarStandards = standards;
+      // Rebar Standards — cached 10 min (rarely changes)
+      context.rebarStandards = await cachedQuery(`agent:${cid}:rebarStandards`, 10 * 60_000, async () => {
+        const { data } = await supabase.from("rebar_standards").select("*");
+        return data;
+      });
       
-      // Validation Rules
-      const { data: rules } = await supabase.from("validation_rules").select("*");
-      context.validationRules = rules;
+      // Validation Rules — cached 10 min
+      context.validationRules = await cachedQuery(`agent:${cid}:validationRules`, 10 * 60_000, async () => {
+        const { data } = await supabase.from("validation_rules").select("*");
+        return data;
+      });
     }
 
     // --- Available Employees (Shared for all agents) ---
