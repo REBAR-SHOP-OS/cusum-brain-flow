@@ -1,10 +1,14 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useVoiceEngine } from "./useVoiceEngine";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 /**
  * Vizzy Voice Engine — wraps useVoiceEngine with executive intelligence prompt
  * and live ERP data injection from vizzy-daily-brief edge function.
+ * 
+ * FIX: Uses a ref for fullInstructions to prevent stale closure bug where
+ * ERP context was never reaching OpenAI because React hadn't re-rendered
+ * before startSession was called.
  */
 
 const VIZZY_INSTRUCTIONS = `You are VIZZY — the Executive Intelligence System for Rebar.shop. You operate as a COO + CFO hybrid AI voice assistant.
@@ -55,17 +59,26 @@ team presence, deliveries, and recent activity events.
 export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
 export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
 
+function buildInstructions(erpContext: string | null): string {
+  if (!erpContext) return VIZZY_INSTRUCTIONS;
+  return `${VIZZY_INSTRUCTIONS}\n\n═══ LIVE BUSINESS DATA (as of ${new Date().toLocaleString()}) ═══\n${erpContext}`;
+}
+
 export function useVizzyVoiceEngine() {
   const [erpContext, setErpContext] = useState<string | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const contextFetched = useRef(false);
 
-  const fullInstructions = erpContext
-    ? `${VIZZY_INSTRUCTIONS}\n\n═══ LIVE BUSINESS DATA (as of ${new Date().toLocaleString()}) ═══\n${erpContext}`
-    : VIZZY_INSTRUCTIONS;
+  // Ref always holds the latest instructions — avoids stale closure
+  const instructionsRef = useRef(buildInstructions(null));
+
+  // Keep ref in sync with erpContext state
+  useEffect(() => {
+    instructionsRef.current = buildInstructions(erpContext);
+  }, [erpContext]);
 
   const engine = useVoiceEngine({
-    instructions: fullInstructions,
+    instructions: instructionsRef.current,
     voice: "shimmer",
     model: "gpt-4o-mini-realtime-preview",
     vadThreshold: 0.5,
@@ -77,6 +90,7 @@ export function useVizzyVoiceEngine() {
   const originalStartSession = engine.startSession;
 
   const startSession = useCallback(async () => {
+    // Fetch ERP context first if not yet fetched
     if (!contextFetched.current) {
       contextFetched.current = true;
       setContextLoading(true);
@@ -88,6 +102,8 @@ export function useVizzyVoiceEngine() {
         );
         if (data?.briefing) {
           setErpContext(data.briefing);
+          // Update the ref immediately — don't wait for React re-render
+          instructionsRef.current = buildInstructions(data.briefing);
         }
       } catch (err) {
         console.warn("Failed to fetch ERP context for Vizzy voice:", err);
@@ -95,8 +111,8 @@ export function useVizzyVoiceEngine() {
         setContextLoading(false);
       }
     }
-    // Let state propagate before connecting
-    await new Promise((r) => setTimeout(r, 150));
+
+    // Instructions ref is now up-to-date — start the session
     originalStartSession();
   }, [originalStartSession]);
 
