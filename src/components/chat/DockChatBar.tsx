@@ -224,6 +224,7 @@ export function DockChatBar() {
           </PopoverContent>
         </Popover>
       </div>
-    </>
+    </>,
+    getFloatingPortalContainer()
   );
 }
