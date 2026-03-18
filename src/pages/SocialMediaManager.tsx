@@ -22,6 +22,7 @@ import { SocialCalendar } from "@/components/social/SocialCalendar";
 import { ContentStrategyPanel } from "@/components/social/ContentStrategyPanel";
 import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
