@@ -30,7 +30,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase
       .from("profiles")
       .select("company_id")
-      .eq("id", user.id)
+      .eq("user_id", user.id)
       .single();
     if (!profile?.company_id) { setLoading(false); return; }
 
