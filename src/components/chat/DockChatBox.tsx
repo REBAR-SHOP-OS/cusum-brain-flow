@@ -11,6 +11,7 @@ import { useTeamMessages, useSendMessage, useMyProfile } from "@/hooks/useTeamCh
 import { useProfiles } from "@/hooks/useProfiles";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { getPublicFileUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks } from "@/lib/chatFileUtils";
 import { useSessionGuard } from "@/hooks/useSessionGuard";

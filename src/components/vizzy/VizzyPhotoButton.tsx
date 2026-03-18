@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { cn } from "@/lib/utils";
 
 interface VizzyPhotoButtonProps {

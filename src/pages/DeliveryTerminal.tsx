@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

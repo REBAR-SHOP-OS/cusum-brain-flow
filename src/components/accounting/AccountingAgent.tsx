@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { sendAgentMessage, ChatMessage, AttachedFile } from "@/lib/agent";
 import { backgroundAgentService } from "@/lib/backgroundAgentService";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { RichMarkdown, type ActionItemCallbacks } from "@/components/chat/RichMarkdown";

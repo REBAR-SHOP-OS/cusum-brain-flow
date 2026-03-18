@@ -33,6 +33,7 @@ import { TransitionsTab } from "./editor/TransitionsTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
 import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 
 type EditorTab = "media" | "record" | "text" | "music" | "stock-video" | "stock-images" | "templates" | "graphics" | "transitions" | "brand-kit" | "script" | "settings" | "card-editor";
 

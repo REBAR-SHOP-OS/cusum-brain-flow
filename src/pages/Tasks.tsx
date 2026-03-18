@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { cn } from "@/lib/utils";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { format, isPast, isToday, startOfDay } from "date-fns";

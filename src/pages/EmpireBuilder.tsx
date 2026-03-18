@@ -11,6 +11,7 @@ import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { MessageActions } from "@/components/chat/MessageActions";
 import { PatchReview } from "@/components/chat/PatchReview";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { analyzeZip } from "@/lib/zipAnalyzer";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";

@@ -11,6 +11,7 @@ import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useSocialPosts } from "@/hooks/useSocialPosts";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
 import { getSignedFileUrl } from "@/lib/storageUtils";
 
 interface CreateContentDialogProps {
