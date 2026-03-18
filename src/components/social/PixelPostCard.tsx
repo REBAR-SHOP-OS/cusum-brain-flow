@@ -86,12 +86,23 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
         <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
           <DialogContent className="max-w-[60vw] max-h-[70vh] p-2 border-none bg-background/95 backdrop-blur-sm flex items-center justify-center">
             <img
-              src={post.imageUrl}
+              src={currentImageUrl}
               alt="Zoomed preview"
               className="max-w-full max-h-[65vh] object-contain rounded-lg"
             />
           </DialogContent>
         </Dialog>
+
+        {/* Image edit dialog */}
+        <ImageEditDialog
+          open={showImageEdit}
+          onOpenChange={setShowImageEdit}
+          imageUrl={currentImageUrl}
+          onImageReady={(newUrl) => {
+            setCurrentImageUrl(newUrl);
+            onEditImage?.(post, newUrl);
+          }}
+        />
 
         {/* 2. Caption */}
         <div className="px-3 pt-3 pb-1">
