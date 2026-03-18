@@ -84,6 +84,8 @@ REQUIRED ANALYSIS AREAS (include only if noteworthy — skip if nothing to flag)
 6. System Health: Automation failures, sync issues, anomalies
 7. Team: Notable presence/absence, capacity concerns
 
+IMPORTANT: PRESERVE all customer names, employee names, dollar amounts, and invoice numbers from the data. The voice assistant needs these specific details to answer follow-up questions. Do NOT over-summarize — keep granular data points.
+
 CLOSE with ONE strategic recommendation — the single most important thing the CEO should act on today, with reasoning.
 
 Keep each finding to 1-2 sentences. Be direct, analytical, and actionable. Never pad with "everything looks fine" — only flag what matters.
