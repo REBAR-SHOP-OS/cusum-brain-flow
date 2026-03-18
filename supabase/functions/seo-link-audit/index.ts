@@ -305,7 +305,13 @@ async function handlePreview(sb: any, auditIds: string[], _companyId: string) {
     }
   }
 
-  return new Response(JSON.stringify({ success: true, proposals }), {
+  return new Response(JSON.stringify({ 
+    success: true, 
+    proposals,
+    total_requested: auditIds.length,
+    processed: capped.length,
+    remaining: Math.max(0, auditIds.length - 10),
+  }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
