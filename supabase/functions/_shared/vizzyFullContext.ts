@@ -188,6 +188,21 @@ export async function buildFullVizzyContext(
       .not("actor_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(500),
+    // Customer directory — top 50 active customers by balance
+    supabase
+      .from("accounting_mirror_customers")
+      .select("display_name, balance, open_balance, total_revenue, qb_customer_id")
+      .order("total_revenue", { ascending: false })
+      .limit(50),
+    // Recent invoices for transaction summary
+    includeFinancials
+      ? supabase
+          .from("accounting_mirror")
+          .select("balance, entity_type, data, last_synced_at")
+          .eq("entity_type", "Invoice")
+          .order("last_synced_at", { ascending: false })
+          .limit(30)
+      : Promise.resolve({ data: null }),
   ]);
 
   // Compute financials

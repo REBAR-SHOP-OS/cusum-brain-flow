@@ -182,6 +182,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               src={vizzyAvatar}
               alt="Vizzy"
               className="w-full h-full object-cover"
+              style={{ transform: "scale(1.8)", objectPosition: "center 38%" }}
               draggable={false}
             />
             {/* Connecting overlay */}

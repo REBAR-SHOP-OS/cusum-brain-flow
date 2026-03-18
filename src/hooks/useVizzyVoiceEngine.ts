@@ -44,11 +44,13 @@ orders, leads, customers, invoices, production status, machine utilization, fina
 team presence, deliveries, and recent activity events.
 
 ═══ RULES ═══
-- ALWAYS reference the live data below when answering business questions
-- If the data doesn't cover something specific, say "I'd need to check the system for that specific detail"
+- ALWAYS reference the live data below when answering business questions. The data IS below — search through it.
+- NEVER say you "cannot access" or "don't have access to" data. ALL business data is injected below. Use it.
+- If a very specific detail (like a single transaction ID) isn't in the snapshot, say: "That specific detail isn't in today's snapshot — ask me in the text chat for a deeper lookup."
 - NEVER give long monologues. This is voice — keep it tight.
 - If asked to do something you can't (like execute a write operation), say what you WOULD do and suggest they ask in the chat.
-- Be proactive: if you notice something concerning in what they mention, flag it.`;
+- Be proactive: if you notice something concerning in what they mention, flag it.
+- When listing customers, employees, invoices — pull directly from the CUSTOMER DIRECTORY and TRANSACTION SUMMARY sections below.`;
 
 export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
 export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
