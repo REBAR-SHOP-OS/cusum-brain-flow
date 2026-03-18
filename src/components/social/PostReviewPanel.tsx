@@ -145,6 +145,8 @@ export function PostReviewPanel({
   const [localContent, setLocalContent] = useState(post?.content || "");
   const [localHashtags, setLocalHashtags] = useState(post?.hashtags?.join(", ") || "");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [persianImageText, setPersianImageText] = useState("");
+  const [persianCaptionText, setPersianCaptionText] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
@@ -202,9 +204,23 @@ export function PostReviewPanel({
       setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
     }
     setLocalContentType(post.content_type || "post");
-    // Sync text fields from post data
+    // Sync text fields from post data — strip Persian block from editable content
     setLocalTitle(post.title || "");
-    setLocalContent(post.content || "");
+    const rawC = post.content || "";
+    const persianSepIdx = rawC.indexOf("---PERSIAN---");
+    if (persianSepIdx !== -1) {
+      setLocalContent(rawC.slice(0, persianSepIdx).trim());
+      const pBlock = rawC.slice(persianSepIdx + "---PERSIAN---".length).trim();
+      // Parse image text and caption translation from Persian block
+      const imgMatch = pBlock.match(/🖼️\s*متن روی عکس:\s*([\s\S]*?)(?=📝|$)/);
+      const capMatch = pBlock.match(/📝\s*ترجمه کپشن:\s*([\s\S]*?)$/);
+      setPersianImageText(imgMatch?.[1]?.trim() || pBlock);
+      setPersianCaptionText(capMatch?.[1]?.trim() || "");
+    } else {
+      setLocalContent(rawC);
+      setPersianImageText("");
+      setPersianCaptionText("");
+    }
     setLocalHashtags(post.hashtags?.join(", ") || "");
     setSaveStatus("idle");
   }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages, post?.title, post?.content, post?.hashtags]);
@@ -273,12 +289,17 @@ export function PostReviewPanel({
       .filter((h) => h.length > 0)
       .map((h) => (h.startsWith("#") ? h : `#${h}`));
     setSaveStatus("saving");
+    // Re-append Persian block so it's preserved in DB but never in the editable textarea
+    let contentToSave = localContent;
+    if (persianImageText || persianCaptionText) {
+      contentToSave += "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + (persianImageText || "") + "\n📝 ترجمه کپشن: " + (persianCaptionText || "");
+    }
     updatePost.mutate(
-      { id: post.id, title: localTitle, content: localContent, hashtags: hashtagArray },
+      { id: post.id, title: localTitle, content: contentToSave, hashtags: hashtagArray },
       { onSuccess: () => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); },
         onError: () => setSaveStatus("idle") }
     );
-  }, [post?.id, localTitle, localContent, localHashtags, updatePost]);
+  }, [post?.id, localTitle, localContent, localHashtags, persianImageText, persianCaptionText, updatePost]);
 
   const flushRef = useRef(flushSave);
   flushRef.current = flushSave;
@@ -601,30 +622,24 @@ export function PostReviewPanel({
                       </div>
                     </div>
 
-                    {/* Persian translation — internal reference only */}
-                    {(() => {
-                      const persianSep = "---PERSIAN---";
-                      const rawContent = post.content || "";
-                      const persianIdx = rawContent.indexOf(persianSep);
-                      const persianBlock = persianIdx !== -1 ? rawContent.slice(persianIdx + persianSep.length).trim() : "";
-                      return persianBlock ? (
-                        <div className="mx-4">
-                          <Collapsible>
-                            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group w-full">
-                              <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
-                              <span>🔒 Persian Translation (internal only — never published)</span>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className="mt-2 p-3 rounded-lg border border-border/50 bg-muted/30">
-                                <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed" dir="rtl">
-                                  {persianBlock}
-                                </p>
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </div>
-                      ) : null;
-                    })()}
+                    {/* Persian translation — always visible, read-only, never published */}
+                    <div className="mx-3 my-2 p-2.5 rounded-lg bg-muted/50 border border-border/50">
+                      <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
+                        🔒 Internal reference only — not published
+                      </p>
+                      <div className="mb-1.5">
+                        <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                          {persianImageText || "ترجمه‌ای موجود نیست"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                          {persianCaptionText || "ترجمه‌ای موجود نیست"}
+                        </p>
+                      </div>
+                    </div>
 
                     {/* Regenerate caption */}
                     <div className="flex gap-2 px-4 pt-3">
