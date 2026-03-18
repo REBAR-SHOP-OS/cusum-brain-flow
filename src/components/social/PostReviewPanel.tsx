@@ -145,6 +145,8 @@ export function PostReviewPanel({
   const [localContent, setLocalContent] = useState(post?.content || "");
   const [localHashtags, setLocalHashtags] = useState(post?.hashtags?.join(", ") || "");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [persianImageText, setPersianImageText] = useState("");
+  const [persianCaptionText, setPersianCaptionText] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
