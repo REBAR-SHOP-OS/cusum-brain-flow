@@ -122,28 +122,13 @@ export default function AzinInterpreter() {
         </div>
       </div>
 
-      {/* Mic button */}
+      {/* Voice Orb */}
       <div className="flex items-center justify-center py-6 border-t border-border">
-        <button
-          onClick={handleToggle}
-          disabled={isConnecting}
-          className={cn(
-            "relative w-20 h-20 rounded-full flex items-center justify-center transition-all",
-            isConnected
-              ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/30"
-              : "bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:scale-105",
-            isConnecting && "opacity-60 cursor-wait"
-          )}
-        >
-          {isConnected && (
-            <span className="absolute inset-0 rounded-full bg-destructive/40 animate-ping" />
-          )}
-          {isConnected ? (
-            <MicOff className="w-8 h-8 relative z-10" />
-          ) : (
-            <Mic className="w-8 h-8 relative z-10" />
-          )}
-        </button>
+        <AzinVoiceOrb
+          isConnected={isConnected}
+          isConnecting={isConnecting}
+          onToggle={handleToggle}
+        />
       </div>
 
       {/* Voice Chat Overlay */}
