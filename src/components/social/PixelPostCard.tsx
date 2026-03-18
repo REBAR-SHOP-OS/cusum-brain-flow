@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { CheckCircle2, RefreshCw, ZoomIn } from "lucide-react";
+import { CheckCircle2, RefreshCw, ZoomIn, Languages } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export interface PixelPostData {
   id: string;
@@ -104,24 +105,30 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
           </div>
         )}
 
-        {/* 5. Internal Reference Box — always visible */}
-        <div className="mx-3 my-2 p-2.5 rounded-lg bg-muted/50 border border-border/50">
-          <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
-            🔒 Internal reference only — not published
-          </p>
-          <div className="mb-1.5">
-            <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
-            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-              {post.imageTextTranslation || "ترجمه‌ای موجود نیست"}
+        {/* 5. Collapsible Persian Translation */}
+        <Collapsible className="mx-3 my-2">
+          <CollapsibleTrigger className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors text-muted-foreground text-xs font-medium w-full">
+            <Languages className="w-4 h-4" />
+            <span>🇮🇷 Persian translation</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-1.5 p-2.5 rounded-lg bg-muted/50 border border-border/50">
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
+              🔒 Internal reference only — not published
             </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
-            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-              {post.captionTranslation || "ترجمه‌ای موجود نیست"}
-            </p>
-          </div>
-        </div>
+            <div className="mb-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                {post.imageTextTranslation || "ترجمه‌ای موجود نیست"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                {post.captionTranslation || "ترجمه‌ای موجود نیست"}
+              </p>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* 6. Action buttons */}
         <div className="flex items-center gap-3 px-4 pb-4 pt-1">
