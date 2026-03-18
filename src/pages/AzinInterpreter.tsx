@@ -144,6 +144,13 @@ export default function AzinInterpreter() {
           )}
         </button>
       </div>
+
+      {/* Voice Chat Overlay */}
+      <AnimatePresence>
+        {showVoiceChat && (
+          <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
