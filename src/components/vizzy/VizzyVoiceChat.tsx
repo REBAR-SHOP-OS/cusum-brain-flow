@@ -193,7 +193,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               )}
             >
               <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
-                {t.role === "user" ? "You" : agentName}
+                {t.role === "user" ? "You" : "Vizzy"}
               </span>
               {t.text}
             </motion.div>
