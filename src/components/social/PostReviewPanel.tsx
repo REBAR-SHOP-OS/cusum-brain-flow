@@ -131,7 +131,7 @@ export function PostReviewPanel({
   onSchedule,
   onDecline,
 }: PostReviewPanelProps) {
-  const { posts: allPosts, updatePost, deletePost } = useSocialPosts();
+  const { posts: allPosts, updatePost, deletePost, createPost } = useSocialPosts();
   const { toast } = useToast();
   const { publishPost, publishing } = usePublishPost();
   const queryClient = useQueryClient();
@@ -894,20 +894,66 @@ export function PostReviewPanel({
                         }
                       }
 
+                      const isUnassigned = post.platform === "unassigned";
                       let allOk = true;
-                      for (const combo of combos) {
-                        const ok = await publishPost({
-                          id: post.id,
-                          platform: combo.platform,
-                          content: post.content,
+
+                      // Publish first combo using original post ID
+                      const firstCombo = combos[0];
+                      const firstOk = await publishPost({
+                        id: post.id,
+                        platform: firstCombo.platform,
+                        content: post.content,
+                        title: post.title,
+                        hashtags: post.hashtags,
+                        image_url: post.image_url,
+                        page_name: firstCombo.page,
+                        content_type: localContentType,
+                      });
+                      if (!firstOk) allOk = false;
+
+                      // For additional combos, clone and publish
+                      for (let i = 1; i < combos.length; i++) {
+                        const combo = combos[i];
+                        // Create a clone for this combo
+                        const cloneResult = await createPost.mutateAsync({
+                          user_id: post.user_id,
+                          platform: combo.platform as any,
+                          status: "draft",
+                          qa_status: "approved",
                           title: post.title,
-                          hashtags: post.hashtags,
+                          content: post.content,
                           image_url: post.image_url,
+                          hashtags: post.hashtags,
                           page_name: combo.page,
                           content_type: localContentType,
+                          scheduled_date: post.scheduled_date,
                         });
-                        if (!ok) allOk = false;
+                        if (cloneResult?.id) {
+                          const ok = await publishPost({
+                            id: cloneResult.id,
+                            platform: combo.platform,
+                            content: post.content,
+                            title: post.title,
+                            hashtags: post.hashtags,
+                            image_url: post.image_url,
+                            page_name: combo.page,
+                            content_type: localContentType,
+                          });
+                          if (!ok) allOk = false;
+                        } else {
+                          allOk = false;
+                        }
                       }
+
+                      // If original was unassigned and first combo changed it, update platform
+                      // Then if there were extra combos the original is now the first combo's platform
+                      // If unassigned, delete original after cloning (first combo already used original ID)
+                      if (isUnassigned && allOk && combos.length > 0) {
+                        // The first publishPost already updated the original row's platform,
+                        // so it's no longer "unassigned" — no extra delete needed.
+                        // But if first combo failed, don't delete.
+                      }
+
                       if (allOk) onClose();
                     }}
                   >
