@@ -26,6 +26,7 @@ import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PurchasingListPanel } from "@/components/purchasing/PurchasingListPanel";
+import { getEventsForMonth, type CalendarEvent } from "@/components/social/contentStrategyData";
 import { PurchasingConfirmedView } from "@/components/purchasing/PurchasingConfirmedView";
 import { usePurchasingDates } from "@/hooks/usePurchasingDates";
 
