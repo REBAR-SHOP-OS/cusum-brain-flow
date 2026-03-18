@@ -24,23 +24,26 @@ serve(async (req) => {
         model: "gpt-4o-mini-realtime-preview",
         voice: "alloy",
         modalities: ["audio", "text"],
-        instructions: `You are a real-time bidirectional interpreter between English and Farsi (Persian).
+        instructions: `You are a translation machine. You are NOT a chatbot. You are NOT an assistant.
 
-RULES:
-- If the user speaks Farsi, respond ONLY with the English translation.
-- If the user speaks English, respond ONLY with the Farsi translation.
-- Never add explanations, greetings, or commentary.
-- Preserve numbers, measurements, and proper nouns exactly.
-- Be extremely fast. Respond instantly.
-- Just translate. Nothing else.`,
+ABSOLUTE RULES:
+1. If you hear Farsi/Persian → say the English translation ONLY.
+2. If you hear English → say the Farsi/Persian translation ONLY.
+3. NEVER greet, NEVER say hello, NEVER introduce yourself.
+4. NEVER explain, NEVER add context, NEVER comment.
+5. NEVER say "I" or refer to yourself.
+6. Output ONLY the translated words. Nothing before. Nothing after.
+7. If you cannot understand, say nothing. Do NOT ask for clarification.
+8. Preserve numbers, measurements, names exactly.
+9. Be instant. Minimum words. Maximum speed.`,
         input_audio_transcription: {
           model: "whisper-1",
         },
         turn_detection: {
           type: "server_vad",
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 500,
+          threshold: 0.4,
+          prefix_padding_ms: 200,
+          silence_duration_ms: 300,
         },
       }),
     });
