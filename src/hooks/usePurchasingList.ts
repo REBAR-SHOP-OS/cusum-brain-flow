@@ -75,8 +75,22 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     return () => { supabase.removeChannel(channel); };
   }, [fetchItems]);
 
+  const refreshSessionIfNeeded = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      const { error } = await supabase.auth.refreshSession();
+      if (error) {
+        toast.error("Session expired – please log in again");
+        await supabase.auth.signOut({ scope: "local" });
+        return false;
+      }
+    }
+    return true;
+  }, []);
+
   const addItem = useCallback(async (title: string, quantity = 1, category?: string, priority = "medium", dueDate?: string) => {
     if (!user) return;
+    if (!(await refreshSessionIfNeeded())) return false;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
@@ -90,16 +104,17 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       created_by: user.id,
     });
     if (error) {
-      toast.error("Error adding item");
+      toast.error(`Error adding item: ${error.message}`);
       console.error("addItem error:", error);
       return false;
     }
     toast.success("Item added");
     return true;
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const addItemAsRejected = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
+    if (!(await refreshSessionIfNeeded())) return;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
@@ -115,13 +130,14 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       due_date: dueDate || null,
     });
     if (error) {
-      toast.error("Error rejecting item");
+      toast.error(`Error rejecting item: ${error.message}`);
       console.error(error);
     }
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const addItemAsPurchased = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
+    if (!(await refreshSessionIfNeeded())) return;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
@@ -138,13 +154,14 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       due_date: dueDate || null,
     });
     if (error) {
-      toast.error("Error marking item");
+      toast.error(`Error marking item: ${error.message}`);
       console.error(error);
     }
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const togglePurchased = useCallback(async (itemId: string, currentValue: boolean) => {
     if (!user) return;
+    if (!(await refreshSessionIfNeeded())) return;
     const { error } = await supabase
       .from("purchasing_list_items")
       .update({
@@ -155,23 +172,23 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       })
       .eq("id", itemId);
     if (error) {
-      toast.error("Error updating");
+      toast.error(`Error updating: ${error.message}`);
       console.error(error);
     }
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const toggleRejected = useCallback(async (itemId: string, currentValue: boolean) => {
     if (!user) return;
-    // Reject = delete the record so the item disappears from the list
+    if (!(await refreshSessionIfNeeded())) return;
     const { error } = await supabase
       .from("purchasing_list_items")
       .delete()
       .eq("id", itemId);
     if (error) {
-      toast.error("Error removing item");
+      toast.error(`Error removing item: ${error.message}`);
       console.error(error);
     }
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const deleteItem = useCallback(async (itemId: string) => {
     const { error } = await supabase.from("purchasing_list_items").delete().eq("id", itemId);
