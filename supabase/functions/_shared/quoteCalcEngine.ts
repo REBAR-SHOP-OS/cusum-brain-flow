@@ -356,6 +356,22 @@ export function applyScrap(weightKg: number, scrapPct: number): number {
 
 // ─── Scope Normalizer ───
 
+function normalizeCageInput(raw: unknown): unknown[] {
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === "object") return [parsed];
+    } catch { /* not valid JSON */ }
+    return [];
+  }
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return [raw];
+  }
+  if (Array.isArray(raw)) return raw;
+  return [];
+}
+
 function normalizeScope(scope: any): EstimateRequest["scope"] {
   // Coerce all numeric fields in scope line items
   const coerceLines = <T extends Record<string, unknown>>(arr: unknown): T[] => {
@@ -377,12 +393,15 @@ function normalizeScope(scope: any): EstimateRequest["scope"] {
     });
   };
 
+  // Normalize cages: string/object → array before coercion
+  const safeCages = normalizeCageInput(scope?.cages);
+
   return {
     straight_rebar_lines: coerceLines<StraightLine>(scope?.straight_rebar_lines),
     fabricated_rebar_lines: coerceLines<FabricatedLine>(scope?.fabricated_rebar_lines),
     dowels: coerceLines<DowelLine>(scope?.dowels),
     ties_circular: coerceLines<TieLine>(scope?.ties_circular),
-    cages: coerceLines<CageLine>(scope?.cages),
+    cages: coerceLines<CageLine>(safeCages),
     mesh: coerceLines<MeshLine>(scope?.mesh),
     coating_type: scope?.coating_type || "black",
     shop_drawings_required: scope?.shop_drawings_required || false,
