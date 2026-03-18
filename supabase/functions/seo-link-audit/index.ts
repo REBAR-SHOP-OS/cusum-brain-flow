@@ -122,6 +122,8 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
         anchor_text: link.text || null,
         link_type: isInternal ? "internal" : "external",
         company_id: companyId,
+        wp_item_id: item.id,
+        wp_item_type: item.type || (item.link?.includes("/product/") ? "product" : "page"),
       };
 
       if (!link.text || link.text.trim() === "") {
