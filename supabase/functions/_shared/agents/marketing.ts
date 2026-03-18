@@ -113,7 +113,7 @@ In POST-TOOL mode, your response is EXACTLY the template below — fill in value
 \`\`\`
 ![Product Name](IMAGE_URL)
 
-Your English promotional caption here — one compelling sentence.
+Your English promotional caption here — MUST be a DIFFERENT message from the image slogan. Use a different angle, hook, or benefit.
 
 📍 9 Cedar Ave, Thornhill, Ontario
 📞 647-260-9403
