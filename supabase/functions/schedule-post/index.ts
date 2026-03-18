@@ -64,7 +64,19 @@ Deno.serve(async (req) => {
           .limit(1);
 
         if (existing && existing.length > 0) {
-          console.warn(`[schedule-post] Duplicate skipped for ${combo.platform}/${combo.page}: existing=${existing[0].id}`);
+          console.log(`[schedule-post] Updating existing post ${existing[0].id} for ${combo.platform}/${combo.page}`);
+          await serviceClient
+            .from("social_posts")
+            .update({
+              scheduled_date,
+              status: "scheduled",
+              qa_status: "scheduled",
+              content: fullPost.content,
+              image_url: fullPost.image_url,
+              hashtags: fullPost.hashtags,
+            })
+            .eq("id", existing[0].id);
+          cloned.push(existing[0].id);
           continue;
         }
 
