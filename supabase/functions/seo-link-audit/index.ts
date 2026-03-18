@@ -27,6 +27,8 @@ serve(async (req) => {
 
     if (phase === "crawl") {
       return await handleCrawl(sb, domain_id, company_id);
+    } else if (phase === "check_broken") {
+      return await handleCheckBroken(sb, domain_id);
     } else if (phase === "preview") {
       return await handlePreview(sb, audit_ids, company_id);
     } else if (phase === "fix") {
