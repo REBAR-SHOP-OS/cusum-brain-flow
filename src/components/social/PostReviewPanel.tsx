@@ -604,6 +604,7 @@ export function PostReviewPanel({
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">Caption</Label>
                         <Textarea
+                          ref={captionRef}
                           value={localContent}
                           disabled={isPublished}
                           onChange={(e) => { setLocalContent(e.target.value); triggerDebouncedSave(); }}
