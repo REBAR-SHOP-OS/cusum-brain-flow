@@ -2,7 +2,7 @@ import { format } from "date-fns";
 import { CheckCircle, XCircle, Clock, Package, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { jsPDF } from "jspdf";
+const loadJsPDF = () => import("jspdf").then(m => m.jsPDF);
 import type { ConfirmedListRecord } from "@/hooks/usePurchasingDates";
 
 interface PurchasingConfirmedViewProps {
@@ -17,8 +17,9 @@ type SnapshotItem = {
   priority: string;
 };
 
-function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+async function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
+  const JsPDF = await loadJsPDF();
+  const doc = new JsPDF({ unit: "mm", format: "a4" });
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
   const margin = 15;
