@@ -79,20 +79,6 @@ async function callAI(prompt: string, systemPrompt: string): Promise<string> {
 
 // ─── CRAWL PHASE ───
 
-async function checkLink(href: string, siteUrl: string): Promise<{ status: number | null; error: boolean }> {
-  try {
-    const url = href.startsWith("/") ? `${siteUrl}${href}` : href;
-    const res = await fetch(url, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: AbortSignal.timeout(2000),
-    });
-    return { status: res.status, error: res.status >= 400 };
-  } catch {
-    return { status: null, error: true };
-  }
-}
-
 async function handleCrawl(sb: any, domainId: string, companyId: string) {
   const wp = new WPClient();
 
