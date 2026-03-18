@@ -266,7 +266,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     return (
       <div
         style={style}
-        className="fixed bottom-0 z-[9998] w-[280px] cursor-pointer"
+        className="fixed bottom-0 z-[9998] w-[280px] cursor-pointer pointer-events-auto"
         onClick={() => toggleMinimize(channelId)}
       >
         <div className="flex items-center gap-2 px-3 py-2 bg-background border border-border rounded-t-xl shadow-lg">
@@ -292,7 +292,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     <div
       style={containerStyle}
       className={cn(
-        "fixed bottom-0 z-[9998] w-[320px] flex flex-col bg-background border border-border rounded-t-xl shadow-2xl transition-colors",
+        "fixed bottom-0 z-[9998] w-[320px] flex flex-col bg-background border border-border rounded-t-xl shadow-2xl transition-colors pointer-events-auto",
         dragOver && "ring-2 ring-primary border-primary"
       )}
       onDragOver={handleDragOver}
