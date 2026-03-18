@@ -103,6 +103,7 @@ import InboxManager from "./pages/InboxManager";
 import OrgChart from "./pages/OrgChart";
 import GlassesCapture from "./pages/GlassesCapture";
 import CameraIntelligence from "./pages/CameraIntelligence";
+import AzinInterpreter from "./pages/AzinInterpreter";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -178,6 +179,7 @@ const App = () => (
 
                     {/* AI Agents */}
                     <Route path="/agent/:agentId" element={<P><AgentWorkspace /></P>} />
+                    <Route path="/azin-interpreter" element={<P><AzinInterpreter /></P>} />
 
                     {/* Operations */}
                     <Route path="/shop-floor" element={<P><ShopFloor /></P>} />
