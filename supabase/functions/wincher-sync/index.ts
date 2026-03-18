@@ -55,6 +55,10 @@ Deno.serve(async (req) => {
 
     const { action, domain_id, website_id } = await req.json();
 
+    // Resolve company_id from user profile
+    const { data: profile } = await serviceClient.from("profiles").select("company_id").eq("user_id", userId).single();
+    const companyId = profile?.company_id;
+
     // Helper: get service client
     const sb = serviceClient;
 
