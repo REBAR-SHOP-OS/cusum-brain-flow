@@ -280,18 +280,18 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         open={confirmDialogOpen}
         onOpenChange={setConfirmDialogOpen}
         title="Confirm Purchasing List"
-        description={`Save all items for ${filterDate ? format(filterDate, "yyyy/MM/dd") : "today"}?`}
+        description={`Save all items for ${filterDate ? format(filterDate, "yyyy/MM/dd") : format(new Date(), "yyyy/MM/dd")}?`}
         details={[
           `Total items: ${items.length}`,
           `Pending (no date): ${items.filter(i => !i.due_date).length}`,
-          `Date: ${filterDate ? format(filterDate, "yyyy/MM/dd") : "—"}`,
+          `Date: ${filterDate ? format(filterDate, "yyyy/MM/dd") : format(new Date(), "yyyy/MM/dd")}`,
         ]}
         confirmLabel="Yes, Confirm & Save"
         loading={confirmLoading}
         onConfirm={async () => {
-          if (!filterDate) return;
+          const effectiveDate = filterDate ?? new Date();
           setConfirmLoading(true);
-          const dateStr = format(filterDate, "yyyy-MM-dd");
+          const dateStr = format(effectiveDate, "yyyy-MM-dd");
           await confirmList(dateStr);
           await refetch();
           setConfirmLoading(false);
