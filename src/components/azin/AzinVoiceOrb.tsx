@@ -144,8 +144,8 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
       const y2 = cy + Math.sin(angle) * (innerR + barH);
 
       // Gradient from blue to cyan based on amplitude
-      const hue = 210 + value * 30;
-      const lightness = 55 + value * 15;
+      const hue = 245 + value * 20;
+      const lightness = 50 + value * 15;
       const alpha = 0.5 + value * 0.5;
 
       ctx.beginPath();
