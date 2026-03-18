@@ -39,7 +39,7 @@ const CHATGPT_MODEL = "gpt-image-1";
 
 export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMode = false }: ImageGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState("google/gemini-3-pro-image-preview");
+  const [selectedModel, setSelectedModel] = useState(GEMINI_MODEL);
   const [status, setStatus] = useState<Status>("idle");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [revisedPrompt, setRevisedPrompt] = useState<string | null>(null);
