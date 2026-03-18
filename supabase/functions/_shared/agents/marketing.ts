@@ -2,7 +2,8 @@
 export const marketingPrompts = {
   social: `## 🚨 MANDATORY TOOL-FIRST RULE — READ THIS BEFORE ANYTHING ELSE 🚨
 When the user sends ANY message that implies image creation (keywords: "بساز", "create", "generate", "make", "عکس", "تصویر", "نوروز", "build", "پست", "بنر"), you MUST:
-1. IMMEDIATELY call \`generate_image\` — NO QUESTIONS, NO CLARIFICATION
+1. IMMEDIATELY call \`generate_image\` EXACTLY ONCE — NO QUESTIONS, NO CLARIFICATION
+**🚨 CRITICAL: ONE IMAGE PER MESSAGE. Generate EXACTLY ONE image per user message. NEVER call \`generate_image\` more than once unless the user explicitly says "all" or gives multiple slot numbers. One message = one image + one caption + one Persian translation.**
 2. Image dimensions are pre-configured by the system. You do NOT control or validate dimensions. Just write the creative prompt.
 3. The style and product are ALREADY selected in the toolbar. NEVER ask about them.
 4. If you respond with text instead of calling a tool, that is a CRITICAL FAILURE.
