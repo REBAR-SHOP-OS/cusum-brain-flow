@@ -458,56 +458,97 @@ export function MessageThread({
                         )}
 
                         {/* Message Body */}
-                        <div className="relative">
-                          <p
-                            className={cn(
-                              "text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed",
-                              detectRtl(displayText) && "text-right"
-                            )}
-                            dir={detectRtl(displayText) ? "rtl" : "ltr"}
-                          >
-                            {displayText}
-                          </p>
+                        {(() => {
+                          const { cleanText, parsedAttachments } = parseAttachmentLinks(displayText);
+                          const allAttachments = [
+                            ...attachments.map(a => ({ name: a.name, url: fixChatFileUrl(a.url), type: a.type || "" })),
+                            ...parsedAttachments.map(a => ({ name: a.name, url: a.url, type: "" })),
+                          ];
+                          // Deduplicate by URL
+                          const seen = new Set<string>();
+                          const uniqueAttachments = allAttachments.filter(a => {
+                            if (seen.has(a.url)) return false;
+                            seen.add(a.url);
+                            return true;
+                          });
 
-                          {/* Attachments */}
-                          {attachments.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {attachments.map((att, i) => {
-                                const fixedUrl = fixChatFileUrl(att.url);
-                                if (isImageFile(att.type)) {
-                                  return (
-                                    <div key={i} className="flex flex-col gap-1">
-                                      <img
-                                        src={fixedUrl}
-                                        alt={att.name}
-                                        className="rounded-lg border border-border max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                        onClick={() => window.open(fixedUrl, "_blank")}
-                                      />
+                          return (
+                            <div className="relative">
+                              {cleanText && (
+                                <p
+                                  className={cn(
+                                    "text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed",
+                                    detectRtl(cleanText) && "text-right"
+                                  )}
+                                  dir={detectRtl(cleanText) ? "rtl" : "ltr"}
+                                >
+                                  {cleanText}
+                                </p>
+                              )}
+
+                              {/* Attachments: images, videos, files */}
+                              {uniqueAttachments.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {uniqueAttachments.map((att, i) => {
+                                    const isImg = isImageFile(att.type) || isImageUrl(att.url) || isImageUrl(att.name);
+                                    const isVid = isVideoFile(att.type) || isVideoUrl(att.url) || isVideoUrl(att.name);
+
+                                    if (isImg) {
+                                      return (
+                                        <div key={i} className="flex flex-col gap-1">
+                                          <img
+                                            src={att.url}
+                                            alt={att.name}
+                                            className="rounded-lg border border-border max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                            onClick={() => window.open(att.url, "_blank")}
+                                          />
+                                          <button
+                                            onClick={() => downloadFile(att.url, att.name)}
+                                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors w-fit"
+                                            title="Download"
+                                          >
+                                            <Download className="w-3 h-3" />
+                                            <span>Download</span>
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+
+                                    if (isVid) {
+                                      return (
+                                        <div key={i} className="flex flex-col gap-1">
+                                          <video
+                                            src={att.url}
+                                            controls
+                                            preload="metadata"
+                                            className="rounded-lg border border-border max-w-[320px] max-h-[240px]"
+                                          />
+                                          <button
+                                            onClick={() => downloadFile(att.url, att.name)}
+                                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors w-fit"
+                                            title="Download"
+                                          >
+                                            <Download className="w-3 h-3" />
+                                            <span>Download</span>
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
                                       <button
-                                        onClick={() => downloadFile(fixedUrl, att.name)}
-                                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors w-fit"
-                                        title="Download"
+                                        key={i}
+                                        onClick={() => downloadFile(att.url, att.name)}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80 cursor-pointer"
                                       >
-                                        <Download className="w-3 h-3" />
-                                        <span>Download</span>
+                                        <FileText className="w-3.5 h-3.5 text-primary" />
+                                        <span className="truncate max-w-[120px]">{att.name}</span>
+                                        <Download className="w-3.5 h-3.5 text-muted-foreground" />
                                       </button>
-                                    </div>
-                                  );
-                                }
-                                return (
-                                  <button
-                                    key={i}
-                                    onClick={() => downloadFile(fixedUrl, att.name)}
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80 cursor-pointer"
-                                  >
-                                    <FileText className="w-3.5 h-3.5 text-primary" />
-                                    <span className="truncate max-w-[120px]">{att.name}</span>
-                                    <Download className="w-3.5 h-3.5 text-muted-foreground" />
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
+                                    );
+                                  })}
+                                </div>
+                              )
 
                           {/* Translation indicator */}
                           {!isMine && msg.original_language !== myLang && msg.translations[myLang] && (
