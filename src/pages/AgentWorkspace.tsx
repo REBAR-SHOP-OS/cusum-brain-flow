@@ -97,7 +97,14 @@ export default function AgentWorkspace() {
   const [purchasingDate, setPurchasingDate] = useState<Date | undefined>();
   const [activePurchasingDateStr, setActivePurchasingDateStr] = useState<string | null>(null);
 
-  const { dates: purchasingDates, getConfirmedSnapshot } = usePurchasingDates();
+  const { dates: purchasingDates, getConfirmedSnapshot, deleteConfirmedList } = usePurchasingDates();
+
+  const handleDeletePurchasingDate = useCallback((dateStr: string) => {
+    deleteConfirmedList(dateStr);
+    if (activePurchasingDateStr === dateStr) {
+      setActivePurchasingDateStr(null);
+    }
+  }, [deleteConfirmedList, activePurchasingDateStr]);
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle } = useChatSessions();
   const hasConversation = messages.length > 0;
@@ -500,6 +507,7 @@ export default function AgentWorkspace() {
                 setPurchasingDate(undefined);
               }
             } : undefined}
+            onDeletePurchasingDate={agentId === "purchasing" ? handleDeletePurchasingDate : undefined}
           />
         </div>
       )}
@@ -533,6 +541,7 @@ export default function AgentWorkspace() {
                 }
                 setMobileHistoryOpen(false);
               } : undefined}
+              onDeletePurchasingDate={agentId === "purchasing" ? handleDeletePurchasingDate : undefined}
             />
           </div>
         </div>

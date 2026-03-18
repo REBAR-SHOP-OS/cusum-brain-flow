@@ -23,6 +23,7 @@ interface AgentHistorySidebarProps {
   purchasingDates?: string[];
   activePurchasingDate?: string | null;
   onSelectPurchasingDate?: (date: string | null) => void;
+  onDeletePurchasingDate?: (date: string) => void;
 }
 
 export function AgentHistorySidebar({
@@ -39,6 +40,7 @@ export function AgentHistorySidebar({
   purchasingDates,
   activePurchasingDate,
   onSelectPurchasingDate,
+  onDeletePurchasingDate,
 }: AgentHistorySidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [teamReportOpen, setTeamReportOpen] = useState(false);
@@ -119,13 +121,25 @@ export function AgentHistorySidebar({
                     onClick={() => onSelectPurchasingDate?.(dateStr)}
                     onKeyDown={(e) => { if (e.key === 'Enter') onSelectPurchasingDate?.(dateStr); }}
                     className={cn(
-                      "w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-colors cursor-pointer",
+                      "w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-colors cursor-pointer group flex items-center gap-2",
                       activePurchasingDate === dateStr
                         ? "bg-primary/10 text-primary font-medium"
                         : "text-foreground/80 hover:bg-muted"
                     )}
                   >
-                    <span className="text-xs">📅 {dateStr}</span>
+                    <span className="flex-1 truncate text-xs">📅 {dateStr}</span>
+                    {onDeletePurchasingDate && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onDeletePurchasingDate(dateStr);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all flex-shrink-0"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {purchasingDates.length === 0 && (
