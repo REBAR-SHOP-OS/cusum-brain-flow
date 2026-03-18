@@ -30,7 +30,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase
       .from("profiles")
       .select("company_id")
-      .eq("id", user.id)
+      .eq("user_id", user.id)
       .single();
     if (!profile?.company_id) { setLoading(false); return; }
 
@@ -77,7 +77,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   const addItem = useCallback(async (title: string, quantity = 1, category?: string, priority = "medium", dueDate?: string) => {
     if (!user) return;
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
     const { error } = await supabase.from("purchasing_list_items").insert({
@@ -100,7 +100,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   const addItemAsRejected = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
     const { error } = await supabase.from("purchasing_list_items").insert({
@@ -122,7 +122,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   const addItemAsPurchased = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
     const { error } = await supabase.from("purchasing_list_items").insert({
@@ -186,7 +186,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
   // Confirm list: set due_date on all items without one, then save a snapshot
   const confirmList = useCallback(async (date: string) => {
     if (!user) return;
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
     // 1. Set due_date on items without one
