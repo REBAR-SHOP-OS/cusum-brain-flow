@@ -360,16 +360,53 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
             />
           </div>
 
-          {/* Attachments — Odoo-style file chips */}
-          {attachments.length > 0 && (
+          {/* Attachments */}
+          {(bodyAttachments.length > 0 || gmailAttachments.length > 0) && (
             <div className="mt-4">
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Attachments ({attachments.length})
+              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Paperclip className="w-3.5 h-3.5" />
+                Attachments ({bodyAttachments.length + gmailAttachments.length})
               </p>
               <div className="flex flex-wrap gap-2">
-                {attachments.map((att, i) => (
+                {/* Real Gmail attachments */}
+                {gmailAttachments.map((att, i) => {
+                  const ext = att.filename.split(".").pop()?.toLowerCase() || "";
+                  const type = ext === "pdf" ? "pdf"
+                    : ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext) ? "image"
+                    : ["mp4", "mov", "avi", "webm"].includes(ext) ? "video"
+                    : ["doc", "docx", "xls", "xlsx", "csv"].includes(ext) ? "document"
+                    : "link";
+                  const isDownloading = downloadingIds.has(att.attachmentId);
+                  const sizeStr = att.size > 1048576
+                    ? `${(att.size / 1048576).toFixed(1)} MB`
+                    : `${Math.round(att.size / 1024)} KB`;
+
+                  return (
+                    <button
+                      key={`gmail-${i}`}
+                      onClick={() => handleDownloadAttachment(att)}
+                      disabled={isDownloading}
+                      className={cn(
+                        "inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors cursor-pointer",
+                        getAttachmentBg(type)
+                      )}
+                    >
+                      {isDownloading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        getAttachmentIcon(type)
+                      )}
+                      <span className="max-w-[180px] truncate text-foreground">{att.filename}</span>
+                      <span className="text-[10px] text-muted-foreground">{sizeStr}</span>
+                      <Download className="w-3 h-3 text-muted-foreground" />
+                    </button>
+                  );
+                })}
+
+                {/* Body-extracted link attachments */}
+                {bodyAttachments.map((att, i) => (
                   <a
-                    key={i}
+                    key={`body-${i}`}
                     href={att.url}
                     target="_blank"
                     rel="noopener noreferrer"
