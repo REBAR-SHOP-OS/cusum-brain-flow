@@ -421,7 +421,7 @@ export function generateQuote(
   }
 
   // 3. Dowels
-  for (const line of req.scope.dowels) {
+  for (const line of scope.dowels) {
     const match = config.dowels.find(
       (d) => d.type === line.type && d.size === line.size
     );
