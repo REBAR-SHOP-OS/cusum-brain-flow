@@ -53,7 +53,8 @@ function getTaskCreatorName(task: TaskRow): string | null {
   const profileName = task.created_by_profile?.full_name;
   if (!isInvalidName(profileName)) return profileName!.trim();
 
-  return null;
+  // 4) No human creator found — attribute to System
+  return "System";
 }
 
 // ─── Types ──────────────────────────────────────────────
@@ -1348,7 +1349,7 @@ export default function Tasks() {
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Created By</span>
-                  <p className="mt-0.5 text-sm">{getTaskCreatorName(selectedTask) || "ناشناس"}</p>
+                  <p className="mt-0.5 text-sm">{getTaskCreatorName(selectedTask) || "Unknown"}</p>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Due Date</span>
