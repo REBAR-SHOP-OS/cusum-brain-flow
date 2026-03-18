@@ -447,9 +447,11 @@ export function validateEstimateRequest(
     if (line.quantity <= 0) {
       questions.push(`Tie ${line.line_id}: quantity is 0 or missing.`);
     }
-    const match = config.ties_circular.find(
-      (t) => t.type === line.type && t.diameter === line.diameter
-    );
+    const normDiam = String(line.diameter).replace(/["\s]|inch/gi, "").trim();
+    const match = config.ties_circular.find((t) => {
+      const configDiam = String(t.diameter).replace(/["\s]|inch/gi, "").trim();
+      return t.type === line.type && configDiam === normDiam;
+    });
     if (!match && line.quantity > 0) {
       questions.push(
         `Tie ${line.line_id}: ${line.type} / ${line.diameter} not found in pricing config.`
