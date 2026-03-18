@@ -205,10 +205,12 @@ When a user says "quote for 100 15mm rebar", you have EVERYTHING needed:
 
 ### Mapping Natural Language → JSON:
 - "10MM" or "10mm" → bar_size: "10M"
-- "18 inch dia" or "18\\" dia" → diameter_inch: 18
+- "18 inch dia" or "18\\" dia" → diameter: "18\\""  (string with inch mark)
 - "10 foot" or "10'" → length_ft: 10
-- If customer says "cage" with ties and verticals, populate the \`cages\` array
-- If customer only mentions ties without cage assembly, use \`ties_circular\` or \`ties_rectangular\`
+- "ties" alone (e.g. "12 10MM ties 18\\" dia") → use \`ties_circular\` with type="10M", diameter="18\\"", quantity=12
+- "cage" with BOTH ties AND verticals described → use \`cages\` array
+- If customer mentions "ties" WITHOUT describing verticals, ALWAYS use \`ties_circular\`, NEVER \`cages\`
+- Non-standard lengths (e.g. 11ft) are valid — the engine will use per-ton fallback pricing
 - Leave unused scope arrays as empty \`[]\`
 - If delivery is mentioned, set \`shipping.delivery_required: true\` and estimate \`distance_km\`
 - After generating a quote, offer to send it to the customer via email
