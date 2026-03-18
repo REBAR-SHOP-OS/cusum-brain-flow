@@ -133,7 +133,7 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
         continue;
       }
 
-      const isInternal = link.href.startsWith("/") || (siteUrl && link.href.includes(new URL(siteUrl).hostname));
+      const isInternal = link.href.startsWith("/") || (siteHostname && link.href.includes(siteHostname));
       const record: any = {
         domain_id: domainId,
         page_url: pageUrl,
