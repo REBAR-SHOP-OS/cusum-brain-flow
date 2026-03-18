@@ -99,7 +99,7 @@ export type SalesQuotation = {
   valid_until: string | null;
   revision_reason: string | null;
   line_items: unknown[] | null;
-  assumptions: unknown[] | null;
+  assumptions: any[] | null;
   source: string | null;
 };
 
