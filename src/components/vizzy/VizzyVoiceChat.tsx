@@ -137,16 +137,19 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             }}
           />
 
-          {/* Orbiting dot */}
+          {/* Orbiting dot — CSS animation */}
           {isConnected && (
             <div
-              className="absolute w-3 h-3 rounded-full transition-shadow duration-300"
+              className="absolute w-3 h-3 rounded-full"
               style={{
                 left: "50%",
                 top: "50%",
-                transform: `translate(calc(-50% + ${dotX}px), calc(-50% + ${dotY}px))`,
+                marginLeft: -6,
+                marginTop: -6,
                 background: "hsl(172 66% 55%)",
                 boxShadow: "0 0 12px 3px hsl(172 66% 50% / 0.6)",
+                animation: "vizzy-orbit 5s linear infinite",
+                offsetPath: "circle(72px)",
               }}
             />
           )}

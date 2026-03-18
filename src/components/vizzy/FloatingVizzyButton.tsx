@@ -22,9 +22,6 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     const [showVoiceChat, setShowVoiceChat] = useState(false);
     const [pulseActive, setPulseActive] = useState(true);
 
-    // Hide on /vizzy full-screen route to avoid overlap
-    if (location.pathname === "/vizzy") return null;
-
     const { pos, handlers, wasDragged } = useDraggablePosition({
       storageKey: "vizzy-btn-pos",
       btnSize: BTN_SIZE,
@@ -33,6 +30,9 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
         y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 90 : 28) : 300,
       }),
     });
+
+    // Hide on /vizzy full-screen route to avoid overlap
+    if (location.pathname === "/vizzy") return null;
 
     // Stop pulse after 10 seconds
     useEffect(() => {
