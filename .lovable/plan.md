@@ -1,21 +1,29 @@
 
 
-## Assessment: PWA/Caching Already Implemented
+## Plan: Add `/vizzy` Route for Dedicated Vizzy Live Voice Chat
 
-This bug report is **not applicable** — your project already has a fully configured PWA caching strategy.
+### What exists now
+- `/chat` — text-based LiveChat page (also has a mic button that opens `VizzyVoiceChat` as a full-screen overlay)
+- `VizzyVoiceChat` component — full-screen GPT Realtime voice session with Vizzy
+- `FloatingVizzyButton` — draggable button that also opens VizzyVoiceChat overlay
+- No `/vizzy` route exists
 
-### What's already in place (`vite.config.ts`)
+### What to build
+A new `/vizzy` page that opens directly into the full-screen Vizzy voice chat experience — no text chat, just the immersive voice interface. Navigating to `/vizzy` immediately starts a live GPT Realtime session.
 
-- `vite-plugin-pwa` is installed and configured with `registerType: "autoUpdate"`
-- Workbox precaching: `globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"]`
-- Runtime caching for Supabase API calls (NetworkFirst, 24h expiry, 100 entries)
-- Full PWA manifest with icons, theme color, standalone display
-- Max file size cache limit set to 6MB
-- Custom `sw-push.js` for push notifications
+### Changes
 
-### Verdict
+**1. Create `src/pages/VizzyLive.tsx`**
+- Simple page wrapper that renders `VizzyVoiceChat` full-screen
+- `onClose` navigates back (or to `/home`)
+- Restricted to super admins (redirect if not authorized)
 
-No changes needed. The caching and Service Worker setup described in the bug report is already implemented and more comprehensive than what was suggested. The project already caches static assets via Workbox precaching and Supabase responses via runtime caching.
+**2. Update `src/App.tsx`**
+- Add route: `<Route path="/vizzy" element={<VizzyLive />} />`
+- Import the new page component
 
-If you're experiencing slow load times, the issue would be elsewhere — potentially large bundle size, unoptimized API queries, or render performance. I can audit those areas instead if you'd like.
+**3. Update `src/hooks/useActiveModule.ts`**
+- Add `/vizzy` entry: `{ module: "Vizzy", moduleRoute: "/vizzy" }`
+
+That's it — three small file changes. The existing `VizzyVoiceChat` component and `useVizzyVoiceEngine` hook handle all voice logic already.
 
