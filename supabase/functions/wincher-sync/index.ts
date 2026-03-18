@@ -138,7 +138,11 @@ Deno.serve(async (req) => {
         }
 
         const { error } = await sb.from("seo_keyword_ai").upsert(upsertData, { onConflict: "domain_id,keyword" });
-        if (!error) kwUpserted++;
+        if (error) {
+          console.error("Upsert error for keyword:", keyword, error.message);
+        } else {
+          kwUpserted++;
+        }
       }
 
       // 5. Pull keyword history for top 20 keywords (by traffic)
