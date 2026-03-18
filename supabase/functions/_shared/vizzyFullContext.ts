@@ -427,6 +427,50 @@ export async function buildFullVizzyContext(
     .map(([name, hrs]) => `  • ${name}: ${hrs.toFixed(1)} hrs`)
     .join("\n");
 
+  // ═══ EMAIL BIRD'S-EYE VIEW (per employee) ═══
+  const emailProfileMap = new Map(
+    (profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"])
+  );
+  const emailsByEmployee: Record<string, { sent: number; received: number }> = {};
+  for (const e of (allEmailsToday || [])) {
+    if (e.direction === "outbound") {
+      const fromEmail = e.from_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
+      const name = emailProfileMap.get(fromEmail) || fromEmail;
+      if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0 };
+      emailsByEmployee[name].sent++;
+    } else {
+      const toEmail = e.to_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
+      const name = emailProfileMap.get(toEmail) || toEmail;
+      if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0 };
+      emailsByEmployee[name].received++;
+    }
+  }
+  const totalOutbound = (allEmailsToday || []).filter((e: any) => e.direction === "outbound").length;
+  const totalInbound = (allEmailsToday || []).filter((e: any) => e.direction === "inbound").length;
+
+  // Unanswered inbound: threads with inbound but no outbound today
+  const inboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "inbound" && e.gmail_thread_id).map((e: any) => e.gmail_thread_id));
+  const outboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "outbound" && e.gmail_thread_id).map((e: any) => e.gmail_thread_id));
+  const unansweredCount = [...inboundThreads].filter((t) => !outboundThreads.has(t)).length;
+
+  const emailByEmployeeLines = Object.entries(emailsByEmployee)
+    .sort((a, b) => (b[1].sent + b[1].received) - (a[1].sent + a[1].received))
+    .map(([name, stats]) => `  • ${name}: ${stats.sent} sent, ${stats.received} received`)
+    .join("\n");
+
+  // ═══ EMPLOYEE ACTIVITY EVENT COUNTS (per employee) ═══
+  const eventsByEmployee: Record<string, { count: number; types: Set<string> }> = {};
+  for (const ev of (employeeEvents || [])) {
+    const name = profileUserIdMap.get(ev.actor_id) || "Unknown";
+    if (!eventsByEmployee[name]) eventsByEmployee[name] = { count: 0, types: new Set() };
+    eventsByEmployee[name].count++;
+    eventsByEmployee[name].types.add(ev.event_type);
+  }
+  const employeeEventLines = Object.entries(eventsByEmployee)
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([name, stats]) => `  • ${name}: ${stats.count} actions (${Array.from(stats.types).slice(0, 5).join(", ")})`)
+    .join("\n");
+
   return `═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
 
 ${includeFinancials ? `📊 FINANCIALS
@@ -472,6 +516,14 @@ ${operatorLines || "    No operators currently assigned"}
 ${agentUsageLines || "    No agent sessions today"}
   Agent Actions by Employee:
 ${actionsLines || "    No agent actions today"}
+  All Logged Actions by Employee:
+${employeeEventLines || "    No activity events today"}
+
+📧 EMAIL BIRD'S-EYE VIEW (TODAY)
+  Total Inbound: ${totalInbound} | Total Outbound: ${totalOutbound}
+  Unanswered Threads: ${unansweredCount}
+  Per-Employee Email Activity:
+${emailByEmployeeLines || "    No email activity today"}
 
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
