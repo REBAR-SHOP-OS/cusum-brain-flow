@@ -55,7 +55,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
       : voiceState === "error"
       ? "Connection failed"
       : mode === "speaking" || isSpeaking
-      ? agentName + " is speaking..."
+      ? "Vizzy is speaking..."
       : voiceState === "connected"
       ? "Listening..."
       : "";
