@@ -158,12 +158,15 @@ export async function fetchContext(
       });
     }
 
-    // --- Available Employees (Shared for all agents) ---
-    const { data: employees } = await svc
-      .from("profiles")
-      .select("id, full_name, title, department")
-      .eq("is_active", true)
-      .order("full_name");
+    // --- Available Employees (Shared, cached 5 min) ---
+    const employees = await cachedQuery(`agent:${cid}:employees`, 5 * 60_000, async () => {
+      const { data } = await svc
+        .from("profiles")
+        .select("id, full_name, title, department")
+        .eq("is_active", true)
+        .order("full_name");
+      return data;
+    });
     context.availableEmployees = (employees || []).map((e: any) => ({
       id: e.id, name: e.full_name, title: e.title, department: e.department,
     }));
