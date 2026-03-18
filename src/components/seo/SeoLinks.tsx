@@ -150,7 +150,8 @@ export function SeoLinks() {
   });
 
   const handleFixClick = (ids: string[]) => {
-    previewMutation.mutate(ids);
+    // Cap to 10 client-side to match backend cap
+    previewMutation.mutate(ids.slice(0, 10));
   };
 
   const handleApproveAll = () => {
