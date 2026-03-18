@@ -26,6 +26,7 @@ export interface InboxEmail {
   aiDraft?: string | null;
   aiPriorityData?: Record<string, unknown> | null;
   resolvedAt?: string | null;
+  attachments?: { filename: string; mimeType: string; size: number; attachmentId: string }[];
 }
 
 interface InboxEmailListProps {
