@@ -859,14 +859,20 @@ const REGION_BADGE: Record<string, { label: string; cls: string }> = {
 
 function EventCalendarSection({ onGenerate }: { onGenerate: (event: CalendarEvent) => void }) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const events = useMemo(() => getEventsForMonth(selectedMonth + 1), [selectedMonth]);
+
+  const formatFullDate = (month: number, day: number) => {
+    const date = new Date(new Date().getFullYear(), month - 1, day);
+    return date.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  };
 
   return (
     <div className="mt-6">
       <div className="flex items-center gap-2 mb-3">
         <CalendarIcon className="w-4 h-4 text-muted-foreground" />
         <h3 className="font-semibold text-sm text-foreground">Event Calendar</h3>
-        <span className="text-xs text-muted-foreground ml-auto">Generate content for upcoming events</span>
+        <span className="text-xs text-muted-foreground ml-auto">Click an event for details · Generate content for upcoming events</span>
       </div>
 
       {/* Month selector */}
@@ -874,7 +880,7 @@ function EventCalendarSection({ onGenerate }: { onGenerate: (event: CalendarEven
         {MONTHS.map((m, i) => (
           <button
             key={m}
-            onClick={() => setSelectedMonth(i)}
+            onClick={() => { setSelectedMonth(i); setExpandedIdx(null); }}
             className={cn(
               "px-2.5 py-1 text-xs rounded-md font-medium transition-colors",
               selectedMonth === i
@@ -888,37 +894,55 @@ function EventCalendarSection({ onGenerate }: { onGenerate: (event: CalendarEven
       </div>
 
       {/* Events list */}
-      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
         {events.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">No events in {MONTHS[selectedMonth]}</p>
         ) : (
           events.map((event, i) => {
             const badge = REGION_BADGE[event.region];
+            const isExpanded = expandedIdx === i;
             return (
-              <div key={`${event.month}-${event.day}-${i}`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-muted flex flex-col items-center justify-center shrink-0">
-                  <span className="text-xs font-bold leading-none">{event.day}</span>
-                  <span className="text-[10px] text-muted-foreground">{MONTHS[event.month - 1]}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-sm font-medium truncate">{event.name}</p>
-                    {badge && (
-                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded border shrink-0", badge.cls)}>
-                        {badge.label}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground line-clamp-1">{event.contentTheme}</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs shrink-0"
-                  onClick={() => onGenerate(event)}
+              <div key={`${event.month}-${event.day}-${i}`} className="rounded-lg border border-border overflow-hidden transition-colors">
+                <div
+                  className="flex items-center gap-3 p-3 hover:bg-muted/30 cursor-pointer transition-colors"
+                  onClick={() => setExpandedIdx(isExpanded ? null : i)}
                 >
-                  Generate
-                </Button>
+                  <div className="w-10 h-10 rounded-lg bg-muted flex flex-col items-center justify-center shrink-0">
+                    <span className="text-xs font-bold leading-none">{event.day}</span>
+                    <span className="text-[10px] text-muted-foreground">{MONTHS[event.month - 1]}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-sm font-medium truncate">{event.name}</p>
+                      {badge && (
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded border shrink-0", badge.cls)}>
+                          {badge.label}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-1">{event.contentTheme}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs shrink-0"
+                    onClick={(e) => { e.stopPropagation(); onGenerate(event); }}
+                  >
+                    Generate
+                  </Button>
+                </div>
+
+                {/* Expanded detail panel */}
+                {isExpanded && event.description && (
+                  <div className="px-4 pb-3 pt-1 bg-muted/30 border-t border-border">
+                    <p className="text-xs font-semibold text-primary mb-1">
+                      📅 {formatFullDate(event.month, event.day)}
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {event.description}
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })

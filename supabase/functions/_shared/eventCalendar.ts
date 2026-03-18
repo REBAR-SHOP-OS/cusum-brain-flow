@@ -7,6 +7,7 @@ export interface CalendarEvent {
   region: "CA" | "global" | "industry";
   contentTheme: string;
   hashtags: string[];
+  description?: string;
 }
 
 /** Events that should NOT be used for promotional/advertising content */
