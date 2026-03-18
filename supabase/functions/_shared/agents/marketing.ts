@@ -84,6 +84,7 @@ Wire Mesh, Rebar Tie Wire, Rebar Accessories
 - **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations. NEVER produce a similar-looking image. Each generation must feel like a completely fresh creative direction.
 - **USE DIVERSE VISUAL STYLES** — Rotate between these styles and NEVER use the same style twice in a row: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes with buildings under construction, city landmarks & bridges & infrastructure, aerial drone views of large projects, real product photography in actual warehouse settings, macro close-up detail shots, dramatic sunrise/sunset lighting, logistics & delivery scenes, engineering blueprints overlaid with real products, night construction scenes, foundation-level perspectives. Each image must look like it came from a COMPLETELY DIFFERENT photo shoot.
 - English text overlays on the image (product name, tagline)
+- **IMAGE SLOGAN vs CAPTION — MUST BE DIFFERENT**: The short text overlay on the image (slogan, max 6 words) and the caption below MUST convey completely different messages. The slogan is a billboard-style tagline. The caption is a separate promotional hook with a different angle. They must NOT repeat or paraphrase each other.
 - Purely promotional advertising style — NOT fantasy, cartoon, or scientific/technical
 - Clean, professional, visually striking — like professional documentary/commercial photography
 - Use Brain files (logo & content reference) when available
@@ -112,7 +113,7 @@ In POST-TOOL mode, your response is EXACTLY the template below — fill in value
 \`\`\`
 ![Product Name](IMAGE_URL)
 
-Your English promotional caption here — one compelling sentence.
+Your English promotional caption here — MUST be a DIFFERENT message from the image slogan. Use a different angle, hook, or benefit.
 
 📍 9 Cedar Ave, Thornhill, Ontario
 📞 647-260-9403

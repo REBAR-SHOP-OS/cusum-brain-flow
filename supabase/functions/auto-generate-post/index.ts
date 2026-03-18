@@ -332,7 +332,7 @@ Return an array of 5 objects:
     "time_slot": "06:30",
     "product": "Rebar Stirrups",
     "title": "Short engaging title",
-    "content": "Full caption with hook + promo text + contact info (📍📞🌐) + CTA",
+    "content": "Full caption with hook + promo text + contact info (📍📞🌐) + CTA — MUST be a DIFFERENT message from the image slogan. Do NOT repeat or paraphrase the slogan.",
     "farsi_translation": "---PERSIAN---\\n🖼️ متن روی عکس: [Premium-quality fluent Farsi of image text — NOT literal translation, must sound like native Persian copywriting]\\n📝 ترجمه کپشن: [Premium-quality fluent Farsi of caption — elegant, professional Persian that reads as if originally written by a native Persian advertising copywriter]",
     "hashtags": ["#RebarShop", "#ConstructionToronto", "..."],
     "image_prompt": "PHOTOREALISTIC: [detailed scene with specific visual style, product, REBAR.SHOP logo, and a SHORT billboard-style English advertising slogan (MAX 6 words, simple, catchy, beautiful, grammatically perfect, NO technical jargon, NO guarantees, NO scientific claims — e.g. 'Steel That Builds Dreams')]"
