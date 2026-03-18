@@ -179,6 +179,7 @@ const App = () => (
 
                     {/* AI Agents */}
                     <Route path="/agent/:agentId" element={<P><AgentWorkspace /></P>} />
+                    <Route path="/azin-interpreter" element={<P><AzinInterpreter /></P>} />
 
                     {/* Operations */}
                     <Route path="/shop-floor" element={<P><ShopFloor /></P>} />
