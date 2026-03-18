@@ -6,11 +6,25 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link2, ExternalLink, AlertTriangle, CheckCircle, Loader2, Sparkles, RefreshCw, Globe } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import { Link2, ExternalLink, AlertTriangle, CheckCircle, Loader2, Sparkles, RefreshCw, Globe, Eye, Brain } from "lucide-react";
 import { toast } from "sonner";
 import { useSemrushSync } from "@/hooks/useSemrushApi";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 type StatusFilter = "all" | "broken" | "opportunity" | "fixed" | "backlinks";
+
+interface Proposal {
+  id: string;
+  type?: "opportunity" | "broken";
+  action?: string;
+  before_paragraph?: string;
+  after_paragraph?: string;
+  reasoning?: string;
+  error?: string;
+}
 
 const statusBadge: Record<string, { label: string; className: string }> = {
   ok: { label: "OK", className: "bg-green-500/10 text-green-600" },
@@ -28,10 +42,12 @@ const typeBadge: Record<string, { label: string; className: string }> = {
 
 export function SeoLinks() {
   const [filter, setFilter] = useState<StatusFilter>("all");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [pendingFixIds, setPendingFixIds] = useState<string[]>([]);
   const qc = useQueryClient();
   const { fetchBacklinks } = useSemrushSync();
 
-  // Get domain
   const { data: domain } = useQuery({
     queryKey: ["seo-domain"],
     queryFn: async () => {
@@ -40,7 +56,6 @@ export function SeoLinks() {
     },
   });
 
-  // Fetch audit results
   const { data: audits, isLoading } = useQuery({
     queryKey: ["seo-link-audits", domain?.id],
     queryFn: async () => {
@@ -55,7 +70,6 @@ export function SeoLinks() {
     enabled: !!domain?.id,
   });
 
-  // Run crawl
   const crawlMutation = useMutation({
     mutationFn: async () => {
       if (!domain) throw new Error("No domain configured");
@@ -72,22 +86,56 @@ export function SeoLinks() {
     onError: (e) => toast.error(`Crawl failed: ${e.message}`),
   });
 
-  // Fix single
+  // Preview mutation — gets AI proposals without applying
+  const previewMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!domain) throw new Error("No domain");
+      return await invokeEdgeFunction<{ proposals: Proposal[] }>("seo-link-audit", {
+        phase: "preview",
+        audit_ids: ids,
+        company_id: domain.company_id,
+      }, { timeoutMs: 120000 });
+    },
+    onSuccess: (data, ids) => {
+      setProposals(data.proposals || []);
+      setPendingFixIds(ids);
+      setPreviewOpen(true);
+    },
+    onError: (e) => toast.error(`Preview failed: ${e.message}`),
+  });
+
+  // Fix mutation — applies approved changes
   const fixMutation = useMutation({
     mutationFn: async (ids: string[]) => {
       if (!domain) throw new Error("No domain");
-      const { data, error } = await supabase.functions.invoke("seo-link-audit", {
-        body: { phase: "fix", audit_ids: ids, company_id: domain.company_id },
-      });
-      if (error) throw error;
-      return data;
+      return await invokeEdgeFunction("seo-link-audit", {
+        phase: "fix",
+        audit_ids: ids,
+        company_id: domain.company_id,
+      }, { timeoutMs: 120000 });
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       toast.success(`Done — ${data.fixed || 0} fixes applied`);
+      setPreviewOpen(false);
+      setProposals([]);
+      setPendingFixIds([]);
       qc.invalidateQueries({ queryKey: ["seo-link-audits"] });
     },
     onError: (e) => toast.error(`Fix failed: ${e.message}`),
   });
+
+  const handleFixClick = (ids: string[]) => {
+    previewMutation.mutate(ids);
+  };
+
+  const handleApproveAll = () => {
+    const validIds = proposals.filter(p => !p.error && p.before_paragraph && p.after_paragraph).map(p => p.id);
+    if (validIds.length === 0) {
+      toast.error("No valid proposals to apply");
+      return;
+    }
+    fixMutation.mutate(validIds);
+  };
 
   const filtered = (audits || []).filter((a: any) => {
     if (filter === "all") return true;
@@ -105,6 +153,9 @@ export function SeoLinks() {
   };
 
   const unfixedOpportunities = (audits || []).filter((a: any) => a.status === "opportunity" && !a.is_fixed).map((a: any) => a.id);
+  const unfixedBroken = (audits || []).filter((a: any) => a.status === "broken" && !a.is_fixed).map((a: any) => a.id);
+
+  const stripHtml = (html: string) => html?.replace(/<[^>]+>/g, "") || "";
 
   return (
     <div className="space-y-6">
@@ -149,7 +200,7 @@ export function SeoLinks() {
       </div>
 
       {/* Filters + Fix All */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <Tabs value={filter} onValueChange={(v) => setFilter(v as StatusFilter)}>
           <TabsList>
             <TabsTrigger value="all">All ({stats.total})</TabsTrigger>
@@ -161,17 +212,30 @@ export function SeoLinks() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        {unfixedOpportunities.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fixMutation.mutate(unfixedOpportunities)}
-            disabled={fixMutation.isPending}
-          >
-            {fixMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            Fix All Opportunities ({unfixedOpportunities.length})
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {unfixedBroken.length > 0 && filter === "broken" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleFixClick(unfixedBroken)}
+              disabled={previewMutation.isPending}
+            >
+              {previewMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Brain className="w-4 h-4 mr-2" />}
+              AI Fix Broken ({unfixedBroken.length})
+            </Button>
+          )}
+          {unfixedOpportunities.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleFixClick(unfixedOpportunities)}
+              disabled={previewMutation.isPending}
+            >
+              {previewMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+              AI Fix Opportunities ({unfixedOpportunities.length})
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Backlinks panel */}
@@ -268,10 +332,11 @@ export function SeoLinks() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => fixMutation.mutate([a.id])}
-                          disabled={fixMutation.isPending}
+                          onClick={() => handleFixClick([a.id])}
+                          disabled={previewMutation.isPending}
                         >
-                          Fix
+                          {previewMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Eye className="w-3 h-3 mr-1" />}
+                          Preview Fix
                         </Button>
                       ) : null}
                     </TableCell>
@@ -283,6 +348,85 @@ export function SeoLinks() {
         </Card>
       )
       )}
+
+      {/* Preview/Confirm Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-primary" />
+              AI Fix Preview
+            </DialogTitle>
+            <DialogDescription>
+              Review the AI-proposed changes before applying them to your site.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {proposals.length === 0 && previewMutation.isPending && (
+              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                AI is analyzing your content...
+              </div>
+            )}
+            {proposals.map((p, i) => (
+              <Card key={p.id} className="border-border">
+                <CardContent className="pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline" className={p.type === "broken" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}>
+                      {p.type === "broken" ? `Broken Link Fix${p.action ? ` (${p.action})` : ""}` : "Opportunity Placement"}
+                    </Badge>
+                    {p.error && <Badge variant="destructive">Error</Badge>}
+                  </div>
+
+                  {p.error ? (
+                    <p className="text-sm text-destructive">{p.error}</p>
+                  ) : (
+                    <>
+                      {/* Before */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">BEFORE</p>
+                        <div className="bg-destructive/5 border border-destructive/20 rounded p-3 text-xs leading-relaxed">
+                          {stripHtml(p.before_paragraph || "")}
+                        </div>
+                      </div>
+
+                      {/* After */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">AFTER</p>
+                        <div className="bg-green-500/5 border border-green-500/20 rounded p-3 text-xs leading-relaxed">
+                          {stripHtml(p.after_paragraph || "")}
+                        </div>
+                      </div>
+
+                      {/* Reasoning */}
+                      {p.reasoning && (
+                        <div className="flex items-start gap-2 bg-muted/50 rounded p-3">
+                          <Brain className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                          <p className="text-xs text-muted-foreground">{p.reasoning}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleApproveAll}
+              disabled={fixMutation.isPending || proposals.every(p => !!p.error)}
+            >
+              {fixMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+              Apply {proposals.filter(p => !p.error && p.before_paragraph).length} Fix{proposals.filter(p => !p.error).length !== 1 ? "es" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
