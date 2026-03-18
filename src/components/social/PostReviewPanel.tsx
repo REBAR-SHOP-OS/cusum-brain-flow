@@ -149,6 +149,7 @@ export function PostReviewPanel({
   const [persianCaptionText, setPersianCaptionText] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const captionRef = useRef<HTMLTextAreaElement>(null);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [showStoryGen, setShowStoryGen] = useState(false); // rebuild-trigger-v1
