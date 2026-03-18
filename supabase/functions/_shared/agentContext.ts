@@ -186,12 +186,16 @@ ENFORCEMENT RULES:
 
     // --- Brain Knowledge Block Construction ---
     try {
-      const { data: brainDocs } = await svc
-        .from("knowledge")
-        .select("title, content, category, metadata, source_url")
-        .in("category", ["company-playbook", "agent-strategy"])
-        .eq("company_id", companyId)
-        .order("created_at", { ascending: false });
+      // Brain knowledge — cached 5 min (changes infrequently)
+      const brainDocs = await cachedQuery(`agent:${cid}:brainDocs`, 5 * 60_000, async () => {
+        const { data } = await svc
+          .from("knowledge")
+          .select("title, content, category, metadata, source_url")
+          .in("category", ["company-playbook", "agent-strategy"])
+          .eq("company_id", companyId)
+          .order("created_at", { ascending: false });
+        return data;
+      });
       
       let brainBlock = "";
       if (brainDocs) {
