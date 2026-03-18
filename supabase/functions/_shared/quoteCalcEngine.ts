@@ -300,7 +300,7 @@ export function validateEstimateRequest(
   }
 
   // Check ties
-  for (const line of req.scope.ties_circular) {
+  for (const line of scope.ties_circular) {
     if (line.quantity <= 0) {
       questions.push(`Tie ${line.line_id}: quantity is 0 or missing.`);
     }
