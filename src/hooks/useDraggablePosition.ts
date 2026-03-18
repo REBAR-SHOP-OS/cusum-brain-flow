@@ -58,7 +58,8 @@ export function useDraggablePosition({ storageKey, btnSize = 56, defaultPos }: U
   }, [btnSize]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    e.nativeEvent.stopImmediatePropagation();
+    e.stopPropagation();
+    e.preventDefault();
     dragging.current = true;
     moved.current = false;
     wasDragged.current = false;
