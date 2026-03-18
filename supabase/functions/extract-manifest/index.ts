@@ -21,6 +21,39 @@ function getMimeType(filename: string): string {
   return map[ext] || "application/octet-stream";
 }
 
+/** Parse a dimension value that may be imperial (e.g. "0'-4\"", "3'-6\"") or numeric. Returns a number or null. */
+function parseDimension(val: any): number | null {
+  if (val == null) return null;
+  if (typeof val === "number") return val;
+  if (typeof val !== "string") return null;
+
+  const s = val.trim();
+  if (!s) return null;
+
+  // Imperial: X'-Y" or X' Y" or X'-Y or X' Y
+  const ftIn = s.match(/^(\d+(?:\.\d+)?)\s*['']\s*-?\s*(\d+(?:\.\d+)?)\s*["""]?\s*$/);
+  if (ftIn) {
+    return Math.round(parseFloat(ftIn[1]) * 12 + parseFloat(ftIn[2]));
+  }
+
+  // Feet only: "6'"
+  const ftOnly = s.match(/^(\d+(?:\.\d+)?)\s*['']\s*$/);
+  if (ftOnly) {
+    return Math.round(parseFloat(ftOnly[1]) * 12);
+  }
+
+  // Inches only: '4"'
+  const inOnly = s.match(/^(\d+(?:\.\d+)?)\s*["""]?\s*$/);
+  if (inOnly) {
+    const n = parseFloat(inOnly[1]);
+    return isNaN(n) ? null : n;
+  }
+
+  // Plain number
+  const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+  return isNaN(n) ? null : n;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
