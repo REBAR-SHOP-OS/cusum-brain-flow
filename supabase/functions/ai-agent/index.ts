@@ -873,7 +873,8 @@ Deno.serve(async (req) => {
 
           const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
             realismRule +
-            `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n\n` +
+            `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n` +
+            `STRICTLY FORBIDDEN IN IMAGE: Do NOT depict any holidays, cultural events, celebrations, seasonal decorations, or festive elements (e.g., Nowruz Haft-sin, Christmas trees, fireworks, flowers for occasions). The image must be a PURE industrial/construction product advertisement with NO event or occasion theme whatsoever.\n\n` +
             `VISUAL STYLE: ${effectiveStyle}. ` +
             `PRODUCT FOCUS: ${productFocusOverride || effectiveSlotProduct} for REBAR.SHOP. THEME: ${slot.theme}. ` +
             `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${dynContent.imageText}"` +
