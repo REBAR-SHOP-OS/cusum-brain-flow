@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { MessageSquare, Hash, Users, ChevronRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { DockChatBox } from "./DockChatBox";
 import { useTeamChannels, useMyProfile } from "@/hooks/useTeamChat";
@@ -116,7 +118,7 @@ export function DockChatBar() {
   const BOX_WIDTH = 330;
   const LAUNCHER_OFFSET = 80; // space for the launcher pill
 
-  return (
+  return createPortal(
     <>
       {/* Render open chat boxes */}
       {openChats.map((chat, index) => {
@@ -135,7 +137,8 @@ export function DockChatBar() {
 
       {/* Draggable floating chat button */}
       <div
-        className="fixed z-[9998]"
+        data-feedback-btn="true"
+        className="fixed z-[9999] pointer-events-auto"
         style={{ left: pos.x, top: pos.y, touchAction: "none" }}
       >
         <Popover open={launcherOpen}>
@@ -221,6 +224,7 @@ export function DockChatBar() {
           </PopoverContent>
         </Popover>
       </div>
-    </>
+    </>,
+    getFloatingPortalContainer()
   );
 }
