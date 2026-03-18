@@ -18,8 +18,8 @@ export type VoiceEngineState = "idle" | "connecting" | "connected" | "error";
 export type VoiceEngineMode = "speaking" | "listening" | null;
 
 export interface VoiceEngineConfig {
-  /** System prompt / instructions sent to OpenAI Realtime */
-  instructions: string;
+  /** System prompt / instructions sent to OpenAI Realtime. Can also be a getter function for lazy evaluation. */
+  instructions: string | (() => string);
   /** OpenAI voice id (default: "alloy") */
   voice?: string;
   /** OpenAI Realtime model (default: "gpt-4o-mini-realtime-preview") */
