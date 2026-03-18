@@ -98,7 +98,7 @@ export type SalesQuotation = {
   customer_approval_version: number | null;
   valid_until: string | null;
   revision_reason: string | null;
-  line_items: unknown[] | null;
+  line_items: any[] | null;
   assumptions: any[] | null;
   source: string | null;
 };
