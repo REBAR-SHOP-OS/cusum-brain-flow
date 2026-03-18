@@ -1,36 +1,71 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { corsHeaders, json } from "../_shared/auth.ts";
 
+/**
+ * Mints an ephemeral OpenAI Realtime API token for the AZIN interpreter.
+ * Uses GPT_API_KEY to create a session, returns the client_secret for WebRTC.
+ */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
-    const ELEVENLABS_AZIN_AGENT_ID = Deno.env.get("ELEVENLABS_AZIN_AGENT_ID");
+    const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
+    if (!GPT_API_KEY) throw new Error("GPT_API_KEY not configured");
 
-    if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY not configured");
-    if (!ELEVENLABS_AZIN_AGENT_ID) throw new Error("ELEVENLABS_AZIN_AGENT_ID not configured");
+    const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GPT_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-realtime-preview",
+        voice: "alloy",
+        modalities: ["audio", "text"],
+        instructions: `You are a real-time bidirectional interpreter between English and Farsi (Persian).
 
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${ELEVENLABS_AZIN_AGENT_ID}`,
-      {
-        headers: { "xi-api-key": ELEVENLABS_API_KEY },
-      }
-    );
+RULES:
+- If the user speaks Farsi, respond ONLY with the English translation.
+- If the user speaks English, respond ONLY with the Farsi translation.
+- Never add explanations, greetings, or commentary.
+- Preserve numbers, measurements, and proper nouns exactly.
+- Be extremely fast. Respond instantly.
+- Just translate. Nothing else.`,
+        input_audio_transcription: {
+          model: "whisper-1",
+        },
+        turn_detection: {
+          type: "server_vad",
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 500,
+        },
+      }),
+    });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("ElevenLabs AZIN signed URL error:", response.status, errText);
-      return json({ error: "Failed to get signed URL" }, 500);
+      console.error("OpenAI Realtime session error:", response.status, errText);
+      return json({ error: "Failed to create realtime session" }, 500);
     }
 
-    const { signed_url } = await response.json();
-    return json({ signed_url });
+    const sessionData = await response.json();
+    const clientSecret = sessionData.client_secret?.value;
+
+    if (!clientSecret) {
+      console.error("No client_secret in response:", JSON.stringify(sessionData));
+      return json({ error: "No client secret received" }, 500);
+    }
+
+    return json({
+      client_secret: clientSecret,
+      expires_at: sessionData.client_secret?.expires_at,
+    });
   } catch (e) {
     if (e instanceof Response) return e;
-    console.error("elevenlabs-azin-token error:", e);
+    console.error("azin-token error:", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
   }
 });
