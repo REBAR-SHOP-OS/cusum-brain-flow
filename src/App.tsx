@@ -35,8 +35,8 @@ import PickupStation from "./pages/PickupStation";
 import PoolView from "./pages/PoolView";
 
 import InventoryCountPage from "./pages/InventoryCountPage";
-import Brain from "./pages/Brain";
-import Integrations from "./pages/Integrations";
+const Brain = React.lazy(() => import("./pages/Brain"));
+const Integrations = React.lazy(() => import("./pages/Integrations"));
 import IntegrationCallback from "./pages/IntegrationCallback";
 import SocialMediaManager from "./pages/SocialMediaManager";
 import DailySummarizer from "./pages/DailySummarizer";
