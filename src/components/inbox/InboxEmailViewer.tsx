@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import DOMPurify from "dompurify";
-import { Mail, FileText, Image, File, ExternalLink, Zap, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
+import { Mail, FileText, Image, File, ExternalLink, Zap, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Clock, Download, Loader2, Video, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
