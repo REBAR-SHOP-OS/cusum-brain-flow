@@ -31,7 +31,16 @@ function extractPostData(content: string): ExtractedPost[] {
     results.push({ caption: match[1], imageUrl: match[2], hashtags: "", contactInfo: "", imageTextTranslation: "", captionTranslation: "" });
   }
 
-  // Fallback: bare social-images URLs
+  // Fallback 1: standard markdown links [caption](social-images-url) without leading !
+  if (results.length === 0) {
+    const linkRegex = /(?<!!)\[([^\]]*)\]\((https?:\/\/[^\s)]*social-images[^\s)]*)\)/g;
+    let linkMatch;
+    while ((linkMatch = linkRegex.exec(content)) !== null) {
+      results.push({ caption: linkMatch[1], imageUrl: linkMatch[2], hashtags: "", contactInfo: "", imageTextTranslation: "", captionTranslation: "" });
+    }
+  }
+
+  // Fallback 2: bare social-images URLs
   if (results.length === 0) {
     const bareUrlRegex = /(https?:\/\/[^\s)<>]*social-images[^\s)<>]*\.(?:png|jpg|jpeg|webp))/g;
     let bareMatch;
