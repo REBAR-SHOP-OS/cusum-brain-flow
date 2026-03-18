@@ -354,6 +354,7 @@ Return an array of 5 objects:
     "image_prompt": "PHOTOREALISTIC: [detailed scene with specific visual style, product, REBAR.SHOP logo, and the EXACT text from image_slogan rendered in clean bold font]"
   }
 ]
+`;
 
       try {
         const aiResult = await callAI({
