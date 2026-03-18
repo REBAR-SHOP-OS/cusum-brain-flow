@@ -620,30 +620,24 @@ export function PostReviewPanel({
                       </div>
                     </div>
 
-                    {/* Persian translation — internal reference only */}
-                    {(() => {
-                      const persianSep = "---PERSIAN---";
-                      const rawContent = post.content || "";
-                      const persianIdx = rawContent.indexOf(persianSep);
-                      const persianBlock = persianIdx !== -1 ? rawContent.slice(persianIdx + persianSep.length).trim() : "";
-                      return persianBlock ? (
-                        <div className="mx-4">
-                          <Collapsible>
-                            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group w-full">
-                              <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
-                              <span>🔒 Persian Translation (internal only — never published)</span>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className="mt-2 p-3 rounded-lg border border-border/50 bg-muted/30">
-                                <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed" dir="rtl">
-                                  {persianBlock}
-                                </p>
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </div>
-                      ) : null;
-                    })()}
+                    {/* Persian translation — always visible, read-only, never published */}
+                    <div className="mx-3 my-2 p-2.5 rounded-lg bg-muted/50 border border-border/50">
+                      <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
+                        🔒 Internal reference only — not published
+                      </p>
+                      <div className="mb-1.5">
+                        <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                          {persianImageText || "ترجمه‌ای موجود نیست"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                          {persianCaptionText || "ترجمه‌ای موجود نیست"}
+                        </p>
+                      </div>
+                    </div>
 
                     {/* Regenerate caption */}
                     <div className="flex gap-2 px-4 pt-3">
