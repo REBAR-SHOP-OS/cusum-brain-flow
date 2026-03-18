@@ -94,6 +94,7 @@ export default function AgentWorkspace() {
   const [imageStyles, setImageStyles] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [imageAspectRatio, setImageAspectRatio] = useState<string>("1:1");
+  const [showRecipeTable, setShowRecipeTable] = useState(false);
   const [purchasingDate, setPurchasingDate] = useState<Date | undefined>();
   const [activePurchasingDateStr, setActivePurchasingDateStr] = useState<string | null>(null);
 
