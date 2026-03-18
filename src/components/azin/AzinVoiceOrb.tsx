@@ -108,7 +108,7 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      ctx.strokeStyle = "hsla(217, 91%, 60%, 0.3)";
+      ctx.strokeStyle = "hsla(245, 58%, 55%, 0.3)";
       ctx.lineWidth = 2.5 * dpr;
       ctx.lineCap = "round";
       ctx.stroke();
