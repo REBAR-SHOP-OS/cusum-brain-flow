@@ -241,6 +241,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         aiDraft: comm.aiDraft,
         aiPriorityData: comm.aiPriorityData,
         resolvedAt: comm.resolvedAt,
+        attachments: (meta?.attachments as { filename: string; mimeType: string; size: number; attachmentId: string }[]) || undefined,
       };
     });
 

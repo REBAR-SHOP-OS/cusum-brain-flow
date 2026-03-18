@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import DOMPurify from "dompurify";
-import { Mail, FileText, Image, File, ExternalLink, Zap, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
+import { Mail, FileText, Image, File, ExternalLink, Zap, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Clock, Download, Loader2, Video, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -110,12 +110,58 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [showAiDraft, setShowAiDraft] = useState(true);
   const [resolving, setResolving] = useState(false);
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
-  const attachments = useMemo(() => {
+  // Regex-extracted attachments from body
+  const bodyAttachments = useMemo(() => {
     if (!email) return [];
     return extractAttachments(email.body || "");
   }, [email]);
+
+  // Real Gmail attachments from metadata
+  const gmailAttachments = email?.attachments || [];
+
+  const handleDownloadAttachment = useCallback(async (att: { filename: string; mimeType: string; attachmentId: string }) => {
+    if (!email?.sourceId) return;
+    setDownloadingIds(prev => new Set(prev).add(att.attachmentId));
+    try {
+      const { data, error } = await supabase.functions.invoke("gmail-attachment", {
+        body: { messageId: email.sourceId, attachmentId: att.attachmentId },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.data) throw new Error("No attachment data returned");
+
+      // Convert base64 to blob and trigger download
+      const byteChars = atob(data.data);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: att.mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = att.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Download failed",
+        description: err instanceof Error ? err.message : "Could not download attachment",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingIds(prev => {
+        const next = new Set(prev);
+        next.delete(att.attachmentId);
+        return next;
+      });
+    }
+  }, [email?.sourceId, toast]);
 
   const handleSmartReply = async () => {
     if (!email) return;
@@ -314,16 +360,53 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
             />
           </div>
 
-          {/* Attachments — Odoo-style file chips */}
-          {attachments.length > 0 && (
+          {/* Attachments */}
+          {(bodyAttachments.length > 0 || gmailAttachments.length > 0) && (
             <div className="mt-4">
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Attachments ({attachments.length})
+              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Paperclip className="w-3.5 h-3.5" />
+                Attachments ({bodyAttachments.length + gmailAttachments.length})
               </p>
               <div className="flex flex-wrap gap-2">
-                {attachments.map((att, i) => (
+                {/* Real Gmail attachments */}
+                {gmailAttachments.map((att, i) => {
+                  const ext = att.filename.split(".").pop()?.toLowerCase() || "";
+                  const type = ext === "pdf" ? "pdf"
+                    : ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext) ? "image"
+                    : ["mp4", "mov", "avi", "webm"].includes(ext) ? "video"
+                    : ["doc", "docx", "xls", "xlsx", "csv"].includes(ext) ? "document"
+                    : "link";
+                  const isDownloading = downloadingIds.has(att.attachmentId);
+                  const sizeStr = att.size > 1048576
+                    ? `${(att.size / 1048576).toFixed(1)} MB`
+                    : `${Math.round(att.size / 1024)} KB`;
+
+                  return (
+                    <button
+                      key={`gmail-${i}`}
+                      onClick={() => handleDownloadAttachment(att)}
+                      disabled={isDownloading}
+                      className={cn(
+                        "inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors cursor-pointer",
+                        getAttachmentBg(type)
+                      )}
+                    >
+                      {isDownloading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        getAttachmentIcon(type)
+                      )}
+                      <span className="max-w-[180px] truncate text-foreground">{att.filename}</span>
+                      <span className="text-[10px] text-muted-foreground">{sizeStr}</span>
+                      <Download className="w-3 h-3 text-muted-foreground" />
+                    </button>
+                  );
+                })}
+
+                {/* Body-extracted link attachments */}
+                {bodyAttachments.map((att, i) => (
                   <a
-                    key={i}
+                    key={`body-${i}`}
                     href={att.url}
                     target="_blank"
                     rel="noopener noreferrer"
