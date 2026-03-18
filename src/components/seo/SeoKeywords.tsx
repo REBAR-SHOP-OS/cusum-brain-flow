@@ -186,17 +186,20 @@ export function SeoKeywords() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left p-3 font-medium">Keyword</th>
-                    <th className="text-center p-3 font-medium w-20">Position</th>
-                    <th className="text-center p-3 font-medium w-16">Trend</th>
-                    <th className="text-center p-3 font-medium w-24">Intent</th>
-                    <th className="text-left p-3 font-medium w-28">Cluster</th>
-                    <th className="text-center p-3 font-medium w-24">Opportunity</th>
-                    <th className="text-center p-3 font-medium w-24">Relevance</th>
-                    <th className="text-center p-3 font-medium w-24">Status</th>
-                    <th className="text-center p-3 font-medium w-32">Sources</th>
-                    <th className="text-right p-3 font-medium w-16">Clicks</th>
-                  </tr>
+                     <th className="text-left p-3 font-medium">Keyword</th>
+                     <th className="text-center p-3 font-medium w-20">Position</th>
+                     <th className="text-center p-3 font-medium w-20">W.Pos</th>
+                     <th className="text-center p-3 font-medium w-16">W.Δ</th>
+                     <th className="text-center p-3 font-medium w-16">Trend</th>
+                     <th className="text-center p-3 font-medium w-24">Intent</th>
+                     <th className="text-center p-3 font-medium w-20">Volume</th>
+                     <th className="text-center p-3 font-medium w-16">KD</th>
+                     <th className="text-center p-3 font-medium w-16">CPC</th>
+                     <th className="text-center p-3 font-medium w-24">Opportunity</th>
+                     <th className="text-center p-3 font-medium w-24">Status</th>
+                     <th className="text-center p-3 font-medium w-32">Sources</th>
+                     <th className="text-right p-3 font-medium w-16">Traffic</th>
+                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
