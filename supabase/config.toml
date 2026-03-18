@@ -536,3 +536,6 @@ verify_jwt = false
 
 [functions.elevenlabs-azin-token]
 verify_jwt = false
+
+[functions.voice-engine-token]
+verify_jwt = false
