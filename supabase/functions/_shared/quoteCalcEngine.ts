@@ -339,8 +339,11 @@ export function generateQuote(
   config: PricingConfig,
   rebarSizes: RebarSizeRow[]
 ): QuoteResult {
-  const scrapPct = req.scope.scrap_percent_override ?? config.default_scrap_percent;
-  const coatingType = req.scope.coating_type || "black";
+  // Defensive: normalize scope arrays to prevent "not iterable" crashes
+  const scope = normalizeScope(req.scope);
+
+  const scrapPct = scope.scrap_percent_override ?? config.default_scrap_percent;
+  const coatingType = scope.coating_type || "black";
   const coatingMult = config.coating_multipliers[coatingType] ?? 1;
 
   const lineItems: QuoteLineItem[] = [];
@@ -349,7 +352,7 @@ export function generateQuote(
   let cageWeightKg = 0;
 
   // 1. Straight bars
-  for (const line of req.scope.straight_rebar_lines) {
+  for (const line of scope.straight_rebar_lines) {
     const priceResult = computeStraightBarPrice(line, config);
     // Estimate weight for straight bars for shipping calc
     const sizeData = rebarSizes.find((r) => r.bar_code === line.bar_size);
