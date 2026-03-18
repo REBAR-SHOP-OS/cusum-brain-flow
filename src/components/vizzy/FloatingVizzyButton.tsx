@@ -14,7 +14,6 @@ const BTN_SIZE = 64;
 
 export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
   function FloatingVizzyButton(_props, ref) {
-    const { isSuperAdmin } = useSuperAdmin();
     const isMobile = useIsMobile();
     const navigate = useNavigate();
     const location = useLocation();
