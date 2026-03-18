@@ -149,6 +149,7 @@ export function PostReviewPanel({
   const [persianCaptionText, setPersianCaptionText] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const captionRef = useRef<HTMLTextAreaElement>(null);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [showStoryGen, setShowStoryGen] = useState(false); // rebuild-trigger-v1
@@ -603,6 +604,7 @@ export function PostReviewPanel({
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">Caption</Label>
                         <Textarea
+                          ref={captionRef}
                           value={localContent}
                           disabled={isPublished}
                           onChange={(e) => { setLocalContent(e.target.value); triggerDebouncedSave(); }}
@@ -678,6 +680,19 @@ export function PostReviewPanel({
                       >
                         {regeneratingCaption ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                         {regeneratingCaption ? "Regenerating..." : "Regenerate caption"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={isPublished}
+                        onClick={() => {
+                          captionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          setTimeout(() => captionRef.current?.focus(), 300);
+                        }}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Edit caption
                       </Button>
                     </div>
                   </>
