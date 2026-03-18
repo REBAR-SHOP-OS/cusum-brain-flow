@@ -612,9 +612,9 @@ export async function executeToolCall(
             // Inject aspect ratio as soft composition guidance (final dimensions enforced by server-side crop)
             // aspectRatio already declared at top of generate_image handler
             const AR_COMPOSITION_MAP: Record<string, string> = {
-              "16:9": "Compose the scene as a LANDSCAPE layout — wider than tall, with important elements spread horizontally.",
-              "9:16": "Compose the scene as a PORTRAIT/VERTICAL layout — taller than wide, with important elements arranged vertically (suitable for Stories/Reels).",
-              "1:1": "Compose the scene as a SQUARE layout — balanced, with the main subject centered.",
+              "16:9": "CRITICAL ASPECT RATIO: Generate this image in LANDSCAPE orientation (wider than tall). Target dimensions: 1536×864 pixels. The image MUST be significantly wider than it is tall. Spread important elements horizontally.",
+              "9:16": "CRITICAL ASPECT RATIO: Generate this image in PORTRAIT orientation (taller than wide). Target dimensions: 864×1536 pixels. The image MUST be significantly taller than it is wide. Arrange elements vertically (suitable for Stories/Reels).",
+              "1:1": "CRITICAL ASPECT RATIO: Generate this image as a perfect SQUARE. Target dimensions: 1024×1024 pixels. The image width and height must be equal. Center the main subject.",
             };
             imagePrompt += `\n\n${AR_COMPOSITION_MAP[aspectRatio] || `Compose the image for a ${aspectRatio} layout.`}`;
             imagePrompt += "\n\nLANGUAGE RULE: ALL text rendered on the image MUST be in ENGLISH ONLY. NO Persian, Farsi, Arabic, or any non-Latin script text is allowed in the image.";
