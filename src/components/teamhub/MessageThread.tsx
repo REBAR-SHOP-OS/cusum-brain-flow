@@ -548,7 +548,7 @@ export function MessageThread({
                                     );
                                   })}
                                 </div>
-                              )
+                              )}
 
                               {/* Translation indicator */}
                               {!isMine && msg.original_language !== myLang && msg.translations[myLang] && (
@@ -567,7 +567,6 @@ export function MessageThread({
                             </div>
                           );
                         })()}
-                      </div>
 
                       {/* Message actions (on hover) */}
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-start gap-0.5 pt-1">
