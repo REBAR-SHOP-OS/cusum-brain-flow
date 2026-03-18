@@ -48,7 +48,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
     state === "connecting"
       ? connectingElapsed >= 10 ? "Taking longer than expected..." : "Connecting to AZIN..."
       : state === "error" ? "Connection failed"
-      : mode === "speaking" || isSpeaking ? "AZIN is translating..."
+      : mode === "speaking" || isSpeaking ? "Translating..."
       : state === "connected" ? "Listening..."
       : "";
 
