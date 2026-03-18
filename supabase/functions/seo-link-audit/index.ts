@@ -107,10 +107,12 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
   ]);
 
   const allContent = [...pages, ...posts, ...products];
+  const siteUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "";
   console.log(`Crawling ${allContent.length} pages/posts/products, siteUrl: ${siteUrl}`);
 
   const results: any[] = [];
   let siteHostname = "";
+  try { siteHostname = siteUrl ? new URL(siteUrl).hostname : ""; } catch { /* ignore */ }
   try { siteHostname = siteUrl ? new URL(siteUrl).hostname : ""; } catch { /* ignore */ }
 
   // Collect all link records first (no network calls yet)
