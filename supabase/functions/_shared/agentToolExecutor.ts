@@ -274,8 +274,23 @@ export async function executeToolCall(
         er.scope.fabricated_rebar_lines = Array.isArray(er.scope.fabricated_rebar_lines) ? er.scope.fabricated_rebar_lines : [];
         er.scope.dowels = Array.isArray(er.scope.dowels) ? er.scope.dowels : [];
         er.scope.ties_circular = Array.isArray(er.scope.ties_circular) ? er.scope.ties_circular : [];
-        er.scope.cages = Array.isArray(er.scope.cages) ? er.scope.cages : [];
         er.scope.mesh = Array.isArray(er.scope.mesh) ? er.scope.mesh : [];
+
+        // ── Cage normalization: fix LLM emitting "cages" as string or bare object ──
+        if (typeof er.scope.cages === "string") {
+          try {
+            const parsed = JSON.parse(er.scope.cages);
+            er.scope.cages = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === "object" ? [parsed] : []);
+          } catch {
+            console.warn("[generate_sales_quote] cages was a non-parseable string, resetting to []:", er.scope.cages);
+            er.scope.cages = [];
+          }
+        } else if (er.scope.cages && typeof er.scope.cages === "object" && !Array.isArray(er.scope.cages)) {
+          // Bare object → wrap as single-element array
+          er.scope.cages = [er.scope.cages];
+        } else if (!Array.isArray(er.scope.cages)) {
+          er.scope.cages = [];
+        }
       }
       // Defensive: ensure shipping/project/meta exist
       if (!er.shipping) er.shipping = { delivery_required: false, distance_km: 0, truck_capacity_tons: 7 };
