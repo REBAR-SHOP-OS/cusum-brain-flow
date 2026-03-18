@@ -173,7 +173,52 @@ export function SeoKeywords() {
   const [showGroupTags, setShowGroupTags] = useState(() => loadLocalStorage("seo-keyword-show-group-tags", true));
   const [showMiniTrends, setShowMiniTrends] = useState(() => loadLocalStorage("seo-keyword-show-mini-trends", true));
   const { researchKeyword } = useSemrushSync();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !domain?.id) return;
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = read(buffer, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = utils.sheet_to_json(sheet);
+
+      const keywords = rows.map((row: any) => ({
+        keyword: row["Keyword"] || "",
+        position: row["Position"] ?? null,
+        change: row["Change Δ"] ?? row["Change Delta"] ?? null,
+        change_status: row["Change status"] || "",
+        traffic: row["Est. traffic"] ?? null,
+        traffic_change: row["Est. traffic: Change Δ"] ?? null,
+        volume: row["Volume"] ?? null,
+        features: row["Features"] || "",
+        top_page: row["Top ranking page"] || "",
+        updated: row["Updated"] || "",
+      })).filter((kw: any) => kw.keyword);
+
+      toast.info(`Importing ${keywords.length} keywords from Excel…`, { duration: 8000 });
+
+      const { data, error } = await supabase.functions.invoke("wincher-import", {
+        body: { domain_id: domain.id, keywords },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(`Imported ${data.upserted} keywords successfully!`);
+      queryClient.invalidateQueries({ queryKey: ["seo-ai-keywords"] });
+      queryClient.invalidateQueries({ queryKey: ["seo-domain"] });
+    } catch (err: any) {
+      toast.error(`Import failed: ${err.message}`);
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("seo-keyword-column-order", JSON.stringify(columnOrder));
