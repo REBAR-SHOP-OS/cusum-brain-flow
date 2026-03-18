@@ -102,6 +102,14 @@ function isImageFile(type: string) {
   return type.startsWith("image/");
 }
 
+function isVideoFile(type: string) {
+  return type.startsWith("video/");
+}
+
+function isVideoUrl(url: string): boolean {
+  return /\.(mp4|webm|mov)(\?|$)/i.test(url);
+}
+
 export function MessageThread({
   channelName,
   channelDescription,
