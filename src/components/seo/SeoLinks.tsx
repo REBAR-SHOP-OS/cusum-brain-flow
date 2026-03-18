@@ -468,7 +468,7 @@ export function SeoLinks() {
               disabled={fixMutation.isPending || proposals.every(p => !!p.error)}
             >
               {fixMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-              Apply {proposals.filter(p => !p.error && p.before_paragraph).length} Fix{proposals.filter(p => !p.error).length !== 1 ? "es" : ""}
+              Apply {proposals.filter(p => !p.error && (p.before_paragraph || (p.action === "replace" && p.replacement_url))).length} Fix{proposals.filter(p => !p.error).length !== 1 ? "es" : ""}
             </Button>
           </DialogFooter>
         </DialogContent>
