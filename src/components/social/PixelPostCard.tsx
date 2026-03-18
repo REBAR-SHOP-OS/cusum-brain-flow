@@ -26,6 +26,7 @@ interface PixelPostCardProps {
   onView?: (post: PixelPostData) => void;
   onApprove?: (post: PixelPostData) => void;
   onRegenerate?: (post: PixelPostData) => void;
+  onEditImage?: (post: PixelPostData, newUrl: string) => void;
 }
 
 const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
