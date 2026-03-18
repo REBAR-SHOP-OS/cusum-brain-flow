@@ -442,7 +442,7 @@ async function handleFix(sb: any, auditIds: string[], companyId: string) {
     if (!record || record.is_fixed) continue;
 
     try {
-      const wpItem = await findWPItem(wp, record.page_url);
+      const wpItem = await findWPItemFromRecord(wp, record);
       if (!wpItem) {
         errors.push(id);
         continue;
