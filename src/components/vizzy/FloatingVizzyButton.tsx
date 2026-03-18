@@ -18,10 +18,6 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     const isMobile = useIsMobile();
     const navigate = useNavigate();
     const location = useLocation();
-    const { user } = useAuth();
-    const agent = getUserPrimaryAgent(user?.email);
-    const avatarImg = agent?.image || assistantHelper;
-    const agentName = agent?.name || "Vizzy";
 
     const [showTooltip, setShowTooltip] = useState(false);
     const [showActions, setShowActions] = useState(isMobile);
