@@ -1,61 +1,121 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Plan: Maximum SEMrush Data Pull Before Cancellation
+## Completed: Add All Wan 2.6 Capabilities
 
-### Current Problem
-Your SEMrush API units balance is **zero**. All calls are returning `ERROR 403 :: ERROR 132 :: API UNITS BALANCE IS ZERO`. You need to either:
-1. Wait for your monthly API units to reset, or
-2. Purchase additional API units from your SEMrush account
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-**No code changes can fix this** -- the API is rejecting requests because you have no remaining units.
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-### What We Already Pull (7 endpoints)
-| Endpoint | What it gets | Saved to DB? |
-|----------|-------------|--------------|
-| `domain_ranks` (overview) | Authority, traffic, cost | Yes - `seo_domains` |
-| `domain_organic` | Organic keywords (500/db) | Yes - `seo_keyword_ai` |
-| `domain_organic_organic` | Competitors | No - returned only |
-| `domain_adwords` | Paid keywords | No - returned only |
-| `domain_rank_history` | 24-month rank history | No - returned only |
-| `backlinks_overview` | Backlink totals | No - returned only |
-| `backlinks_refdomains` | Referring domains list | No - returned only |
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### What We Should Add (maximize value before cancelling)
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-Based on the SEMrush API docs, these additional endpoints would give you data you can keep forever in your database:
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-1. **Domain Organic Pages** (`domain_organic_organic` type=`domain_organic_pages`) -- Which pages on your site drive organic traffic, with per-page keyword counts and traffic. Save to `seo_page_ai`.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-2. **Related Keywords** (`phrase_related`) -- For each of your top keywords, pull related keyword ideas with volume/difficulty. Save to `seo_keyword_ai`.
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
 
-3. **Broad Match Keywords** (`phrase_fullsearch`) -- Broader keyword variations. Save to `seo_keyword_ai`.
+## Completed: Pipeline Unified Timeline & Data Quality Patch
 
-4. **Phrase Questions** (`phrase_questions`) -- Question-based keywords (great for content). Save to `seo_keyword_ai`.
+### Changes
 
-5. **Backlinks list** (`backlinks`) -- Individual backlink URLs (not just referring domains). Could save to a new table or JSON field.
+**Backend — Sync Fixes:**
+- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
+- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
+- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
 
-6. **Domain Overview All DBs** (`domain_ranks_all`) -- Get data across ALL regional databases in one call (more efficient than calling US + CA separately).
+**Frontend — Lead Detail:**
+- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
 
-7. **Keyword Intent data** -- Add `In` (Intent) column to organic keyword pulls to classify commercial/informational/navigational/transactional intent.
+**Frontend — Pipeline Board:**
+- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
 
-### Implementation Changes
+**Migration:**
+- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
+- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
 
-**Edge Function (`semrush-api/index.ts`):**
-- Add 5 new action handlers: `domain_organic_pages`, `related_keywords`, `broad_match_keywords`, `phrase_questions`, `backlinks_list`
-- Expand `domain_organic` export columns to include `In` (intent), `Tg` (traffic amount), `Ts` (timestamp)
-- Increase organic keyword limit from 500 to **10,000** per database to pull ALL keywords
-- Save competitors, backlinks, and rank history to DB instead of just returning them
-- Add graceful handling for `API UNITS BALANCE IS ZERO` errors (return cached data instead of 500)
+### Known Risks
+- Priority re-mapping changes existing lead priorities on next sync (intentional)
+- File linkage fix uses both int/string ID matching — monitor results after next sync
+- Stage group filter is additive/safe — "Show all" restores full board
 
-**Frontend (`useSemrushApi.ts`):**
-- Update `fullExport` to include the new endpoints
-- Increase organic keyword limit from 500 to 10,000
-- Handle zero-balance errors gracefully with a clear user message like "SEMrush API units exhausted. Top up at semrush.com to continue syncing."
+### Follow-up
+- Run a full Odoo sync to apply priority and revenue fixes to existing data
+- Monitor file linkage stats in chatter sync response after deployment
 
-**Database migration:**
-- Add `semrush_competitors_json`, `semrush_backlinks_json`, `semrush_rank_history_json` columns to `seo_domains` to persist competitor/backlink/history data
-- Add `intent` enrichment to `seo_keyword_ai` (column already exists)
+## Completed: Odoo Mirror Pipeline + Sales Department Patch
 
-### Important Note
-Before running the full export, you must have API units available. Once your units reset or you purchase more, the "Full Export" button will pull everything and save it permanently to your database so you keep the data after cancelling SEMrush.
+### Assessment
+Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
 
+### Changes Implemented
+
+**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
+- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
+- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
+- 30s cooldown per lead to prevent API rate limiting
+- Shows "Syncing…" indicator in header during refresh
+- Invalidates all lead-related query keys on completion
+
+**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
+- New `mode: "single"` + `odoo_id` parameter
+- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
+- Logs stage change events if stage differs
+- Returns fast without touching other leads
+
+**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
+- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
+- Logs reconciliation events with reason
+- Only archives non-terminal leads (skips already won/lost)
+
+**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
+- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
+- Improves timeline readability
+
+**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
+- Footer shows "Synced X minutes ago" with color-coded status dot
+- Green: <5min, Yellow: <30min, Red: >30min
+
+### Files Changed
+- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
+- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
+- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+
+### No Changes Needed (Already Existed)
+- Sales Department sidebar, routes, pages, tables, hooks
+- Odoo chatter sync single mode (already existed)
+- OdooChatter unified timeline (already existed)
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
+- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
