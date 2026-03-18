@@ -1143,6 +1143,19 @@ Deno.serve(async (req) => {
       reply = "I processed the data but couldn't generate a text response. Please try again or rephrase your question.";
     }
 
+    // Post-processing safety net: strip verbose pre-image text for social agent
+    if (agent === "social" && reply) {
+      const imageMarkdownIdx = reply.indexOf("![");
+      if (imageMarkdownIdx > 0) {
+        // Check if text before image is verbose (>30 chars of non-whitespace)
+        const preImageText = reply.slice(0, imageMarkdownIdx).trim();
+        if (preImageText.length > 30) {
+          console.log(`🧹 Social agent: stripping ${preImageText.length} chars of pre-image text`);
+          reply = reply.slice(imageMarkdownIdx);
+        }
+      }
+    }
+
     // QA Reviewer Layer — validate high-risk agent outputs
     const qaResult = await reviewAgentOutput(
       agent,
