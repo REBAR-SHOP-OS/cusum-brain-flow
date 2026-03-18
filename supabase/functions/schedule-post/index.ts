@@ -42,7 +42,12 @@ Deno.serve(async (req) => {
     const isUnassigned = delete_original === true || fullPost.platform === "unassigned";
     const cloned: string[] = [];
 
-    if (isUnassigned && extra_combos && Array.isArray(extra_combos) && extra_combos.length > 0) {
+    // Sanitize extra_combos: never create clones with platform "unassigned"
+    const sanitizedCombos = (extra_combos && Array.isArray(extra_combos))
+      ? extra_combos.filter((c: any) => c.platform && c.platform !== "unassigned")
+      : [];
+
+    if (isUnassigned && sanitizedCombos.length > 0) {
       // UNASSIGNED flow: clone for ALL combos, then delete original
       const scheduledDay = scheduled_date.substring(0, 10);
 

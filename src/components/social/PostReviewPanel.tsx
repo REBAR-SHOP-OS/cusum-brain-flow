@@ -989,9 +989,14 @@ export function PostReviewPanel({
                           return;
                         }
 
-                        // Build all platform×page combos
+                        // Build all platform×page combos — filter out "unassigned"
+                        const schedulablePlatforms = localPlatforms.filter(p => p !== "unassigned");
+                        if (schedulablePlatforms.length === 0) {
+                          toast({ title: "No valid platform", description: "Please select a real platform before scheduling.", variant: "destructive" });
+                          return;
+                        }
                         const combos: { platform: string; page: string }[] = [];
-                        for (const plat of localPlatforms) {
+                        for (const plat of schedulablePlatforms) {
                           const dbPlat = platformMap[plat] || plat;
                           for (const page of localPages) {
                             combos.push({ platform: dbPlat, page });
