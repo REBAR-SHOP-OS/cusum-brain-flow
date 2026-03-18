@@ -97,7 +97,7 @@ const SalesInvoices = React.lazy(() => import("./pages/sales/SalesInvoices"));
 const SalesContacts = React.lazy(() => import("./pages/sales/SalesContacts"));
 
 import LiveChat from "./pages/LiveChat";
-import VizzyLive from "./pages/VizzyLive";
+
 import EmailMarketing from "./pages/EmailMarketing";
 import Unsubscribe from "./pages/Unsubscribe";
 import InboxManager from "./pages/InboxManager";
@@ -240,7 +240,7 @@ const App = () => (
 
                     {/* Full-screen live chat */}
                     <Route path="/chat" element={<P><LiveChat /></P>} />
-                    <Route path="/vizzy" element={<P><VizzyLive /></P>} />
+                    
 
                     {/* Legacy redirects */}
                     <Route path="/inbox-manager" element={<P><InboxManager /></P>} />

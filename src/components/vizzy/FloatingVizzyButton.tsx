@@ -4,10 +4,8 @@ import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useAuth } from "@/lib/auth";
-import { getUserPrimaryAgent } from "@/lib/userAgentMap";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
-import assistantHelper from "@/assets/helpers/assistant-helper.png";
+import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { VizzyVoiceChat } from "./VizzyVoiceChat";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
@@ -20,10 +18,6 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     const isMobile = useIsMobile();
     const navigate = useNavigate();
     const location = useLocation();
-    const { user } = useAuth();
-    const agent = getUserPrimaryAgent(user?.email);
-    const avatarImg = agent?.image || assistantHelper;
-    const agentName = agent?.name || "Vizzy";
 
     const [showTooltip, setShowTooltip] = useState(false);
     const [showActions, setShowActions] = useState(isMobile);
@@ -120,15 +114,15 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
             ref={ref}
             onClick={handleAvatarClick}
             className="pointer-events-auto"
-            aria-label={`Open ${agentName} AI Assistant`}
+            aria-label="Open Vizzy AI Assistant"
           >
             <span className="absolute inset-0 rounded-full animate-ping bg-teal-400/30" />
             <span className="absolute -inset-1 rounded-full border-2 border-teal-400/60 animate-pulse" />
 
             <div className="relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-teal-400 shadow-lg shadow-teal-500/25 transition-transform group-hover:scale-110">
               <img
-                src={avatarImg}
-                alt={`${agentName} AI`}
+                src={vizzyAvatar}
+                alt="Vizzy AI"
                 className="w-full h-full object-cover pointer-events-none"
                 draggable={false}
               />

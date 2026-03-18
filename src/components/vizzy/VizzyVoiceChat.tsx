@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, Mic, Loader2, Volume2 } from "lucide-react";
 import { useVizzyVoiceEngine, VizzyVoiceTranscript } from "@/hooks/useVizzyVoiceEngine";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth";
-import { getUserPrimaryAgent } from "@/lib/userAgentMap";
-import assistantHelper from "@/assets/helpers/assistant-helper.png";
+import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface VizzyVoiceChatProps {
@@ -14,12 +12,8 @@ interface VizzyVoiceChatProps {
 export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const {
     state: voiceState, transcripts, isSpeaking, mode,
-    startSession, endSession,
+    startSession, endSession, contextLoading,
   } = useVizzyVoiceEngine();
-  const { user } = useAuth();
-  const agent = getUserPrimaryAgent(user?.email);
-  const avatarImg = agent?.image || assistantHelper;
-  const agentName = agent?.name || "Vizzy";
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const [connectingElapsed, setConnectingElapsed] = useState(0);
@@ -57,11 +51,11 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     voiceState === "connecting"
       ? connectingElapsed >= 10
         ? "Taking longer than expected..."
-        : "Connecting to " + agentName + "..."
+        : "Connecting to Vizzy..."
       : voiceState === "error"
       ? "Connection failed"
       : mode === "speaking" || isSpeaking
-      ? agentName + " is speaking..."
+      ? "Vizzy is speaking..."
       : voiceState === "connected"
       ? "Listening..."
       : "";
@@ -140,8 +134,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             }}
           >
             <img
-              src={avatarImg}
-              alt={agentName}
+               src={vizzyAvatar}
+               alt="Vizzy"
               className="w-full h-full object-cover"
               draggable={false}
             />
@@ -199,7 +193,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               )}
             >
               <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
-                {t.role === "user" ? "You" : agentName}
+                {t.role === "user" ? "You" : "Vizzy"}
               </span>
               {t.text}
             </motion.div>
