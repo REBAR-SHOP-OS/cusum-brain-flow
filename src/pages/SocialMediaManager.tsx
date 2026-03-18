@@ -160,17 +160,18 @@ export default function SocialMediaManager() {
   }, [filteredPosts, selectedPostIds]);
 
   const handleSelectDay = useCallback((dayPostIds: string[]) => {
+    const safeIds = dayPostIds.filter((id) => !isProtectedPost(id));
     setSelectedPostIds((prev) => {
-      const allSelected = dayPostIds.every((id) => prev.has(id));
+      const allSelected = safeIds.every((id) => prev.has(id));
       const next = new Set(prev);
       if (allSelected) {
-        for (const id of dayPostIds) next.delete(id);
+        for (const id of safeIds) next.delete(id);
       } else {
-        for (const id of dayPostIds) next.add(id);
+        for (const id of safeIds) next.add(id);
       }
       return next;
     });
-  }, []);
+  }, [isProtectedPost]);
 
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleting(true);
