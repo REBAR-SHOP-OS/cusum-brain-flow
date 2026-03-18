@@ -226,7 +226,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         preview: comm.preview || "",
         body: fullBody,
         time: receivedDate ? format(receivedDate, "h:mm a") : "",
-        fullDate: receivedDate ? format(receivedDate, "MMM d, h:mm a") : "",
+        fullDate: receivedDate ? format(receivedDate, "EEEE, MMM d, yyyy 'at' h:mm a") : "",
         label: category.label,
         labelColor: category.labelColor,
         isUnread: comm.status === "unread",
