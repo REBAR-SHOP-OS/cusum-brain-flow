@@ -647,7 +647,7 @@ export function buildAssumptions(
     `Coating: ${coatingType} (multiplier: ${config.coating_multipliers[coatingType] ?? 1}×).`,
     `Cage pricing at CAD $${config.cage_price_per_ton_cad}/ton — separate from fabrication brackets.`,
     `Shipping rate: CAD $${config.shipping_per_km_cad}/km per truckload (${config.default_truck_capacity_tons}t capacity).`,
-    req.scope.shop_drawings_required
+    req.scope?.shop_drawings_required
       ? `Shop drawings included at $${config.fabrication_pricing.shop_drawing_per_ton_cad}/ton.`
       : "Shop drawings NOT included.",
     "Prices are based on current pricing config and subject to confirmation.",
