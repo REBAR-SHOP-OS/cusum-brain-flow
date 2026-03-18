@@ -486,8 +486,8 @@ function EventCard({ event }: { event: CalendarEvent }) {
         <div className="space-y-3">
           {/* English section */}
           <div>
-            <p className="font-semibold text-foreground mb-1">{event.name}</p>
-            <p className="text-xs text-muted-foreground">{event.description}</p>
+           <p className="font-semibold text-foreground mb-1">{event.name}</p>
+            <p className="text-xs text-muted-foreground">{event.contentTheme}</p>
           </div>
 
           {/* Hashtags */}
@@ -501,9 +501,9 @@ function EventCard({ event }: { event: CalendarEvent }) {
           {persianInfo && (
             <>
               <div className="border-t border-border" />
-              <div dir="rtl" className="space-y-1">
-                <p className="font-semibold text-foreground text-right">{persianInfo.summary}</p>
-                <p className="text-xs text-muted-foreground text-right leading-relaxed">{persianInfo.details}</p>
+              <div dir="rtl" className="space-y-2">
+                <p className="font-semibold text-foreground text-right text-sm">📖 {persianInfo.summary}</p>
+                <p className="text-sm text-muted-foreground text-right leading-relaxed">{persianInfo.details}</p>
               </div>
             </>
           )}
