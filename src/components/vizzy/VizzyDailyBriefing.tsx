@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, MessageCircle, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { getUserPrimaryAgent } from "@/lib/userAgentMap";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import assistantHelper from "@/assets/helpers/assistant-helper.png";
 
@@ -56,16 +56,17 @@ export function VizzyDailyBriefing() {
 
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token || cancelled) return;
-
-        const res = await supabase.functions.invoke("vizzy-daily-brief", {});
+        const data = await invokeEdgeFunction<{ briefing: string }>(
+          "vizzy-daily-brief",
+          {},
+          { timeoutMs: 30000 }
+        );
         if (cancelled) return;
-        if (res.error || !res.data?.briefing) {
+        if (!data?.briefing) {
           setError(true);
         } else {
-          setBriefing(res.data.briefing);
-          cacheBriefing(res.data.briefing);
+          setBriefing(data.briefing);
+          cacheBriefing(data.briefing);
         }
       } catch {
         if (!cancelled) setError(true);

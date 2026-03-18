@@ -58,6 +58,9 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       }
     }, [location.pathname, navigate]);
 
+    // Hide on /vizzy full-screen route to avoid overlap
+    if (location.pathname === "/vizzy") return null;
+
     return createPortal(
       <>
         <AnimatePresence>

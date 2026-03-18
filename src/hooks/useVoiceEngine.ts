@@ -32,9 +32,12 @@ export interface VoiceEngineConfig {
   prefixPaddingMs?: number;
   /** Connection timeout in ms (default: 15000) */
   connectionTimeoutMs?: number;
+  /** Max session duration in ms (default: 1800000 = 30 minutes) */
+  maxSessionDurationMs?: number;
 }
 
 const OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime";
+const DEFAULT_MAX_SESSION_MS = 30 * 60 * 1000; // 30 minutes
 
 export function useVoiceEngine(config: VoiceEngineConfig) {
   const [state, setState] = useState<VoiceEngineState>("idle");
@@ -44,6 +47,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
 
   const idCounter = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -58,8 +62,16 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     }
   };
 
+  const clearSessionTimer = () => {
+    if (sessionTimerRef.current) {
+      clearTimeout(sessionTimerRef.current);
+      sessionTimerRef.current = null;
+    }
+  };
+
   const cleanup = useCallback(() => {
     clearTimeout_();
+    clearSessionTimer();
     if (dcRef.current) {
       try { dcRef.current.close(); } catch {}
       dcRef.current = null;
@@ -139,6 +151,13 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       console.warn("Failed to parse data channel message:", e);
     }
   }, []);
+
+  const endSession = useCallback(async () => {
+    cleanup();
+    setState("idle");
+    setMode(null);
+    setIsSpeaking(false);
+  }, [cleanup]);
 
   const startSession = useCallback(async () => {
     const cfg = configRef.current;
@@ -224,10 +243,19 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       const answerSdp = await sdpResponse.text();
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
+      // 10. Session duration cap — auto-end after max duration
+      const maxDuration = cfg.maxSessionDurationMs ?? DEFAULT_MAX_SESSION_MS;
+      sessionTimerRef.current = setTimeout(() => {
+        console.warn(`Voice session reached max duration (${maxDuration / 1000}s), auto-ending`);
+        toast.info("Voice session ended — maximum duration reached.");
+        endSession();
+      }, maxDuration);
+
       // Connection state monitoring
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
           clearTimeout_();
+          clearSessionTimer();
           setState("idle");
           setMode(null);
           setIsSpeaking(false);
@@ -246,14 +274,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         toast.error("Could not connect. Try again.");
       }
     }
-  }, [cleanup, handleDataChannelMessage]);
-
-  const endSession = useCallback(async () => {
-    cleanup();
-    setState("idle");
-    setMode(null);
-    setIsSpeaking(false);
-  }, [cleanup]);
+  }, [cleanup, handleDataChannelMessage, endSession]);
 
   const clearTranscripts = useCallback(() => {
     setTranscripts([]);
