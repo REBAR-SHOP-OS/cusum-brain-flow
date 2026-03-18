@@ -244,19 +244,30 @@ export default function EmpireBuilder() {
     let sessionId = activeSessionId;
     if (!sessionId) { sessionId = await createSession(content, config.name); setActiveSessionId(sessionId); }
     if (sessionId) addMessage(sessionId, "user", content);
-    try {
-      const history: AgentChatMessage[] = messages.map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), content: m.content }));
-      const response = await sendAgentMessage(config.agentType, fullContent, history, undefined, attachedFiles);
-      let replyContent = response.reply;
-      if (response.createdNotifications?.length) {
-        const notifSummary = response.createdNotifications.map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`).join("\n");
-        replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
-      }
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "agent", content: replyContent, agent: config.agentType as any, timestamp: new Date() }]);
-      if (sessionId) addMessage(sessionId, "agent", response.reply, config.agentType);
-    } catch (error) {
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "agent", content: `Sorry, I encountered an error. ${error instanceof Error ? error.message : ""}`, agent: config.agentType as any, timestamp: new Date() }]);
-    } finally { setIsLoading(false); }
+
+    const history: AgentChatMessage[] = messages.map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), content: m.content }));
+
+    if (sessionId) {
+      backgroundAgentService.subscribe(sessionId, (response) => {
+        let replyContent = response.reply;
+        if (response.createdNotifications?.length) {
+          const notifSummary = response.createdNotifications.map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`).join("\n");
+          replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
+        }
+        setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "agent", content: replyContent, agent: config.agentType as any, timestamp: new Date() }]);
+        setIsLoading(false);
+      });
+
+      backgroundAgentService.enqueue(
+        sessionId,
+        config.agentType as any,
+        config.name,
+        fullContent,
+        history,
+        undefined,
+        attachedFiles.length > 0 ? attachedFiles : undefined,
+      );
+    }
   }, [messages, isLoading, activeSessionId, createSession, addMessage, pendingFiles]);
 
   const handleSubmit = () => { if (value.trim() || pendingFiles.length > 0) handleSend(value.trim() || "Analyze these files"); };
