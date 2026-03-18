@@ -1,5 +1,13 @@
 let container: HTMLElement | null = null;
 
+// Register EARLY on document capture phase — must fire before Radix DismissableLayer
+document.addEventListener("pointerdown", (e) => {
+  const target = e.target as HTMLElement;
+  if (target?.closest?.("[data-feedback-btn]")) {
+    e.stopImmediatePropagation();
+  }
+}, true);
+
 export function getFloatingPortalContainer(): HTMLElement {
   if (container && document.body.contains(container)) {
     // Ensure it's always the last child
