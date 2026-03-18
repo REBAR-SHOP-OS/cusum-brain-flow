@@ -17,22 +17,60 @@ export async function buildFullVizzyContext(
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
+  // --- Cached queries (slow-changing data) ---
+  const { cachedQuery } = await import("./cache.ts");
+
+  const [machines, totalCustomers, stockSummary, profiles, knowledge] = await Promise.all([
+    cachedQuery("vizzy:machines", 5 * 60_000, async () => {
+      const { data } = await supabase
+        .from("machines")
+        .select("id, name, status, type, current_operator_profile_id")
+        .limit(20);
+      return data;
+    }),
+    cachedQuery("vizzy:customerCount", 10 * 60_000, async () => {
+      const { count } = await supabase
+        .from("customers")
+        .select("*", { count: "exact", head: true });
+      return count;
+    }),
+    cachedQuery("vizzy:stock", 2 * 60_000, async () => {
+      const { data } = await supabase
+        .from("inventory_lots")
+        .select("bar_code, qty_on_hand, location")
+        .gt("qty_on_hand", 0)
+        .limit(15);
+      return data;
+    }),
+    cachedQuery("vizzy:profiles", 5 * 60_000, async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, user_id, email")
+        .not("full_name", "is", null);
+      return data;
+    }),
+    cachedQuery("vizzy:knowledge", 10 * 60_000, async () => {
+      const { data } = await supabase
+        .from("knowledge")
+        .select("title, category, content")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      return data;
+    }),
+  ]);
+
+  // --- Uncached queries (realtime data) ---
   const [
     { count: activeOrders },
-    { data: machines },
     { data: recentEvents },
     { data: pendingSuggestions },
-    { count: totalCustomers },
-    { data: stockSummary },
     { data: cutPlans },
     { data: cutItems },
     { data: leads },
     { data: deliveries },
-    { data: profiles },
     { data: accountingInv },
     { data: accountingBill },
     { data: communications },
-    { data: knowledge },
     { data: agentSessions },
     { data: timeClockEntries },
     { data: memories },
@@ -41,10 +79,6 @@ export async function buildFullVizzyContext(
       .from("work_orders")
       .select("*", { count: "exact", head: true })
       .in("status", ["pending", "in_progress"]),
-    supabase
-      .from("machines")
-      .select("id, name, status, type, current_operator_profile_id")
-      .limit(20),
     supabase
       .from("activity_events")
       .select("event_type, entity_type, description, created_at")
@@ -56,14 +90,6 @@ export async function buildFullVizzyContext(
       .eq("status", "pending")
       .order("priority", { ascending: false })
       .limit(5),
-    supabase
-      .from("customers")
-      .select("*", { count: "exact", head: true }),
-    supabase
-      .from("inventory_lots")
-      .select("bar_code, qty_on_hand, location")
-      .gt("qty_on_hand", 0)
-      .limit(15),
     supabase
       .from("cut_plans")
       .select("id, name, status")
@@ -85,10 +111,6 @@ export async function buildFullVizzyContext(
       .gte("scheduled_date", today)
       .lte("scheduled_date", today)
       .limit(50),
-    supabase
-      .from("profiles")
-      .select("id, full_name, user_id, email")
-      .not("full_name", "is", null),
     includeFinancials
       ? supabase
           .from("accounting_mirror")
@@ -111,12 +133,6 @@ export async function buildFullVizzyContext(
       .eq("direction", "inbound")
       .order("received_at", { ascending: false })
       .limit(30),
-    // Limit knowledge to 50 entries for performance
-    supabase
-      .from("knowledge")
-      .select("title, category, content")
-      .order("created_at", { ascending: false })
-      .limit(50),
     supabase
       .from("chat_sessions")
       .select("id, title, agent_name, user_id, created_at")
