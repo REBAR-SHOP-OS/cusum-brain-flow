@@ -79,6 +79,8 @@ export async function buildFullVizzyContext(
     { data: agentActions },
     { data: machineOps },
     { data: employeeEvents },
+    { data: customerDirectory },
+    { data: recentInvoiceDetails },
   ] = await Promise.all([
     supabase
       .from("work_orders")
@@ -188,6 +190,21 @@ export async function buildFullVizzyContext(
       .not("actor_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(500),
+    // Customer directory — top 50 active customers by balance
+    supabase
+      .from("accounting_mirror_customers")
+      .select("display_name, balance, open_balance, total_revenue, qb_customer_id")
+      .order("total_revenue", { ascending: false })
+      .limit(50),
+    // Recent invoices for transaction summary
+    includeFinancials
+      ? supabase
+          .from("accounting_mirror")
+          .select("balance, entity_type, data, last_synced_at")
+          .eq("entity_type", "Invoice")
+          .order("last_synced_at", { ascending: false })
+          .limit(30)
+      : Promise.resolve({ data: null }),
   ]);
 
   // Compute financials
@@ -494,7 +511,20 @@ ${topOverdueVendors || "    None"}` : `📊 FINANCIALS
   Hot Leads (score ≥70):
 ${hotLeads || "    None"}
 
-👥 CUSTOMERS
+👥 CUSTOMER DIRECTORY (Top ${(customerDirectory || []).length} by Revenue)
+${(customerDirectory || []).map((c: any) => `  • ${c.display_name || "Unknown"}: Revenue ${fmt(c.total_revenue || 0)}, Open Balance ${fmt(c.open_balance || 0)}, Balance ${fmt(c.balance || 0)}`).join("\n") || "  No customer data"}
+
+💳 TRANSACTION SUMMARY (Recent ${(recentInvoiceDetails || []).length} Invoices)
+${(recentInvoiceDetails || []).map((inv: any) => {
+    const custName = inv.data?.CustomerRef?.name || "Unknown";
+    const invNum = inv.data?.DocNumber || "N/A";
+    const dueDate = inv.data?.DueDate || "N/A";
+    const total = inv.data?.TotalAmt || inv.balance || 0;
+    const status = inv.balance > 0 ? "Open" : "Paid";
+    return `  • INV#${invNum} — ${custName}: ${fmt(total)} (Due: ${dueDate}, ${status}, Bal: ${fmt(inv.balance || 0)})`;
+  }).join("\n") || "  No invoice data"}
+
+👥 CUSTOMERS TOTAL
   Total Active: ${totalCustomers ?? 0}
 
 🚚 DELIVERIES TODAY
