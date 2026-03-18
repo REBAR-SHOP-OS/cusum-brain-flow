@@ -693,19 +693,23 @@ export function generateQuote(
 
   // 5. Cages
   for (const cage of scope.cages) {
-    const cageResult = computeCagePrice(cage, config, scrapPct);
+    const cageResult = computeCagePrice(cage, config, scrapPct, rebarSizes);
     cageWeightKg += cageResult.weight_kg;
+    const perCageKg = cage.quantity > 0 ? round3(cageResult.weight_kg / cage.quantity / (1 + scrapPct / 100)) : 0;
+    const weightLabel = cageResult.auto_estimated
+      ? `~${perCageKg} kg/cage (auto-estimated)`
+      : `${cage.total_cage_weight_kg} kg/cage`;
     lineItems.push({
       category: "Cages",
-      description: `${cage.cage_type} (${cage.total_cage_weight_kg} kg/cage × ${cage.quantity})`,
+      description: `${cage.cage_type} (${weightLabel} × ${cage.quantity})`,
       bar_size: "—",
       qty: cage.quantity,
-      length_or_weight: `${cage.total_cage_weight_kg} kg`,
+      length_or_weight: `${perCageKg} kg`,
       weight_kg: cageResult.weight_kg,
       tonnage: cageResult.tonnage,
-      unit_price_cad: round2(cageResult.cost / cage.quantity),
+      unit_price_cad: cage.quantity > 0 ? round2(cageResult.cost / cage.quantity) : 0,
       extended_price_cad: cageResult.cost,
-      notes: `$${config.cage_price_per_ton_cad}/ton + ${scrapPct}% scrap`,
+      notes: `$${config.cage_price_per_ton_cad}/ton + ${scrapPct}% scrap${cageResult.auto_estimated ? " (weight auto-estimated from structural details)" : ""}`,
     });
   }
 
