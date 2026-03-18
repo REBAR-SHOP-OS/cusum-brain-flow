@@ -88,6 +88,7 @@ const helpers: Helper[] = [
   { id: "seo", name: "Seomi", role: "SEO & Search", image: seoHelper, gradient: "from-lime-500 to-green-600", route: "/agent/seo" },
   { id: "growth", name: "Gigi", role: "Personal Development", image: growthHelper, gradient: "from-green-400 to-emerald-600", route: "/agent/growth" },
   { id: "purchasing", name: "Kala", role: "خرید و تدارکات", image: accountingHelper, gradient: "from-rose-500 to-red-600", route: "/agent/purchasing" },
+  { id: "azin", name: "AZIN", role: "مترجم همزمان", image: azinHelper, gradient: "from-indigo-500 to-violet-600", route: "/azin-interpreter" },
 ];
 
 export default function Home() {
