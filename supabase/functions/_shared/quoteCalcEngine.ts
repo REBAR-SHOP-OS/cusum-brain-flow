@@ -248,6 +248,23 @@ export function applyScrap(weightKg: number, scrapPct: number): number {
   return weightKg * (1 + scrapPct / 100);
 }
 
+// ─── Scope Normalizer ───
+
+function normalizeScope(scope: any): EstimateRequest["scope"] {
+  return {
+    straight_rebar_lines: Array.isArray(scope?.straight_rebar_lines) ? scope.straight_rebar_lines : [],
+    fabricated_rebar_lines: Array.isArray(scope?.fabricated_rebar_lines) ? scope.fabricated_rebar_lines : [],
+    dowels: Array.isArray(scope?.dowels) ? scope.dowels : [],
+    ties_circular: Array.isArray(scope?.ties_circular) ? scope.ties_circular : [],
+    cages: Array.isArray(scope?.cages) ? scope.cages : [],
+    mesh: Array.isArray(scope?.mesh) ? scope.mesh : [],
+    coating_type: scope?.coating_type || "black",
+    shop_drawings_required: scope?.shop_drawings_required || false,
+    scrap_percent_override: scope?.scrap_percent_override ?? null,
+    tax_rate: scope?.tax_rate ?? 13,
+  };
+}
+
 // ─── Validation ───
 
 export function validateEstimateRequest(
@@ -256,8 +273,11 @@ export function validateEstimateRequest(
 ): string[] {
   const questions: string[] = [];
 
+  // Defensive: normalize scope arrays
+  const scope = normalizeScope(req.scope);
+
   // Check straight bars exist in config
-  for (const line of req.scope.straight_rebar_lines) {
+  for (const line of scope.straight_rebar_lines) {
     if (line.quantity <= 0) {
       questions.push(`Straight bar ${line.line_id}: quantity is 0 or missing.`);
     }
@@ -272,7 +292,7 @@ export function validateEstimateRequest(
   }
 
   // Check fabricated bars
-  for (const line of req.scope.fabricated_rebar_lines) {
+  for (const line of scope.fabricated_rebar_lines) {
     if (line.quantity <= 0) {
       questions.push(`Fabricated bar ${line.line_id}: quantity is 0 or missing.`);
     }
@@ -282,7 +302,7 @@ export function validateEstimateRequest(
   }
 
   // Check dowels
-  for (const line of req.scope.dowels) {
+  for (const line of scope.dowels) {
     if (line.quantity <= 0) {
       questions.push(`Dowel ${line.line_id}: quantity is 0 or missing.`);
     }
@@ -297,7 +317,7 @@ export function validateEstimateRequest(
   }
 
   // Check ties
-  for (const line of req.scope.ties_circular) {
+  for (const line of scope.ties_circular) {
     if (line.quantity <= 0) {
       questions.push(`Tie ${line.line_id}: quantity is 0 or missing.`);
     }
@@ -312,7 +332,7 @@ export function validateEstimateRequest(
   }
 
   // Check cages
-  for (const cage of req.scope.cages) {
+  for (const cage of scope.cages) {
     if (cage.total_cage_weight_kg <= 0) {
       questions.push(`Cage ${cage.line_id}: total_cage_weight_kg is 0 or missing.`);
     }
@@ -336,8 +356,11 @@ export function generateQuote(
   config: PricingConfig,
   rebarSizes: RebarSizeRow[]
 ): QuoteResult {
-  const scrapPct = req.scope.scrap_percent_override ?? config.default_scrap_percent;
-  const coatingType = req.scope.coating_type || "black";
+  // Defensive: normalize scope arrays to prevent "not iterable" crashes
+  const scope = normalizeScope(req.scope);
+
+  const scrapPct = scope.scrap_percent_override ?? config.default_scrap_percent;
+  const coatingType = scope.coating_type || "black";
   const coatingMult = config.coating_multipliers[coatingType] ?? 1;
 
   const lineItems: QuoteLineItem[] = [];
@@ -346,7 +369,7 @@ export function generateQuote(
   let cageWeightKg = 0;
 
   // 1. Straight bars
-  for (const line of req.scope.straight_rebar_lines) {
+  for (const line of scope.straight_rebar_lines) {
     const priceResult = computeStraightBarPrice(line, config);
     // Estimate weight for straight bars for shipping calc
     const sizeData = rebarSizes.find((r) => r.bar_code === line.bar_size);
@@ -377,7 +400,7 @@ export function generateQuote(
     found: boolean;
   }[] = [];
 
-  for (const line of req.scope.fabricated_rebar_lines) {
+  for (const line of scope.fabricated_rebar_lines) {
     const wResult = computeFabricatedWeight(line, rebarSizes);
     totalFabWeightKg += wResult.total_weight_kg;
     fabLineDetails.push({
@@ -415,7 +438,7 @@ export function generateQuote(
   }
 
   // 3. Dowels
-  for (const line of req.scope.dowels) {
+  for (const line of scope.dowels) {
     const match = config.dowels.find(
       (d) => d.type === line.type && d.size === line.size
     );
@@ -435,7 +458,7 @@ export function generateQuote(
   }
 
   // 4. Ties circular
-  for (const line of req.scope.ties_circular) {
+  for (const line of scope.ties_circular) {
     const match = config.ties_circular.find(
       (t) => t.type === line.type && t.diameter === line.diameter
     );
@@ -455,7 +478,7 @@ export function generateQuote(
   }
 
   // 5. Cages — always separate from fabrication tonnage
-  for (const cage of req.scope.cages) {
+  for (const cage of scope.cages) {
     const cageResult = computeCagePrice(cage, config, scrapPct);
     cageWeightKg += cageResult.weight_kg;
     lineItems.push({
@@ -473,7 +496,7 @@ export function generateQuote(
   }
 
   // 6. Mesh
-  for (const mesh of req.scope.mesh) {
+  for (const mesh of scope.mesh) {
     if (mesh.quantity > 0 && mesh.unit_price_cad) {
       lineItems.push({
         category: "Mesh",
@@ -492,7 +515,7 @@ export function generateQuote(
 
   // 7. Shop drawings
   const nonCageTonnage = round3((straightWeightKg + fabricatedWeightKg) / 1000);
-  if (req.scope.shop_drawings_required) {
+  if (scope.shop_drawings_required) {
     const sdCost = round2(
       nonCageTonnage * config.fabrication_pricing.shop_drawing_per_ton_cad
     );
@@ -540,7 +563,7 @@ export function generateQuote(
 
   // 9. Totals
   const subtotal = lineItems.reduce((s, li) => s + li.extended_price_cad, 0);
-  const tax = round2(subtotal * (req.scope.tax_rate || 0));
+  const tax = round2(subtotal * (scope.tax_rate || 0));
   const grandTotal = round2(subtotal + tax);
 
   // 10. Spreadsheet table
@@ -624,15 +647,15 @@ export function buildAssumptions(
     `Coating: ${coatingType} (multiplier: ${config.coating_multipliers[coatingType] ?? 1}×).`,
     `Cage pricing at CAD $${config.cage_price_per_ton_cad}/ton — separate from fabrication brackets.`,
     `Shipping rate: CAD $${config.shipping_per_km_cad}/km per truckload (${config.default_truck_capacity_tons}t capacity).`,
-    req.scope.shop_drawings_required
+    req.scope?.shop_drawings_required
       ? `Shop drawings included at $${config.fabrication_pricing.shop_drawing_per_ton_cad}/ton.`
       : "Shop drawings NOT included.",
     "Prices are based on current pricing config and subject to confirmation.",
     "This quote does not include engineering, structural design, or site labour.",
     "All weights are calculated using CSA G30.18 standard bar masses.",
     "Mesh pricing is placeholder unless explicitly configured.",
-    req.scope.tax_rate > 0
-      ? `Tax rate: ${(req.scope.tax_rate * 100).toFixed(1)}%.`
+    (req.scope?.tax_rate ?? 0) > 0
+      ? `Tax rate: ${((req.scope?.tax_rate ?? 0) * 100).toFixed(1)}%.`
       : "No tax applied.",
   ];
 }
@@ -662,11 +685,11 @@ export function generateExplanation(
   if (fabItems.length > 0) {
     lines.push("### Fabricated Bars");
     lines.push(
-      `Total fabricated weight (after ${req.scope.scrap_percent_override ?? config.default_scrap_percent}% scrap): ${result.weights_summary.fabricated_kg} kg = ${round3(result.weights_summary.fabricated_kg / 1000)} tons.`
+      `Total fabricated weight (after ${req.scope?.scrap_percent_override ?? config.default_scrap_percent}% scrap): ${result.weights_summary.fabricated_kg} kg = ${round3(result.weights_summary.fabricated_kg / 1000)} tons.`
     );
     lines.push(`Tonnage bracket selected: ${result.pricing_method_summary.tonnage_bracket_used}`);
     if (result.pricing_method_summary.coating_multiplier > 1) {
-      lines.push(`Coating multiplier (${req.scope.coating_type}): ${result.pricing_method_summary.coating_multiplier}×`);
+      lines.push(`Coating multiplier (${req.scope?.coating_type || "black"}): ${result.pricing_method_summary.coating_multiplier}×`);
     }
     lines.push("");
   }
