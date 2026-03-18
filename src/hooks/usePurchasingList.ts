@@ -186,7 +186,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
   // Confirm list: set due_date on all items without one, then save a snapshot
   const confirmList = useCallback(async (date: string) => {
     if (!user) return;
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
     // 1. Set due_date on items without one
