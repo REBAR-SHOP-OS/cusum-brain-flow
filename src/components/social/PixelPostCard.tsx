@@ -30,9 +30,11 @@ interface PixelPostCardProps {
 }
 
 const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
-  ({ post, onView, onApprove, onRegenerate }, ref) => {
+  ({ post, onView, onApprove, onRegenerate, onEditImage }, ref) => {
     const [approved, setApproved] = useState(false);
     const [imageZoomOpen, setImageZoomOpen] = useState(false);
+    const [showImageEdit, setShowImageEdit] = useState(false);
+    const [currentImageUrl, setCurrentImageUrl] = useState(post.imageUrl);
 
     const handleApprove = () => {
       if (!approved) {
