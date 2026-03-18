@@ -142,11 +142,11 @@ export function DockChatBar() {
         data-feedback-btn="true"
         className="fixed z-[9999] pointer-events-auto cursor-grab active:cursor-grabbing select-none"
         style={{ left: pos.x, top: pos.y, touchAction: "none" }}
-        onPointerDown={(e) => { e.nativeEvent.stopImmediatePropagation(); handlers.onPointerDown(e); }}
+        onPointerDown={(e) => { e.nativeEvent.stopImmediatePropagation(); e.stopPropagation(); handlers.onPointerDown(e); }}
         onPointerMove={handlers.onPointerMove}
         onPointerUp={handlePointerUp}
       >
-        <Popover open={launcherOpen}>
+        <Popover open={launcherOpen} modal={false}>
           <PopoverAnchor asChild>
             <button
               className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:scale-110 transition-transform ring-2 ring-primary/30 pointer-events-none"
@@ -155,7 +155,7 @@ export function DockChatBar() {
               <MessageSquare className="w-6 h-6 pointer-events-none" />
             </button>
           </PopoverAnchor>
-          <PopoverContent side="top" align="center" className="w-[300px] p-0 mb-2" onPointerDownOutside={() => setLauncherOpen(false)} onEscapeKeyDown={() => setLauncherOpen(false)}>
+          <PopoverContent side="top" align="center" className="w-[300px] p-0 mb-2" onPointerDownOutside={(e) => { if ((e.target as HTMLElement)?.closest?.("[data-feedback-btn]")) { e.preventDefault(); return; } setLauncherOpen(false); }} onEscapeKeyDown={() => setLauncherOpen(false)} onInteractOutside={(e) => { if ((e.target as HTMLElement)?.closest?.("[data-feedback-btn]")) { e.preventDefault(); return; } }}>
             <ScrollArea className="max-h-[400px]">
               {/* Team members - top for visibility */}
               <div className="px-2 pt-2 pb-2">
