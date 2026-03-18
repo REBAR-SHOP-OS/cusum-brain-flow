@@ -25,6 +25,7 @@ import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { schedulePost } from "@/lib/schedulePost";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
@@ -226,7 +227,6 @@ export default function SocialMediaManager() {
   const handleSchedule = async (post: SocialPost) => {
     if (post.platform === "unassigned") {
       // Use schedulePost with delete_original to clone into platform-specific posts and remove unassigned card
-      const { schedulePost } = await import("@/lib/schedulePost");
       const result = await schedulePost({
         post_id: post.id,
         scheduled_date: post.scheduled_date || new Date().toISOString(),
