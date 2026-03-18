@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { GripVertical, Loader2, Minus, Search, Settings2, Sparkles, TrendingDown, TrendingUp, LayoutDashboard } from "lucide-react";
+import { GripVertical, Loader2, Minus, Search, Settings2, Sparkles, TrendingDown, TrendingUp, LayoutDashboard, Upload } from "lucide-react";
 import { useSemrushSync } from "@/hooks/useSemrushApi";
 import { SeoKeywordDetailsDialog } from "@/components/seo/SeoKeywordDetailsDialog";
+import { toast } from "sonner";
+import { read, utils } from "@e965/xlsx";
 
 const statusColors: Record<string, string> = {
   winner: "bg-success/10 text-success",
@@ -171,7 +173,52 @@ export function SeoKeywords() {
   const [showGroupTags, setShowGroupTags] = useState(() => loadLocalStorage("seo-keyword-show-group-tags", true));
   const [showMiniTrends, setShowMiniTrends] = useState(() => loadLocalStorage("seo-keyword-show-mini-trends", true));
   const { researchKeyword } = useSemrushSync();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !domain?.id) return;
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = read(buffer, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = utils.sheet_to_json(sheet);
+
+      const keywords = rows.map((row: any) => ({
+        keyword: row["Keyword"] || "",
+        position: row["Position"] ?? null,
+        change: row["Change Δ"] ?? row["Change Delta"] ?? null,
+        change_status: row["Change status"] || "",
+        traffic: row["Est. traffic"] ?? null,
+        traffic_change: row["Est. traffic: Change Δ"] ?? null,
+        volume: row["Volume"] ?? null,
+        features: row["Features"] || "",
+        top_page: row["Top ranking page"] || "",
+        updated: row["Updated"] || "",
+      })).filter((kw: any) => kw.keyword);
+
+      toast.info(`Importing ${keywords.length} keywords from Excel…`, { duration: 8000 });
+
+      const { data, error } = await supabase.functions.invoke("wincher-import", {
+        body: { domain_id: domain.id, keywords },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(`Imported ${data.upserted} keywords successfully!`);
+      queryClient.invalidateQueries({ queryKey: ["seo-ai-keywords"] });
+      queryClient.invalidateQueries({ queryKey: ["seo-domain"] });
+    } catch (err: any) {
+      toast.error(`Import failed: ${err.message}`);
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("seo-keyword-column-order", JSON.stringify(columnOrder));
@@ -390,6 +437,11 @@ export function SeoKeywords() {
               <Button size="sm" variant="outline" onClick={() => setDashboardOpen(true)} disabled={!domain?.wincher_data_json}>
                 <LayoutDashboard className="mr-1 h-4 w-4" />
                 Wincher dashboard
+              </Button>
+              <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleExcelImport} />
+              <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing || !domain?.id}>
+                {importing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}
+                Import Excel
               </Button>
             </div>
           </CardContent>

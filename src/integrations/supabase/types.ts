@@ -12276,6 +12276,7 @@ export type Database = {
           top_page: string | null
           topic_cluster: string | null
           trend_score: number | null
+          volume: number | null
           wincher_best_position: number | null
           wincher_cpc: number | null
           wincher_difficulty: number | null
@@ -12310,6 +12311,7 @@ export type Database = {
           top_page?: string | null
           topic_cluster?: string | null
           trend_score?: number | null
+          volume?: number | null
           wincher_best_position?: number | null
           wincher_cpc?: number | null
           wincher_difficulty?: number | null
@@ -12344,6 +12346,7 @@ export type Database = {
           top_page?: string | null
           topic_cluster?: string | null
           trend_score?: number | null
+          volume?: number | null
           wincher_best_position?: number | null
           wincher_cpc?: number | null
           wincher_difficulty?: number | null
