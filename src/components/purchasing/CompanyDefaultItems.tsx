@@ -152,16 +152,20 @@ function DefaultRow({
       )}>
         {def.title}
       </span>
-      {dbMatch && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          onClick={() => onDeleteItem?.(dbMatch.id)}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
-      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+        onClick={() => {
+          if (dbMatch) {
+            onToggleRejected?.(dbMatch.id, false);
+          } else {
+            onMarkRejected(def.title, def.category);
+          }
+        }}
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </Button>
     </div>
   );
 }
