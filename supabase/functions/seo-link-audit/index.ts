@@ -183,17 +183,13 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
     }
   }
 
-  console.log(`Collected ${pending.length} link records, checking status concurrently...`);
+  console.log(`Collected ${pending.length} link records, ${urlsToCheckSet.size} unique external URLs to check`);
 
   // Deduplicate URLs to check
-  const urlsToCheck = new Set<string>();
-  for (const p of pending) {
-    if (p.needsCheck && p.record.link_href) urlsToCheck.add(p.record.link_href);
-  }
+  const uniqueUrls = Array.from(urlsToCheckSet);
 
-  // Check URLs in concurrent batches of 15
-  const BATCH_SIZE = 15;
-  const uniqueUrls = Array.from(urlsToCheck);
+  // Check URLs in concurrent batches of 30
+  const BATCH_SIZE = 30;
   for (let i = 0; i < uniqueUrls.length; i += BATCH_SIZE) {
     const batch = uniqueUrls.slice(i, i + BATCH_SIZE);
     const checks = await Promise.all(batch.map((url) => checkLink(url, siteUrl)));
@@ -206,6 +202,7 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
         checkedUrls.set(batch[j], { status: "ok", suggestion: null });
       }
     }
+    console.log(`Checked batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(uniqueUrls.length / BATCH_SIZE)}`);
   }
 
   // Apply check results to records
