@@ -848,3 +848,82 @@ export default function AgentWorkspace() {
     </div>
   );
 }
+
+/* ── Event Calendar sub-component for Pixel recipe view ── */
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const REGION_BADGE: Record<string, { label: string; cls: string }> = {
+  CA: { label: "🇨🇦 Canada", cls: "bg-red-500/10 text-red-600 border-red-200" },
+  global: { label: "🌍 Global", cls: "bg-blue-500/10 text-blue-600 border-blue-200" },
+  industry: { label: "🏗️ Industry", cls: "bg-amber-500/10 text-amber-600 border-amber-200" },
+};
+
+function EventCalendarSection({ onGenerate }: { onGenerate: (event: CalendarEvent) => void }) {
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const events = useMemo(() => getEventsForMonth(selectedMonth + 1), [selectedMonth]);
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-2 mb-3">
+        <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+        <h3 className="font-semibold text-sm text-foreground">Event Calendar</h3>
+        <span className="text-xs text-muted-foreground ml-auto">Generate content for upcoming events</span>
+      </div>
+
+      {/* Month selector */}
+      <div className="flex gap-1 mb-4 flex-wrap">
+        {MONTHS.map((m, i) => (
+          <button
+            key={m}
+            onClick={() => setSelectedMonth(i)}
+            className={cn(
+              "px-2.5 py-1 text-xs rounded-md font-medium transition-colors",
+              selectedMonth === i
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+
+      {/* Events list */}
+      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+        {events.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">No events in {MONTHS[selectedMonth]}</p>
+        ) : (
+          events.map((event, i) => {
+            const badge = REGION_BADGE[event.region];
+            return (
+              <div key={`${event.month}-${event.day}-${i}`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                <div className="w-10 h-10 rounded-lg bg-muted flex flex-col items-center justify-center shrink-0">
+                  <span className="text-xs font-bold leading-none">{event.day}</span>
+                  <span className="text-[10px] text-muted-foreground">{MONTHS[event.month - 1]}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-sm font-medium truncate">{event.name}</p>
+                    {badge && (
+                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded border shrink-0", badge.cls)}>
+                        {badge.label}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-1">{event.contentTheme}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs shrink-0"
+                  onClick={() => onGenerate(event)}
+                >
+                  Generate
+                </Button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
