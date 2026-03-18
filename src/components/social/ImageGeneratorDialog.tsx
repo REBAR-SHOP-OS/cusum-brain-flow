@@ -47,7 +47,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
   const [error, setError] = useState<string | null>(null);
 
   const { brandKit, saveBrandKit } = useBrandKit();
-  const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
+  const currentModelLabel = selectedModel === CHATGPT_MODEL ? "ChatGPT Image" : "Gemini Pro Image";
 
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [uploadingLogo, setUploadingLogo] = useState(false);
