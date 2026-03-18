@@ -29,6 +29,7 @@ import { schedulePost } from "@/lib/schedulePost";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
+import { ApprovalsPanel } from "@/components/social/ApprovalsPanel";
 
 const platformFilters = [
   { id: "all", label: "All" },
