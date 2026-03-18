@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Mic, MicOff, Loader2, ArrowLeft } from "lucide-react";
 import { useVizzyVoiceEngine, VizzyVoiceTranscript } from "@/hooks/useVizzyVoiceEngine";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import assistantHelper from "@/assets/helpers/assistant-helper.png";
 
 /**
