@@ -114,15 +114,15 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
             ref={ref}
             onClick={handleAvatarClick}
             className="pointer-events-auto"
-            aria-label={`Open ${agentName} AI Assistant`}
+            aria-label="Open Vizzy AI Assistant"
           >
             <span className="absolute inset-0 rounded-full animate-ping bg-teal-400/30" />
             <span className="absolute -inset-1 rounded-full border-2 border-teal-400/60 animate-pulse" />
 
             <div className="relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-teal-400 shadow-lg shadow-teal-500/25 transition-transform group-hover:scale-110">
               <img
-                src={avatarImg}
-                alt={`${agentName} AI`}
+                src={vizzyAvatar}
+                alt="Vizzy AI"
                 className="w-full h-full object-cover pointer-events-none"
                 draggable={false}
               />
