@@ -28,6 +28,14 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { user } = useAuth();
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const { isSuperAdmin } = useSuperAdmin();
+  const location = useLocation();
+
+  // Log navigation for all authenticated users
+  useEffect(() => {
+    if (user) {
+      logNavigation(location.pathname);
+    }
+  }, [location.pathname, user]);
 
   return (
     <RoleGuard>
