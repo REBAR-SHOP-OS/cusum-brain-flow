@@ -1,26 +1,124 @@
 import { format } from "date-fns";
-import { CheckCircle, XCircle, Clock, Package } from "lucide-react";
+import { CheckCircle, XCircle, Clock, Package, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { jsPDF } from "jspdf";
 import type { ConfirmedListRecord } from "@/hooks/usePurchasingDates";
 
 interface PurchasingConfirmedViewProps {
   record: ConfirmedListRecord;
 }
 
+type SnapshotItem = {
+  title: string;
+  category: string | null;
+  quantity: number;
+  status: "purchased" | "rejected" | "pending";
+  priority: string;
+};
+
+function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  const maxW = pw - margin * 2;
+  let y = margin;
+
+  // Header
+  doc.setFillColor(30, 30, 60);
+  doc.rect(0, 0, pw, 28, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(255, 255, 255);
+  doc.text("Purchasing — Confirmed List", margin, 12);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Due: ${record.due_date}    Confirmed: ${format(new Date(record.confirmed_at), "yyyy/MM/dd HH:mm")}`, margin, 22);
+  y = 36;
+
+  // Summary
+  const purchased = snapshot.filter(i => i.status === "purchased").length;
+  const rejected = snapshot.filter(i => i.status === "rejected").length;
+  const pending = snapshot.filter(i => i.status === "pending").length;
+
+  doc.setFontSize(10);
+  doc.setTextColor(34, 139, 34);
+  doc.text(`Purchased: ${purchased}`, margin, y);
+  doc.setTextColor(220, 53, 69);
+  doc.text(`Rejected: ${rejected}`, margin + 40, y);
+  doc.setTextColor(120, 120, 120);
+  doc.text(`Pending: ${pending}`, margin + 76, y);
+  y += 8;
+
+  // Separator
+  doc.setDrawColor(200, 200, 200);
+  doc.line(margin, y, pw - margin, y);
+  y += 6;
+
+  // Group by category
+  const categories = [...new Set(snapshot.map(i => i.category || "Other"))];
+
+  const checkPage = (needed = 8) => {
+    if (y + needed > ph - 20) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  for (const cat of categories) {
+    const items = snapshot.filter(i => (i.category || "Other") === cat);
+    checkPage(14);
+
+    // Category header
+    doc.setFillColor(240, 240, 245);
+    doc.rect(margin, y - 4, maxW, 7, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(30, 30, 80);
+    doc.text(cat, margin + 2, y);
+    y += 6;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+
+    for (const item of items) {
+      checkPage(6);
+
+      let icon = "○";
+      if (item.status === "purchased") {
+        doc.setTextColor(34, 139, 34);
+        icon = "✓";
+      } else if (item.status === "rejected") {
+        doc.setTextColor(220, 53, 69);
+        icon = "✗";
+      } else {
+        doc.setTextColor(120, 120, 120);
+      }
+
+      const qty = item.quantity > 1 ? ` x${item.quantity}` : "";
+      doc.text(`${icon}  ${item.title}${qty}`, margin + 4, y);
+      y += 5;
+    }
+    y += 3;
+  }
+
+  // Footer
+  const footerY = ph - 10;
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text("Rebar.Shop Inc — Generated " + format(new Date(), "yyyy/MM/dd HH:mm"), margin, footerY);
+
+  doc.save(`purchasing-list-${record.due_date}.pdf`);
+}
+
 export function PurchasingConfirmedView({ record }: PurchasingConfirmedViewProps) {
-  const snapshot = (record.snapshot || []) as Array<{
-    title: string;
-    category: string | null;
-    quantity: number;
-    status: "purchased" | "rejected" | "pending";
-    priority: string;
-  }>;
+  const snapshot = (record.snapshot || []) as SnapshotItem[];
 
   const purchased = snapshot.filter((i) => i.status === "purchased");
   const rejected = snapshot.filter((i) => i.status === "rejected");
   const pending = snapshot.filter((i) => i.status === "pending");
 
-  // Group by category
   const categories = [...new Set(snapshot.map((i) => i.category || "Other"))];
 
   return (
@@ -29,7 +127,15 @@ export function PurchasingConfirmedView({ record }: PurchasingConfirmedViewProps
       <div className="p-4 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2 mb-1">
           <Package className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-bold">Confirmed List</h2>
+          <h2 className="text-lg font-bold flex-1">Confirmed List</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => generatePdf(record, snapshot)}
+            title="Download PDF"
+          >
+            <Download className="w-4 h-4" />
+          </Button>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>📅 {record.due_date}</span>
