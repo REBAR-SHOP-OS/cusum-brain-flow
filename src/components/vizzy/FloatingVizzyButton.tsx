@@ -58,8 +58,6 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       }
     }, [location.pathname, navigate]);
 
-    if (!isSuperAdmin) return null;
-
     return createPortal(
       <>
         <AnimatePresence>

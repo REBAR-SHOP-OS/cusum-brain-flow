@@ -76,8 +76,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             {/* Mobile bottom nav */}
             <MobileNavV2 />
 
-            {/* Floating Vizzy avatar — always visible for super admin */}
-            {isSuperAdmin && <FloatingVizzyButton />}
+            {/* Floating Vizzy avatar — visible for all @rebar.shop employees */}
+            {isInternal && <FloatingVizzyButton />}
 
             {/* Screenshot Feedback button — internal @rebar.shop users only */}
             {isInternal && <ScreenshotFeedbackButton />}
