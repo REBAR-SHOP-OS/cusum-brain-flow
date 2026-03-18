@@ -182,10 +182,15 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     if (!(await refreshSessionIfNeeded())) return;
     const { error } = await supabase
       .from("purchasing_list_items")
-      .delete()
+      .update({
+        is_rejected: !currentValue,
+        is_purchased: false,
+        purchased_by: null,
+        purchased_at: null,
+      })
       .eq("id", itemId);
     if (error) {
-      toast.error(`Error removing item: ${error.message}`);
+      toast.error(`Error updating item: ${error.message}`);
       console.error(error);
     }
   }, [user, refreshSessionIfNeeded]);
