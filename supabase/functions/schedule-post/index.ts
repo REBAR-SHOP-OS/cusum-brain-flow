@@ -156,9 +156,9 @@ Deno.serve(async (req) => {
     console.log(`[schedule-post] PRIMARY updated:`, JSON.stringify(data));
 
     // Handle extra platform×page combos (clone post for each)
-    if (extra_combos && Array.isArray(extra_combos) && extra_combos.length > 0 && fullPost) {
+    if (sanitizedCombos.length > 0 && fullPost) {
       const scheduledDay = scheduled_date.substring(0, 10);
-      for (const combo of extra_combos) {
+      for (const combo of sanitizedCombos) {
         const { data: existing } = await serviceClient
           .from("social_posts")
           .select("id")
