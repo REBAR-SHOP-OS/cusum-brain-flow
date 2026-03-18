@@ -94,18 +94,11 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
 
   const allContent = [...pages, ...posts, ...products];
   const siteUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "";
-  console.log(`Crawling ${allContent.length} pages/posts/products, siteUrl: ${siteUrl}`);
+  console.log(`Crawling ${allContent.length} pages/posts/products`);
 
   const results: any[] = [];
   let siteHostname = "";
   try { siteHostname = siteUrl ? new URL(siteUrl).hostname : ""; } catch { /* ignore */ }
-  try { siteHostname = siteUrl ? new URL(siteUrl).hostname : ""; } catch { /* ignore */ }
-
-  // Collect all link records first (no network calls yet)
-  type PendingRecord = { record: any; needsCheck: boolean };
-  const pending: PendingRecord[] = [];
-  const checkedUrls = new Map<string, { status: string; suggestion: string | null }>();
-  const urlsToCheckSet = new Set<string>();
 
   for (const item of allContent) {
     const pageUrl = item.link || `${siteUrl}/?p=${item.id}`;
@@ -132,15 +125,12 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
       if (!link.text || link.text.trim() === "") {
         record.status = "missing_anchor";
         record.suggestion = "Add descriptive anchor text for SEO";
-        pending.push({ record, needsCheck: false });
-      } else if (isInternal) {
-        // Skip HEAD check for internal links — they're almost always valid
-        record.status = "ok";
-        pending.push({ record, needsCheck: false });
       } else {
-        urlsToCheckSet.add(link.href);
-        pending.push({ record, needsCheck: true });
+        // Mark as "ok" initially; broken link detection happens in a separate check phase
+        record.status = "ok";
       }
+
+      results.push(record);
     }
 
     // RSIC opportunity detection
@@ -154,61 +144,24 @@ async function handleCrawl(sb: any, domainId: string, companyId: string) {
 
       const matched = resource.keywords.some((kw) => textContent.includes(kw));
       if (matched) {
-        pending.push({
-          record: {
-            domain_id: domainId,
-            page_url: pageUrl,
-            link_href: null,
-            anchor_text: null,
-            link_type: "rsic_opportunity",
-            status: "opportunity",
-            suggestion: `Add outbound link to "${resource.anchor}" — keyword match found in content`,
-            suggested_href: resource.href,
-            suggested_anchor: resource.anchor,
-            company_id: companyId,
-          },
-          needsCheck: false,
+        results.push({
+          domain_id: domainId,
+          page_url: pageUrl,
+          link_href: null,
+          anchor_text: null,
+          link_type: "rsic_opportunity",
+          status: "opportunity",
+          suggestion: `Add outbound link to "${resource.anchor}" — keyword match found in content`,
+          suggested_href: resource.href,
+          suggested_anchor: resource.anchor,
+          company_id: companyId,
         });
         rsicCount++;
       }
     }
   }
 
-  console.log(`Collected ${pending.length} link records, ${urlsToCheckSet.size} unique external URLs to check`);
-
-  // Deduplicate URLs to check
-  const uniqueUrls = Array.from(urlsToCheckSet);
-
-  // Check URLs in concurrent batches of 30
-  const BATCH_SIZE = 30;
-  for (let i = 0; i < uniqueUrls.length; i += BATCH_SIZE) {
-    const batch = uniqueUrls.slice(i, i + BATCH_SIZE);
-    const checks = await Promise.all(batch.map((url) => checkLink(url, siteUrl)));
-    for (let j = 0; j < batch.length; j++) {
-      const check = checks[j];
-      if (check.error) {
-        const suggestion = check.status ? `Link returns ${check.status}. Fix or remove.` : "Link unreachable or timed out";
-        checkedUrls.set(batch[j], { status: "broken", suggestion });
-      } else {
-        checkedUrls.set(batch[j], { status: "ok", suggestion: null });
-      }
-    }
-    console.log(`Checked batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(uniqueUrls.length / BATCH_SIZE)}`);
-  }
-
-  // Apply check results to records
-  for (const p of pending) {
-    if (p.needsCheck && p.record.link_href) {
-      const result = checkedUrls.get(p.record.link_href);
-      if (result) {
-        p.record.status = result.status;
-        p.record.suggestion = result.suggestion;
-      } else {
-        p.record.status = "ok";
-      }
-    }
-    results.push(p.record);
-  }
+  console.log(`Collected ${results.length} link records, inserting...`);
 
   if (results.length > 0) {
     const batchSize = 100;
