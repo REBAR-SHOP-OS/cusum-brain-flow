@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { downloadFile } from "@/lib/downloadUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 import { getPublicFileUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl } from "@/lib/chatFileUtils";
 
@@ -125,6 +126,7 @@ export function MessageThread({
   onJoinMeeting,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
+  const { ensureSession } = useSessionGuard();
   const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
   const [pendingFiles, setPendingFiles] = useState<ChatAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -179,9 +181,15 @@ export function MessageThread({
     setIsUploading(true);
     const newAttachments: ChatAttachment[] = [];
 
+    const sessionOk = await ensureSession();
+    if (!sessionOk) {
+      setIsUploading(false);
+      return;
+    }
+
     for (const file of Array.from(files)) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error(`${file.name} is too large (max 10MB)`);
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error(`${file.name} is too large (max 50MB)`);
         continue;
       }
 
@@ -191,7 +199,7 @@ export function MessageThread({
         .upload(path, file);
 
       if (error) {
-        toast.error(`Failed to upload ${file.name}`);
+        toast.error(`Failed to upload ${file.name}: ${error.message}`);
         continue;
       }
 

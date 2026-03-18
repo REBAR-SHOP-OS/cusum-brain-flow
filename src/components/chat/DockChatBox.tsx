@@ -13,8 +13,9 @@ import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getPublicFileUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks } from "@/lib/chatFileUtils";
+import { useSessionGuard } from "@/hooks/useSessionGuard";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 interface PendingFile {
   file: File;
@@ -52,6 +53,7 @@ interface DockChatBoxProps {
 export function DockChatBox({ channelId, channelName, channelType, minimized, style }: DockChatBoxProps) {
   const navigate = useNavigate();
   const { closeChat, toggleMinimize } = useDockChat();
+  const { ensureSession } = useSessionGuard();
   const { messages, isLoading } = useTeamMessages(channelId);
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
@@ -181,11 +183,14 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   }, [addFiles]);
 
   const uploadFiles = async (): Promise<Array<{ name: string; url: string; type: string; size: number }>> => {
+    const sessionOk = await ensureSession();
+    if (!sessionOk) throw new Error("Session expired — please log in again");
+
     const results: Array<{ name: string; url: string; type: string; size: number }> = [];
     for (const pf of pendingFiles) {
       const path = `chat-uploads/${channelId}/${Date.now()}-${pf.name}`;
       const { error } = await supabase.storage.from("team-chat-files").upload(path, pf.file);
-      if (error) throw new Error(`Upload failed: ${pf.name}`);
+      if (error) throw new Error(`Upload failed for ${pf.name}: ${error.message}`);
       const publicUrl = getPublicFileUrl(path);
       results.push({
         name: pf.name,
