@@ -55,6 +55,10 @@ Deno.serve(async (req) => {
 
     const { action, domain_id, website_id } = await req.json();
 
+    // Resolve company_id from user profile
+    const { data: profile } = await serviceClient.from("profiles").select("company_id").eq("user_id", userId).single();
+    const companyId = profile?.company_id;
+
     // Helper: get service client
     const sb = serviceClient;
 
@@ -104,6 +108,7 @@ Deno.serve(async (req) => {
 
         const ranking = kw.ranking || {};
         const upsertData: Record<string, unknown> = {
+          company_id: companyId,
           domain_id,
           keyword,
           wincher_keyword_id: kw.id,
@@ -133,7 +138,11 @@ Deno.serve(async (req) => {
         }
 
         const { error } = await sb.from("seo_keyword_ai").upsert(upsertData, { onConflict: "domain_id,keyword" });
-        if (!error) kwUpserted++;
+        if (error) {
+          console.error("Upsert error for keyword:", keyword, error.message);
+        } else {
+          kwUpserted++;
+        }
       }
 
       // 5. Pull keyword history for top 20 keywords (by traffic)
