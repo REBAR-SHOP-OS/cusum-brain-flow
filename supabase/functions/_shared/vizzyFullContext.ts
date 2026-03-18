@@ -74,6 +74,9 @@ export async function buildFullVizzyContext(
     { data: agentSessions },
     { data: timeClockEntries },
     { data: memories },
+    { data: workOrdersToday },
+    { data: agentActions },
+    { data: machineOps },
   ] = await Promise.all([
     supabase
       .from("work_orders")
@@ -151,6 +154,24 @@ export async function buildFullVizzyContext(
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(100),
+    // Employee performance: work orders with assignees today
+    supabase
+      .from("work_orders")
+      .select("id, work_order_number, status, assigned_to, actual_start, actual_end")
+      .gte("updated_at", today + "T00:00:00")
+      .limit(200),
+    // Employee performance: agent actions today
+    supabase
+      .from("agent_action_log")
+      .select("user_id, action_type, entity_type, created_at")
+      .gte("created_at", today + "T00:00:00")
+      .order("created_at", { ascending: false })
+      .limit(200),
+    // Machine operators currently assigned
+    supabase
+      .from("machines")
+      .select("id, name, status, current_operator_profile_id")
+      .not("current_operator_profile_id", "is", null),
   ]);
 
   // Compute financials
