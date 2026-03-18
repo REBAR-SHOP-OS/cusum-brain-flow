@@ -10674,6 +10674,56 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_audit_log: {
+        Row: {
+          company_id: string
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          new_value: string | null
+          notes: string | null
+          performed_by: string | null
+          performed_by_name: string | null
+          previous_value: string | null
+          quotation_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          new_value?: string | null
+          notes?: string | null
+          performed_by?: string | null
+          performed_by_name?: string | null
+          previous_value?: string | null
+          quotation_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          new_value?: string | null
+          notes?: string | null
+          performed_by?: string | null
+          performed_by_name?: string | null
+          previous_value?: string | null
+          quotation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_audit_log_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: false
+            referencedRelation: "sales_quotations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quote_pricing_configs: {
         Row: {
           company_id: string
@@ -11694,42 +11744,123 @@ export type Database = {
       sales_quotations: {
         Row: {
           amount: number | null
+          assumptions: Json | null
           company_id: string
           created_at: string
+          customer_approval_version: number | null
+          customer_approved_at: string | null
+          customer_approved_by: string | null
           customer_company: string | null
           customer_name: string | null
+          estimate_request: Json | null
           expiry_date: string | null
           id: string
+          internal_approval_note: string | null
+          internal_approved_at: string | null
+          internal_approved_by: string | null
+          line_items: Json | null
           notes: string | null
+          parent_version_id: string | null
+          pdf_generated_at: string | null
+          pdf_version: number | null
+          pdf_viewed_by_customer: boolean
+          pdf_viewed_internally: boolean
+          pricing_failure_details: Json | null
+          pricing_failure_reason: string | null
+          pricing_status: string
           quotation_number: string
+          quote_result: Json | null
+          revision_reason: string | null
           sales_lead_id: string | null
+          scrap_percent: number | null
+          source: string | null
           status: string
+          tonnage_bracket: string | null
+          total_tonnage: number | null
+          updated_at: string
+          updated_by: string | null
+          valid_until: string | null
+          version_number: number
         }
         Insert: {
           amount?: number | null
+          assumptions?: Json | null
           company_id: string
           created_at?: string
+          customer_approval_version?: number | null
+          customer_approved_at?: string | null
+          customer_approved_by?: string | null
           customer_company?: string | null
           customer_name?: string | null
+          estimate_request?: Json | null
           expiry_date?: string | null
           id?: string
+          internal_approval_note?: string | null
+          internal_approved_at?: string | null
+          internal_approved_by?: string | null
+          line_items?: Json | null
           notes?: string | null
+          parent_version_id?: string | null
+          pdf_generated_at?: string | null
+          pdf_version?: number | null
+          pdf_viewed_by_customer?: boolean
+          pdf_viewed_internally?: boolean
+          pricing_failure_details?: Json | null
+          pricing_failure_reason?: string | null
+          pricing_status?: string
           quotation_number: string
+          quote_result?: Json | null
+          revision_reason?: string | null
           sales_lead_id?: string | null
+          scrap_percent?: number | null
+          source?: string | null
           status?: string
+          tonnage_bracket?: string | null
+          total_tonnage?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          valid_until?: string | null
+          version_number?: number
         }
         Update: {
           amount?: number | null
+          assumptions?: Json | null
           company_id?: string
           created_at?: string
+          customer_approval_version?: number | null
+          customer_approved_at?: string | null
+          customer_approved_by?: string | null
           customer_company?: string | null
           customer_name?: string | null
+          estimate_request?: Json | null
           expiry_date?: string | null
           id?: string
+          internal_approval_note?: string | null
+          internal_approved_at?: string | null
+          internal_approved_by?: string | null
+          line_items?: Json | null
           notes?: string | null
+          parent_version_id?: string | null
+          pdf_generated_at?: string | null
+          pdf_version?: number | null
+          pdf_viewed_by_customer?: boolean
+          pdf_viewed_internally?: boolean
+          pricing_failure_details?: Json | null
+          pricing_failure_reason?: string | null
+          pricing_status?: string
           quotation_number?: string
+          quote_result?: Json | null
+          revision_reason?: string | null
           sales_lead_id?: string | null
+          scrap_percent?: number | null
+          source?: string | null
           status?: string
+          tonnage_bracket?: string | null
+          total_tonnage?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          valid_until?: string | null
+          version_number?: number
         }
         Relationships: [
           {
@@ -11737,6 +11868,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quotations_parent_version_id_fkey"
+            columns: ["parent_version_id"]
+            isOneToOne: false
+            referencedRelation: "sales_quotations"
             referencedColumns: ["id"]
           },
           {
