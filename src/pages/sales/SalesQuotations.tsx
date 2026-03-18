@@ -15,13 +15,7 @@ import SalesQuotationDrawer from "@/components/sales/SalesQuotationDrawer";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { toast } from "sonner";
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground",
-  sent: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  accepted: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  declined: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  expired: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-};
+// Status colors now driven by getStatusInfo from hook
 
 export default function SalesQuotations() {
   const { quotations, isLoading, create, update, remove, generateNumber } = useSalesQuotations();
