@@ -76,14 +76,14 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
           <div className="absolute rounded-full transition-all duration-300" style={{
             inset: "-32px", borderRadius: "50%",
             background: isActive
-              ? "radial-gradient(circle, hsl(var(--primary) / 0.3) 0%, transparent 70%)"
-              : "radial-gradient(circle, hsl(var(--primary) / 0.05) 0%, transparent 70%)",
+              ? "radial-gradient(circle, hsl(245 58% 55% / 0.3) 0%, transparent 70%)"
+              : "radial-gradient(circle, hsl(245 58% 55% / 0.05) 0%, transparent 70%)",
             transform: `scale(${isActive ? 1.3 : 1})`,
           }} />
           {/* Pulse ring */}
           <div className="absolute rounded-full border-2 transition-all duration-300" style={{
             inset: "-24px", borderRadius: "50%",
-            borderColor: isActive ? "hsl(172 66% 50% / 0.7)" : "hsl(172 66% 50% / 0.3)",
+            borderColor: isActive ? "hsl(245 58% 55% / 0.7)" : "hsl(245 58% 55% / 0.3)",
             transform: `scale(${isActive ? 1.1 : 1})`,
           }} />
           {state === "connecting" && (
