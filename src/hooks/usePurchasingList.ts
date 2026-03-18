@@ -137,6 +137,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   const addItemAsPurchased = useCallback(async (title: string, category: string, dueDate?: string) => {
     if (!user) return;
+    if (!(await refreshSessionIfNeeded())) return;
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
 
@@ -153,10 +154,10 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       due_date: dueDate || null,
     });
     if (error) {
-      toast.error("Error marking item");
+      toast.error(`Error marking item: ${error.message}`);
       console.error(error);
     }
-  }, [user]);
+  }, [user, refreshSessionIfNeeded]);
 
   const togglePurchased = useCallback(async (itemId: string, currentValue: boolean) => {
     if (!user) return;
