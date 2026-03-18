@@ -15,11 +15,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Message } from "./ChatMessage";
 import { CalChatMessage } from "./CalChatMessage";
 import { CalStepProgress } from "./CalStepProgress";
 import { sendAgentMessage } from "@/lib/agent";
+import { backgroundAgentService } from "@/lib/backgroundAgentService";
 import { UploadedFile } from "./ChatInput";
 
 type CalculationMode = "smart" | "step-by-step" | null;
@@ -38,6 +40,8 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [calculationMode, setCalculationMode] = useState<CalculationMode>(null);
   const [showModeSelection, setShowModeSelection] = useState(false);
+  const [calSessionId, setCalSessionId] = useState<string | null>(null);
+  const { user } = useAuth();
   
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -220,42 +224,63 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
       status: "sent",
     };
     setMessages(prev => [...prev, userMessage]);
+    const msgContent = inputValue.trim();
     setInputValue("");
     setIsTyping(true);
-    
-    try {
-      const history = messages.map(m => ({
-        role: m.role === "user" ? "user" as const : "assistant" as const,
-        content: m.content,
-      }));
-      
-      const response = await sendAgentMessage(
-        "estimation",
-        inputValue.trim(),
-        history,
-        { calculationMode, projectName }
-      );
-      
-      const agentMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "agent",
-        content: response.reply,
-        agent: "estimation",
-        timestamp: new Date(),
-        status: "sent",
-      };
-      setMessages(prev => [...prev, agentMessage]);
-    } catch (error) {
-      console.error("Agent error:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to get response",
-        variant: "destructive",
-      });
-    } finally {
-      setIsTyping(false);
+
+    // Create session if needed
+    let sessionId = calSessionId;
+    if (!sessionId && user) {
+      const { data } = await supabase
+        .from("chat_sessions")
+        .insert({ user_id: user.id, title: msgContent.slice(0, 100), agent_name: "Gauge", agent_color: "bg-orange-500" })
+        .select("id")
+        .single();
+      if (data) { sessionId = data.id; setCalSessionId(sessionId); }
     }
-  }, [inputValue, isTyping, messages, calculationMode, projectName, toast]);
+
+    if (sessionId) {
+      await supabase.from("chat_messages").insert({ session_id: sessionId, role: "user", content: msgContent });
+    }
+    
+    const history = messages.map(m => ({
+      role: m.role === "user" ? "user" as const : "assistant" as const,
+      content: m.content,
+    }));
+
+    if (sessionId) {
+      backgroundAgentService.subscribe(sessionId, (response) => {
+        setMessages(prev => [...prev, {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: response.reply,
+          agent: "estimation",
+          timestamp: new Date(),
+          status: "sent",
+        }]);
+        setIsTyping(false);
+      });
+
+      backgroundAgentService.enqueue(
+        sessionId,
+        "estimation",
+        "Gauge",
+        msgContent,
+        history,
+        { calculationMode, projectName },
+      );
+    } else {
+      // Fallback
+      try {
+        const response = await sendAgentMessage("estimation", msgContent, history, { calculationMode, projectName });
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: "agent", content: response.reply, agent: "estimation", timestamp: new Date(), status: "sent" }]);
+      } catch (error) {
+        toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to get response", variant: "destructive" });
+      } finally {
+        setIsTyping(false);
+      }
+    }
+  }, [inputValue, isTyping, messages, calculationMode, projectName, toast, calSessionId, user]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

@@ -9,6 +9,7 @@ import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
 import { sendAgentMessage, AgentType, ChatMessage as AgentChatMessage, PixelPost, AttachedFile } from "@/lib/agent";
+import { backgroundAgentService } from "@/lib/backgroundAgentService";
 import { UploadedFile } from "@/components/chat/ChatInput";
 import { AgentSuggestions } from "@/components/agent/AgentSuggestions";
 import { agentSuggestions } from "@/components/agent/agentSuggestionsData";
@@ -159,6 +160,59 @@ export default function AgentWorkspace() {
     setAutoBriefingSent(true); // don't auto-brief when loading history
   }, [getSessionMessages]);
 
+  // Background service: subscribe/unsubscribe on session changes, check for undelivered
+  useEffect(() => {
+    if (!activeSessionId) return;
+    // Check if there's an undelivered result from a previous navigation
+    const undelivered = backgroundAgentService.consumeUndelivered(activeSessionId);
+    if (undelivered) {
+      let replyContent = undelivered.reply;
+      if (undelivered.createdNotifications?.length) {
+        const notifSummary = undelivered.createdNotifications
+          .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
+          .join("\n");
+        replyContent += `\n\n---\n📋 **Created ${undelivered.createdNotifications.length} item(s):**\n${notifSummary}`;
+      }
+      setMessages((prev) => [...prev, {
+        id: crypto.randomUUID(),
+        role: "agent",
+        content: replyContent,
+        agent: config.agentType as any,
+        timestamp: new Date(),
+      }]);
+      setIsLoading(false);
+    }
+    // If still processing, show loading
+    if (backgroundAgentService.isProcessing(activeSessionId)) {
+      setIsLoading(true);
+    }
+    // Subscribe for live delivery
+    backgroundAgentService.subscribe(activeSessionId, (response) => {
+      let replyContent = response.reply;
+      if (response.createdNotifications?.length) {
+        const notifSummary = response.createdNotifications
+          .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
+          .join("\n");
+        replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
+      }
+      if (agentId === "social" && response.nextSlot) {
+        setPendingPixelSlot(response.nextSlot);
+      }
+      if (agentId === "social" && response.pixelPost) {
+        setLastPixelPost(response.pixelPost);
+      }
+      setMessages((prev) => [...prev, {
+        id: crypto.randomUUID(),
+        role: "agent",
+        content: replyContent,
+        agent: config.agentType as any,
+        timestamp: new Date(),
+      }]);
+      setIsLoading(false);
+    });
+    return () => { backgroundAgentService.unsubscribe(activeSessionId); };
+  }, [activeSessionId, config.agentType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Start a new empty chat
   const handleNewChat = useCallback(() => {
     setMessages([]);
@@ -226,115 +280,106 @@ export default function AgentWorkspace() {
       if (mapping.userRole === "shop_supervisor") extraContext.isShopSupervisor = true;
     }
 
-    try {
-      const history: AgentChatMessage[] = messages.map((m) => ({
-        role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-        content: m.content,
-      }));
+    const history: AgentChatMessage[] = messages.map((m) => ({
+      role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+      content: m.content,
+    }));
 
-      const attachedFiles = files?.map(f => ({ name: f.name, url: f.url }));
-      const response = await sendAgentMessage(config.agentType, content, history, extraContext, attachedFiles, slotOverride, aiModel);
+    const attachedFiles = files?.map(f => ({ name: f.name, url: f.url }));
 
-      // Track pixel sequential flow
-      if (agentId === "social" && response.nextSlot) {
-        setPendingPixelSlot(response.nextSlot);
-        setPixelDateMessage(content);
-      } else if (agentId === "social" && response.nextSlot === null) {
-        setPendingPixelSlot(null);
-      }
-
-      // Store pixel post data for saving on approval
-      if (agentId === "social" && response.pixelPost) {
-        setLastPixelPost(response.pixelPost);
-      }
-
-      // Build reply with created notification badges
-      let replyContent = response.reply;
-
-      // Parse vizzy-action blocks for RingCentral actions (assistant only)
-      if (agentId === "assistant" && isSuperAdmin) {
-        const actionMatch = replyContent.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
-        if (actionMatch) {
-          try {
-            const actionData = JSON.parse(actionMatch[1]);
-            const desc = actionData.type === "ringcentral_call"
-              ? `Call ${actionData.contact_name || actionData.phone}`
-              : `Send SMS to ${actionData.contact_name || actionData.phone}: "${actionData.message?.slice(0, 80)}..."`;
-            
-            setPendingAction({
-              id: crypto.randomUUID(),
-              action: actionData.type,
-              description: desc,
-              params: actionData,
-                resolve: async (approved: boolean) => {
-                setPendingAction(null);
-                if (approved) {
-                  try {
-                    if (actionData.type === "ringcentral_call") {
-                      const success = await webPhoneActions.call(actionData.phone, actionData.contact_name);
-                      if (!success) throw new Error("WebPhone call failed");
-                    } else {
-                      const { data, error } = await supabase.functions.invoke("ringcentral-action", {
-                        body: actionData,
-                      });
-                      if (error) throw error;
-                      if (data?.error) throw new Error(data.error);
-                      toast.success("SMS sent!");
-                    }
-                  } catch (err) {
-                    toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-                  }
-                } else {
-                  toast.info("Action cancelled");
-                }
-              },
-            });
-          } catch (e) {
-            console.warn("Failed to parse vizzy-action:", e);
-          }
-          replyContent = replyContent.replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/, "").trim();
+    if (sessionId) {
+      // Subscribe so we can handle special UI logic (vizzy-actions, pixel flow)
+      backgroundAgentService.subscribe(sessionId, (response) => {
+        // Track pixel sequential flow
+        if (agentId === "social" && response.nextSlot) {
+          setPendingPixelSlot(response.nextSlot);
+          setPixelDateMessage(content);
+        } else if (agentId === "social" && response.nextSlot === null) {
+          setPendingPixelSlot(null);
         }
-      }
+        if (agentId === "social" && response.pixelPost) {
+          setLastPixelPost(response.pixelPost);
+        }
 
-      if (response.createdNotifications && response.createdNotifications.length > 0) {
-        const notifSummary = response.createdNotifications
-          .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
-          .join("\n");
-        replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
-      }
+        let replyContent = response.reply;
 
-      const agentMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "agent",
-        content: replyContent,
-        agent: config.agentType as any,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, agentMsg]);
+        // Parse vizzy-action blocks for RingCentral actions (assistant only)
+        if (agentId === "assistant" && isSuperAdmin) {
+          const actionMatch = replyContent.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
+          if (actionMatch) {
+            try {
+              const actionData = JSON.parse(actionMatch[1]);
+              const desc = actionData.type === "ringcentral_call"
+                ? `Call ${actionData.contact_name || actionData.phone}`
+                : `Send SMS to ${actionData.contact_name || actionData.phone}: "${actionData.message?.slice(0, 80)}..."`;
+              
+              setPendingAction({
+                id: crypto.randomUUID(),
+                action: actionData.type,
+                description: desc,
+                params: actionData,
+                resolve: async (approved: boolean) => {
+                  setPendingAction(null);
+                  if (approved) {
+                    try {
+                      if (actionData.type === "ringcentral_call") {
+                        const success = await webPhoneActions.call(actionData.phone, actionData.contact_name);
+                        if (!success) throw new Error("WebPhone call failed");
+                      } else {
+                        const { data, error } = await supabase.functions.invoke("ringcentral-action", {
+                          body: actionData,
+                        });
+                        if (error) throw error;
+                        if (data?.error) throw new Error(data.error);
+                        toast.success("SMS sent!");
+                      }
+                    } catch (err) {
+                      toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+                    }
+                  } else {
+                    toast.info("Action cancelled");
+                  }
+                },
+              });
+            } catch (e) {
+              console.warn("Failed to parse vizzy-action:", e);
+            }
+            replyContent = replyContent.replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/, "").trim();
+          }
+        }
 
-      // Persist agent message
-      if (sessionId) {
-        addMessage(sessionId, "agent", response.reply, config.agentType);
-      }
-    } catch (error) {
-      const errorMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "agent",
-        content: (() => {
-          const errText = error instanceof Error ? error.message : "";
-          const friendlyMsg = /abort|timeout|failed to send/i.test(errText)
-            ? "Image generation timed out. Try a simpler prompt or square (1:1) ratio."
-            : errText;
-          return `Sorry, I encountered an error. ${friendlyMsg}`;
-        })(),
-        agent: config.agentType as any,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
+        if (response.createdNotifications && response.createdNotifications.length > 0) {
+          const notifSummary = response.createdNotifications
+            .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
+            .join("\n");
+          replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
+        }
+
+        const agentMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: replyContent,
+          agent: config.agentType as any,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, agentMsg]);
+        setIsLoading(false);
+      });
+
+      // Enqueue via background service — survives navigation
+      backgroundAgentService.enqueue(
+        sessionId,
+        config.agentType as AgentType,
+        config.name,
+        content,
+        history,
+        extraContext,
+        attachedFiles,
+        slotOverride,
+        aiModel,
+      );
     }
-  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate, aiModel]);
+  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate, aiModel, agentId, isSuperAdmin, imageStyles, selectedProducts, imageAspectRatio]);
 
   // Keep ref in sync
   useEffect(() => { sendRef.current = handleSendInternal; }, [handleSendInternal]);
