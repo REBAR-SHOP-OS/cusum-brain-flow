@@ -156,8 +156,10 @@ export default function AgentWorkspace() {
     // Pixel agent: no longer auto-send; user picks mode from empty state
     // Reset purchasing state so user sees fresh default list
     if (agentId === "purchasing") {
-      setPurchasingDate(undefined);
-      setActivePurchasingDateStr(null);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      setPurchasingDate(today);
+      setActivePurchasingDateStr(today.toISOString().split("T")[0]);
     }
   }, [agentId]);
 
