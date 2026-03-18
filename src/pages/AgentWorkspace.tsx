@@ -669,8 +669,8 @@ export default function AgentWorkspace() {
               <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xl mb-6">
                 {/* Card 1: Free chat mode */}
                 <button
-                  onClick={() => {/* no-op, user types below */}}
-                  className="flex-1 bg-card border border-border rounded-xl p-6 hover:border-primary/50 hover:shadow-md transition-all cursor-default text-center group"
+                  onClick={() => handleSend("Ready to create images via chat. What should I make?")}
+                  className="flex-1 bg-card border border-border rounded-xl p-6 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer text-center group"
                 >
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3 group-hover:bg-primary/20 transition-colors">
                     <MessageSquare className="w-6 h-6 text-primary" />
