@@ -233,13 +233,18 @@ async function handleCheckBroken(sb: any, domainId: string) {
     }));
 
     for (const check of checks) {
+      const ids = urlMap.get(check.url) || [];
       if (check.broken) {
-        const ids = urlMap.get(check.url) || [];
         const suggestion = check.status ? `Link returns ${check.status}. Fix or remove.` : "Link unreachable or timed out";
         for (const id of ids) {
           await sb.from("seo_link_audit").update({ status: "broken", suggestion }).eq("id", id);
         }
         brokenCount += ids.length;
+      } else {
+        // Mark as "checked" so it won't be re-fetched in the next iteration
+        for (const id of ids) {
+          await sb.from("seo_link_audit").update({ status: "checked" }).eq("id", id);
+        }
       }
     }
   }
@@ -519,7 +524,23 @@ async function fetchAllWPProducts(wp: WPClient): Promise<any[]> {
 async function findWPItem(wp: WPClient, pageUrl: string): Promise<any | null> {
   const url = new URL(pageUrl);
   const slug = url.pathname.replace(/^\/|\/$/g, "").split("/").pop() || "";
-  if (!slug) return null;
+
+  // Handle homepage (empty slug)
+  if (!slug) {
+    try {
+      for (const trySlug of ["home", "homepage", "front-page"]) {
+        const pages = await wp.listPages({ slug: trySlug, per_page: "1" });
+        if (pages && pages.length > 0) return { ...pages[0], type: "page" };
+      }
+      const idMatch = pageUrl.match(/[?&]p=(\d+)/);
+      if (idMatch) {
+        const page = await wp.getPage(idMatch[1]);
+        if (page) return { ...page, type: "page" };
+      }
+    } catch { /* ignore */ }
+    console.warn(`findWPItem: Could not resolve homepage for ${pageUrl}`);
+    return null;
+  }
 
   try {
     const pages = await wp.listPages({ slug, per_page: "1" });

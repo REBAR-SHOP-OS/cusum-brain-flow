@@ -28,6 +28,7 @@ interface Proposal {
 
 const statusBadge: Record<string, { label: string; className: string }> = {
   ok: { label: "OK", className: "bg-green-500/10 text-green-600" },
+  checked: { label: "OK", className: "bg-green-500/10 text-green-600" },
   broken: { label: "Broken", className: "bg-destructive/10 text-destructive" },
   missing_anchor: { label: "Missing Anchor", className: "bg-yellow-500/10 text-yellow-600" },
   nofollow_issue: { label: "Nofollow", className: "bg-orange-500/10 text-orange-600" },
@@ -86,13 +87,15 @@ export function SeoLinks() {
       toast.info("Phase 2/2: Checking external links...");
       let remaining = 1;
       let totalBroken = 0;
-      while (remaining > 0) {
+      let iterations = 0;
+      while (remaining > 0 && iterations < 50) {
         const checkResult = await invokeEdgeFunction<{ broken: number; remaining: number }>("seo-link-audit", {
           phase: "check_broken",
           domain_id: domain.id,
         }, { timeoutMs: 60000 });
         totalBroken += checkResult.broken || 0;
         remaining = checkResult.remaining || 0;
+        iterations++;
       }
 
       return { totalBroken };
