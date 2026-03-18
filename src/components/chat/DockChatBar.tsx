@@ -142,7 +142,7 @@ export function DockChatBar() {
         data-feedback-btn="true"
         className="fixed z-[9999] pointer-events-auto cursor-grab active:cursor-grabbing select-none"
         style={{ left: pos.x, top: pos.y, touchAction: "none" }}
-        onPointerDown={(e) => { e.nativeEvent.stopImmediatePropagation(); e.stopPropagation(); handlers.onPointerDown(e); }}
+        onPointerDown={handlers.onPointerDown}
         onPointerMove={handlers.onPointerMove}
         onPointerUp={handlePointerUp}
       >
