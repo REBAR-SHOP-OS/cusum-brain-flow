@@ -99,7 +99,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
             style={{
               transform: `scale(${state === "connected" ? orbScale : 1})`,
               boxShadow: state === "connected" && isActive
-                ? "0 0 60px 15px hsl(172 66% 50% / 0.4)"
+                ? "0 0 60px 15px hsl(245 58% 55% / 0.4)"
                 : state === "error" ? "0 0 20px 5px hsl(var(--destructive) / 0.3)" : "none",
             }}
           >
