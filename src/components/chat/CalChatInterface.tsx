@@ -40,6 +40,8 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [calculationMode, setCalculationMode] = useState<CalculationMode>(null);
   const [showModeSelection, setShowModeSelection] = useState(false);
+  const [calSessionId, setCalSessionId] = useState<string | null>(null);
+  const { user } = useAuth();
   
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
