@@ -290,6 +290,21 @@ serve(async (req) => {
 
     const result = await sendResponse.json();
 
+    // Log email send as employee activity event
+    try {
+      await supabaseAdmin.from("activity_events").insert({
+        company_id: "a0000000-0000-0000-0000-000000000001",
+        entity_type: "email",
+        entity_id: result.id || crypto.randomUUID(),
+        event_type: "email_sent",
+        description: `Sent email to ${to}: ${subject.slice(0, 100)}`,
+        source: "gmail",
+        actor_id: userId,
+        actor_type: sent_by_agent ? "agent" : "user",
+        metadata: { to, subject, threadId: result.threadId, fromEmail },
+      });
+    } catch { /* non-critical logging */ }
+
     return new Response(
       JSON.stringify({
         success: true,

@@ -807,6 +807,110 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
         });
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
+    // ─── Employee Activity Tool ───
+    case "get_employee_activity": {
+      const date = args.date || new Date().toISOString().split("T")[0];
+      const limit = Math.min(args.limit || 50, 200);
+      
+      // Resolve employee name to user_id via profiles
+      let actorIds: string[] | null = null;
+      if (args.employee_name) {
+        const { data: matchedProfiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .ilike("full_name", `%${args.employee_name}%`);
+        if (!matchedProfiles || matchedProfiles.length === 0) {
+          return JSON.stringify({ message: `No employee found matching "${args.employee_name}"`, results: [] });
+        }
+        actorIds = matchedProfiles.map((p: any) => p.user_id).filter(Boolean);
+      }
+
+      let q = supabase
+        .from("activity_events")
+        .select("event_type, entity_type, entity_id, description, actor_id, actor_type, source, created_at, metadata")
+        .gte("created_at", date + "T00:00:00")
+        .lte("created_at", date + "T23:59:59")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      
+      if (actorIds && actorIds.length > 0) {
+        q = q.in("actor_id", actorIds);
+      }
+
+      const { data, error } = await q;
+      if (error) return JSON.stringify({ error: error.message });
+
+      // Enrich with profile names
+      const uniqueActorIds = [...new Set((data || []).map((e: any) => e.actor_id).filter(Boolean))];
+      const { data: actorProfiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", uniqueActorIds.length > 0 ? uniqueActorIds : ["none"]);
+      const nameMap = new Map((actorProfiles || []).map((p: any) => [p.user_id, p.full_name]));
+
+      const enriched = (data || []).map((e: any) => ({
+        ...e,
+        actor_name: nameMap.get(e.actor_id) || "Unknown",
+      }));
+
+      return JSON.stringify({ date, total: enriched.length, results: enriched });
+    }
+
+    // ─── Employee Email Tool ───
+    case "get_employee_emails": {
+      const date = args.date || new Date().toISOString().split("T")[0];
+      const limit = Math.min(args.limit || 30, 100);
+      const direction = args.direction || "all";
+
+      // Resolve employee name to email addresses
+      let emailFilter: string[] | null = null;
+      if (args.employee_name) {
+        const { data: matchedProfiles } = await supabase
+          .from("profiles")
+          .select("email, full_name")
+          .ilike("full_name", `%${args.employee_name}%`);
+        if (!matchedProfiles || matchedProfiles.length === 0) {
+          return JSON.stringify({ message: `No employee found matching "${args.employee_name}"`, results: [] });
+        }
+        emailFilter = matchedProfiles.map((p: any) => p.email).filter(Boolean);
+      }
+
+      let q = supabase
+        .from("communications")
+        .select("subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, gmail_thread_id")
+        .gte("received_at", date + "T00:00:00")
+        .lte("received_at", date + "T23:59:59")
+        .order("received_at", { ascending: false })
+        .limit(limit);
+      
+      if (direction !== "all") {
+        q = q.eq("direction", direction);
+      }
+
+      const { data, error } = await q;
+      if (error) return JSON.stringify({ error: error.message });
+
+      // Filter by employee email if specified
+      let results = data || [];
+      if (emailFilter && emailFilter.length > 0) {
+        results = results.filter((e: any) => {
+          const fromMatch = emailFilter!.some((em) => e.from_address?.toLowerCase().includes(em.toLowerCase()));
+          const toMatch = emailFilter!.some((em) => e.to_address?.toLowerCase().includes(em.toLowerCase()));
+          return fromMatch || toMatch;
+        });
+      }
+
+      return JSON.stringify({ date, direction, total: results.length, results: results.map((e: any) => ({
+        subject: e.subject,
+        from: e.from_address,
+        to: e.to_address,
+        direction: e.direction,
+        preview: e.body_preview?.slice(0, 100),
+        urgency: e.ai_urgency,
+        time: e.received_at,
+      }))});
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
