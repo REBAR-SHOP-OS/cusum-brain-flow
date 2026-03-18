@@ -325,7 +325,7 @@ ${contextData}`;
     let finalContent = "";
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await callAI({
+      const result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-flash",
         agentName: "seo",
@@ -333,24 +333,17 @@ ${contextData}`;
         tools: wp ? wpTools : undefined,
       });
 
-      const choice = response.choices?.[0];
-      const msg = choice?.message;
-
-      if (!msg) {
-        finalContent = "Sorry, I couldn't process that request.";
-        break;
-      }
-
       // If no tool calls, we have the final answer
-      if (!msg.tool_calls?.length) {
-        finalContent = msg.content || "";
+      if (!result.toolCalls?.length) {
+        finalContent = result.content || "";
         break;
       }
 
-      // Process tool calls
-      aiMessages.push(msg);
+      // Process tool calls — push the raw assistant message for context
+      const rawMsg = result.raw?.choices?.[0]?.message;
+      if (rawMsg) aiMessages.push(rawMsg);
 
-      for (const toolCall of msg.tool_calls) {
+      for (const toolCall of result.toolCalls) {
         const fnName = toolCall.function.name;
         let fnArgs: Record<string, any> = {};
         try {
