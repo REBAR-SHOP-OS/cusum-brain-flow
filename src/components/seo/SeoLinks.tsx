@@ -20,6 +20,7 @@ interface Proposal {
   id: string;
   type?: "opportunity" | "broken";
   action?: string;
+  replacement_url?: string;
   before_paragraph?: string;
   after_paragraph?: string;
   reasoning?: string;
