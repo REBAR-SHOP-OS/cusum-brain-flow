@@ -34,7 +34,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     }
   ];
 
-  if (!stripSendCapabilities && (agent === "accounting" || agent === "commander" || agent === "email")) {
+  if (!stripSendCapabilities && (agent === "accounting" || agent === "commander" || agent === "email" || agent === "sales")) {
     tools.push({
       type: "function" as const,
       function: {
