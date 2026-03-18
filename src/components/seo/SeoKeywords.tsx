@@ -63,7 +63,8 @@ export function SeoKeywords() {
         .from("seo_keyword_ai")
         .select("*")
         .eq("domain_id", domain!.id)
-        .order("opportunity_score", { ascending: false });
+        .order("opportunity_score", { ascending: false })
+        .range(0, 9999);
       return data || [];
     },
   });

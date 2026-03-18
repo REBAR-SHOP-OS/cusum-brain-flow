@@ -32,7 +32,8 @@ export function SeoPages() {
         .from("seo_page_ai")
         .select("*")
         .eq("domain_id", domain!.id)
-        .order("seo_score", { ascending: false });
+        .order("seo_score", { ascending: false })
+        .range(0, 9999);
       return data || [];
     },
   });

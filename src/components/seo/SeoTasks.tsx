@@ -47,7 +47,8 @@ export function SeoTasks() {
       const { data } = await supabase
         .from("seo_tasks")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(0, 9999);
       return data || [];
     },
   });
