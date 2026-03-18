@@ -110,12 +110,58 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [showAiDraft, setShowAiDraft] = useState(true);
   const [resolving, setResolving] = useState(false);
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
-  const attachments = useMemo(() => {
+  // Regex-extracted attachments from body
+  const bodyAttachments = useMemo(() => {
     if (!email) return [];
     return extractAttachments(email.body || "");
   }, [email]);
+
+  // Real Gmail attachments from metadata
+  const gmailAttachments = email?.attachments || [];
+
+  const handleDownloadAttachment = useCallback(async (att: { filename: string; mimeType: string; attachmentId: string }) => {
+    if (!email?.sourceId) return;
+    setDownloadingIds(prev => new Set(prev).add(att.attachmentId));
+    try {
+      const { data, error } = await supabase.functions.invoke("gmail-attachment", {
+        body: { messageId: email.sourceId, attachmentId: att.attachmentId },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.data) throw new Error("No attachment data returned");
+
+      // Convert base64 to blob and trigger download
+      const byteChars = atob(data.data);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: att.mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = att.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Download failed",
+        description: err instanceof Error ? err.message : "Could not download attachment",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingIds(prev => {
+        const next = new Set(prev);
+        next.delete(att.attachmentId);
+        return next;
+      });
+    }
+  }, [email?.sourceId, toast]);
 
   const handleSmartReply = async () => {
     if (!email) return;
