@@ -241,6 +241,7 @@ const App = () => (
 
                     {/* Full-screen live chat */}
                     <Route path="/chat" element={<P><LiveChat /></P>} />
+                    <Route path="/vizzy" element={<ProtectedRoute><VizzyLive /></ProtectedRoute>} />
                     
 
                     {/* Legacy redirects */}
