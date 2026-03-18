@@ -34,24 +34,8 @@ interface ImageGeneratorDialogProps {
 
 type Status = "idle" | "searching" | "generating" | "branding" | "completed" | "failed";
 
-interface ModelOption {
-  id: string;
-  label: string;
-  description: string;
-}
-
-const modelOptions: ModelOption[] = [
-  {
-    id: "google/gemini-3-pro-image-preview",
-    label: "Gemini Pro Image",
-    description: "Highest quality — best for detailed, professional images",
-  },
-  {
-    id: "google/gemini-3.1-flash-image-preview",
-    label: "Gemini Flash Image",
-    description: "Fast generation with pro-level quality",
-  },
-];
+const GEMINI_MODEL = "google/gemini-3-pro-image-preview";
+const CHATGPT_MODEL = "gpt-image-1";
 
 export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMode = false }: ImageGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
