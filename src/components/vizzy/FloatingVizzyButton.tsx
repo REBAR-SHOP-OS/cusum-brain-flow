@@ -177,7 +177,6 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
                 src={vizzyAvatar}
                 alt="Vizzy AI"
                 className="w-full h-full object-cover pointer-events-none"
-                style={{ transform: "scale(1.8)", objectPosition: "center 38%" }}
                 draggable={false}
               />
             </div>
