@@ -607,6 +607,108 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ─── RingCentral Telephony Tools ───
+
+      case "rc_send_sms": {
+        const { phone, message, contact_name } = params;
+        if (!phone || !message) throw new Error("phone and message are required");
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-action`, {
+          method: "POST",
+          headers: { Authorization: authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "ringcentral_sms", phone, message, contact_name }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || "SMS send failed");
+        result = { success: true, message: `SMS sent to ${contact_name || phone}: "${message.slice(0, 80)}..."`, data };
+        break;
+      }
+
+      case "rc_make_call": {
+        const { phone, contact_name } = params;
+        if (!phone) throw new Error("phone is required");
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-action`, {
+          method: "POST",
+          headers: { Authorization: authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "ringcentral_call", phone, contact_name }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || "Call initiation failed");
+        result = { success: true, message: `Call initiated to ${contact_name || phone}`, data };
+        break;
+      }
+
+      case "rc_send_fax": {
+        const { fax_number, cover_page_text } = params;
+        if (!fax_number) throw new Error("fax_number is required");
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const formData = new FormData();
+        formData.append("fax_number", fax_number);
+        if (cover_page_text) formData.append("cover_page_text", cover_page_text);
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-fax-send`, {
+          method: "POST",
+          headers: { Authorization: authHeader },
+          body: formData,
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || "Fax send failed");
+        result = { success: true, message: `Fax sent to ${fax_number}`, data };
+        break;
+      }
+
+      case "rc_create_meeting": {
+        const { meeting_name, meeting_type } = params;
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-video`, {
+          method: "POST",
+          headers: { Authorization: authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "create", meetingName: meeting_name || "Team Meeting", meetingType: meeting_type || "video" }),
+        });
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Meeting creation failed");
+        result = { success: true, message: `Meeting created: ${data.joinUrl}`, data };
+        break;
+      }
+
+      case "rc_get_call_analytics": {
+        const { days_back } = params;
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-call-analytics`, {
+          method: "POST",
+          headers: { Authorization: authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({ daysBack: days_back || 30 }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || "Analytics fetch failed");
+        result = { success: true, message: `Call analytics for last ${days_back || 30} days`, data };
+        break;
+      }
+
+      case "rc_get_active_calls": {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-active-calls`, {
+          method: "POST",
+          headers: { Authorization: authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const data = await resp.json();
+        result = { success: true, message: `${(data.activeCalls || []).length} active call(s)`, data };
+        break;
+      }
+
+      case "rc_get_team_presence": {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-presence`, {
+          method: "POST",
+          headers: { Authorization: authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const data = await resp.json();
+        result = { success: true, message: `Team presence: ${(data.presenceData || []).length} user(s)`, data };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: corsHeaders });
     }
