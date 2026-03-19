@@ -1369,8 +1369,24 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
         }).eq("user_id", tokenRow.user_id);
       }
 
-      const body: any = { to: { phoneNumber: args.to }, playPrompt: true };
-      if (args.from) body.from = { phoneNumber: args.from };
+      // Auto-detect caller ID if not provided
+      let fromNumber = args.from;
+      if (!fromNumber) {
+        try {
+          const pnResp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/phone-number`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (pnResp.ok) {
+            const pnData = await pnResp.json();
+            const records = pnData.records || [];
+            const directNum = records.find((r: any) => r.usageType === "DirectNumber" && r.features?.includes("CallerId"));
+            fromNumber = directNum?.phoneNumber || records[0]?.phoneNumber || "";
+          }
+        } catch (e) { console.error("Failed to fetch caller ID:", e); }
+      }
+      if (!fromNumber) throw new Error("No caller ID available. Please connect a RingCentral phone number.");
+
+      const body: any = { to: { phoneNumber: args.to }, from: { phoneNumber: fromNumber }, playPrompt: true };
       const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/ring-out`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -1378,7 +1394,7 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(`RingOut failed: ${JSON.stringify(data)}`);
-      return { success: true, message: `Call initiated to ${args.to}`, ringout_id: data.id, status: data.status?.callStatus };
+      return { success: true, message: `Call initiated to ${args.to} from ${fromNumber}`, ringout_id: data.id, status: data.status?.callStatus };
     }
 
     case "rc_send_sms": {
