@@ -431,7 +431,7 @@ export function PostReviewPanel({
 
     const promises: Promise<any>[] = [];
     for (const sib of toDelete) {
-      promises.push(supabase.from("social_posts").delete().eq("id", sib.id));
+      promises.push(supabase.from("social_posts").delete().eq("id", sib.id).then());
     }
     for (const pageName of toAdd) {
       promises.push(
