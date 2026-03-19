@@ -167,15 +167,39 @@ Deno.serve(async (req) => {
       .gte("created_at", sevenDaysAgo)
       .limit(200);
 
-    // Build evidence block
-    let evidence = `═══ AGENT ACTIVITY (Last 7 Days) ═══\n`;
-    for (const [agent, data] of Object.entries(agentConversations)) {
+    // Build evidence block with PROMPT SOURCE + CONVERSATION LOGS
+    let evidence = `═══ AGENT ACTIVITY & PROMPT SOURCE (Last 7 Days) ═══\n`;
+    
+    // Include ALL known agents (even inactive ones) so Vizzy can audit prompts
+    const allAgentKeys = new Set([
+      ...Object.keys(agentConversations),
+      ...Object.keys(ALL_PROMPTS),
+    ]);
+
+    for (const agent of allAgentKeys) {
+      if (EXCLUDED_AGENTS.includes(agent)) continue;
       const file = AGENT_FILE_MAP[agent] || "unknown";
-      evidence += `\n--- ${agent.toUpperCase()} (file: ${file}, sessions: ${data.sessionCount}, messages: ${data.messages.length}) ---\n`;
-      // Include last 10 messages per agent for quality check
-      const sample = data.messages.slice(-10);
-      for (const m of sample) {
-        evidence += `[${m.role}] ${(m.content || "").slice(0, 300)}\n`;
+      const convData = agentConversations[agent];
+      const promptText = ALL_PROMPTS[agent] || null;
+
+      evidence += `\n--- ${agent.toUpperCase()} (file: ${file}, sessions: ${convData?.sessionCount || 0}, messages: ${convData?.messages.length || 0}) ---\n`;
+
+      // Include actual prompt source (first 2000 chars)
+      if (promptText) {
+        evidence += `\nCURRENT PROMPT SOURCE (first 2000 chars):\n${promptText.slice(0, 2000)}\n`;
+      } else {
+        evidence += `\nCURRENT PROMPT SOURCE: [not found]\n`;
+      }
+
+      // Include recent conversation samples
+      if (convData?.messages.length) {
+        evidence += `\nRECENT CONVERSATIONS (last 10):\n`;
+        const sample = convData.messages.slice(-10);
+        for (const m of sample) {
+          evidence += `[${m.role}] ${(m.content || "").slice(0, 300)}\n`;
+        }
+      } else {
+        evidence += `\nRECENT CONVERSATIONS: NONE (inactive)\n`;
       }
     }
 
