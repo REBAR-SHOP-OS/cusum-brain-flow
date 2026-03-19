@@ -7,6 +7,7 @@ import { RoleGuard } from "@/components/auth/RoleGuard";
 import { LiveChatWidget } from "./LiveChatWidget";
 import { FloatingVizzyButton } from "@/components/vizzy/FloatingVizzyButton";
 import { ScreenshotFeedbackButton } from "@/components/feedback/ScreenshotFeedbackButton";
+import { VizzyCallHandler } from "@/components/vizzy/VizzyCallHandler";
 import { useFixRequestMonitor } from "@/hooks/useFixRequestMonitor";
 import { ChatPanelProvider } from "@/contexts/ChatPanelContext";
 import { DockChatProvider } from "@/contexts/DockChatContext";
