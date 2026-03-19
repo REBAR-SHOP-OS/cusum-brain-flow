@@ -49,6 +49,35 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
   const handleClose = () => { endSession(); onClose(); };
 
+  const generateConversationPdf = () => {
+    if (transcripts.length === 0) return;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const margin = 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const maxWidth = pageWidth - margin * 2;
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+    let md = `# Nila Interpreter — Conversation Report\n\n`;
+    md += `**Date:** ${dateStr} at ${timeStr}\n\n`;
+    md += `**Total exchanges:** ${transcripts.length}\n\n`;
+    md += `## Conversation\n\n`;
+
+    transcripts.forEach((t, i) => {
+      const direction = t.sourceLang === "en" ? "English → Farsi" : "Farsi → English";
+      const englishText = t.sourceLang === "en" ? t.original : t.translation;
+      md += `- **${i + 1}. [${direction}]:** ${englishText || "(no translation)"}\n`;
+    });
+
+    addMarkdownToPdf(doc, md, { margin, maxWidth, pageHeight, startY: margin });
+
+    const fileName = `nila-report-${now.toISOString().slice(0, 10)}.pdf`;
+    doc.save(fileName);
+  };
+
   const isSpeaking = transcripts.some((t) => t.isSpeaking);
   const isTranslating = transcripts.some((t) => t.isTranslating);
 
