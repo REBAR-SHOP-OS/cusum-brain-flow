@@ -64,7 +64,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
     >
       {/* Close */}
       <div className="w-full flex justify-end p-4">
-        <button onClick={handleClose} className="p-2 rounded-full bg-muted hover:bg-accent transition-colors" aria-label="End interpreter">
+        <button onClick={handleClose} className="p-2 rounded-full bg-muted hover:bg-accent transition-colors" aria-label="End Nila interpreter">
           <X className="w-6 h-6 text-foreground" />
         </button>
       </div>
