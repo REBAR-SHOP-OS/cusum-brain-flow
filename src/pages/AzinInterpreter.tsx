@@ -151,7 +151,7 @@ export default function AzinInterpreter() {
                   : t.originalCleanText || t.text;
 
                 return (
-                  <div key={t.id} className="text-sm text-foreground">
+                  <div key={t.id} className="text-base text-foreground leading-relaxed" style={{ fontFamily: '"Vazirmatn", "Tahoma", sans-serif' }}>
                     {t.isTranslating ? (
                       <span className="text-muted-foreground italic">در حال ترجمه...</span>
                     ) : (
