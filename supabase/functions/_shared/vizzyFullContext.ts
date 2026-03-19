@@ -474,8 +474,10 @@ export async function buildFullVizzyContext(
     .map(([name, hrs]) => `  • ${name}: ${hrs.toFixed(1)} hrs`)
     .join("\n");
 
-  // ═══ EMAIL → EMPLOYEE MAP (must be declared BEFORE footprint/RC sections that use it) ═══
-  // emailProfileMap already declared above (before footprint section)
+  // ═══ EMAIL → EMPLOYEE MAP (declared here BEFORE footprint/RC sections that use it) ═══
+  const emailProfileMap = new Map(
+    (profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"])
+  );
 
   // ═══ PHONE → EMPLOYEE MAP (RC calls use phone numbers, not emails) ═══
   // Hardcoded from known RingCentral extensions + auto-extracted from call note recipients
