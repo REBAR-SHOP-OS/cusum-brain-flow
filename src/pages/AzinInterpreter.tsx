@@ -25,17 +25,14 @@ export default function AzinInterpreter() {
     clearTranscripts,
   } = useRealtimeTranscribe();
 
-  const handleLangToggle = useCallback((lang: "en" | "fa") => {
+  const handleLangToggle = useCallback(async (lang: "en" | "fa") => {
     if (isConnected && sourceLang === lang) {
-      // Same button pressed while active → stop
       disconnect();
     } else if (isConnected && sourceLang !== lang) {
-      // Switch language while recording
       disconnect();
       setSourceLang(lang);
-      setTimeout(() => connect(), 100);
+      connect();
     } else {
-      // Not connected → start with this language
       setSourceLang(lang);
       connect();
     }

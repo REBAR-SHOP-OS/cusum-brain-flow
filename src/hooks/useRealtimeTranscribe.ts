@@ -37,7 +37,13 @@ export function useRealtimeTranscribe() {
       if (!trimmed) return;
       // Filter out very short fragments (likely background noise)
       const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 2 || trimmed.length < 5) return;
+      if (wordCount < 3 || trimmed.length < 10) return;
+      // Filter noise patterns: mostly non-letter chars, repeated syllables, etc.
+      const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
+      if (letterCount / trimmed.length < 0.5) return;
+      const words = trimmed.split(/\s+/);
+      const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
+      if (words.length >= 3 && uniqueWords.size === 1) return; // "da da da"
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       const entryId = crypto.randomUUID();
       const currentSourceLang = sourceLangRef.current;
