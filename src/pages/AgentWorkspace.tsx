@@ -96,6 +96,7 @@ export default function AgentWorkspace() {
   const [showRecipeTable, setShowRecipeTable] = useState(false);
   const [purchasingDate, setPurchasingDate] = useState<Date | undefined>();
   const [activePurchasingDateStr, setActivePurchasingDateStr] = useState<string | null>(null);
+  const [purchasingKey, setPurchasingKey] = useState(0);
 
   const { dates: purchasingDates, getConfirmedSnapshot, deleteConfirmedList } = usePurchasingDates();
 
@@ -221,6 +222,7 @@ export default function AgentWorkspace() {
       today.setHours(0, 0, 0, 0);
       setPurchasingDate(today);
       setActivePurchasingDateStr(today.toISOString().split("T")[0]);
+      setPurchasingKey((k) => k + 1);
     }
   }, [agentId]);
 
@@ -631,6 +633,7 @@ export default function AgentWorkspace() {
             <PurchasingConfirmedView record={getConfirmedSnapshot(activePurchasingDateStr)!} />
           ) : (
             <PurchasingListPanel
+              key={purchasingKey}
               filterDate={purchasingDate}
               onFilterDateChange={(d) => {
                 setPurchasingDate(d);
