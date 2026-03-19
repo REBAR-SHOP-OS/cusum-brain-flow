@@ -276,6 +276,13 @@ serve(async (req) => {
         .delete()
         .eq("user_id", userId);
 
+      // Also remove from integration_connections
+      await supabaseAdmin
+        .from("integration_connections")
+        .delete()
+        .eq("user_id", userId)
+        .eq("integration_id", "ringcentral");
+
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
