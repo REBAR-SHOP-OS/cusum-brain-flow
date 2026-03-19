@@ -633,6 +633,7 @@ export default function AgentWorkspace() {
             <PurchasingConfirmedView record={getConfirmedSnapshot(activePurchasingDateStr)!} />
           ) : (
             <PurchasingListPanel
+              key={purchasingKey}
               filterDate={purchasingDate}
               onFilterDateChange={(d) => {
                 setPurchasingDate(d);
