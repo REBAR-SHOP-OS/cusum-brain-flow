@@ -656,7 +656,17 @@ Deno.serve(async (req) => {
 
       const timeSlotNum: number | undefined = (pixelSlot && typeof pixelSlot === "number" && pixelSlot >= 1 && pixelSlot <= 5) ? pixelSlot : undefined;
 
-      if (slotMatch || isAllSlots || timeSlotNum || isRegenerate) {
+      // Map time strings to slot numbers for instant generation
+      const TIME_TO_SLOT: Record<string, number> = {
+        "06:30": 1, "6:30": 1,
+        "07:30": 2, "7:30": 2,
+        "08:00": 3, "8:00": 3,
+        "12:30": 4,
+        "14:00": 5,
+      };
+      const timeMatch = TIME_TO_SLOT[msgLower.trim()];
+
+      if (slotMatch || isAllSlots || timeSlotNum || isRegenerate || timeMatch) {
         console.log("🎨 Pixel Step 2: Deterministic image generation triggered", isRegenerate ? "(REGENERATE)" : "");
 
         // Resolve company logo — optional, continue without if missing
@@ -680,7 +690,7 @@ Deno.serve(async (req) => {
 
         const resolvedSlotNum = isRegenerate
           ? parseInt(regenMatch![1])
-          : (timeSlotNum || parseInt(slotMatch?.[1] || "1"));
+          : (timeSlotNum || timeMatch || parseInt(slotMatch?.[1] || "1"));
         const slotsToGenerate = isAllSlots
           ? PIXEL_SLOTS
           : [PIXEL_SLOTS[resolvedSlotNum - 1]];
