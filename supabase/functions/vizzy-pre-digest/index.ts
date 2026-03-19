@@ -167,7 +167,8 @@ CRITICAL RULES:
 - Compare against previous benchmarks when available: "AR is up 12% from last week"
 - Be opinionated — this is Vizzy's internal analysis, not a neutral report
 
-${benchmarkHistory ? `\n═══ PREVIOUS BENCHMARKS ═══\n${benchmarkHistory}` : "No previous benchmarks — this is the first session."}`,
+${benchmarkHistory ? `\n═══ PREVIOUS BENCHMARKS ═══\n${benchmarkHistory}` : "No previous benchmarks — this is the first session."}
+${agentAuditContext}`,
         },
         {
           role: "user",
