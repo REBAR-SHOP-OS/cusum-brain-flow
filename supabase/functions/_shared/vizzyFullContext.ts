@@ -805,14 +805,14 @@ ${employeeEventLines || "    No activity events today"}
 ${emailByEmployeeLines || "    No email activity today"}
 
 📞 RINGCENTRAL CALLS TODAY (${totalRcCalls} total)
-  Inbound: ${totalRcInbound} | Outbound: ${totalRcCalls - totalRcInbound} | Missed: ${totalRcMissed}
+${syncStalenessLine ? syncStalenessLine + "\n" : ""}  Inbound: ${totalRcInbound} | Outbound: ${totalRcCalls - totalRcInbound} | Missed: ${totalRcMissed}
   Per-Employee Call Activity:
 ${rcEmployeeLines || "    No call activity today"}
   Call Details:
 ${rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today"}
 ${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlags.join("\n")}` : ""}
 
-📝 CALL NOTES & TRANSCRIPTS (from RingCentral AI Assistant — ${(rcCallNoteEmails || []).length} today)
+📝 CALL NOTES & TRANSCRIPTS (from RingCentral AI Assistant — ${(rcCallNoteEmails || []).length} in last 7 days)
 ${(rcCallNoteEmails || []).length > 0
   ? (rcCallNoteEmails || []).map((note: any) => {
       const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
