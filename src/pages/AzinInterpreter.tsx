@@ -155,6 +155,7 @@ export default function AzinInterpreter() {
               {partialText && sourceLang === "fa" && (
                 <div className="text-sm text-muted-foreground italic">{partialText}</div>
               )}
+              <div ref={faBottomRef} />
             </div>
           </ScrollArea>
         </div>
