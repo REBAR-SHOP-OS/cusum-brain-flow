@@ -274,6 +274,8 @@ RULES:
 - Sales agent gets the deepest scrutiny — it directly impacts revenue
 - Generate Lovable commands ONLY for real issues, not cosmetic preferences
 - Each Lovable command must be copy-pasteable into Lovable chat and produce a working fix
+- Since you have the ACTUAL prompt source, reference specific sections/lines when suggesting fixes — be surgical
+- For inactive agents with no conversations, still audit the prompt source for quality and completeness
 - EXCLUDE social/Pixel agent entirely — do not mention it`,
         },
         {
