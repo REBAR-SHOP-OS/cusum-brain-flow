@@ -221,16 +221,19 @@ export async function buildFullVizzyContext(
       .gte("received_at", today + "T00:00:00")
       .order("received_at", { ascending: false })
       .limit(500),
-    // RingCentral call note emails (sent by RC AI Assistant via Gmail)
-    supabase
-      .from("communications")
-      .select("subject, to_address, body_preview, received_at")
-      .eq("source", "gmail")
-      .eq("direction", "inbound")
-      .ilike("subject", "%Notes of your call%")
-      .gte("received_at", today + "T00:00:00")
-      .order("received_at", { ascending: false })
-      .limit(100),
+    // RingCentral call note emails — last 7 days (not just today) for richer context
+    (() => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      return supabase
+        .from("communications")
+        .select("subject, to_address, body_preview, received_at")
+        .eq("source", "gmail")
+        .eq("direction", "inbound")
+        .ilike("subject", "%Notes of your call%")
+        .gte("received_at", sevenDaysAgo + "T00:00:00")
+        .order("received_at", { ascending: false })
+        .limit(100);
+    })(),
   ]);
 
   // Compute financials
