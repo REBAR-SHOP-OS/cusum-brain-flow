@@ -127,7 +127,7 @@ export default function AzinInterpreter() {
                 );
               })}
               {partialText && sourceLang !== "fa" && (
-                <div className="text-sm text-muted-foreground italic">{partialText}</div>
+                <div className="text-base text-muted-foreground italic leading-relaxed">{partialText}</div>
               )}
               <div ref={enBottomRef} />
             </div>
