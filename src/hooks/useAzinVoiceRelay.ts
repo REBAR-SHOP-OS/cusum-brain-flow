@@ -118,6 +118,10 @@ export function useAzinVoiceRelay() {
       const trimmed = data.text.trim();
       if (!trimmed) return;
 
+      // Block Scribe annotations and punctuation-only strings
+      if (SCRIBE_ANNOTATION.test(trimmed)) return;
+      if (PUNCTUATION_ONLY.test(trimmed)) return;
+
       // Strong noise filter
       const wordCount = trimmed.split(/\s+/).length;
       if (wordCount < 3 || trimmed.length < 8) return;
