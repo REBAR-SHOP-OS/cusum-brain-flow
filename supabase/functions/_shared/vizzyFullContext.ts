@@ -668,10 +668,9 @@ export async function buildFullVizzyContext(
     const duration = (meta?.duration as number) || 0;
     const isMissed = result === "Missed" || result === "No Answer";
 
-    // Match employee by from/to address against profile emails
+    // Match employee by phone number OR email using resolveEmployeeName
     const addr = dir === "outbound" ? call.from_address : call.to_address;
-    const addrClean = addr?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || addr || "";
-    const employeeName = emailProfileMap.get(addrClean) || addrClean;
+    const employeeName = resolveEmployeeName(addr);
 
     if (!rcCallsByEmployee[employeeName]) rcCallsByEmployee[employeeName] = { outbound: 0, inbound: 0, missed: 0, talkTimeSec: 0 };
     if (dir === "outbound") rcCallsByEmployee[employeeName].outbound++;
