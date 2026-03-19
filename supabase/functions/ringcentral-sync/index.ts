@@ -414,7 +414,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log("ringcentral-sync v2: request received");
+    
     // Parse body early (needed for both modes)
     let body: { syncType?: string; daysBack?: number } = {};
     try {
