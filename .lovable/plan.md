@@ -1,38 +1,65 @@
 
 
-# Fix: AZIN Generating Responses Instead of Translating
+# Add Manual Language-Specific Record Buttons (Google Translate Style)
 
-## Problem
+## What the User Wants
 
-As shown in the screenshot, after the user says "خیلی دوست دارم" (I really like you), AZIN correctly translates it but then generates its own response: "What are you doing today?" — this is conversational behavior, not translation. The model must NEVER generate original speech.
+Two separate record buttons in the bottom bar — one labeled **EN** (English) and one labeled **FA** (فارسی) — so the user can manually specify the source language before recording. Like Google Translate: press the EN button to record English (translates to Farsi), press FA to record Farsi (translates to English).
 
-## Root Cause
+## Current Behavior
 
-Two issues:
-
-1. **The prompt needs to be more aggressive** — current prompt says "NEVER speak on your own" but GPT-4o Realtime is a conversational model that defaults to responding. It needs explicit, repeated reinforcement that it is NOT a conversational agent and must NEVER generate responses to what it hears.
-
-2. **The old `elevenlabs-azin-token` edge function still uses `gpt-4o-mini-realtime-preview`** with the old prompt — this should be updated too for consistency, even though it's not actively called from the client.
+- Single mic orb auto-detects language via `sourceLang: "auto"`
+- The `translate-message` edge function already supports explicit `sourceLang` parameter
+- No changes needed to the backend
 
 ## Changes
 
-### 1. Rewrite AZIN prompt with anti-response hardening
-**File: `src/hooks/useAzinVoiceInterpreter.ts`**
+### 1. Update `useRealtimeTranscribe` hook to accept source language
+**File: `src/hooks/useRealtimeTranscribe.ts`**
 
-Replace the current `AZIN_INSTRUCTIONS` with a much more aggressive prompt that:
-- Explicitly forbids generating responses, follow-up questions, or reactions
-- Repeats the core rule in multiple phrasings (reinforcement technique for realtime models)
-- Adds explicit examples of forbidden behavior: "Do NOT reply, respond, react, ask questions, or continue the conversation"
-- Frames identity as "a translation codec / relay device" — not an AI, not an assistant
+- Add a `sourceLang` state (`"auto" | "en" | "fa"`) with a setter
+- Pass `sourceLang` to the `translate-message` call instead of hardcoded `"auto"`
+- When `sourceLang` is `"en"`: translate to `["fa"]` only, show original in EN column, translation in FA column
+- When `sourceLang` is `"fa"`: translate to `["en"]` only, show original in FA column, translation in EN column
+- Store `sourceLang` per transcript entry so the UI knows which column is original vs translated
 
-### 2. Update the legacy `elevenlabs-azin-token` edge function
-**File: `supabase/functions/elevenlabs-azin-token/index.ts`**
+### 2. Add two language record buttons to the bottom bar
+**File: `src/pages/AzinInterpreter.tsx`**
 
-- Upgrade model to `gpt-4o-realtime-preview`
-- Sync the prompt with the new hardened version
-- Update VAD settings to match (silence: 600ms, prefix: 300ms)
+Replace the single `AzinVoiceOrb` with a Google Translate-style layout:
 
-## Technical Detail
+```text
+┌─────────────────────────────────────────┐
+│   [🎙 EN]    [AZIN avatar]    [🎙 فا]  │
+└─────────────────────────────────────────┘
+```
 
-The OpenAI Realtime API's conversational models have a strong default tendency to "respond" to user speech. Simple negative instructions ("don't respond") are often insufficient. The fix uses prompt reinforcement: stating the same constraint in 3-4 different ways, framing the model's identity as a non-agent device, and explicitly listing forbidden behaviors with examples.
+- **EN button**: Sets `sourceLang` to `"en"`, starts/stops recording. When active, shows English mic pulsing.
+- **FA button**: Sets `sourceLang` to `"fa"`, starts/stops recording. When active, shows Farsi mic pulsing.
+- Each button shows the language label and a mic icon
+- Active button gets the indigo glow/pulse animation (reuse existing AzinVoiceOrb styling)
+- Only one can be active at a time (pressing one while the other is active switches)
+
+### 3. Update transcript display logic
+**File: `src/pages/AzinInterpreter.tsx`**
+
+- When `sourceLang === "en"`: EN column shows original text, FA column shows translation
+- When `sourceLang === "fa"`: FA column shows original text, EN column shows translation
+- Each transcript entry carries its `sourceLang` so mixed-language sessions display correctly
+
+### 4. Create `LanguageMicButton` component
+**File: `src/components/azin/LanguageMicButton.tsx`**
+
+A compact mic button with:
+- Language label (EN or فا)
+- Mic/MicOff icon
+- Active state: indigo glow + pulse animation
+- Connecting state: loading spinner
+- Disabled state when the other language is recording
+
+## Technical Details
+
+- The `translate-message` edge function already accepts `sourceLang` and `targetLangs` — no backend changes needed
+- `CommittedTranscript` interface gets a new `sourceLang` field to track per-entry language direction
+- The existing AZIN avatar button (voice chat overlay) stays in the center between the two mic buttons
 
