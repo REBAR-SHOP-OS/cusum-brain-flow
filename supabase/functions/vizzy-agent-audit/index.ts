@@ -242,6 +242,7 @@ For EACH agent (active or inactive), produce:
 **Compliance:** Did the agent stay within its role? Did it attempt tasks outside its domain?
 **Proactiveness:** Did it create tasks/notifications when it should have? Did it miss obvious follow-up opportunities?
 **Task Quality:** If the agent created tasks, were they clear, actionable, and properly prioritized?
+**Prompt Health Check:** Does the prompt have clear boundaries, anti-hallucination rules, proper tool instructions, escape hatches for edge cases? Flag any missing guardrails.
 
 ### SALES AGENT SPECIAL REPORT (only for sales/commander/blitz):
 - Quote accuracy assessment
