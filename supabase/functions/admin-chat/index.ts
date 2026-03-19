@@ -1342,6 +1342,125 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
         data,
       };
     }
+    // ─── RingCentral Write Tools ───
+    case "rc_make_call": {
+      const { data: allTokens } = await supabase
+        .from("user_ringcentral_tokens")
+        .select("access_token, token_expires_at, refresh_token, user_id")
+        .order("token_expires_at", { ascending: false })
+        .limit(1);
+      if (!allTokens?.length) throw new Error("No RingCentral connection found");
+      const tokenRow = allTokens[0];
+      let accessToken = tokenRow.access_token;
+      if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
+        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
+        const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+        });
+        if (!resp.ok) throw new Error("Token refresh failed");
+        const tokens = await resp.json();
+        accessToken = tokens.access_token;
+        await supabase.from("user_ringcentral_tokens").update({
+          access_token: tokens.access_token, refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+          token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+        }).eq("user_id", tokenRow.user_id);
+      }
+
+      const body: any = { to: { phoneNumber: args.to }, playPrompt: true };
+      if (args.from) body.from = { phoneNumber: args.from };
+      const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/ring-out`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`RingOut failed: ${JSON.stringify(data)}`);
+      return { success: true, message: `Call initiated to ${args.to}`, ringout_id: data.id, status: data.status?.callStatus };
+    }
+
+    case "rc_send_sms": {
+      const { data: allTokens } = await supabase
+        .from("user_ringcentral_tokens")
+        .select("access_token, token_expires_at, refresh_token, user_id")
+        .order("token_expires_at", { ascending: false })
+        .limit(1);
+      if (!allTokens?.length) throw new Error("No RingCentral connection found");
+      const tokenRow = allTokens[0];
+      let accessToken = tokenRow.access_token;
+      if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
+        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
+        const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+        });
+        if (!resp.ok) throw new Error("Token refresh failed");
+        const tokens = await resp.json();
+        accessToken = tokens.access_token;
+        await supabase.from("user_ringcentral_tokens").update({
+          access_token: tokens.access_token, refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+          token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+        }).eq("user_id", tokenRow.user_id);
+      }
+
+      const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/sms`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ to: [{ phoneNumber: args.to }], text: args.text }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`SMS failed: ${JSON.stringify(data)}`);
+      return { success: true, message: `SMS sent to ${args.to}`, messageId: data.id };
+    }
+
+    case "rc_send_fax": {
+      const { data: allTokens } = await supabase
+        .from("user_ringcentral_tokens")
+        .select("access_token, token_expires_at, refresh_token, user_id")
+        .order("token_expires_at", { ascending: false })
+        .limit(1);
+      if (!allTokens?.length) throw new Error("No RingCentral connection found");
+      const tokenRow = allTokens[0];
+      let accessToken = tokenRow.access_token;
+      if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
+        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
+        const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+        });
+        if (!resp.ok) throw new Error("Token refresh failed");
+        const tokens = await resp.json();
+        accessToken = tokens.access_token;
+        await supabase.from("user_ringcentral_tokens").update({
+          access_token: tokens.access_token, refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+          token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+        }).eq("user_id", tokenRow.user_id);
+      }
+
+      const rcForm = new FormData();
+      const faxJson = JSON.stringify({
+        to: [{ phoneNumber: args.to }],
+        faxResolution: "High",
+        coverPageText: args.cover_page_text || undefined,
+      });
+      rcForm.append("json", new Blob([faxJson], { type: "application/json" }));
+
+      const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/fax`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: rcForm,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`Fax failed: ${JSON.stringify(data)}`);
+      return { success: true, message: `Fax sent to ${args.to}`, faxId: data.id, status: data.messageStatus };
+    }
+
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
   }
