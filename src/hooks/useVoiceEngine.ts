@@ -39,6 +39,22 @@ export interface VoiceEngineConfig {
 const OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime";
 const DEFAULT_MAX_SESSION_MS = 30 * 60 * 1000; // 30 minutes
 
+// Client-side self-talk filter — blocks agent transcripts that are self-generated
+const SELF_TALK_PATTERNS = [
+  /^(hello|hi|hey|salam|welcome)/i,
+  /\b(i am|i'm|i can|i will|i'll|let me|how can i)\b/i,
+  /\b(sure|of course|okay|got it|understood|absolutely|certainly)\b/i,
+  /\b(how can i help|what would you like|let me know|is there anything)\b/i,
+  /\b(i'm here to|i am here to|i'm ready|i am ready|i'm listening)\b/i,
+  /\b(translat(ing|ion)|interpret(ing|ation))\b/i,
+  /\b(that's interesting|good question|i see|i understand)\b/i,
+];
+
+function isSelfTalk(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  return SELF_TALK_PATTERNS.some(p => p.test(lower));
+}
+
 export function useVoiceEngine(config: VoiceEngineConfig) {
   const [state, setState] = useState<VoiceEngineState>("idle");
   const [transcripts, setTranscripts] = useState<VoiceTranscript[]>([]);
@@ -124,7 +140,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         case "response.audio_transcript.done": {
           const text = (msg.transcript || agentTextRef.current).trim();
           agentTextRef.current = "";
-          if (text) {
+          if (text && !isSelfTalk(text)) {
             setTranscripts(prev => [
               ...prev,
               { id: String(++idCounter.current), role: "agent", text, timestamp: Date.now() },
