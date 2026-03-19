@@ -33,13 +33,12 @@ const CANONICAL_FIELDS: CanonicalField[] = [
 
 const DIM_FIELDS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
 
-type LengthUnit = "mm" | "cm" | "m" | "in" | "ft";
-const LENGTH_UNITS: { value: LengthUnit; label: string; factor: number }[] = [
-  { value: "mm", label: "mm", factor: 1 },
-  { value: "cm", label: "cm", factor: 10 },
-  { value: "m",  label: "m",  factor: 1000 },
-  { value: "in", label: "inches", factor: 25.4 },
-  { value: "ft", label: "feet", factor: 304.8 },
+type LengthUnit = "mm" | "in" | "ft" | "imperial";
+const LENGTH_UNITS: { value: LengthUnit; label: string; shortLabel: string; factor: number }[] = [
+  { value: "mm", label: "Millimeters", shortLabel: "mm", factor: 1 },
+  { value: "in", label: "Inches", shortLabel: "in", factor: 25.4 },
+  { value: "ft", label: "Feet", shortLabel: "ft", factor: 304.8 },
+  { value: "imperial", label: "Imperial (ft-in)", shortLabel: "ft-in", factor: 25.4 },
 ];
 
 // ── Header alias map (lowercase → canonical key) ─────────────
@@ -146,12 +145,12 @@ function checkDataCoverage(rows: ExtractRow[], mapping: Record<string, string>) 
   return issues;
 }
 
-// ── Build dimensions JSON from row ───────────────────────────
-function buildDimensionsJson(row: ExtractRow): Record<string, number> {
+// ── Build dimensions JSON from row (with unit conversion) ────
+function buildDimensionsJson(row: ExtractRow, factor: number): Record<string, number> {
   const dims: Record<string, number> = {};
   for (const d of DIM_FIELDS) {
     const val = (row as any)[`dim_${d.toLowerCase()}`];
-    if (val != null && val !== 0) dims[d] = Number(val);
+    if (val != null && val !== 0) dims[d] = Math.round(Number(val) * factor);
   }
   return dims;
 }
@@ -183,6 +182,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
   const [lengthUnit, setLengthUnit] = useState<LengthUnit>("mm");
 
   const lengthFactor = useMemo(() => LENGTH_UNITS.find(u => u.value === lengthUnit)?.factor ?? 1, [lengthUnit]);
+  const unitLabel = useMemo(() => LENGTH_UNITS.find(u => u.value === lengthUnit)?.shortLabel ?? "mm", [lengthUnit]);
 
   const issues = useMemo(() => checkDataCoverage(rows, mapping), [rows, mapping]);
   const blockers = issues.filter(i => i.type === "missing" || i.type === "empty");
@@ -203,7 +203,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       shape: String((row as any)[mapping.shape] ?? ""),
       length: Math.round(Number((row as any)[mapping.length] ?? 0) * lengthFactor),
       quantity: Number((row as any)[mapping.quantity] ?? 0),
-      dimensions_json: buildDimensionsJson(row),
+      dimensions_json: buildDimensionsJson(row, lengthFactor),
       dwg: String((row as any)[mapping.dwg] ?? ""),
       grade: String((row as any)[mapping.grade] ?? ""),
     }));
@@ -219,7 +219,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       shape: String((row as any)[mapping.shape] ?? ""),
       length: Math.round(Number((row as any)[mapping.length] ?? 0) * lengthFactor),
       quantity: Number((row as any)[mapping.quantity] ?? 0),
-      dimensions_json: buildDimensionsJson(row),
+      dimensions_json: buildDimensionsJson(row, lengthFactor),
       dwg: String((row as any)[mapping.dwg] ?? ""),
       grade: String((row as any)[mapping.grade] ?? ""),
     }));
@@ -244,6 +244,30 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
               <CheckCircle2 className="w-3 h-3 mr-1" /> Mapping Confirmed
             </Badge>
           )}
+        </div>
+
+        {/* ── Unit System Toggle ── */}
+        <div className="shrink-0 space-y-1.5">
+          <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+            Source Data Units
+          </span>
+          <div className="flex gap-1 p-1 rounded-lg bg-muted/60 border border-border w-fit">
+            {LENGTH_UNITS.map(u => (
+              <button
+                key={u.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => { setLengthUnit(u.value); setConfirmed(false); }}
+                className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+                  lengthUnit === u.value
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/60"
+                } disabled:opacity-50`}
+              >
+                {u.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Scrollable content: mapping grid + blockers + preview */}
@@ -275,27 +299,6 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                     ))}
                   </SelectContent>
                 </Select>
-                {field.key === "length" && (
-                  <div className="w-full flex items-center gap-2 mt-1">
-                    <span className="text-[10px] text-muted-foreground">Source unit:</span>
-                    <Select
-                      value={lengthUnit}
-                      onValueChange={(val) => { setLengthUnit(val as LengthUnit); setConfirmed(false); }}
-                      disabled={disabled}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-[100px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {LENGTH_UNITS.map(u => (
-                          <SelectItem key={u.value} value={u.value} className="text-xs">
-                            {u.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -318,6 +321,11 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
               <div className="bg-muted/50 px-3 py-1.5 border-b border-border">
                 <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
                   Mapped Preview — First {previewRows.length} of {rows.length} rows
+                  {lengthUnit !== "mm" && (
+                    <span className="ml-2 text-primary">
+                      (source: {unitLabel} → stored as mm)
+                    </span>
+                  )}
                 </span>
               </div>
               <div className="overflow-x-auto max-h-52">
@@ -328,9 +336,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                       <TableHead className="text-[10px] font-bold tracking-wider">MARK</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider">SIZE</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider">SHAPE</TableHead>
-                      <TableHead className="text-[10px] font-bold tracking-wider text-right">LENGTH</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider text-right">LENGTH (mm)</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider text-right">QTY</TableHead>
-                      <TableHead className="text-[10px] font-bold tracking-wider">DIMS</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider">DIMS (mm)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
