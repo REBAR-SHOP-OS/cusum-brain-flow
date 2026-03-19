@@ -86,7 +86,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     supabase.from("leads").select("id, title, stage, expected_value, probability").in("stage", ["new", "contacted", "qualified", "proposal"]).order("probability", { ascending: false }).limit(20),
     supabase.from("customers").select("id").eq("status", "active").limit(100),
     supabase.from("deliveries").select("id, status, scheduled_date").gte("scheduled_date", today).lte("scheduled_date", today).limit(50),
-    supabase.from("profiles").select("id, full_name, user_id").not("full_name", "is", null),
+    supabase.from("profiles").select("id, full_name, user_id, email").not("full_name", "is", null),
     supabase.from("activity_events").select("id, event_type, entity_type, description, created_at").order("created_at", { ascending: false }).limit(20),
     supabase.from("knowledge").select("title, category, content").order("created_at", { ascending: false }).limit(50),
     supabase.from("chat_sessions").select("id, title, agent_name, user_id, created_at").gte("created_at", today + "T00:00:00").order("created_at", { ascending: false }).limit(100),
@@ -94,6 +94,8 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Invoice").gt("balance", 0).limit(50),
     supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Vendor").gt("balance", 0).limit(50),
     supabase.from("communications").select("subject, from_address, to_address, body_preview, received_at").eq("direction", "inbound").ilike("to_address", "%@rebar.shop%").order("received_at", { ascending: false }).limit(50),
+    // RingCentral calls today
+    supabase.from("communications").select("from_address, to_address, direction, received_at, metadata, source").eq("source", "ringcentral").gte("received_at", today + "T00:00:00").order("received_at", { ascending: false }).limit(500),
   ]);
 
   const invoices = (accountingInv || []).map((r: any) => ({ Balance: r.balance, DueDate: r.data?.DueDate, CustomerRef: r.data?.CustomerRef }));
