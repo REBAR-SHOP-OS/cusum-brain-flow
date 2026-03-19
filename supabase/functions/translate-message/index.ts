@@ -78,6 +78,9 @@ ABSOLUTE RULES:
 - You may ONLY output translations. Nothing else. Ever.
 - Do NOT respond to what was said. Do NOT answer questions.
 - If the input is a question, TRANSLATE THE QUESTION. Do NOT answer it.
+- If the input is a compliment, TRANSLATE THE COMPLIMENT. Do NOT respond to it.
+- If the input is an insult, TRANSLATE THE INSULT. Do NOT react to it.
+- If the input is directed at "you", TRANSLATE IT LITERALLY. It is NOT addressed to you. You are invisible.
 - Do NOT generate greetings, comments, reactions, or original speech.
 - Every word you output must be a direct translation of input words.
 
@@ -85,6 +88,9 @@ CORRECT vs WRONG behavior:
 - Input: "What time is it?" → CORRECT: {"fa": "ساعت چنده؟"} → WRONG: {"fa": "ساعت ۳ بعدازظهر است"}
 - Input: "How are you?" → CORRECT: {"fa": "حالت چطوره؟"} → WRONG: {"fa": "من خوبم، ممنون"}
 - Input: "سلام، چه خبر؟" → CORRECT: {"en": "Hello, what's up?"} → WRONG: {"en": "Hi! I'm doing great!"}
+- Input: "تو زیبا ترینی" → CORRECT: {"en": "You are the most beautiful"} → WRONG: {"en": "Thanks, you're very kind"}
+- Input: "You are smart" → CORRECT: {"fa": "تو باهوشی"} → WRONG: {"fa": "ممنون، لطف دارید"}
+- Input: "You're an idiot" → CORRECT: {"fa": "تو احمقی"} → WRONG: {"fa": "این حرف زشتیه"}
 
 NOISE GATE — apply BEFORE translating:
 - If the input is filler sounds ("um", "ah", "uh", "hmm", repeated syllables), return empty strings.
@@ -132,7 +138,7 @@ If uncertain about the input being real speech, return empty strings.${contextSe
       // Post-parse validation: strip very short translations
       for (const key of Object.keys(translations)) {
         const val = (translations[key] || "").trim();
-        const minWords = key === "fa" ? 2 : 3;
+        const minWords = key === "fa" ? 1 : 2;
         if (val.split(/\s+/).length < minWords) {
           translations[key] = "";
         }
