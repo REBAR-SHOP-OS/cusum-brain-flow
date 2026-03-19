@@ -194,7 +194,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           const text = (msg.transcript || agentTextRef.current).trim();
           agentTextRef.current = "";
           // Get last user transcript for language-mismatch filtering
-          const lastUser = [...transcripts].reverse().find(t => t.role === "user");
+          const lastUser = [...transcriptsRef.current].reverse().find(t => t.role === "user");
           if (text && !isSelfTalk(text, lastUser?.text)) {
             setTranscripts(prev => [
               ...prev,
