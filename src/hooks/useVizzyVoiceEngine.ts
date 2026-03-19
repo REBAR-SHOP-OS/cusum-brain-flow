@@ -305,7 +305,10 @@ export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
 function buildInstructions(digest: string | null, rawContext: string | null): string {
   if (!digest && !rawContext) return VIZZY_INSTRUCTIONS;
 
-  const now = new Date().toLocaleString();
+  const now = new Date();
+  const hour = now.getHours();
+  const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  const nowStr = now.toLocaleString();
 
   if (digest) {
     // Pre-digested mode: digest is self-sufficient — omit rawContext to prevent token overflow
