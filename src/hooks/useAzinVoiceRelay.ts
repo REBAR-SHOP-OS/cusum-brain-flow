@@ -44,11 +44,13 @@ export function useAzinVoiceRelay() {
       isPlayingRef.current = false;
       playNextAudio();
     };
-    audio.onerror = () => {
+    audio.onerror = (e) => {
+      console.error("[relay] audio error:", e);
       isPlayingRef.current = false;
       playNextAudio();
     };
-    audio.play().catch(() => {
+    audio.play().catch((err) => {
+      console.warn("[relay] audio.play() blocked:", err?.message);
       isPlayingRef.current = false;
       playNextAudio();
     });

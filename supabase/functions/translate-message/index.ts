@@ -110,13 +110,10 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
     try {
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       translations = JSON.parse(cleaned);
-      // Post-parse validation: strip very short translations
+      // Post-parse validation: strip empty/whitespace-only translations
       for (const key of Object.keys(translations)) {
         const val = (translations[key] || "").trim();
-        const minWords = key === "fa" ? 1 : 2;
-        if (val.split(/\s+/).length < minWords) {
-          translations[key] = "";
-        }
+        translations[key] = val;
       }
     } catch {
       console.error("Failed to parse translation:", raw);
