@@ -445,12 +445,7 @@ serve(async (req) => {
       );
     }
 
-    let body: { syncType?: string; daysBack?: number } = {};
-    try {
-      body = await req.json();
-    } catch {
-      // Use defaults
-    }
+    // body already parsed above (before auth check)
 
     const syncType = body.syncType || "all";
     const daysBack = body.daysBack || 7;
