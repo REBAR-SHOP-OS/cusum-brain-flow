@@ -67,9 +67,13 @@ export function ProductionQueueView() {
 
   const handleDeleteBarlist = async (barlistId: string) => {
     // work_orders.barlist_id → SET NULL via FK; barlist_items, machine_queue_items, production_tasks → CASCADE via FK
-    const { error } = await supabase.from("barlists").delete().eq("id", barlistId);
+    const { data, error } = await supabase.from("barlists").delete().eq("id", barlistId).select();
     if (error) {
       toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (!data || data.length === 0) {
+      toast({ title: "Permission denied", description: "You don't have permission to delete this barlist.", variant: "destructive" });
       return;
     }
     toast({ title: "Barlist deleted" });
@@ -81,21 +85,27 @@ export function ProductionQueueView() {
     // 1. Delete barlists (work_orders.barlist_id → SET NULL via FK; barlist_items etc → CASCADE)
     const projectBarlists = barlists.filter(b => b.project_id === projectId);
     for (const b of projectBarlists) {
-      const { error } = await supabase.from("barlists").delete().eq("id", b.id);
+      const { data, error } = await supabase.from("barlists").delete().eq("id", b.id).select();
       if (error) { toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" }); return false; }
+      if (!data || data.length === 0) { toast({ title: "Permission denied", description: "Cannot delete barlist — insufficient permissions.", variant: "destructive" }); return false; }
     }
 
     // 3. Delete cut plans (CASCADE handles cut_plan_items → clearance_evidence, cut_output_batches, inventory_reservations, loading_checklist)
     const projectPlans = plans.filter(p => p.project_id === projectId);
     for (const p of projectPlans) {
-      const { error } = await supabase.from("cut_plans").delete().eq("id", p.id);
+      const { data, error } = await supabase.from("cut_plans").delete().eq("id", p.id).select();
       if (error) { toast({ title: "Error deleting cut plan", description: error.message, variant: "destructive" }); return false; }
+      if (!data || data.length === 0) { toast({ title: "Permission denied", description: "Cannot delete cut plan — insufficient permissions.", variant: "destructive" }); return false; }
     }
 
     // 4. Delete project (CASCADE handles project_events, project_milestones, project_tasks; work_orders SET NULL)
-    const { error } = await supabase.from("projects").delete().eq("id", projectId);
+    const { data: delData, error } = await supabase.from("projects").delete().eq("id", projectId).select();
     if (error) {
       toast({ title: "Error deleting project", description: error.message, variant: "destructive" });
+      return false;
+    }
+    if (!delData || delData.length === 0) {
+      toast({ title: "Permission denied", description: "Cannot delete project — insufficient permissions.", variant: "destructive" });
       return false;
     }
     toast({ title: "Project deleted" });
