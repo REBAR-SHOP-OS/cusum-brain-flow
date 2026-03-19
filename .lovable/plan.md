@@ -1,121 +1,117 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Full ERP Audit — Issues Found (Zero Tolerance, No Changes Yet)
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## CRITICAL BUGS (Will Cause Runtime Failures)
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+### 1. `analyze-feedback-fix` Edge Function — Missing Required Fields on Insert
+**Severity: CRITICAL — Every insert fails**
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+The `vizzy_memory` table has `user_id` (NOT NULL, no default) and `company_id` (NOT NULL, no default). The edge function inserts at line 301 without providing either field:
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+```typescript
+// Line 301 — MISSING user_id and company_id
+await supabaseAdmin.from("vizzy_memory").insert({
+  category: savedCategory,
+  content: savedContent,
+  metadata: { ... },
+});
+```
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+**Result**: Every feedback analysis silently fails. The Fixes Queue in CEO Portal will always be empty for feedback-generated items. Confirmed by `count(*) = 0` for feedback categories.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+**Fix**: Pass `user_id` and `company_id` from the feedback submitter or use a system service account ID.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+---
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+### 2. `analyze-feedback-fix` — Escalation Task Insert Missing `company_id`
+**Severity: CRITICAL**
 
-### Changes
+Line 285 inserts into `tasks` table which requires `company_id` (NOT NULL), but doesn't include it:
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+```typescript
+await supabaseAdmin.from("tasks").insert({
+  title: `📋 Escalated: ...`,
+  assigned_to: profiles[0].id,
+  status: "open",
+  // ❌ No company_id
+});
+```
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+**Result**: Escalation tasks silently fail to create.
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+---
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+### 3. `FixesQueue.tsx` — RLS Prevents CEO from Seeing All Fixes
+**Severity: HIGH**
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+The `vizzy_memory` RLS policy is `user_id = auth.uid()`. The FixesQueue reads via client-side Supabase (with user JWT), meaning the CEO can **only** see records where `user_id` matches their own auth ID — not fixes generated by other employees' feedback.
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+**Fix**: Either add an RLS policy for admin users, or query via an edge function using service role.
 
-## Completed: Odoo Mirror Pipeline + Sales Department Patch
+---
 
-### Assessment
-Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+## MEDIUM BUGS (Logic/Flow Issues)
 
-### Changes Implemented
+### 4. `reReportFeedback()` in Tasks.tsx Still Delegates to Radin
+**Severity: MEDIUM**
 
-**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
-- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
-- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
-- 30s cooldown per lead to prevent API rate limiting
-- Shows "Syncing…" indicator in header during refresh
-- Invalidates all lead-related query keys on completion
+Lines 661-692: The `reReportFeedback` function still creates tasks for `FEEDBACK_RECIPIENTS` (Radin) instead of calling `triggerFeedbackAnalysis`. This was supposed to be eliminated per the plan, but only `reopenWithIssue` was updated.
 
-**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
-- New `mode: "single"` + `odoo_id` parameter
-- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
-- Logs stage change events if stage differs
-- Returns fast without touching other leads
+**Result**: When users click the "مشکل حل نشده" re-report button on the task card, it bypasses the AI analysis and goes back to Radin.
 
-**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
-- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
-- Logs reconciliation events with reason
-- Only archives non-terminal leads (skips already won/lost)
+---
 
-**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
-- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
-- Improves timeline readability
+### 5. `triggerFeedbackAnalysis` — No `company_id` or `user_id` Passed
+**Severity: MEDIUM**
 
-**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
-- Footer shows "Synced X minutes ago" with color-coded status dot
-- Green: <5min, Yellow: <30min, Red: >30min
+The `triggerFeedbackAnalysis` helper doesn't pass `company_id` or `user_id` to the edge function. Even if the edge function is fixed to accept these, the callers (AnnotationOverlay, InboxPanel, Tasks) don't provide them.
 
-### Files Changed
-- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
-- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
-- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+**Fix**: Add these fields to `triggerFeedbackAnalysis` params and pass from callers.
 
-### No Changes Needed (Already Existed)
-- Sales Department sidebar, routes, pages, tables, hooks
-- Odoo chatter sync single mode (already existed)
-- OdooChatter unified timeline (already existed)
+---
 
-### Risks
-- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
-- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
+### 6. `ClarificationCard` — `supabase.functions.invoke` Used Instead of `invokeEdgeFunction`
+**Severity: LOW-MEDIUM**
+
+Line 352 in FixesQueue.tsx uses `supabase.functions.invoke` which swallows error bodies on non-2xx (per the project's own error-handling standard). Should use the custom `invokeEdgeFunction` utility.
+
+---
+
+### 7. `FixesQueue` — `useMutation` Imported but Never Used
+**Severity: LOW**
+
+Line 2 imports `useMutation` from TanStack but it's never used in the component. Dead import.
+
+---
+
+## OBSERVATIONS (Not Bugs, But Worth Noting)
+
+### 8. `aiRouter.ts` Uses Direct API Keys, Not Lovable AI Gateway
+The shared AI router directly calls OpenAI/Gemini APIs with `GPT_API_KEY` and `GEMINI_API_KEY` secrets, bypassing Lovable AI's supported models. This is the project's established pattern and works — just noting it doesn't use the free gateway.
+
+### 9. `getClaims()` Used in 25+ Edge Functions
+The shared `_shared/auth.ts` correctly uses `getUser()`, but 25+ older edge functions still use the deprecated `getClaims()` method directly. Not broken today, but a deprecation risk.
+
+### 10. Feedback Flow Still Assigns to Radin in Parallel
+Even in `AnnotationOverlay.tsx` (line 246) and `InboxPanel.tsx` (line 361), tasks are still created for `FEEDBACK_RECIPIENTS` (Radin) **in addition to** calling `triggerFeedbackAnalysis`. The plan said to stop delegating to Radin, but both paths still run. This creates duplicate work — Radin gets a task AND the AI generates a patch.
+
+---
+
+## SUMMARY OF REQUIRED FIXES
+
+| # | Issue | Severity | File |
+|---|-------|----------|------|
+| 1 | Missing `user_id` + `company_id` on vizzy_memory insert | CRITICAL | `analyze-feedback-fix/index.ts` |
+| 2 | Missing `company_id` on escalation task insert | CRITICAL | `analyze-feedback-fix/index.ts` |
+| 3 | RLS blocks CEO from seeing all fixes | HIGH | DB policy on `vizzy_memory` |
+| 4 | `reReportFeedback()` still delegates to Radin | MEDIUM | `Tasks.tsx` |
+| 5 | `triggerFeedbackAnalysis` missing company/user context | MEDIUM | `triggerFeedbackAnalysis.ts` + callers |
+| 6 | `supabase.functions.invoke` instead of `invokeEdgeFunction` | LOW | `FixesQueue.tsx` |
+| 7 | Unused `useMutation` import | LOW | `FixesQueue.tsx` |
+| 10 | Radin still gets tasks in parallel with AI analysis | MEDIUM | `AnnotationOverlay.tsx`, `InboxPanel.tsx` |
+
+**All fixes are surgical and additive — zero risk of damage to existing functionality.**
+
+Approve to proceed with fixing all 8 issues?
+
