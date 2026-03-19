@@ -746,6 +746,9 @@ ${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlag
 ${footprintLines.length > 0 ? footprintLines.join("\n") : "  No footprint data today"}
 ${footprintAlerts.length > 0 ? `\n  🚨 UTILIZATION ALERTS:\n${footprintAlerts.join("\n")}` : ""}
 
+📋 DAILY REPORT PER PERSON
+${buildPerPersonReports(profiles || [], hoursWorked, emailsByEmployee, rcCallsByEmployee, woByAssignee, agentUsageByUser, actionsByUser, eventsByEmployee, footprintTimestamps, machineOps || [], profileIdMap)}
+
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
 
