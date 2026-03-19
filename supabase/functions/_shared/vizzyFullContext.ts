@@ -649,8 +649,8 @@ export async function buildFullVizzyContext(
   const totalInbound = (allEmailsToday || []).filter((e: any) => e.direction === "inbound").length;
 
   // Unanswered inbound: threads with inbound but no outbound today
-  const inboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "inbound" && e.gmail_thread_id).map((e: any) => e.gmail_thread_id));
-  const outboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "outbound" && e.gmail_thread_id).map((e: any) => e.gmail_thread_id));
+  const inboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "inbound" && e.thread_id).map((e: any) => e.thread_id));
+  const outboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "outbound" && e.thread_id).map((e: any) => e.thread_id));
   const unansweredCount = [...inboundThreads].filter((t) => !outboundThreads.has(t)).length;
 
   const emailByEmployeeLines = Object.entries(emailsByEmployee)

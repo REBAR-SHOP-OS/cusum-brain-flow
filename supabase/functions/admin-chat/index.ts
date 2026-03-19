@@ -877,7 +877,7 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
 
       let q = supabase
         .from("communications")
-        .select("subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, gmail_thread_id")
+        .select("subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, thread_id")
         .gte("received_at", date + "T00:00:00")
         .lte("received_at", date + "T23:59:59")
         .order("received_at", { ascending: false })
