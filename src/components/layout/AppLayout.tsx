@@ -77,6 +77,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             {/* Mobile bottom nav */}
             <MobileNavV2 />
 
+            {/* Vizzy Phone Manager — auto-answers calls on ext 101 */}
+            {isInternal && <VizzyCallHandler />}
+
             {/* Floating Vizzy avatar — visible for all @rebar.shop employees */}
             {isInternal && <FloatingVizzyButton />}
 
