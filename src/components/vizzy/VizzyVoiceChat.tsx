@@ -201,7 +201,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           </p>
 
           {/* Audio wave indicator when connected */}
-          {isConnected && !isActive && (
+          {isConnected && !isActive && !isMuted && (
             <div className="flex items-center gap-1 h-4">
               {[...Array(5)].map((_, i) => (
                 <motion.div
