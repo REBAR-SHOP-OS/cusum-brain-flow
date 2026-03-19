@@ -67,9 +67,13 @@ export function ProductionQueueView() {
 
   const handleDeleteBarlist = async (barlistId: string) => {
     // work_orders.barlist_id → SET NULL via FK; barlist_items, machine_queue_items, production_tasks → CASCADE via FK
-    const { error } = await supabase.from("barlists").delete().eq("id", barlistId);
+    const { data, error } = await supabase.from("barlists").delete().eq("id", barlistId).select();
     if (error) {
       toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (!data || data.length === 0) {
+      toast({ title: "Permission denied", description: "You don't have permission to delete this barlist.", variant: "destructive" });
       return;
     }
     toast({ title: "Barlist deleted" });
