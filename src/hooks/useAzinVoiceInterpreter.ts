@@ -15,6 +15,9 @@ const AZIN_INSTRUCTIONS = `You are a real-time Farsi↔English translation relay
 
 SILENCE IS YOUR DEFAULT STATE. You only break silence to output a faithful translation.`;
 
+export type { VoiceTranscript as InterpreterTranscript } from "./useVoiceEngine";
+export type { VoiceEngineState as InterpreterState } from "./useVoiceEngine";
+
 export function useAzinVoiceInterpreter() {
   return useVoiceEngine({
     instructions: AZIN_INSTRUCTIONS,
