@@ -62,6 +62,7 @@ export function useAzinVoiceRelay() {
 
     try {
       const voiceId = lang === "fa" ? VOICE_FARSI : VOICE_ENGLISH;
+      console.log("[relay] TTS request:", { text: text.slice(0, 40), lang, voiceId });
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -77,7 +78,10 @@ export function useAzinVoiceRelay() {
       );
 
       if (signal?.aborted) return;
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.error("[relay] TTS response not OK:", response.status);
+        return;
+      }
 
       const audioBlob = await response.blob();
       if (signal?.aborted) return;
