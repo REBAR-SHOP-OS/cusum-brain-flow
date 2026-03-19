@@ -2092,8 +2092,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
               const desc = buildActionDescription(pa.tool, pa.args);
               writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
             }
-            writer.write(enc.encode("data: [DONE]\n\n"));
-            writer.close();
+            safeCloseWriter();
             return;
           }
           
@@ -2111,8 +2110,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
               const desc = buildActionDescription(pa.tool, pa.args);
               writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
             }
-            writer.write(enc.encode("data: [DONE]\n\n"));
-            writer.close();
+            safeCloseWriter();
             return;
           }
 
@@ -2146,8 +2144,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
             writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
           }
 
-          writer.write(enc.encode("data: [DONE]\n\n"));
-          writer.close();
+          safeCloseWriter();
         } catch (bgErr) {
           console.error("Background tool processing error:", bgErr);
           try {
@@ -2155,8 +2152,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
             writer.write(enc.encode("data: [DONE]\n\n"));
           } catch { /* writer may be closed */ }
         } finally {
-          // Safety net: always close writer to prevent browser hangs
-          try { writer.close(); } catch { /* already closed */ }
+          safeCloseWriter();
         }
       })();
 
