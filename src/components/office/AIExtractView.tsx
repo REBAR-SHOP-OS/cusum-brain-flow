@@ -490,13 +490,18 @@ export function AIExtractView() {
     }
   };
 
-  const handleMappingConfirmed = useCallback((mappedRows: MappedRow[]) => {
+  const handleMappingConfirmed = useCallback(async (mappedRows: MappedRow[], unitSystem?: string) => {
     setMappingConfirmed(true);
+    // Persist the user-selected unit system on the session
+    if (activeSessionId && unitSystem) {
+      await supabase.from("extract_sessions").update({ unit_system: unitSystem } as any).eq("id", activeSessionId);
+      await refreshSessions();
+    }
     toast({
       title: "Mapping confirmed",
       description: `${mappedRows.length} rows mapped to canonical fields`,
     });
-  }, [toast]);
+  }, [toast, activeSessionId, refreshSessions]);
 
   const handleApplyMapping = async () => {
     if (!activeSessionId) return;

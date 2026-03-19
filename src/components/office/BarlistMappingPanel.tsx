@@ -224,7 +224,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       grade: String((row as any)[mapping.grade] ?? ""),
     }));
     setConfirmed(true);
-    onConfirmMapping(allMapped);
+    onConfirmMapping(allMapped, lengthUnit === "imperial" || lengthUnit === "ft" || lengthUnit === "in" ? "imperial" : "metric");
   };
 
   return (

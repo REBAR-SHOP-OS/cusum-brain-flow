@@ -30,12 +30,19 @@ const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as
 function formatDim(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
   if (unitSystem === "imperial") {
-    const whole = Math.floor(val);
-    const hasFrac = Math.abs(val - whole) >= 0.25;
-    const feet = Math.floor(whole / 12);
-    const inches = whole % 12;
-    const frac = hasFrac ? "½" : "";
-    return `${feet}'-${inches}${frac}"`;
+    const totalInches = val;
+    const feet = Math.floor(totalInches / 12);
+    const rawInches = totalInches % 12;
+    const eighths = Math.round(rawInches * 8);
+    const wholeInches = Math.floor(eighths / 8);
+    const remainderEighths = eighths % 8;
+    const fractionMap: Record<number, string> = {
+      0: "", 1: "⅛", 2: "¼", 3: "⅜", 4: "½", 5: "⅝", 6: "¾", 7: "⅞",
+    };
+    const frac = fractionMap[remainderEighths] || "";
+    if (feet === 0) return `${wholeInches}${frac}"`;
+    if (wholeInches === 0 && !frac) return `${feet}'-0"`;
+    return `${feet}'-${wholeInches}${frac}"`;
   }
   return String(val);
 }
