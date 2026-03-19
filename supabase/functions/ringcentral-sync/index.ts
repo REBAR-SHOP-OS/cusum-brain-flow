@@ -425,6 +425,7 @@ serve(async (req) => {
 
     // Try user JWT auth first
     const userId = await verifyAuth(req);
+    console.log("verifyAuth result:", userId);
 
     if (!userId) {
       // No valid user JWT — check if this is a cron call (anon key or service role key)
