@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { toast } from "sonner";
 
+export type SourceLang = "auto" | "en" | "fa";
+
 interface CommittedTranscript {
   id: string;
   text: string;
@@ -11,6 +13,7 @@ interface CommittedTranscript {
   translatedText?: string;
   originalCleanText?: string;
   isTranslating?: boolean;
+  sourceLang: SourceLang;
 }
 
 export function useRealtimeTranscribe() {
