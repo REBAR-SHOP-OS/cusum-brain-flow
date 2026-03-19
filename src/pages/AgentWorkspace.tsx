@@ -96,6 +96,7 @@ export default function AgentWorkspace() {
   const [showRecipeTable, setShowRecipeTable] = useState(false);
   const [purchasingDate, setPurchasingDate] = useState<Date | undefined>();
   const [activePurchasingDateStr, setActivePurchasingDateStr] = useState<string | null>(null);
+  const [purchasingKey, setPurchasingKey] = useState(0);
 
   const { dates: purchasingDates, getConfirmedSnapshot, deleteConfirmedList } = usePurchasingDates();
 
