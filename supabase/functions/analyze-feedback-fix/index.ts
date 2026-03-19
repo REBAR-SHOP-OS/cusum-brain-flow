@@ -302,6 +302,7 @@ serve(async (req) => {
             status: "open",
             priority: "high",
             source: "system",
+            company_id,
           });
         }
       }
