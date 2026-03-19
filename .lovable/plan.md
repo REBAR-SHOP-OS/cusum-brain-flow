@@ -1,53 +1,35 @@
 
 
-# Fix Translation Quality: Filter Noise, Ensure Both Buttons Work
+# Aggressive Noise Suppression for AZIN Translator
 
 ## Problem
-1. Translation picks up unclear/noisy audio and translates gibberish
-2. Both EN and FA buttons need to properly translate in their respective directions
-
-## Root Causes
-- Client-side filter is too weak: only filters `<2 words` or `<5 chars` — lets through noise fragments
-- The `translate-message` prompt asks AI to return empty for noise, but short noisy fragments still slip through
-- When switching languages mid-session, there's a 100ms delay that may cause race conditions
+1. The translator still processes and displays unclear/noisy audio (e.g., "God, God.", "It's unbelievable." from background noise)
+2. When no clear speech is detected, it should stay completely silent — no output at all
+3. The error fallback shows raw transcription text instead of silently discarding
 
 ## Changes
 
-### 1. Strengthen client-side noise filtering (`useRealtimeTranscribe.ts`)
-- Increase minimum threshold: require **3+ words** and **10+ characters** for committed transcripts
-- Add a confidence check: filter out text that's mostly symbols, repeated characters, or non-alphabetic content
-- Add a regex filter to catch common noise patterns (repeated syllables, single-character words)
+### 1. Client-side: Stronger filters + silent error handling (`useRealtimeTranscribe.ts`)
 
-### 2. Improve server-side prompt (`translate-message/index.ts`)
-- Strengthen the noise detection instructions — be more aggressive about returning empty for:
-  - Fragments shorter than 3 meaningful words
-  - Repeated syllables or filler sounds ("ah ah ah", "um um")
-  - Text that doesn't form a coherent phrase
-- Add explicit instruction: "If you are not confident this is clear, intentional speech, return empty strings"
+- **Increase minimum thresholds**: Require 4+ words and 15+ characters (up from 3/10)
+- **Add repetition filter**: Detect repeated short phrases like "God, God" (same word repeated)
+- **Silent error fallback**: On translation failure, remove the entry entirely instead of showing raw text
+- **Add post-translation length check**: If the translated text is very short (< 3 words), discard it
 
-### 3. Fix language toggle reliability (`AzinInterpreter.tsx`)
-- Remove the 100ms `setTimeout` when switching languages — instead await disconnect, then connect immediately
-- Ensure `sourceLangRef` is updated before `connect()` is called so the correct language is passed to translation
+### 2. Server-side: Much stricter prompt (`translate-message/index.ts`)
 
-## Technical Details
+- **Zero tolerance noise gate**: Add explicit instruction that the translator must NEVER generate its own speech or respond to the user
+- **Stricter examples**: Add examples of what should return empty — "God God", short exclamations, fragments without clear sentence structure
+- **Lower temperature to 0.01** for maximum determinism
+- **Add rule**: If the input is fewer than 5 words in any language, return empty unless it forms a complete, coherent sentence
 
-**Client filter (useRealtimeTranscribe.ts lines 36-40):**
-```
-Current:  wordCount < 2 || trimmed.length < 5
-Proposed: wordCount < 3 || trimmed.length < 10 || isNoisePattern(trimmed)
-```
+### 3. Post-parse validation (server-side)
 
-New `isNoisePattern()` helper checks for:
-- Mostly non-letter characters (>50% symbols/digits)
-- Repeated single syllables ("da da da")
-- All-caps short fragments that are typically noise artifacts
+After parsing the AI response, validate that translations are not just filler phrases. If any translation value is fewer than 3 words, replace it with empty string before returning.
 
-**Server prompt addition:**
-Add stronger gate: "Err on the side of returning empty strings. Only translate text that clearly represents intentional, coherent speech from a person. Short filler sounds, background murmur, or fragments without clear meaning should all return empty strings."
-
-**Language switch fix:**
-```typescript
-// Before: disconnect → setTimeout 100ms → connect (race condition)
-// After:  disconnect → setSourceLang → connect (synchronous flow)
-```
+## Summary
+- Raise all thresholds significantly — prefer silence over noise
+- Silent discard on errors (never show raw transcription)
+- Server validates output length after AI responds
+- Temperature near zero for deterministic behavior
 
