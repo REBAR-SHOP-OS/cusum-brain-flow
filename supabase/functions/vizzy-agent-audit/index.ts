@@ -284,7 +284,7 @@ RULES:
         },
       ],
       temperature: 0.3,
-      maxTokens: 4000,
+      maxTokens: 8000,
     });
 
     const auditReport = result.content || "";
