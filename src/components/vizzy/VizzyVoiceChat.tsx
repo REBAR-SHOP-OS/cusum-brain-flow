@@ -80,8 +80,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
       transition={{ duration: 0.3 }}
       className="fixed inset-0 flex flex-col items-center justify-between"
       style={{
-        zIndex: 100000,
-        background: "radial-gradient(ellipse at center, hsl(200 25% 10%) 0%, hsl(210 30% 6%) 100%)",
+      zIndex: 100000,
+      pointerEvents: "auto",
+      background: "radial-gradient(ellipse at center, hsl(200 25% 10%) 0%, hsl(210 30% 6%) 100%)",
       }}
     >
       {/* Top bar */}
