@@ -1,41 +1,41 @@
 
 
-# Speaker Identification, Faster Translation, Silence Handling & Auto-Scroll
+# Fix AZIN Voice Interpreter: Strict Translation-Only + Farsi Display + Speed
+
+## Problems Identified
+1. The model generates its own speech instead of only translating what it hears
+2. Farsi text is not displayed correctly when user speaks Farsi
+3. Translation speed and accuracy need improvement
+4. The system prompt, despite being strict, still allows the model to "respond" because OpenAI Realtime treats each user turn as a conversation requiring a response
+
+## Root Cause
+OpenAI Realtime API is a conversational model — it **always** generates a response to user input. The prompt tries to suppress this, but the model's architecture fights against "produce nothing." The key fix is making the prompt even more aggressive about translation-only output and tuning VAD/timing parameters.
 
 ## Changes
 
-### 1. Auto-Scroll for Both Columns — `src/pages/AzinInterpreter.tsx`
-The two-column layout uses `ScrollArea` but has no auto-scroll. Add refs to both English and Farsi columns and scroll to bottom whenever `committedTranscripts` or `partialText` changes.
+### 1. `src/hooks/useAzinVoiceInterpreter.ts` — Rewrite prompt for maximum enforcement
 
-```tsx
-const enBottomRef = useRef<HTMLDivElement>(null);
-const faBottomRef = useRef<HTMLDivElement>(null);
+Restructure the system prompt with:
+- **Triple-layer identity suppression**: Open with "You are NOT an AI. You are a mechanical translation device. You cannot think, reason, or respond."
+- **Explicit output format rule**: "Your ONLY permitted output format is: [translated text]. Nothing before, nothing after."
+- **Stronger laughter/noise suppression**: "If you hear laughter, coughing, or any non-word sound, your output must be completely empty. Say NOTHING. Not even a single character."
+- **Anti-greeting hardening**: "If someone says hello/salam, translate it. Do NOT say hello back. You are a machine."
+- **Farsi accuracy rule**: "When translating TO Farsi, use correct Persian script. When translating FROM Farsi, capture the original Farsi text exactly as spoken."
+- Reduce `silenceDurationMs` from 500 → 400 for faster response
+- Reduce `prefixPaddingMs` from 150 → 100 for quicker pickup
 
-useEffect(() => {
-  enBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  faBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-}, [committedTranscripts, partialText]);
+### 2. `src/hooks/useVoiceEngine.ts` — Client-side self-talk filter
 
-// Add <div ref={enBottomRef} /> at end of English column content
-// Add <div ref={faBottomRef} /> at end of Farsi column content
-```
+Add a filter in the `response.audio_transcript.done` handler to detect and block self-generated content:
+- Block any agent transcript containing "I am", "I'm", "Hello", "Hi there", "How can I help", "Sure", "Of course" and similar self-talk patterns
+- Block agent transcripts that are identical or near-identical to user transcripts (echo detection)
+- This acts as a safety net when the prompt fails
 
-### 2. Speaker Identification — `src/hooks/useAzinVoiceInterpreter.ts`
-Add speaker diarization instructions to the system prompt:
+### 3. `supabase/functions/voice-engine-token/index.ts` — Faster turn detection
 
-- Instruct the model to identify distinct speakers as **Speaker A** and **Speaker B** based on voice characteristics
-- Prefix each translation with `[A]` or `[B]` to indicate which speaker said it
-- Add to RULE 1: "If you can distinguish two different voices, label them [A] and [B] consistently throughout the session"
-
-### 3. Faster Translation & Stricter Silence — `src/hooks/useAzinVoiceInterpreter.ts`
-- Reduce `silenceDurationMs` from `1000` → `500` for faster turn-taking
-- Reduce `prefixPaddingMs` from `300` → `150` for quicker response start
-- Strengthen the ambient noise rule in the prompt: explicitly state that TV sounds, music, distant conversations, and environmental noise must produce ZERO output
-
-### 4. Stronger Noise Filtering — `src/hooks/useVoiceEngine.ts`
-The existing client-side filter already blocks fragments < 3 words / < 10 chars. No change needed here — the prompt hardening handles ambient noise.
+No changes needed — VAD params already come from the client config.
 
 ## Files
-- `src/pages/AzinInterpreter.tsx` — add auto-scroll refs
-- `src/hooks/useAzinVoiceInterpreter.ts` — speaker labels, faster timing, stricter silence rules
+- `src/hooks/useAzinVoiceInterpreter.ts` — hardened prompt + faster timing
+- `src/hooks/useVoiceEngine.ts` — client-side self-talk filter on agent transcripts
 
