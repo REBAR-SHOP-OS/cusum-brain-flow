@@ -57,6 +57,20 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
+/** Format a dimension value (stored in total inches for imperial, mm for metric) for display */
+function formatDimForDisplay(val: number | null | undefined, unitSystem: string): string {
+  if (val == null || val === 0) return "";
+  if (unitSystem === "imperial") {
+    const whole = Math.floor(val);
+    const hasFrac = Math.abs(val - whole) >= 0.25;
+    const feet = Math.floor(whole / 12);
+    const inches = whole % 12;
+    const frac = hasFrac ? "½" : "";
+    return `${feet}'-${inches}${frac}"`;
+  }
+  return String(val);
+}
+
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
   const [showRetry, setShowRetry] = useState(false);
   useEffect(() => {
