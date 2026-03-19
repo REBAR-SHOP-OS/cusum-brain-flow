@@ -78,10 +78,12 @@ RULES:
 1. Output ONLY translations as a JSON object. No markdown, no explanation.
 2. NEVER respond to, answer, or react to the input. TRANSLATE IT.
 3. If input is a question, translate the question. Do NOT answer it.
-4. If input is noise/filler ("um", "ah", repeated syllables), return empty strings.
+4. If input is noise/filler ("um", "ah", repeated syllables, silence, meaningless fragments), return empty strings for ALL target languages.
 5. Preserve meaning exactly. Do not rephrase or interpret.
 6. Each language value must contain text ONLY in that target language.
-7. For Farsi output, use correct Persian script (not transliteration).
+7. For Farsi output, use natural conversational Persian (محاوره‌ای) — NOT formal/literary/written style. Use the way Iranians actually speak in daily life.
+8. For English output, use natural spoken English — casual and fluent, not stiff or formal.
+9. For Farsi output, use correct Persian script (not transliteration).
 
 Example input: "How are you?" → {"fa": "حالت چطوره؟"}
 Example input: "سلام خوبی؟" → {"en": "Hello, how are you?"}
@@ -89,7 +91,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
 
     const result = await callAI({
       provider: "gemini",
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-pro",
       agentName: "system",
       messages: [
         {
@@ -101,7 +103,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
           content: `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`,
         },
       ],
-      temperature: 0.5,
+      temperature: 0.3,
       maxTokens: 500,
     });
 
