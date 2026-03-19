@@ -35,15 +35,15 @@ export function useRealtimeTranscribe() {
     onCommittedTranscript: (data) => {
       const trimmed = data.text.trim();
       if (!trimmed) return;
-      // Filter out very short fragments (likely background noise)
+      // Relaxed filters — Farsi phrases can be very short
       const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 3 || trimmed.length < 10) return;
-      // Filter noise patterns: mostly non-letter chars, repeated syllables, etc.
+      if (wordCount < 2 || trimmed.length < 5) return;
+      // Filter noise patterns: mostly non-letter chars
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.5) return;
       const words = trimmed.split(/\s+/);
       const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
-      if (uniqueWords.size <= 2 && words.length >= 3) return; // "God, God", "da da da"
+      if (uniqueWords.size <= 2 && words.length >= 3) return;
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       const entryId = crypto.randomUUID();
       const currentSourceLang = sourceLangRef.current;
@@ -118,8 +118,13 @@ export function useRealtimeTranscribe() {
         throw new Error(error?.message || "Failed to get scribe token");
       }
 
+      // Map source language to ISO 639-3 for Scribe accuracy
+      const langCodeMap: Record<string, string> = { en: "eng", fa: "fas" };
+      const languageCode = langCodeMap[sourceLangRef.current] || undefined;
+
       await scribe.connect({
         token: data.token,
+        languageCode,
         microphone: {
           echoCancellation: true,
           noiseSuppression: true,
