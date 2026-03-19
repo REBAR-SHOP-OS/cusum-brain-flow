@@ -47,6 +47,8 @@ serve(async (req) => {
       await handleCallEvent(supabase, body);
     } else if (event.includes("/message-store")) {
       await handleMessageEvent(supabase, body);
+      // Also check for voicemail events
+      await handleVoicemailEvent(supabase, body);
     } else {
       console.log("Unhandled RC event type:", event);
     }
