@@ -108,6 +108,7 @@ export function useAzinVoiceRelay() {
     onPartialTranscript: (data) => {
       if (abortRef.current?.signal.aborted) return;
       if (SCRIBE_ANNOTATION.test(data.text) || PUNCTUATION_ONLY.test(data.text)) return;
+      if (FOREIGN_SCRIPT.test(data.text)) return;
       setPartialText(data.text);
     },
     onCommittedTranscript: (data) => {
