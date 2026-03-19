@@ -232,9 +232,9 @@ Deno.serve(async (req) => {
           role: "system",
           content: `You are Vizzy's Intelligence Trainer — you audit AI agent performance and generate actionable improvement patches.
 
-TASK: Analyze the recent conversation logs, task creation quality, and action logs for each agent (EXCLUDING social/Pixel).
+TASK: You have FULL READ ACCESS to every agent's prompt source code AND their recent conversation logs. Analyze both — find mismatches between what the prompt instructs and how the agent actually behaves. EXCLUDE social/Pixel entirely.
 
-For EACH active agent, produce:
+For EACH agent (active or inactive), produce:
 
 ## [AGENT NAME] — Score: X/10
 **Strengths:** What the agent does well (be specific with examples from the logs)
