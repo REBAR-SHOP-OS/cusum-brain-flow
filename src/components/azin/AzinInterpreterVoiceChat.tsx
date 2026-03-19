@@ -49,8 +49,9 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
   const handleClose = () => { endSession(); onClose(); };
 
-  const generateConversationPdf = () => {
+  const generateConversationPdf = async () => {
     if (transcripts.length === 0) return;
+    const jsPDF = await loadJsPDF();
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 15;
     const pageWidth = doc.internal.pageSize.getWidth();
