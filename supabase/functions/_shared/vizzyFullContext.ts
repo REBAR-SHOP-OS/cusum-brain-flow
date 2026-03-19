@@ -821,7 +821,7 @@ ${(rcCallNoteEmails || []).length > 0
       const preview = note.body_preview ? note.body_preview.replace(/\n/g, " ").slice(0, 500) : "(no preview)";
       return `  • [${time}] ${note.subject || "Call Note"} → ${recipientName}\n      ${preview}`;
     }).join("\n")
-  : "  No call notes today"}
+  : "  No call notes in the last 7 days"}
 
 👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)
   Based on: page views, emails sent, calls, AI sessions, work orders, agent actions
