@@ -34,6 +34,7 @@ import { DailyBriefingCard } from "@/components/ceo/DailyBriefingCard";
 import { SLATrackerCard } from "@/components/ceo/SLATrackerCard";
 import { DailyAssignments } from "@/components/ceo/DailyAssignments";
 import { FixRequestQueue } from "@/components/ceo/FixRequestQueue";
+import { FixesQueue } from "@/components/ceo/FixesQueue";
 
 /* ─── Helpers ─── */
 
@@ -468,6 +469,9 @@ export function CEODashboardView() {
 
       {/* ─── Fix Request Queue ─── */}
       <FixRequestQueue />
+
+      {/* ─── Vizzy Fixes Queue ─── */}
+      <FixesQueue />
 
       {/* ─── Drilldown Drawers ─── */}
       <ARWorkbenchDrawer open={openDrawer === "ar"} onClose={() => setOpenDrawer(null)} outstandingAR={m.outstandingAR} unpaidInvoices={m.unpaidInvoices} arAgingBuckets={m.arAgingBuckets} />
