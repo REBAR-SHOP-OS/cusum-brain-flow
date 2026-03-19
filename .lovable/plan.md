@@ -1,34 +1,39 @@
 
 
-# Fix: Faithful Translation + No Interruption
-
-## Problems (from screenshot)
-1. **AI answers instead of translating**: "تو زیبا ترینی" (You are the most beautiful) → AI outputs "Thanks, you're very kind" (a RESPONSE, not a translation)
-2. **Translation gets cut off**: When AZIN is reading a translation aloud and hears new audio, it stops mid-sentence instead of finishing
-
-## Root Causes
-1. Despite strong prompts, the model still interprets compliments/questions as conversational turns and generates responses. Need even more aggressive anti-response examples including this exact failing case.
-2. OpenAI Realtime's `server_vad` interrupts the agent's speech when it detects user audio. The current `vadThreshold: 0.4` is too sensitive — background speech easily triggers interruption during translation playback.
+# Rename AZIN to Nila + Wake-Word Activation
 
 ## Changes
 
-### 1. Voice Interpreter — prevent interruption (`useAzinVoiceInterpreter.ts`)
-- Raise `vadThreshold` from `0.4` to `0.85` — much harder to interrupt while speaking
-- Increase `silenceDurationMs` from `600` to `1000` — wait longer before concluding the user stopped talking
-- Add explicit instruction: "ALWAYS complete the full translation. Never stop mid-sentence."
-- Add the exact failing example to the prompt: `"تو زیبا ترینی" → "You are the most beautiful" NOT "Thanks, you're very kind"`
+### 1. Rename all "AZIN" references to "Nila"
+Update display names across all files (keep file/folder names as-is for minimal churn):
+- `agentConfigs.ts` — name: "Nila", greeting updated
+- `Home.tsx` — card name "Nila"
+- `AzinInterpreter.tsx` — header "Nila — Real-Time Interpreter", alt texts, aria-labels
+- `AzinInterpreterVoiceChat.tsx` — "Connecting to Nila...", alt text
+- `AzinVoiceChatButton.tsx` — aria-label
+- `useAzinVoiceInterpreter.ts` — comment only (no user-facing text)
 
-### 2. Text translation prompt (`translate-message/index.ts`)
-- Add the specific failing example (compliment → must translate, not respond)
-- Add rule: "Compliments, insults, statements directed at 'you' — translate them literally. They are NOT addressed to you."
-- Lower Farsi minimum word threshold from 2 to 1 (some valid Farsi translations are single compound words)
+### 2. Wake-word detection: "Hey Nila"
+When the text mic (EN or FA) is active and the user says "Hey Nila", automatically open the voice interpreter overlay.
 
-### 3. Voice engine VAD config (`voice-engine-token/index.ts`)
-- Accept an optional `interruptThreshold` parameter from the client
-- When provided, use a higher VAD threshold to prevent premature interruption during agent speech
+**Implementation in `AzinInterpreter.tsx`:**
+- Add a `useEffect` that watches `committedTranscripts` and `partialText`
+- Check if the latest text contains "hey nila" (case-insensitive)
+- If detected: disconnect the text mic, open `showVoiceChat`, and remove the wake-word transcript from the list
+- Also check `partialText` for faster activation (don't wait for commit)
 
-## Files to Edit
-- `src/hooks/useAzinVoiceInterpreter.ts` — prompt + VAD settings
-- `supabase/functions/translate-message/index.ts` — prompt examples
-- `supabase/functions/voice-engine-token/index.ts` — accept higher VAD threshold
+```text
+User speaks into EN/FA mic
+  → ElevenLabs transcribes "... hey Nila ..."
+  → useEffect detects wake phrase
+  → disconnect text mic
+  → setShowVoiceChat(true)  (opens avatar voice interpreter)
+```
+
+### Files to Edit
+- `src/components/agent/agentConfigs.ts` — name change
+- `src/pages/Home.tsx` — name change
+- `src/pages/AzinInterpreter.tsx` — name change + wake-word logic
+- `src/components/azin/AzinInterpreterVoiceChat.tsx` — name change
+- `src/components/azin/AzinVoiceChatButton.tsx` — name change
 
