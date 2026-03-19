@@ -1,28 +1,24 @@
 
 
-# بهبود سرعت، صدای زنانه، و فیلتر نویز قوی‌تر
+# سرعت و دقت بیشتر + حذف Hey Nila + فیلتر سکوت
 
 ## تغییرات
 
-### 1. `src/hooks/useAzinVoiceRelay.ts` — صدای زنانه + سرعت + فیلتر قوی‌تر
+### 1. `supabase/functions/translate-message/index.ts` — مدل GPT-5-mini
+- تغییر provider از `gemini` به `gpt` و model به `gpt-5-mini` (سریع‌ترین مدل ChatGPT با دقت بالا)
+- اضافه کردن `maxTokens: 300` برای پاسخ سریع‌تر
 
-**صدا**: هر دو صدا زنانه شوند:
-- انگلیسی: **Sarah** (`EXAVITQu4vr4xnSDxMaL`) — multilingual v2
-- فارسی: **Sarah** (همان voice، multilingual v2 فارسی هم ساپورت می‌کند)
+### 2. `src/hooks/useAzinVoiceRelay.ts` — فیلتر سکوت قوی‌تر
+- بلاک کردن متن‌هایی که با `(` شروع می‌شوند — مثل `(speaking in foreign language)` که Scribe هنگام سکوت تولید می‌کند
+- بلاک کردن partial text حاوی annotation (نمایش ندادن)
+- افزایش `stability` به `0.65` و `similarity_boost` به `0.85` برای صدای واضح‌تر
 
-**سرعت**: پارامتر `speed: 1.1` به TTS request اضافه شود (10% سریع‌تر بدون خرابی کیفیت)
-
-**فیلتر نویز قوی‌تر** برای جلوگیری از نوشتن متن الکی:
-- حداقل **3 کلمه** (به جای 2) و حداقل **8 کاراکتر** (به جای 5)
-- بلاک‌لیست کلمات تکراری و بی‌معنی (مثل "yeah yeah", "hmm", تکرار حروف)
-- تشخیص زبان‌های غیر فارسی/انگلیسی (مثل تامیل در اسکرین‌شات) و حذف آن‌ها — اگر متن حاوی حروف فارسی/عربی یا لاتین نباشد، نادیده گرفته شود
-
-### 2. `supabase/functions/elevenlabs-tts/index.ts` — مدل سریع‌تر
-
-- تغییر مدل TTS از `eleven_multilingual_v2` به `eleven_turbo_v2_5` — لیتنسی کمتر، کیفیت خوب
-- `speed` پارامتر از کلاینت دریافت شود (پیش‌فرض 1.0)
+### 3. `src/pages/AzinInterpreter.tsx` — حذف کامل Hey Nila
+- حذف useEffect مربوط به wake-word detection (خطوط 49-61)
 
 ### فایل‌ها
-- `src/hooks/useAzinVoiceRelay.ts` — voice IDs، speed، noise filter
-- `supabase/functions/elevenlabs-tts/index.ts` — مدل turbo
+- `supabase/functions/translate-message/index.ts`
+- `src/hooks/useAzinVoiceRelay.ts`
+- `src/pages/AzinInterpreter.tsx`
+- `supabase/functions/elevenlabs-tts/index.ts` — stability/similarity بالاتر
 
