@@ -740,6 +740,12 @@ ${rcEmployeeLines || "    No call activity today"}
 ${rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today"}
 ${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlags.join("\n")}` : ""}
 
+👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)
+  Based on: page views, emails sent, calls, AI sessions, work orders, agent actions
+  Idle gap threshold: 15 minutes (gaps longer than 15min = not counted as active)
+${footprintLines.length > 0 ? footprintLines.join("\n") : "  No footprint data today"}
+${footprintAlerts.length > 0 ? `\n  🚨 UTILIZATION ALERTS:\n${footprintAlerts.join("\n")}` : ""}
+
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
 
