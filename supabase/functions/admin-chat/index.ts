@@ -562,6 +562,87 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── RingCentral Read Tools ───
+  {
+    type: "function",
+    function: {
+      name: "rc_get_active_calls",
+      description: "Get currently active calls on the company's RingCentral account. Returns live call sessions with direction, from/to, status, and duration.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rc_get_team_presence",
+      description: "Get the DND/availability/telephony status of all RingCentral extensions in the company. Shows who is available, busy, on a call, or in DND.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rc_get_call_analytics",
+      description: "Pull call analytics from the communications table — total calls, per-employee breakdown, missed calls, average duration. Supports date filtering.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "Date filter YYYY-MM-DD. Defaults to today." },
+          days: { type: "number", description: "Number of days to look back (alternative to date). Default: 1" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  // ─── RingCentral Write Tools (require confirmation) ───
+  {
+    type: "function",
+    function: {
+      name: "rc_make_call",
+      description: "Initiate a RingOut call via RingCentral. Rings the company phone first, then connects to the destination number. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Destination phone number (E.164 format, e.g. +14155551234)" },
+          from: { type: "string", description: "Caller ID / from number. Optional — uses default extension if omitted." },
+        },
+        required: ["to"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rc_send_sms",
+      description: "Send an SMS message via RingCentral. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Recipient phone number (E.164 format)" },
+          text: { type: "string", description: "SMS message body" },
+        },
+        required: ["to", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rc_send_fax",
+      description: "Send a fax via RingCentral. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Fax number (E.164 format)" },
+          cover_page_text: { type: "string", description: "Cover page text for the fax" },
+        },
+        required: ["to"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 async function executeReadTool(supabase: any, toolName: string, args: any): Promise<string> {
