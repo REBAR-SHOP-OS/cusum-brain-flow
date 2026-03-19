@@ -10,7 +10,7 @@ export function AzinVoiceChatButton({ onClick }: AzinVoiceChatButtonProps) {
     <button
       onClick={onClick}
       className="relative w-12 h-12 rounded-full focus:outline-none group"
-      aria-label="Start voice chat with AZIN"
+      aria-label="Start voice chat with Nila"
     >
       {/* Outer animated rings */}
       <motion.div
@@ -31,7 +31,7 @@ export function AzinVoiceChatButton({ onClick }: AzinVoiceChatButtonProps) {
 
       {/* Avatar */}
       <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-primary/50 group-hover:ring-primary transition-all shadow-lg">
-        <img src={azinAvatar} alt="AZIN" className="w-full h-full object-cover" draggable={false} />
+        <img src={azinAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
       </div>
     </button>
   );

@@ -46,7 +46,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
   const statusLabel =
     state === "connecting"
-      ? connectingElapsed >= 10 ? "Taking longer than expected..." : "Connecting to AZIN..."
+      ? connectingElapsed >= 10 ? "Taking longer than expected..." : "Connecting to Nila..."
       : state === "error" ? "Connection failed"
       : mode === "speaking" || isSpeaking ? "Translating..."
       : state === "connected" ? "Listening..."
@@ -64,7 +64,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
     >
       {/* Close */}
       <div className="w-full flex justify-end p-4">
-        <button onClick={handleClose} className="p-2 rounded-full bg-muted hover:bg-accent transition-colors" aria-label="End interpreter">
+        <button onClick={handleClose} className="p-2 rounded-full bg-muted hover:bg-accent transition-colors" aria-label="End Nila interpreter">
           <X className="w-6 h-6 text-foreground" />
         </button>
       </div>
@@ -103,7 +103,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
                 : state === "error" ? "0 0 20px 5px hsl(var(--destructive) / 0.3)" : "none",
             }}
           >
-            <img src={azinAvatar} alt="AZIN" className="w-full h-full object-cover" draggable={false} />
+            <img src={azinAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
           </div>
           {state === "connecting" && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/60 rounded-full">

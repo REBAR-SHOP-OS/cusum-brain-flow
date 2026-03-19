@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRealtimeTranscribe } from "@/hooks/useRealtimeTranscribe";
 import { Trash2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,20 @@ export default function AzinInterpreter() {
     }
   }, [isConnected, sourceLang, connect, disconnect, setSourceLang]);
 
+  // Wake-word detection: "Hey Nila"
+  useEffect(() => {
+    if (!isConnected || showVoiceChat) return;
+    const textsToCheck = [
+      partialText,
+      ...committedTranscripts.slice(-3).map((t) => t.text),
+    ];
+    const combined = textsToCheck.join(" ").toLowerCase();
+    if (combined.includes("hey nila") || combined.includes("هی نیلا")) {
+      disconnect();
+      setShowVoiceChat(true);
+    }
+  }, [partialText, committedTranscripts, isConnected, showVoiceChat, disconnect]);
+
   const statusLabel = isConnecting
     ? "Connecting..."
     : isConnected
@@ -59,7 +73,7 @@ export default function AzinInterpreter() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-lg font-bold text-foreground">AZIN — Real-Time Interpreter</h1>
+            <h1 className="text-lg font-bold text-foreground">Nila — Real-Time Interpreter</h1>
             <p className={cn("text-sm font-medium", statusColor)}>{statusLabel}</p>
           </div>
         </div>
@@ -162,10 +176,10 @@ export default function AzinInterpreter() {
         <button
           onClick={() => setShowVoiceChat(true)}
           className="relative w-14 h-14 rounded-full focus:outline-none group"
-          aria-label="Start voice interpreter with AZIN"
+          aria-label="Start voice interpreter with Nila"
         >
           <div className="w-14 h-14 rounded-full overflow-hidden ring-2 ring-primary/50 group-hover:ring-primary transition-all shadow-lg">
-            <img src={azinAvatar} alt="AZIN" className="w-full h-full object-cover" draggable={false} />
+            <img src={azinAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
           </div>
         </button>
 
