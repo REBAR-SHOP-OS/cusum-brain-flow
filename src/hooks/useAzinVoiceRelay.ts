@@ -26,8 +26,13 @@ export interface RelayTranscript {
 export type RelayState = "idle" | "connecting" | "connected" | "error";
 
 // TTS voices
-const VOICE_ENGLISH = "JBFqnCBsd6RMkjVDRZzb"; // George
-const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (multilingual v2)
+const VOICE_ENGLISH = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
+const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
+
+// Noise filter helpers
+const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
+const HAS_FARSI_OR_LATIN = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
+const REPEATED_CHARS = /(.)\1{4,}/;
 
 export function useAzinVoiceRelay() {
   const [state, setState] = useState<RelayState>("idle");
