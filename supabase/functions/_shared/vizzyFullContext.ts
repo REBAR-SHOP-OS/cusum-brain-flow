@@ -612,9 +612,7 @@ export async function buildFullVizzyContext(
     }
   }
 
-  const emailProfileMap = new Map(
-    (profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"])
-  );
+  // emailProfileMap already declared above (line ~478)
   const emailsByEmployee: Record<string, { sent: number; received: number }> = {};
   for (const e of (allEmailsToday || [])) {
     if (e.direction === "outbound") {
