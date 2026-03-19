@@ -382,9 +382,24 @@ Rules:
 
         // Save rows to DB
         const items = extractedData.items || [];
+
+        // Detect unit system from AI response — check if values contain imperial patterns
+        let detectedUnitSystem = "metric";
+        const sampleValues: string[] = [];
+        for (const item of items.slice(0, 10)) {
+          for (const key of ["total_length", "A", "B", "C", "D", "E", "F", "G", "H"]) {
+            if (item[key] != null) sampleValues.push(String(item[key]));
+          }
+        }
+        const imperialPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]/;
+        if (sampleValues.some((v) => imperialPattern.test(v))) {
+          detectedUnitSystem = "imperial";
+          console.log("Detected imperial unit system from AI response values");
+        }
+
         await svcClient
           .from("extract_sessions")
-          .update({ progress: 85 })
+          .update({ progress: 85, unit_system: detectedUnitSystem } as any)
           .eq("id", sessionId);
 
         if (items.length > 0) {

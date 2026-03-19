@@ -26,6 +26,23 @@ const MASS_KG_PER_M: Record<string, number> = {
 
 const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
 
+/** Format a dimension value (stored in total inches for imperial, mm for metric) for display */
+function formatDim(val: number | null | undefined, unitSystem: string): string {
+  if (val == null || val === 0) return "";
+  if (unitSystem === "imperial") {
+    const totalInches = Math.round(val);
+    const feet = Math.floor(totalInches / 12);
+    const inches = totalInches % 12;
+    return `${feet}'-${inches}"`;
+  }
+  return String(val);
+}
+
+/** Unit suffix label */
+function dimUnit(unitSystem: string): string {
+  return unitSystem === "imperial" ? "" : "MM";
+}
+
 function getWeight(size: string | null, lengthMm: number | null, qty: number | null): string {
   if (!size || !lengthMm) return "";
   const mass = MASS_KG_PER_M[size.toUpperCase()] || 0;
