@@ -31,11 +31,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       }),
     });
 
-    // Stop pulse after 10 seconds
-    useEffect(() => {
-      const t = setTimeout(() => setPulseActive(false), 10000);
-      return () => clearTimeout(t);
-    }, []);
+    // Pulse removed — clean face-only design
 
     const handleAvatarClick = useCallback(() => {
       if (wasDragged.current) return;
