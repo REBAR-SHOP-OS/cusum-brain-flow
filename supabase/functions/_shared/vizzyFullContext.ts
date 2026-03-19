@@ -348,12 +348,12 @@ export async function buildFullVizzyContext(
     )
     .join("\n");
 
-  // Emails — truncated to 50 chars for performance
+  // Emails — expanded to 500 chars for Vizzy email reply capability
   const emailsList = (communications || [])
     .slice(0, 20)
     .map((e: any) => {
       const preview = e.body_preview
-        ? e.body_preview.slice(0, 50).replace(/\n/g, " ")
+        ? e.body_preview.slice(0, 500).replace(/\n/g, " ")
         : "";
       const date = e.received_at
         ? new Date(e.received_at).toLocaleDateString("en-US", {
@@ -361,7 +361,9 @@ export async function buildFullVizzyContext(
             day: "numeric",
           })
         : "unknown";
-      return `  • [${e.subject || "No subject"}] from ${e.from_address || "unknown"} — ${preview} (${date})`;
+      const threadId = e.gmail_thread_id ? ` [thread:${e.gmail_thread_id}]` : "";
+      const toAddr = e.to_address ? ` to:${e.to_address}` : "";
+      return `  • [${e.subject || "No subject"}] from ${e.from_address || "unknown"}${toAddr} — ${preview} (${date})${threadId}`;
     })
     .join("\n");
 
