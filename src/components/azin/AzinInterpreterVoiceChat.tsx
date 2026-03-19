@@ -6,7 +6,7 @@ import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { detectRtl } from "@/utils/textDirection";
 import { primeMobileAudio } from "@/lib/audioPlayer";
-import jsPDF from "jspdf";
+const loadJsPDF = () => import("jspdf").then(m => m.default);
 import { addMarkdownToPdf } from "@/lib/pdfMarkdownRenderer";
 
 interface Props {
@@ -49,8 +49,9 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
   const handleClose = () => { endSession(); onClose(); };
 
-  const generateConversationPdf = () => {
+  const generateConversationPdf = async () => {
     if (transcripts.length === 0) return;
+    const jsPDF = await loadJsPDF();
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 15;
     const pageWidth = doc.internal.pageSize.getWidth();
