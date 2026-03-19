@@ -114,9 +114,9 @@ export function useAzinVoiceRelay() {
       const trimmed = data.text.trim();
       if (!trimmed) return;
 
-      // Basic noise filter
+      // Strong noise filter
       const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 2 || trimmed.length < 5) return;
+      if (wordCount < 3 || trimmed.length < 8) return;
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.5) return;
 
