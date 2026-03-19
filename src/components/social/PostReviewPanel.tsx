@@ -356,17 +356,6 @@ export function PostReviewPanel({
     tiktok: "tiktok",
   };
 
-  // Helper: find all sibling post IDs in the same calendar card group
-  const getSiblingIds = useCallback(() => {
-    const postDay = post.scheduled_date?.substring(0, 10);
-    const siblings = allPosts.filter(p =>
-      p.platform === post.platform &&
-      p.title === post.title &&
-      p.scheduled_date?.substring(0, 10) === postDay
-    );
-    return siblings.length > 0 ? siblings.map(s => s.id) : [post.id];
-  }, [allPosts, post.id, post.platform, post.title, post.scheduled_date]);
-
   const handlePlatformsSaveMulti = (values: string[]) => {
     // Sanitize: strip "unassigned" when real platforms are selected
     const realValues = values.filter(v => v !== "unassigned");
@@ -375,26 +364,23 @@ export function PostReviewPanel({
     // Reset pages to only valid ones for new platform selection
     const validPages = new Set(sanitized.flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value)));
     setLocalPages(prev => prev.filter(p => validPages.has(p)));
-    // Update ALL sibling posts' platform to the first selected
+    // Update the primary post's platform to the first selected
     if (sanitized.length > 0) {
       const dbPlatform = platformMap[sanitized[0]] || sanitized[0];
-      const ids = getSiblingIds();
-      ids.forEach(id => updatePost.mutate({ id, platform: dbPlatform as SocialPost["platform"] }));
+      updatePost.mutate({ id: post.id, platform: dbPlatform as SocialPost["platform"] });
     }
     setSubPanel(null);
   };
 
   const handleContentTypeSave = (value: string) => {
     setLocalContentType(value);
-    const ids = getSiblingIds();
-    ids.forEach(id => updatePost.mutate({ id, content_type: value }));
+    updatePost.mutate({ id: post.id, content_type: value });
     setSubPanel(null);
   };
 
   const handlePagesSaveMulti = (values: string[]) => {
     setLocalPages(values);
-    const ids = getSiblingIds();
-    ids.forEach(id => updatePost.mutate({ id, page_name: values.join(", ") }));
+    updatePost.mutate({ id: post.id, page_name: values.join(", ") });
     setSubPanel(null);
   };
 
