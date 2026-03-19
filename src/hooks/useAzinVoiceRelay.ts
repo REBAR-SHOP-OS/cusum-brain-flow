@@ -125,6 +125,7 @@ export function useAzinVoiceRelay() {
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.6) return;
       if (!HAS_FARSI_OR_LATIN.test(trimmed)) return;
+      if (FOREIGN_SCRIPT.test(trimmed)) return;
       if (REPEATED_CHARS.test(trimmed)) return;
       if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
 
