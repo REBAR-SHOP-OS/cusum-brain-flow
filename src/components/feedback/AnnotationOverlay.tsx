@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Undo2, Trash2, Send, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { triggerFeedbackAnalysis } from "@/lib/triggerFeedbackAnalysis";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 
