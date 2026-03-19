@@ -236,7 +236,22 @@ serve(async (req) => {
                   console.error(`[social-cron-publish] Facebook pre-flight failed for post ${post.id}:`, preflightData.error);
                   publishResult = { error: `Facebook permissions error: ${preflightData.error.message || "Token invalid"}. Reconnect Facebook with pages_read_engagement and pages_manage_posts.` };
                 } else {
-                  publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
+                  // Verify pages_manage_posts permission before publishing
+                  try {
+                    const permRes = await fetch(`${GRAPH_API}/me/permissions?access_token=${pageAccessToken}`);
+                    const permData = await permRes.json();
+                    if (permData.data && Array.isArray(permData.data)) {
+                      const managePostsPerm = permData.data.find((p: any) => p.permission === "pages_manage_posts");
+                      if (!managePostsPerm || managePostsPerm.status !== "granted") {
+                        publishResult = { error: "Facebook App does not have 'pages_manage_posts' permission approved. Add this user as a Tester in Meta Developer Console, or submit for App Review." };
+                      }
+                    }
+                  } catch (permErr) {
+                    console.warn(`[social-cron-publish] Permission check failed for post ${post.id}, proceeding:`, permErr);
+                  }
+                  if (!publishResult.error) {
+                    publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
+                  }
                 }
               } else {
                 const igAccounts = (tokenData.instagram_accounts as Array<{ id: string; pageId?: string }>) || [];
