@@ -48,11 +48,20 @@ const SELF_TALK_PATTERNS = [
   /\b(i'm here to|i am here to|i'm ready|i am ready|i'm listening)\b/i,
   /\b(translat(ing|ion)|interpret(ing|ation))\b/i,
   /\b(that's interesting|good question|i see|i understand)\b/i,
+  /^(oh|nothing|hmm|well|so|alright|yes|no|yeah|nah|uh|um|huh)\.?$/i,
+  /^(sorry|pardon|excuse me|right|okay then|now|wait)\.?$/i,
 ];
+
+// Single-word or two-word filler that is clearly not a translation
+const SHORT_FILLER_RE = /^[a-zA-Z]{1,8}\.?$/; // single short English word
 
 function isSelfTalk(text: string): boolean {
   const lower = text.toLowerCase().trim();
-  return SELF_TALK_PATTERNS.some(p => p.test(lower));
+  if (SELF_TALK_PATTERNS.some(p => p.test(lower))) return true;
+  // Block very short agent outputs (1-2 words) that look like filler, not translations
+  const words = lower.split(/\s+/);
+  if (words.length <= 2 && SHORT_FILLER_RE.test(words[0]) && !lower.match(/[\u0600-\u06FF]/)) return true;
+  return false;
 }
 
 export function useVoiceEngine(config: VoiceEngineConfig) {
@@ -280,14 +289,26 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       }, maxDuration);
 
       // Connection state monitoring
+      // Auto-reconnect once on disconnect, give up on "failed"
+      let hasAutoReconnected = false;
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+        const cs = pc.connectionState;
+        if (cs === "failed") {
           clearTimeout_();
           clearSessionTimer();
-          setState("idle");
+          setState("error");
           setMode(null);
           setIsSpeaking(false);
           cleanup();
+          toast.error("Voice connection lost.");
+        } else if (cs === "disconnected" && !hasAutoReconnected) {
+          hasAutoReconnected = true;
+          console.warn("Voice engine disconnected — attempting auto-reconnect...");
+          cleanup();
+          // Small delay then retry
+          setTimeout(() => {
+            startSession();
+          }, 1500);
         }
       };
 
