@@ -99,14 +99,14 @@ export default function AzinInterpreter() {
       </div>
 
       {/* Split columns */}
-      <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden">
+      <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden min-h-0">
         {/* English column */}
-        <div className="flex flex-col">
+        <div className="flex flex-col min-h-0">
           <div className="px-4 py-2 border-b border-border bg-muted/30">
             <span className="text-sm font-semibold text-foreground">English</span>
           </div>
           <ScrollArea className="flex-1 px-4 py-2">
-            <div className="space-y-3">
+            <div className="space-y-4">
               {committedTranscripts.map((t) => {
                 const isOriginal = t.sourceLang === "en";
                 const isFaSource = t.sourceLang === "fa";
@@ -117,7 +117,7 @@ export default function AzinInterpreter() {
                   : t.translatedText || t.text;
 
                 return (
-                  <div key={t.id} className="text-sm text-foreground">
+                  <div key={t.id} className="text-base text-foreground leading-relaxed">
                     {t.isTranslating ? (
                       <span className="text-muted-foreground italic">translating...</span>
                     ) : (
@@ -127,7 +127,7 @@ export default function AzinInterpreter() {
                 );
               })}
               {partialText && sourceLang !== "fa" && (
-                <div className="text-sm text-muted-foreground italic">{partialText}</div>
+                <div className="text-base text-muted-foreground italic leading-relaxed">{partialText}</div>
               )}
               <div ref={enBottomRef} />
             </div>
@@ -135,12 +135,12 @@ export default function AzinInterpreter() {
         </div>
 
         {/* Farsi column */}
-        <div className="flex flex-col">
+        <div className="flex flex-col min-h-0">
           <div className="px-4 py-2 border-b border-border bg-muted/30 text-right">
             <span className="text-sm font-semibold text-foreground">فارسی</span>
           </div>
           <ScrollArea className="flex-1 px-4 py-2">
-            <div className="space-y-3" dir="rtl">
+            <div className="space-y-4" dir="rtl">
               {committedTranscripts.map((t) => {
                 const isOriginal = t.sourceLang === "fa";
                 const isEnSource = t.sourceLang === "en";
@@ -151,7 +151,7 @@ export default function AzinInterpreter() {
                   : t.originalCleanText || t.text;
 
                 return (
-                  <div key={t.id} className="text-sm text-foreground">
+                  <div key={t.id} className="text-base text-foreground leading-relaxed" style={{ fontFamily: '"Vazirmatn", "Tahoma", sans-serif' }}>
                     {t.isTranslating ? (
                       <span className="text-muted-foreground italic">در حال ترجمه...</span>
                     ) : (
@@ -161,7 +161,7 @@ export default function AzinInterpreter() {
                 );
               })}
               {partialText && sourceLang === "fa" && (
-                <div className="text-sm text-muted-foreground italic">{partialText}</div>
+                <div className="text-base text-muted-foreground italic leading-relaxed" style={{ fontFamily: '"Vazirmatn", "Tahoma", sans-serif' }}>{partialText}</div>
               )}
               <div ref={faBottomRef} />
             </div>
