@@ -89,12 +89,12 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
               <>
                 {/* Voice button */}
                 <motion.button
-                  initial={{ scale: 0, opacity: 0, y: 0 }}
-                  animate={{ scale: 1, opacity: 1, y: -60 }}
-                  exit={{ scale: 0, opacity: 0, y: 0 }}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1, x: -50, y: -50 }}
+                  exit={{ scale: 0, opacity: 0, x: 0, y: 0 }}
                   transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0 }}
                   onClick={onMicClick}
-                  className="absolute left-1/2 -translate-x-1/2 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-teal-500/30 cursor-pointer"
+                  className="absolute top-0 left-0 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-teal-500/30 cursor-pointer"
                   style={{
                     background: "linear-gradient(135deg, hsl(172 66% 40%), hsl(172 66% 55%))",
                   }}
@@ -105,12 +105,12 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
                 {/* Chat button */}
                 <motion.button
-                  initial={{ scale: 0, opacity: 0, x: 0 }}
-                  animate={{ scale: 1, opacity: 1, x: -55, y: -25 }}
-                  exit={{ scale: 0, opacity: 0, x: 0 }}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1, x: 0, y: -70 }}
+                  exit={{ scale: 0, opacity: 0, x: 0, y: 0 }}
                   transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0.05 }}
                   onClick={onChatClick}
-                  className="absolute left-1/2 -translate-x-1/2 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-primary/30 cursor-pointer bg-primary"
+                  className="absolute top-0 left-0 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-primary/30 cursor-pointer bg-primary"
                   aria-label="Open text chat"
                 >
                   <MessageSquare size={18} className="text-primary-foreground" />
@@ -177,6 +177,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
                 src={vizzyAvatar}
                 alt="Vizzy AI"
                 className="w-full h-full object-cover pointer-events-none"
+                style={{ transform: "scale(1.5)", objectPosition: "center 30%" }}
                 draggable={false}
               />
             </div>
