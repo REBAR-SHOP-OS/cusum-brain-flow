@@ -1,121 +1,86 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Vizzy Morning Executive Partner — Full Upgrade
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## What We're Building
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+Transform Vizzy from a reactive Q&A voice assistant into a **proactive morning executive partner** that:
+1. Opens with a warm, personalized good morning + motivational message
+2. Automatically analyzes ALL databases and prioritizes findings
+3. Reads through emails and presents them for review/reply
+4. Creates tasks for employees directly from voice commands
+5. Supervises all calls and communications proactively
+6. Proposes a daily schedule based on priorities
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Changes
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+### 1. Update Voice Instructions (`src/hooks/useVizzyVoiceEngine.ts`)
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+Add new instruction sections:
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+**Morning Greeting Protocol**: When session starts, Vizzy immediately delivers a warm, personalized good morning with something motivational (quote, observation, or encouragement), then seamlessly transitions into the briefing without waiting for a prompt.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+**Proactive Briefing Flow** (no waiting for "what's up?"):
+1. Greeting → motivational opener
+2. Critical alerts (red flags ranked by severity)
+3. Email review: "You got X emails — here are the ones that need attention..."
+4. Call/communication supervision summary
+5. Proposed daily priorities: "Here's what I think your day should look like..."
+6. Wait for CEO's go/no-go on each item
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+**Task Creation via Voice**: New `[VIZZY-ACTION]` type:
+```
+[VIZZY-ACTION]{"type":"create_task","title":"...","description":"...","assigned_to_name":"Neel","priority":"high"}[/VIZZY-ACTION]
+```
 
-### Changes
+**Email Reply via Voice**: New `[VIZZY-ACTION]` type:
+```
+[VIZZY-ACTION]{"type":"send_email","to":"email","subject":"Re: ...","body":"...","threadId":"..."}[/VIZZY-ACTION]
+```
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+**Daily Schedule Proposal**: Vizzy builds a proposed schedule from:
+- Overdue invoices needing follow-up
+- Hot leads needing action
+- Deliveries to track
+- Production issues to address
+- Emails requiring replies
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+### 2. Add `create_task` and `send_email` to ERP Action Function (`supabase/functions/vizzy-erp-action/index.ts`)
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+**`create_task`**: Resolves employee name → profile ID → assigns `human_tasks` row with company_id, title, description, priority, assigned_to.
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+**`send_email`**: Calls `gmail-send` internally using the CEO's auth context. Accepts to, subject, body, threadId for replies.
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+### 3. Expand Email Context (`supabase/functions/_shared/vizzyFullContext.ts`)
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+- Increase `body_preview` from 50 chars to 500 chars for inbox emails
+- Include `id` and `thread_id` fields so Vizzy can reference specific emails for replies
+- Add `to_address` to email display
 
-## Completed: Odoo Mirror Pipeline + Sales Department Patch
+### 4. Wire Up New Actions in UI (`src/pages/AgentWorkspace.tsx` + `src/components/vizzy/VizzyVoiceChat.tsx`)
 
-### Assessment
-Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+**AgentWorkspace.tsx**: Extend `[VIZZY-ACTION]` parser to handle `create_task` and `send_email` types, calling `vizzy-erp-action` with approval flow.
 
-### Changes Implemented
+**VizzyVoiceChat.tsx**: Add transcript-level `[VIZZY-ACTION]` parsing for voice sessions (currently only text chat handles actions). When Vizzy speaks an action tag, show an approval button overlay before executing.
 
-**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
-- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
-- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
-- 30s cooldown per lead to prevent API rate limiting
-- Shows "Syncing…" indicator in header during refresh
-- Invalidates all lead-related query keys on completion
+### 5. Update Pre-Digest for Morning Mode (`supabase/functions/vizzy-pre-digest/index.ts`)
 
-**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
-- New `mode: "single"` + `odoo_id` parameter
-- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
-- Logs stage change events if stage differs
-- Returns fast without touching other leads
+Add to the AI prompt:
+- Generate a "Morning Schedule Proposal" section with time-blocked priorities
+- Include email triage summary (urgent/needs-reply/FYI)
+- Include motivational opener suggestion based on business performance
 
-**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
-- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
-- Logs reconciliation events with reason
-- Only archives non-terminal leads (skips already won/lost)
+## Technical Details
 
-**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
-- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
-- Improves timeline readability
+**Files to modify:**
+- `src/hooks/useVizzyVoiceEngine.ts` — morning protocol, new action types, email/task instructions
+- `supabase/functions/vizzy-erp-action/index.ts` — add `create_task` and `send_email` cases
+- `supabase/functions/_shared/vizzyFullContext.ts` — expand email context fields
+- `src/components/vizzy/VizzyVoiceChat.tsx` — add voice-level action parsing + approval UI
+- `src/pages/AgentWorkspace.tsx` — extend action handler for new types
+- `supabase/functions/vizzy-pre-digest/index.ts` — morning schedule + email triage in digest
 
-**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
-- Footer shows "Synced X minutes ago" with color-coded status dot
-- Green: <5min, Yellow: <30min, Red: >30min
+**Employee name → profile resolution** for task assignment will use a lookup query: `profiles.full_name ILIKE '%name%'` to resolve the `assigned_to` UUID from a spoken name.
 
-### Files Changed
-- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
-- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
-- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+**Email reply flow**: Vizzy reads the email aloud → proposes reply → CEO says "send it" → `[VIZZY-ACTION]` emitted → approval shown → `vizzy-erp-action` calls `gmail-send`.
 
-### No Changes Needed (Already Existed)
-- Sales Department sidebar, routes, pages, tables, hooks
-- Odoo chatter sync single mode (already existed)
-- OdooChatter unified timeline (already existed)
-
-### Risks
-- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
-- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
