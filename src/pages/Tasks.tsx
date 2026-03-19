@@ -669,7 +669,7 @@ export default function Tasks() {
         screenshot_url: meta.original_attachment_url || undefined,
         reopen_reason: "مشکل حل نشده — گزارش مجدد",
         original_task_id: task.id,
-        user_id: user?.id,
+        user_id: currentUserId || undefined,
         company_id: task.company_id,
       });
 
