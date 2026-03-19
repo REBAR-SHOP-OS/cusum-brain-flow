@@ -429,9 +429,9 @@ export function PostReviewPanel({
     const existingPages = new Set(siblings.map(s => s.page_name || ""));
     const toAdd = values.filter(p => !existingPages.has(p));
 
-    const promises: Promise<any>[] = [];
+    const promises: PromiseLike<any>[] = [];
     for (const sib of toDelete) {
-      promises.push(supabase.from("social_posts").delete().eq("id", sib.id).then());
+      promises.push(supabase.from("social_posts").delete().eq("id", sib.id).select());
     }
     for (const pageName of toAdd) {
       promises.push(
@@ -448,7 +448,7 @@ export function PostReviewPanel({
           page_name: pageName,
           content_type: post.content_type,
           neel_approved: post.neel_approved,
-        })
+        }).select()
       );
     }
     if (promises.length > 0) {
