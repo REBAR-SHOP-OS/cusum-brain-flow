@@ -120,6 +120,13 @@ export function useAzinVoiceRelay() {
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.5) return;
 
+      // Block non-Farsi/non-Latin scripts (e.g. Tamil, Devanagari)
+      if (!HAS_FARSI_OR_LATIN.test(trimmed)) return;
+
+      // Block repeated chars and filler words
+      if (REPEATED_CHARS.test(trimmed)) return;
+      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
+
       // Detect source language
       const isRtl = detectRtl(trimmed);
       const detectedLang: "en" | "fa" = isRtl ? "fa" : "en";
