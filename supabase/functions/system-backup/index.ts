@@ -75,13 +75,24 @@ serve(async (req) => {
   const serviceClient = createClient(supabaseUrl, serviceKey);
 
   // ---------- Admin check ----------
-  const { data: roleRows } = await serviceClient
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
+  // user_roles is linked by profile.id, not auth user id
+  const { data: profileRow } = await serviceClient
+    .from("profiles")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  let isAdmin = false;
+  if (profileRow?.id) {
+    const { data: roleRows } = await serviceClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", profileRow.id);
+    isAdmin = roleRows?.some((r) => r.role === "admin") ?? false;
+  }
 
   const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(userEmail);
-  const isAdmin = isSuperAdmin || roleRows?.some((r) => r.role === "admin");
+  if (isSuperAdmin) isAdmin = true;
 
   let requestBody: Record<string, unknown> = {};
   try {
