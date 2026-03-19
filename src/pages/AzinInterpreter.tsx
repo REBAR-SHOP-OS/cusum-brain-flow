@@ -117,7 +117,7 @@ export default function AzinInterpreter() {
                   : t.translatedText || t.text;
 
                 return (
-                  <div key={t.id} className="text-sm text-foreground">
+                  <div key={t.id} className="text-base text-foreground leading-relaxed">
                     {t.isTranslating ? (
                       <span className="text-muted-foreground italic">translating...</span>
                     ) : (
