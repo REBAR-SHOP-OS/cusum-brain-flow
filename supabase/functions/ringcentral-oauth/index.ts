@@ -401,6 +401,17 @@ async function handleOAuthCallback(url: URL): Promise<Response> {
       return Response.redirect(`${APP_CALLBACK}?status=error&integration=ringcentral&message=${encodeURIComponent("Failed to save credentials")}`, 302);
     }
 
+    // Write to integration_connections so UI shows connected
+    await supabaseAdmin.from("integration_connections").upsert({
+      user_id: userId,
+      integration_id: "ringcentral",
+      status: "connected",
+      last_checked_at: new Date().toISOString(),
+      last_sync_at: new Date().toISOString(),
+      error_message: null,
+      config: { rc_email: rcEmail },
+    }, { onConflict: "user_id,integration_id" });
+
     return Response.redirect(`${APP_CALLBACK}?status=success&integration=ringcentral`, 302);
   } catch (error) {
     console.error("RingCentral callback error:", error);
