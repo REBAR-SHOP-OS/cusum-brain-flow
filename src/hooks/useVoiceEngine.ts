@@ -124,7 +124,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         case "response.audio_transcript.done": {
           const text = (msg.transcript || agentTextRef.current).trim();
           agentTextRef.current = "";
-          if (text) {
+          if (text && !isSelfTalk(text)) {
             setTranscripts(prev => [
               ...prev,
               { id: String(++idCounter.current), role: "agent", text, timestamp: Date.now() },
