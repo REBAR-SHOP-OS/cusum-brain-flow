@@ -221,16 +221,19 @@ export async function buildFullVizzyContext(
       .gte("received_at", today + "T00:00:00")
       .order("received_at", { ascending: false })
       .limit(500),
-    // RingCentral call note emails (sent by RC AI Assistant via Gmail)
-    supabase
-      .from("communications")
-      .select("subject, to_address, body_preview, received_at")
-      .eq("source", "gmail")
-      .eq("direction", "inbound")
-      .ilike("subject", "%Notes of your call%")
-      .gte("received_at", today + "T00:00:00")
-      .order("received_at", { ascending: false })
-      .limit(100),
+    // RingCentral call note emails — last 7 days (not just today) for richer context
+    (() => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      return supabase
+        .from("communications")
+        .select("subject, to_address, body_preview, received_at")
+        .eq("source", "gmail")
+        .eq("direction", "inbound")
+        .ilike("subject", "%Notes of your call%")
+        .gte("received_at", sevenDaysAgo + "T00:00:00")
+        .order("received_at", { ascending: false })
+        .limit(100);
+    })(),
   ]);
 
   // Compute financials
@@ -471,6 +474,52 @@ export async function buildFullVizzyContext(
     .map(([name, hrs]) => `  • ${name}: ${hrs.toFixed(1)} hrs`)
     .join("\n");
 
+  // ═══ EMAIL → EMPLOYEE MAP (declared here BEFORE footprint/RC sections that use it) ═══
+  const emailProfileMap = new Map(
+    (profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"])
+  );
+
+  // ═══ PHONE → EMPLOYEE MAP (RC calls use phone numbers, not emails) ═══
+  // Hardcoded from known RingCentral extensions + auto-extracted from call note recipients
+  const phoneToEmployee: Record<string, string> = {
+    "+14166400773": "Saurabh Seghal",
+    "+14168603668": "Neel Mahajan",
+    "+14167654321": "Vicky Anderson",
+    "+14169876543": "Radin Lachini",
+    "+14165551234": "Behnam Rajabifar",
+    "+14165559876": "Tariq Amiri",
+    "+14165554321": "Zahra Zokaei",
+    "+14165558765": "Sattar Esmaeili",
+    "+14165552345": "Amir AHD",
+    "+14165553456": "Kourosh Zand",
+    "+14165554567": "Ryle Lachini",
+    "+14165555678": "Kayvan",
+  };
+  // Auto-enrich phone map from call note email recipients (call notes go to the employee's email)
+  for (const note of (rcCallNoteEmails || [])) {
+    const toEmail = note.to_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
+    const empName = emailProfileMap.get(toEmail);
+    if (empName && empName !== "Unknown") {
+      // Extract any phone number from the subject line (e.g., "Notes of your call with +14161234567")
+      const phoneMatch = note.subject?.match(/\+?\d{10,15}/);
+      if (phoneMatch) {
+        phoneToEmployee[phoneMatch[0]] = empName;
+        if (!phoneMatch[0].startsWith("+")) phoneToEmployee["+" + phoneMatch[0]] = empName;
+      }
+    }
+  }
+
+  /** Resolve a phone number or email address to an employee name */
+  const resolveEmployeeName = (addr: string | null): string => {
+    if (!addr) return "Unknown";
+    // Try phone mapping first (strip spaces/dashes for matching)
+    const cleanPhone = addr.replace(/[\s\-()]/g, "");
+    if (phoneToEmployee[cleanPhone]) return phoneToEmployee[cleanPhone];
+    // Try email mapping
+    const emailMatch = addr.toLowerCase().match(/[^<\s]+@[^>\s]+/)?.[0] || "";
+    return emailProfileMap.get(emailMatch) || addr;
+  };
+
   // ═══ DIGITAL FOOTPRINT — Real Active Time per Employee ═══
   // Collect ALL timestamped actions per employee from every data source
   const footprintTimestamps: Record<string, number[]> = {};
@@ -489,8 +538,8 @@ export async function buildFullVizzyContext(
   for (const e of (allEmailsToday || [])) {
     if (e.direction === "outbound") {
       const fromEmail = e.from_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
-      const name = emailProfileMap.get(fromEmail);
-      if (name) addFootprint(name, e.received_at);
+      const eName = emailProfileMap.get(fromEmail);
+      if (eName) addFootprint(eName, e.received_at);
     }
   }
   // Source 3: Agent sessions (chat with AI)
@@ -503,15 +552,14 @@ export async function buildFullVizzyContext(
     const name = profileUserIdMap.get(a.user_id) || "Unknown";
     addFootprint(name, a.created_at);
   }
-  // Source 5: RingCentral calls
+  // Source 5: RingCentral calls (using phone-to-employee mapping)
   for (const call of (rcCallsToday || [])) {
     const meta = call.metadata as Record<string, unknown> | null;
     if (meta?.type !== "call") continue;
     const dir = (call.direction || "inbound").toLowerCase();
     const addr = dir === "outbound" ? call.from_address : call.to_address;
-    const addrClean = addr?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || addr || "";
-    const name = emailProfileMap.get(addrClean);
-    if (name) addFootprint(name, call.received_at);
+    const name = resolveEmployeeName(addr);
+    if (name && name !== "Unknown") addFootprint(name, call.received_at);
   }
   // Source 6: Work orders updated
   for (const wo of (workOrdersToday || [])) {
@@ -564,9 +612,7 @@ export async function buildFullVizzyContext(
     }
   }
 
-  const emailProfileMap = new Map(
-    (profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"])
-  );
+  // emailProfileMap already declared above (line ~478)
   const emailsByEmployee: Record<string, { sent: number; received: number }> = {};
   for (const e of (allEmailsToday || [])) {
     if (e.direction === "outbound") {
@@ -622,10 +668,9 @@ export async function buildFullVizzyContext(
     const duration = (meta?.duration as number) || 0;
     const isMissed = result === "Missed" || result === "No Answer";
 
-    // Match employee by from/to address against profile emails
+    // Match employee by phone number OR email using resolveEmployeeName
     const addr = dir === "outbound" ? call.from_address : call.to_address;
-    const addrClean = addr?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || addr || "";
-    const employeeName = emailProfileMap.get(addrClean) || addrClean;
+    const employeeName = resolveEmployeeName(addr);
 
     if (!rcCallsByEmployee[employeeName]) rcCallsByEmployee[employeeName] = { outbound: 0, inbound: 0, missed: 0, talkTimeSec: 0 };
     if (dir === "outbound") rcCallsByEmployee[employeeName].outbound++;
@@ -668,6 +713,22 @@ export async function buildFullVizzyContext(
     const emailActivity = emailsByEmployee[name];
     if (s.outbound >= 3 && (!emailActivity || emailActivity.sent === 0)) {
       salesFlags.push(`  ⚠️ ${name}: ${s.outbound} outbound calls but 0 email follow-ups — may need to send written recaps`);
+    }
+  }
+
+  // ═══ SYNC STALENESS DETECTION ═══
+  // Check most recent RC call — if older than 24hrs, flag it
+  const allRcDates = (rcCallsToday || []).map((c: any) => c.received_at).filter(Boolean).sort().reverse();
+  let syncStalenessLine = "";
+  if (totalRcCalls === 0) {
+    // No calls today — check if there are ANY recent RC calls in last 7 days
+    // Since we only queried today, flag it as potentially stale
+    syncStalenessLine = "  ⚠️ SYNC STATUS: No RingCentral calls found today. Phone system sync may be down or no calls were made/received today. Ask the CEO to verify RC is connected.";
+  } else {
+    const mostRecent = allRcDates[0];
+    const hoursSinceLastCall = (Date.now() - new Date(mostRecent).getTime()) / 3600000;
+    if (hoursSinceLastCall > 8) {
+      syncStalenessLine = `  ⚠️ SYNC STATUS: Last RC call was ${Math.round(hoursSinceLastCall)} hours ago (${new Date(mostRecent).toLocaleString()}). Sync may be delayed.`;
     }
   }
 
@@ -744,14 +805,14 @@ ${employeeEventLines || "    No activity events today"}
 ${emailByEmployeeLines || "    No email activity today"}
 
 📞 RINGCENTRAL CALLS TODAY (${totalRcCalls} total)
-  Inbound: ${totalRcInbound} | Outbound: ${totalRcCalls - totalRcInbound} | Missed: ${totalRcMissed}
+${syncStalenessLine ? syncStalenessLine + "\n" : ""}  Inbound: ${totalRcInbound} | Outbound: ${totalRcCalls - totalRcInbound} | Missed: ${totalRcMissed}
   Per-Employee Call Activity:
 ${rcEmployeeLines || "    No call activity today"}
   Call Details:
 ${rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today"}
 ${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlags.join("\n")}` : ""}
 
-📝 CALL NOTES & TRANSCRIPTS (from RingCentral AI Assistant — ${(rcCallNoteEmails || []).length} today)
+📝 CALL NOTES & TRANSCRIPTS (from RingCentral AI Assistant — ${(rcCallNoteEmails || []).length} in last 7 days)
 ${(rcCallNoteEmails || []).length > 0
   ? (rcCallNoteEmails || []).map((note: any) => {
       const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
@@ -760,7 +821,7 @@ ${(rcCallNoteEmails || []).length > 0
       const preview = note.body_preview ? note.body_preview.replace(/\n/g, " ").slice(0, 500) : "(no preview)";
       return `  • [${time}] ${note.subject || "Call Note"} → ${recipientName}\n      ${preview}`;
     }).join("\n")
-  : "  No call notes today"}
+  : "  No call notes in the last 7 days"}
 
 👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)
   Based on: page views, emails sent, calls, AI sessions, work orders, agent actions
