@@ -44,6 +44,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const [transcripts, setTranscripts] = useState<VoiceTranscript[]>([]);
   const [mode, setMode] = useState<VoiceEngineMode>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
   const idCounter = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
