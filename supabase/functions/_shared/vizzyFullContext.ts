@@ -251,6 +251,13 @@ export async function buildFullVizzyContext(
       .in("status", ["open", "snoozed"])
       .order("created_at", { ascending: false })
       .limit(50),
+    // RingCentral integration connection status (for sync health check)
+    supabase
+      .from("integration_connections")
+      .select("last_sync_at, status")
+      .eq("integration_id", "ringcentral")
+      .order("last_sync_at", { ascending: false })
+      .limit(1),
   ]);
 
   // Compute financials
