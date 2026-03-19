@@ -236,6 +236,13 @@ export async function buildFullVizzyContext(
         .order("received_at", { ascending: false })
         .limit(100);
     })(),
+    // Most recent RC call ever (for staleness detection — not limited to today)
+    supabase
+      .from("communications")
+      .select("received_at")
+      .eq("source", "ringcentral")
+      .order("received_at", { ascending: false })
+      .limit(1),
     // Open human tasks (to avoid duplicates in autopilot)
     supabase
       .from("human_tasks")
