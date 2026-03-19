@@ -15,9 +15,11 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     state: voiceState,
     transcripts,
     isSpeaking,
+    isMuted,
     mode,
     startSession,
     endSession,
+    toggleMute,
     contextLoading,
   } = useVizzyVoiceEngine();
 
