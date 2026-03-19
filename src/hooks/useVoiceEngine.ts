@@ -34,6 +34,8 @@ export interface VoiceEngineConfig {
   connectionTimeoutMs?: number;
   /** Max session duration in ms (default: 1800000 = 30 minutes) */
   maxSessionDurationMs?: number;
+  /** Temperature for model output (default: 0.8). Lower = more deterministic */
+  temperature?: number;
 }
 
 const OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime";
