@@ -413,7 +413,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
+    console.log("ringcentral-sync v2: request received");
     // Parse body early (needed for both modes)
     let body: { syncType?: string; daysBack?: number } = {};
     try {
