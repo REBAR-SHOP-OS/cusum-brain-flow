@@ -99,7 +99,7 @@ export default function AzinInterpreter() {
       </div>
 
       {/* Split columns */}
-      <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden">
+      <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden min-h-0">
         {/* English column */}
         <div className="flex flex-col">
           <div className="px-4 py-2 border-b border-border bg-muted/30">
