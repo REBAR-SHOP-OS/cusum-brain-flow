@@ -88,6 +88,7 @@ export async function buildFullVizzyContext(
     { data: customerDirectory },
     { data: recentInvoiceDetails },
     { data: rcCallsToday },
+    { data: rcCallNoteEmails },
   ] = await Promise.all([
     supabase
       .from("work_orders")
@@ -220,6 +221,16 @@ export async function buildFullVizzyContext(
       .gte("received_at", today + "T00:00:00")
       .order("received_at", { ascending: false })
       .limit(500),
+    // RingCentral call note emails (sent by RC AI Assistant via Gmail)
+    supabase
+      .from("communications")
+      .select("subject, to_address, body_preview, received_at")
+      .eq("source", "gmail")
+      .eq("direction", "inbound")
+      .ilike("subject", "%Notes of your call%")
+      .gte("received_at", today + "T00:00:00")
+      .order("received_at", { ascending: false })
+      .limit(100),
   ]);
 
   // Compute financials
@@ -739,6 +750,17 @@ ${rcEmployeeLines || "    No call activity today"}
   Call Details:
 ${rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today"}
 ${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlags.join("\n")}` : ""}
+
+📝 CALL NOTES & TRANSCRIPTS (from RingCentral AI Assistant — ${(rcCallNoteEmails || []).length} today)
+${(rcCallNoteEmails || []).length > 0
+  ? (rcCallNoteEmails || []).map((note: any) => {
+      const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+      const recipient = note.to_address || "unknown";
+      const recipientName = emailProfileMap.get(recipient?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "") || recipient;
+      const preview = note.body_preview ? note.body_preview.replace(/\n/g, " ").slice(0, 500) : "(no preview)";
+      return `  • [${time}] ${note.subject || "Call Note"} → ${recipientName}\n      ${preview}`;
+    }).join("\n")
+  : "  No call notes today"}
 
 👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)
   Based on: page views, emails sent, calls, AI sessions, work orders, agent actions
