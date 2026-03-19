@@ -83,6 +83,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             results.tasks += data?.created_count || actionData.tasks?.length || 0;
           } else if (actionData.type === "send_email") {
             results.emails++;
+          } else if (actionData.type === "generate_agent_fix") {
+            // Agent fix generates a Lovable command — handled via transcript display
+            results.other++;
           } else {
             results.other++;
           }
