@@ -456,11 +456,15 @@ export const PERSIAN_EVENT_INFO: Record<string, { summary: string; details: stri
 function EventCard({ event }: { event: CalendarEvent }) {
   const badge = regionBadge[event.region];
   const persianInfo = PERSIAN_EVENT_INFO[event.name];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eventDate = new Date(today.getFullYear(), event.month - 1, event.day);
+  const isPast = eventDate < today;
   return (
     <Popover>
       <PopoverTrigger asChild>
         <div className="flex gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors cursor-pointer">
-          <div className="w-10 h-10 rounded-lg bg-muted flex flex-col items-center justify-center shrink-0">
+          <div className={cn("w-10 h-10 rounded-lg flex flex-col items-center justify-center shrink-0", isPast ? "bg-red-500/20 text-red-400" : "bg-purple-500/20 text-purple-400")}>
             <span className="text-xs font-bold leading-none">{event.day}</span>
             <span className="text-[10px] text-muted-foreground">{months[event.month - 1]}</span>
           </div>
