@@ -1,39 +1,33 @@
 
 
-# Rename AZIN to Nila + Wake-Word Activation
+# Rewrite Event Descriptions: Pure Historical/Cultural Only
+
+## Problem
+Both English `description` fields in `contentStrategyData.ts` and Persian `details` in `ContentStrategyPanel.tsx` mix historical context with business/company suggestions (e.g., "For construction companies, this is a chance to..."). The user wants **only** historical/cultural information — no business advice.
 
 ## Changes
 
-### 1. Rename all "AZIN" references to "Nila"
-Update display names across all files (keep file/folder names as-is for minimal churn):
-- `agentConfigs.ts` — name: "Nila", greeting updated
-- `Home.tsx` — card name "Nila"
-- `AzinInterpreter.tsx` — header "Nila — Real-Time Interpreter", alt texts, aria-labels
-- `AzinInterpreterVoiceChat.tsx` — "Connecting to Nila...", alt text
-- `AzinVoiceChatButton.tsx` — aria-label
-- `useAzinVoiceInterpreter.ts` — comment only (no user-facing text)
+### 1. `src/components/social/contentStrategyData.ts` — All 26 event descriptions
+Rewrite every `description` field to be purely historical/cultural:
+- What the day/event is
+- Its origin and history
+- Why it's significant culturally
+- **Remove** all "For construction...", "Showcase your...", "Promote...", "Highlight your..." business advice
 
-### 2. Wake-word detection: "Hey Nila"
-When the text mic (EN or FA) is active and the user says "Hey Nila", automatically open the voice interpreter overlay.
+Example (Nowruz — currently ends with business advice):
+- **Before**: "...Nowruz aligns perfectly with the spring construction season — symbolizing fresh starts, new projects, and building for the future."
+- **After**: Remove that last sentence entirely. Keep the UNESCO, 300 million people, Haft-sin, Chaharshanbe Suri content.
 
-**Implementation in `AzinInterpreter.tsx`:**
-- Add a `useEffect` that watches `committedTranscripts` and `partialText`
-- Check if the latest text contains "hey nila" (case-insensitive)
-- If detected: disconnect the text mic, open `showVoiceChat`, and remove the wake-word transcript from the list
-- Also check `partialText` for faster activation (don't wait for commit)
+### 2. `src/components/social/ContentStrategyPanel.tsx` — All 26 Persian `details`
+Same treatment for all Persian descriptions:
+- Keep historical/cultural facts
+- **Remove** all business suggestions like "برای صنعت ما...", "فرصتی برای تبلیغ...", "برای شرکت‌های ساختمانی..."
 
-```text
-User speaks into EN/FA mic
-  → ElevenLabs transcribes "... hey Nila ..."
-  → useEffect detects wake phrase
-  → disconnect text mic
-  → setShowVoiceChat(true)  (opens avatar voice interpreter)
-```
+### 3. `supabase/functions/_shared/eventCalendar.ts` — Backend mirror
+This file has no `description` field, only `contentTheme` — no changes needed (contentTheme is used for AI prompt context, not user-facing).
 
-### Files to Edit
-- `src/components/agent/agentConfigs.ts` — name change
-- `src/pages/Home.tsx` — name change
-- `src/pages/AzinInterpreter.tsx` — name change + wake-word logic
-- `src/components/azin/AzinInterpreterVoiceChat.tsx` — name change
-- `src/components/azin/AzinVoiceChatButton.tsx` — name change
+## Scope
+- ~26 English descriptions rewritten
+- ~26 Persian details rewritten
+- No structural/code changes, only string content
 
