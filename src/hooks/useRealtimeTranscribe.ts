@@ -55,8 +55,8 @@ export function useRealtimeTranscribe() {
         "translate-message",
         {
           text: data.text,
-          sourceLang: "auto",
-          targetLangs: ["en", "fa"],
+          sourceLang: currentSourceLang,
+          targetLangs,
           context: contextWindow || undefined,
         },
       )
