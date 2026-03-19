@@ -1,9 +1,34 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI } from "../_shared/aiRouter.ts";
+import { salesPrompts } from "../_shared/agents/sales.ts";
+import { accountingPrompts } from "../_shared/agents/accounting.ts";
+import { operationsPrompts } from "../_shared/agents/operations.ts";
+import { supportPrompts } from "../_shared/agents/support.ts";
+import { marketingPrompts } from "../_shared/agents/marketing.ts";
+import { growthPrompts } from "../_shared/agents/growth.ts";
+import { specialistsPrompts } from "../_shared/agents/specialists.ts";
+import { empirePrompts } from "../_shared/agents/empire.ts";
+import { purchasingPrompts } from "../_shared/agents/purchasing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+// Merge all prompts (excluding social/pixel)
+const ALL_PROMPTS: Record<string, string> = {
+  ...salesPrompts,
+  ...accountingPrompts,
+  ...operationsPrompts,
+  ...supportPrompts,
+  ...growthPrompts,
+  ...specialistsPrompts,
+  ...empirePrompts,
+  ...purchasingPrompts,
+  // marketing prompts minus social — only include non-social keys
+  ...Object.fromEntries(
+    Object.entries(marketingPrompts).filter(([k]) => !["social"].includes(k))
+  ),
 };
 
 // Agent → prompt file mapping for Lovable patch commands
@@ -142,15 +167,39 @@ Deno.serve(async (req) => {
       .gte("created_at", sevenDaysAgo)
       .limit(200);
 
-    // Build evidence block
-    let evidence = `═══ AGENT ACTIVITY (Last 7 Days) ═══\n`;
-    for (const [agent, data] of Object.entries(agentConversations)) {
+    // Build evidence block with PROMPT SOURCE + CONVERSATION LOGS
+    let evidence = `═══ AGENT ACTIVITY & PROMPT SOURCE (Last 7 Days) ═══\n`;
+    
+    // Include ALL known agents (even inactive ones) so Vizzy can audit prompts
+    const allAgentKeys = new Set([
+      ...Object.keys(agentConversations),
+      ...Object.keys(ALL_PROMPTS),
+    ]);
+
+    for (const agent of allAgentKeys) {
+      if (EXCLUDED_AGENTS.includes(agent)) continue;
       const file = AGENT_FILE_MAP[agent] || "unknown";
-      evidence += `\n--- ${agent.toUpperCase()} (file: ${file}, sessions: ${data.sessionCount}, messages: ${data.messages.length}) ---\n`;
-      // Include last 10 messages per agent for quality check
-      const sample = data.messages.slice(-10);
-      for (const m of sample) {
-        evidence += `[${m.role}] ${(m.content || "").slice(0, 300)}\n`;
+      const convData = agentConversations[agent];
+      const promptText = ALL_PROMPTS[agent] || null;
+
+      evidence += `\n--- ${agent.toUpperCase()} (file: ${file}, sessions: ${convData?.sessionCount || 0}, messages: ${convData?.messages.length || 0}) ---\n`;
+
+      // Include actual prompt source (first 2000 chars)
+      if (promptText) {
+        evidence += `\nCURRENT PROMPT SOURCE (first 2000 chars):\n${promptText.slice(0, 2000)}\n`;
+      } else {
+        evidence += `\nCURRENT PROMPT SOURCE: [not found]\n`;
+      }
+
+      // Include recent conversation samples
+      if (convData?.messages.length) {
+        evidence += `\nRECENT CONVERSATIONS (last 10):\n`;
+        const sample = convData.messages.slice(-10);
+        for (const m of sample) {
+          evidence += `[${m.role}] ${(m.content || "").slice(0, 300)}\n`;
+        }
+      } else {
+        evidence += `\nRECENT CONVERSATIONS: NONE (inactive)\n`;
       }
     }
 
@@ -183,9 +232,9 @@ Deno.serve(async (req) => {
           role: "system",
           content: `You are Vizzy's Intelligence Trainer — you audit AI agent performance and generate actionable improvement patches.
 
-TASK: Analyze the recent conversation logs, task creation quality, and action logs for each agent (EXCLUDING social/Pixel).
+TASK: You have FULL READ ACCESS to every agent's prompt source code AND their recent conversation logs. Analyze both — find mismatches between what the prompt instructs and how the agent actually behaves. EXCLUDE social/Pixel entirely.
 
-For EACH active agent, produce:
+For EACH agent (active or inactive), produce:
 
 ## [AGENT NAME] — Score: X/10
 **Strengths:** What the agent does well (be specific with examples from the logs)
@@ -193,6 +242,7 @@ For EACH active agent, produce:
 **Compliance:** Did the agent stay within its role? Did it attempt tasks outside its domain?
 **Proactiveness:** Did it create tasks/notifications when it should have? Did it miss obvious follow-up opportunities?
 **Task Quality:** If the agent created tasks, were they clear, actionable, and properly prioritized?
+**Prompt Health Check:** Does the prompt have clear boundaries, anti-hallucination rules, proper tool instructions, escape hatches for edge cases? Flag any missing guardrails.
 
 ### SALES AGENT SPECIAL REPORT (only for sales/commander/blitz):
 - Quote accuracy assessment
@@ -224,6 +274,8 @@ RULES:
 - Sales agent gets the deepest scrutiny — it directly impacts revenue
 - Generate Lovable commands ONLY for real issues, not cosmetic preferences
 - Each Lovable command must be copy-pasteable into Lovable chat and produce a working fix
+- Since you have the ACTUAL prompt source, reference specific sections/lines when suggesting fixes — be surgical
+- For inactive agents with no conversations, still audit the prompt source for quality and completeness
 - EXCLUDE social/Pixel agent entirely — do not mention it`,
         },
         {
@@ -232,7 +284,7 @@ RULES:
         },
       ],
       temperature: 0.3,
-      maxTokens: 4000,
+      maxTokens: 8000,
     });
 
     const auditReport = result.content || "";
