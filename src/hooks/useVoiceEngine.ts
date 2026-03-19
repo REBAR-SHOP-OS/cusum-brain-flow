@@ -46,8 +46,14 @@ const DEFAULT_MAX_SESSION_MS = 30 * 60 * 1000; // 30 minutes
 // RTL character detection for Farsi/Arabic
 const FARSI_RE = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
-// Client-side self-talk filter — blocks agent transcripts that are self-generated
-const SELF_TALK_PATTERNS = [
+// Patterns that are ALWAYS filtered (empty/filler noise regardless of mode)
+const ALWAYS_FILTER_PATTERNS = [
+  /^\.{1,3}$/,  // just dots
+  /^(oh|hmm|uh|um|huh)\.?$/i,
+];
+
+// Patterns only filtered in translation mode (conversational phrases that are valid assistant responses)
+const TRANSLATION_ONLY_PATTERNS = [
   /^(hello|hi|hey|salam|welcome)/i,
   /\b(i am|i'm|i can|i will|i'll|let me|how can i)\b/i,
   /\b(sure|of course|okay|got it|understood|absolutely|certainly)\b/i,
@@ -55,39 +61,41 @@ const SELF_TALK_PATTERNS = [
   /\b(i'm here to|i am here to|i'm ready|i am ready|i'm listening)\b/i,
   /\b(translat(ing|ion)|interpret(ing|ation))\b/i,
   /\b(that's interesting|good question|i see|i understand)\b/i,
-  /^(oh|nothing|hmm|well|so|alright|yes|no|yeah|nah|uh|um|huh)\.?$/i,
+  /^(nothing|well|so|alright|yes|no|yeah|nah)\.?$/i,
   /^(sorry|pardon|excuse me|right|okay then|now|wait)\.?$/i,
   /\b(what do you|what should|can you|do you want|would you like)\b/i,
   /\b(first|listen|carefully|you shouldn't|you should)\b/i,
   /^(go ahead|please|thank you|thanks|you're welcome)\.?$/i,
-  /^\.{1,3}$/,  // just dots
 ];
 
 // Single-word or two-word filler that is clearly not a translation
 const SHORT_FILLER_RE = /^[a-zA-Z]{1,12}\.?$/; // single short English word
 
-function isSelfTalk(text: string, lastUserText?: string): boolean {
+function isSelfTalk(text: string, lastUserText?: string, translationMode = false): boolean {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
   
   // Block empty or whitespace
   if (!trimmed || trimmed.length < 2) return true;
   
-  // Pattern match
-  if (SELF_TALK_PATTERNS.some(p => p.test(lower))) return true;
+  // Always-filter patterns (noise in any mode)
+  if (ALWAYS_FILTER_PATTERNS.some(p => p.test(lower))) return true;
   
-  // Block very short agent outputs (1-2 words) that look like filler
-  const words = lower.split(/\s+/);
-  if (words.length <= 2 && SHORT_FILLER_RE.test(words[0]) && !FARSI_RE.test(trimmed)) return true;
+  // Translation-only patterns — skip for assistant mode
+  if (translationMode && TRANSLATION_ONLY_PATTERNS.some(p => p.test(lower))) return true;
   
-  // Language-mismatch filter: translation must switch languages
-  if (lastUserText) {
+  // Block very short agent outputs (1-2 words) that look like filler — only in translation mode
+  if (translationMode) {
+    const words = lower.split(/\s+/);
+    if (words.length <= 2 && SHORT_FILLER_RE.test(words[0]) && !FARSI_RE.test(trimmed)) return true;
+  }
+  
+  // Language-mismatch filter: translation must switch languages — ONLY in translation mode
+  if (translationMode && lastUserText) {
     const userIsFarsi = FARSI_RE.test(lastUserText);
     const agentIsFarsi = FARSI_RE.test(trimmed);
-    // If user spoke Farsi, agent MUST output English (no Farsi chars)
-    // If user spoke English, agent MUST output Farsi (has Farsi chars)
-    if (userIsFarsi && agentIsFarsi) return true;  // same language = self-talk
-    if (!userIsFarsi && !agentIsFarsi) return true; // same language = self-talk
+    if (userIsFarsi && agentIsFarsi) return true;
+    if (!userIsFarsi && !agentIsFarsi) return true;
   }
   
   // Echo detection: if agent text is very similar to user text, it's parroting
