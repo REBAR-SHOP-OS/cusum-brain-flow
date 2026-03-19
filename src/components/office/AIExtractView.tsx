@@ -2054,7 +2054,7 @@ export function AIExtractView() {
                                   {edit ? (
                                     <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
                                   ) : (
-                                    (row as any)[key] != null ? String((row as any)[key]) : ""
+                                    (row as any)[key] != null ? formatDimForDisplay((row as any)[key], activeSession?.unit_system || "metric") : ""
                                   )}
                                 </TableCell>
                               );
