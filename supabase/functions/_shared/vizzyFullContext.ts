@@ -762,159 +762,220 @@ export async function buildFullVizzyContext(
   // Build structured facts block for anti-hallucination anchoring
   const factsBlock = `[FACTS] staff=${totalStaff}, customers=${totalCustomerCount}, open_leads=${openLeads}, AR=${fmt(totalReceivable)}, AP=${fmt(totalPayable)}, scheduled_deliveries=${scheduledToday}, in_transit=${inTransit}, rc_calls_today=${totalRcCalls}, rc_missed=${totalRcMissed} [/FACTS]`;
 
-  return `${factsBlock}
+  // Build output as parts array to avoid deeply-nested template literal parsing issues
+  const parts: string[] = [];
 
-═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
+  parts.push(factsBlock);
+  parts.push("");
+  parts.push(`═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══`);
+  parts.push("");
 
-${includeFinancials ? `📊 FINANCIALS
-  Accounts Receivable: ${fmt(totalReceivable)}
-  Accounts Payable: ${fmt(totalPayable)}
-  Overdue Invoices: ${overdueInvoices.length} totaling ${fmt(overdueInvoices.reduce((s: number, i: any) => s + i.Balance, 0))}
-${topOverdueCustomers || "    None"}
-  Overdue Bills: ${overdueBills.length} totaling ${fmt(overdueBills.reduce((s: number, b: any) => s + b.Balance, 0))}
-${topOverdueVendors || "    None"}` : `📊 FINANCIALS
-  Restricted — requires admin access`}
+  if (includeFinancials) {
+    const overdueInvTotal = overdueInvoices.reduce((s: number, i: any) => s + i.Balance, 0);
+    const overdueBillTotal = overdueBills.reduce((s: number, b: any) => s + b.Balance, 0);
+    parts.push("📊 FINANCIALS");
+    parts.push(`  Accounts Receivable: ${fmt(totalReceivable)}`);
+    parts.push(`  Accounts Payable: ${fmt(totalPayable)}`);
+    parts.push(`  Overdue Invoices: ${overdueInvoices.length} totaling ${fmt(overdueInvTotal)}`);
+    parts.push(topOverdueCustomers || "    None");
+    parts.push(`  Overdue Bills: ${overdueBills.length} totaling ${fmt(overdueBillTotal)}`);
+    parts.push(topOverdueVendors || "    None");
+  } else {
+    parts.push("📊 FINANCIALS");
+    parts.push("  Restricted — requires admin access");
+  }
 
-🏭 PRODUCTION
-  Active Cut Plans: ${activeCutPlans}
-  Items in Queue: ${queuedItems}
-  Completed Today: ${completedToday}
-  Machines Running: ${machinesRunning}
-  Active Work Orders: ${activeOrders ?? 0}
+  parts.push("");
+  parts.push("🏭 PRODUCTION");
+  parts.push(`  Active Cut Plans: ${activeCutPlans}`);
+  parts.push(`  Items in Queue: ${queuedItems}`);
+  parts.push(`  Completed Today: ${completedToday}`);
+  parts.push(`  Machines Running: ${machinesRunning}`);
+  parts.push(`  Active Work Orders: ${activeOrders ?? 0}`);
 
-📈 SALES PIPELINE
-  Open Leads: ${openLeads}
-  Hot Leads (score ≥70):
-${hotLeads || "    None"}
+  parts.push("");
+  parts.push("📈 SALES PIPELINE");
+  parts.push(`  Open Leads: ${openLeads}`);
+  parts.push("  Hot Leads (score ≥70):");
+  parts.push(hotLeads || "    None");
 
-👥 CUSTOMER DIRECTORY (Top ${(customerDirectory || []).length} by Revenue)
-${(customerDirectory || []).map((c: any) => `  • ${c.display_name || "Unknown"}: Revenue ${fmt(c.total_revenue || 0)}, Open Balance ${fmt(c.open_balance || 0)}, Balance ${fmt(c.balance || 0)}`).join("\n") || "  No customer data"}
+  parts.push("");
+  parts.push(`👥 CUSTOMER DIRECTORY (Top ${(customerDirectory || []).length} by Revenue)`);
+  parts.push(
+    (customerDirectory || []).map((c: any) =>
+      "  • " + (c.display_name || "Unknown") + ": Revenue " + fmt(c.total_revenue || 0) + ", Open Balance " + fmt(c.open_balance || 0) + ", Balance " + fmt(c.balance || 0)
+    ).join("\n") || "  No customer data"
+  );
 
-💳 TRANSACTION SUMMARY (Recent ${(recentInvoiceDetails || []).length} Invoices)
-${(recentInvoiceDetails || []).map((inv: any) => {
-    const custName = inv.data?.CustomerRef?.name || "Unknown";
-    const invNum = inv.data?.DocNumber || "N/A";
-    const dueDate = inv.data?.DueDate || "N/A";
-    const total = inv.data?.TotalAmt || inv.balance || 0;
-    const status = inv.balance > 0 ? "Open" : "Paid";
-    return `  • INV#${invNum} — ${custName}: ${fmt(total)} (Due: ${dueDate}, ${status}, Bal: ${fmt(inv.balance || 0)})`;
-  }).join("\n") || "  No invoice data"}
+  parts.push("");
+  parts.push(`💳 TRANSACTION SUMMARY (Recent ${(recentInvoiceDetails || []).length} Invoices)`);
+  parts.push(
+    (recentInvoiceDetails || []).map((inv: any) => {
+      const custName = inv.data?.CustomerRef?.name || "Unknown";
+      const invNum = inv.data?.DocNumber || "N/A";
+      const dueDate = inv.data?.DueDate || "N/A";
+      const total = inv.data?.TotalAmt || inv.balance || 0;
+      const status = inv.balance > 0 ? "Open" : "Paid";
+      return "  • INV#" + invNum + " — " + custName + ": " + fmt(total) + " (Due: " + dueDate + ", " + status + ", Bal: " + fmt(inv.balance || 0) + ")";
+    }).join("\n") || "  No invoice data"
+  );
 
-👥 CUSTOMERS TOTAL
-  Total Active: ${totalCustomers ?? 0}
+  parts.push("");
+  parts.push("👥 CUSTOMERS TOTAL");
+  parts.push(`  Total Active: ${totalCustomers ?? 0}`);
 
-🚚 DELIVERIES TODAY
-  Scheduled: ${scheduledToday}
-  In Transit: ${inTransit}
+  parts.push("");
+  parts.push("🚚 DELIVERIES TODAY");
+  parts.push(`  Scheduled: ${scheduledToday}`);
+  parts.push(`  In Transit: ${inTransit}`);
 
-👷 TEAM (${totalStaff} staff)
+  parts.push("");
+  parts.push(`👷 TEAM (${totalStaff} staff)`);
 
-⏱️ TEAM PRESENCE & HOURS TODAY
-${presenceLines.length > 0 ? presenceLines.join("\n") : "  No time clock entries today"}
-${hoursLines ? `\n  Hours Worked Today:\n${hoursLines}` : ""}
+  parts.push("");
+  parts.push("⏱️ TEAM PRESENCE & HOURS TODAY");
+  parts.push(presenceLines.length > 0 ? presenceLines.join("\n") : "  No time clock entries today");
+  if (hoursLines) {
+    parts.push("\n  Hours Worked Today:\n" + hoursLines);
+  }
 
-📊 EMPLOYEE PERFORMANCE (TODAY — REAL DATA)
-  Work Order Activity:
-${woPerformanceLines || "    No work orders with assignees today"}
-  Machine Operators Active:
-${operatorLines || "    No operators currently assigned"}
-  AI Agent Usage by Employee:
-${agentUsageLines || "    No agent sessions today"}
-  Agent Actions by Employee:
-${actionsLines || "    No agent actions today"}
-  All Logged Actions by Employee:
-${employeeEventLines || "    No activity events today"}
+  parts.push("");
+  parts.push("📊 EMPLOYEE PERFORMANCE (TODAY — REAL DATA)");
+  parts.push("  Work Order Activity:");
+  parts.push(woPerformanceLines || "    No work orders with assignees today");
+  parts.push("  Machine Operators Active:");
+  parts.push(operatorLines || "    No operators currently assigned");
+  parts.push("  AI Agent Usage by Employee:");
+  parts.push(agentUsageLines || "    No agent sessions today");
+  parts.push("  Agent Actions by Employee:");
+  parts.push(actionsLines || "    No agent actions today");
+  parts.push("  All Logged Actions by Employee:");
+  parts.push(employeeEventLines || "    No activity events today");
 
-📧 EMAIL BIRD'S-EYE VIEW (TODAY)
-  Total Inbound: ${totalInbound} | Total Outbound: ${totalOutbound}
-  Unanswered Threads: ${unansweredCount}
-  Per-Employee Email Activity:
-${emailByEmployeeLines || "    No email activity today"}
+  parts.push("");
+  parts.push("📧 EMAIL BIRD'S-EYE VIEW (TODAY)");
+  parts.push(`  Total Inbound: ${totalInbound} | Total Outbound: ${totalOutbound}`);
+  parts.push(`  Unanswered Threads: ${unansweredCount}`);
+  parts.push("  Per-Employee Email Activity:");
+  parts.push(emailByEmployeeLines || "    No email activity today");
 
-📞 RINGCENTRAL CALLS TODAY (${totalRcCalls} total)
-${syncStalenessLine ? syncStalenessLine + "\n" : ""}  Inbound: ${totalRcInbound} | Outbound: ${totalRcCalls - totalRcInbound} | Missed: ${totalRcMissed}
-  Per-Employee Call Activity:
-${rcEmployeeLines || "    No call activity today"}
-  Call Details:
-${rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today"}
-${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlags.join("\n")}` : ""}
+  parts.push("");
+  parts.push(`📞 RINGCENTRAL CALLS TODAY (${totalRcCalls} total)`);
+  if (syncStalenessLine) parts.push(syncStalenessLine);
+  parts.push(`  Inbound: ${totalRcInbound} | Outbound: ${totalRcCalls - totalRcInbound} | Missed: ${totalRcMissed}`);
+  parts.push("  Per-Employee Call Activity:");
+  parts.push(rcEmployeeLines || "    No call activity today");
+  parts.push("  Call Details:");
+  parts.push(rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today");
+  if (salesFlags.length > 0) {
+    parts.push("\n  🚨 SALES & CALL SUPERVISION FLAGS:\n" + salesFlags.join("\n"));
+  }
 
-📝 CALL NOTES & TRANSCRIPTS (from RingCentral AI Assistant — ${(rcCallNoteEmails || []).length} in last 7 days)
-${(rcCallNoteEmails || []).length > 0
-  ? (rcCallNoteEmails || []).map((note: any) => {
-      const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
-      const recipient = note.to_address || "unknown";
-      const recipientName = emailProfileMap.get(recipient?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "") || recipient;
-      const preview = note.body_preview ? note.body_preview.replace(/\n/g, " ").slice(0, 500) : "(no preview)";
-      return `  • [${time}] ${note.subject || "Call Note"} → ${recipientName}\n      ${preview}`;
-    }).join("\n")
-  : "  No call notes in the last 7 days"}
+  parts.push("");
+  parts.push(`📝 CALL NOTES & TRANSCRIPTS (from RingCentral AI Assistant — ${(rcCallNoteEmails || []).length} in last 7 days)`);
+  if ((rcCallNoteEmails || []).length > 0) {
+    parts.push(
+      (rcCallNoteEmails || []).map((note: any) => {
+        const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+        const recipient = note.to_address || "unknown";
+        const recipientName = emailProfileMap.get(recipient?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "") || recipient;
+        const preview = note.body_preview ? note.body_preview.replace(/\n/g, " ").slice(0, 500) : "(no preview)";
+        return "  • [" + time + "] " + (note.subject || "Call Note") + " → " + recipientName + "\n      " + preview;
+      }).join("\n")
+    );
+  } else {
+    parts.push("  No call notes in the last 7 days");
+  }
 
-👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)
-  Based on: page views, emails sent, calls, AI sessions, work orders, agent actions
-  Idle gap threshold: 15 minutes (gaps longer than 15min = not counted as active)
-${footprintLines.length > 0 ? footprintLines.join("\n") : "  No footprint data today"}
-${footprintAlerts.length > 0 ? `\n  🚨 UTILIZATION ALERTS:\n${footprintAlerts.join("\n")}` : ""}
+  parts.push("");
+  parts.push("👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)");
+  parts.push("  Based on: page views, emails sent, calls, AI sessions, work orders, agent actions");
+  parts.push("  Idle gap threshold: 15 minutes (gaps longer than 15min = not counted as active)");
+  parts.push(footprintLines.length > 0 ? footprintLines.join("\n") : "  No footprint data today");
+  if (footprintAlerts.length > 0) {
+    parts.push("\n  🚨 UTILIZATION ALERTS:\n" + footprintAlerts.join("\n"));
+  }
 
-📋 DAILY REPORT PER PERSON
-${buildPerPersonReports(profiles || [], hoursWorked, emailsByEmployee, rcCallsByEmployee, woByAssignee, agentUsageByUser, actionsByUser, eventsByEmployee, footprintTimestamps, machineOps || [], profileIdMap)}
+  parts.push("");
+  parts.push("📋 DAILY REPORT PER PERSON");
+  parts.push(buildPerPersonReports(profiles || [], hoursWorked, emailsByEmployee, rcCallsByEmployee, woByAssignee, agentUsageByUser, actionsByUser, eventsByEmployee, footprintTimestamps, machineOps || [], profileIdMap));
 
-📋 RECENT ACTIVITY
-${eventsList || "  No recent events"}
+  parts.push("");
+  parts.push("📋 RECENT ACTIVITY");
+  parts.push(eventsList || "  No recent events");
 
-📧 EMAIL INBOX (last ${(communications || []).length} emails)
-${emailsList || "  No emails available"}
+  parts.push("");
+  parts.push(`📧 EMAIL INBOX (last ${(communications || []).length} emails)`);
+  parts.push(emailsList || "  No emails available");
 
-💡 PENDING SUGGESTIONS
-${suggestionsList || "  None"}
+  parts.push("");
+  parts.push("💡 PENDING SUGGESTIONS");
+  parts.push(suggestionsList || "  None");
 
-📦 STOCK SUMMARY
-${(stockSummary || []).map((s: any) => `  • ${s.bar_code}: ${s.qty_on_hand} @ ${s.location || "unknown"}`).join("\n") || "  No stock data"}
+  parts.push("");
+  parts.push(`📦 STOCK SUMMARY`);
+  parts.push(
+    (stockSummary || []).map((s: any) => "  • " + s.bar_code + ": " + s.qty_on_hand + " @ " + (s.location || "unknown")).join("\n") || "  No stock data"
+  );
 
-🧠 KNOWLEDGE BASE (${totalKnowledge} entries, showing latest 50)
-${brainList || "  No entries"}
+  parts.push("");
+  parts.push(`🧠 KNOWLEDGE BASE (${totalKnowledge} entries, showing latest 50)`);
+  parts.push(brainList || "  No entries");
 
-🧠 PERSISTENT MEMORY (${activeMemories.length} items)
-${memorySection}
+  parts.push("");
+  parts.push(`🧠 PERSISTENT MEMORY (${activeMemories.length} items)`);
+  parts.push(memorySection);
 
-📞 VOICEMAIL INBOX (unprocessed)
-${(() => {
+  // Voicemail inbox
+  parts.push("");
+  parts.push("📞 VOICEMAIL INBOX (unprocessed)");
   const voicemails = activeMemories.filter((m: any) => m.category === "voicemail_summary" && !(m.metadata as any)?.processed);
-  if (voicemails.length === 0) return "  No new voicemails";
-  return voicemails.map((vm: any) => {
-    const meta = (vm.metadata || {}) as any;
-    const time = vm.created_at ? new Date(vm.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
-    const caller = meta.contact_name || meta.from_number || "Unknown";
-    const taskStr = (meta.tasks || []).length > 0
-      ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
-      : "";
-    return "  • [" + time + "] From " + caller + ": " + (vm.content || "").slice(0, 200) + taskStr;
-  }).join("\n");
-})()}
+  if (voicemails.length === 0) {
+    parts.push("  No new voicemails");
+  } else {
+    parts.push(voicemails.map((vm: any) => {
+      const meta = (vm.metadata || {}) as any;
+      const time = vm.created_at ? new Date(vm.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+      const caller = meta.contact_name || meta.from_number || "Unknown";
+      const taskStr = (meta.tasks || []).length > 0
+        ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
+        : "";
+      return "  • [" + time + "] From " + caller + ": " + (vm.content || "").slice(0, 200) + taskStr;
+    }).join("\n"));
+  }
 
-📞 RECENT CALL SUMMARIES (auto-answered by Vizzy)
-${(() => {
+  // Call summaries
+  parts.push("");
+  parts.push("📞 RECENT CALL SUMMARIES (auto-answered by Vizzy)");
   const callSummaries = activeMemories.filter((m: any) => m.category === "call_summary");
-  if (callSummaries.length === 0) return "  No auto-answered calls";
-  return callSummaries.slice(0, 10).map((cs: any) => {
-    const meta = (cs.metadata || {}) as any;
-    const time = cs.created_at ? new Date(cs.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
-    const caller = meta.contact_name || meta.from_number || "Unknown";
-    const taskStr = (meta.tasks || []).length > 0
-      ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
-      : "";
-    return "  • [" + time + "] " + caller + ": " + (cs.content || "").slice(0, 200) + taskStr;
-  }).join("\n");
-})()}
+  if (callSummaries.length === 0) {
+    parts.push("  No auto-answered calls");
+  } else {
+    parts.push(callSummaries.slice(0, 10).map((cs: any) => {
+      const meta = (cs.metadata || {}) as any;
+      const time = cs.created_at ? new Date(cs.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+      const caller = meta.contact_name || meta.from_number || "Unknown";
+      const taskStr = (meta.tasks || []).length > 0
+        ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
+        : "";
+      return "  • [" + time + "] " + caller + ": " + (cs.content || "").slice(0, 200) + taskStr;
+    }).join("\n"));
+  }
 
-═══ OPEN TASKS (${(openHumanTasks || []).length} active — DO NOT create duplicates) ═══
-${(openHumanTasks || []).length > 0
-  ? (openHumanTasks || []).map((t: any) => {
+  // Open tasks
+  parts.push("");
+  parts.push(`═══ OPEN TASKS (${(openHumanTasks || []).length} active — DO NOT create duplicates) ═══`);
+  if ((openHumanTasks || []).length > 0) {
+    parts.push((openHumanTasks || []).map((t: any) => {
       const assignee = t.assigned_to ? (profileIdMap.get(t.assigned_to) || "Unassigned") : "Unassigned";
       const created = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      return `  • [${t.priority || "medium"}] "${t.title}" → ${assignee} (${t.status}, created ${created})${t.category ? ` [${t.category}]` : ""}`;
-    }).join("\n")
-  : "  No open tasks"}`;
+      return "  • [" + (t.priority || "medium") + '] "' + t.title + '" → ' + assignee + " (" + t.status + ", created " + created + ")" + (t.category ? " [" + t.category + "]" : "");
+    }).join("\n"));
+  } else {
+    parts.push("  No open tasks");
+  }
+
+  return parts.join("\n");
 }
 
 /** Build a unified mini daily report per employee combining ALL data sources */
