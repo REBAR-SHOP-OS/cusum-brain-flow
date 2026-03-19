@@ -1,69 +1,66 @@
 
 
-# Fix Pages/Platform/ContentType Save to Apply to All Sibling Posts
+# Fix Vizzy Voice Integration with Gmail & RingCentral
 
-## Problem
+## Problem Summary
 
-When editing a card's Pages, Platform, or Content Type in the PostReviewPanel and clicking "Save", the change only updates the single `post.id` row. But the system represents grouped posts as separate DB rows per page (siblings sharing the same title + platform + scheduled day). So:
+Two root causes prevent Vizzy from working properly:
 
-1. **Pages Save**: Currently does `updatePost({ id: post.id, page_name: values.join(", ") })` on one row. It should instead reconcile siblings — keep existing rows for still-selected pages, create new rows for newly added pages, and delete rows for deselected pages.
+**Issue 1 — Vizzy's responses are silently dropped (PRIMARY)**
+The `isSelfTalk()` filter in `useVoiceEngine.ts` (lines 81-88) contains a language-mismatch rule designed for the Azin *translator*. It blocks any agent response that's in the *same* language as the user. Since Vizzy is a conversational assistant who should reply in the same language, nearly **all** of her responses are filtered out before rendering. This is why the screenshot shows only "YOU" bubbles.
 
-2. **Platform Save**: Currently updates only `post.id`. Should update all sibling rows.
+Additionally, the self-talk pattern list (lines 48-62) is extremely aggressive — it blocks phrases like "sure", "got it", "I can", "I will", "let me", which are all legitimate Vizzy responses.
 
-3. **Content Type Save**: Currently updates only `post.id`. Should update all sibling rows.
+**Issue 2 — RingCentral never writes to `integration_connections`**
+The `ringcentral-oauth` edge function saves tokens to `user_ringcentral_tokens` but **never creates a row** in `integration_connections`. Gmail does this (line 183-196 of google-oauth). Without this row, the Integrations page shows RingCentral as disconnected, and Vizzy's context builder can't detect the connection.
 
-## Changes
+## Evidence
 
-### File: `src/components/social/PostReviewPanel.tsx`
+- `curl google-oauth check-status` → `{"status":"connected","email":"sattar@rebar.shop"}` ✓
+- `curl ringcentral-oauth check-status` → `{"status":"connected","email":"Sattar@rebar.shop"}` ✓
+- `integration_connections` table has Gmail rows but **zero RingCentral rows**
+- `user_ringcentral_tokens` has valid token (expires 2026-03-19 23:07)
+- Voice transcript shows all "YOU" messages, no "VIZZY" messages → filter is dropping them
 
-#### 1. Fix `handlePagesSaveMulti` — reconcile sibling rows
+## Fix Plan
 
-Replace the current single-row update with sibling reconciliation:
-- Find all existing siblings (same title + platform + day)
-- For each selected page: if a sibling row already exists for that page, keep it. If not, create a new row cloned from the current post.
-- For each existing sibling whose page is no longer selected: delete it.
-- Invalidate queries after all mutations complete.
+### Step 1 — Remove language-mismatch filter for non-translation use
 
-#### 2. Fix `handlePlatformsSaveMulti` — batch update siblings
+**File: `src/hooks/useVoiceEngine.ts`**
 
-After setting the new platform on the primary post, also update all sibling rows (same title + old platform + day) to the new platform.
+- Add `translationMode?: boolean` to `VoiceEngineConfig` (default `false`)
+- Pass `translationMode` into `isSelfTalk` calls
+- Only apply the language-mismatch check (lines 82-88) when `translationMode === true`
+- Keep echo detection and empty-text filters active for all modes
 
-#### 3. Fix `handleContentTypeSave` — batch update siblings
+### Step 2 — Reduce aggressive self-talk patterns for assistant mode
 
-After setting content_type on the primary post, also update all sibling rows (same title + platform + day) to the new content_type.
+**File: `src/hooks/useVoiceEngine.ts`**
 
-#### 4. Fix date update (already done)
+- Split patterns into two groups: `ALWAYS_FILTER` (empty, dots, single fillers) and `TRANSLATION_ONLY_FILTER` (conversational phrases like "sure", "I can", etc.)
+- Only apply `TRANSLATION_ONLY_FILTER` when `translationMode === true`
+- This allows Vizzy to say things like "Got it, let me check your emails" without being blocked
 
-The date update already uses a bulk Supabase query targeting all siblings — this is correct and serves as the reference pattern.
+### Step 3 — Write RingCentral status to `integration_connections`
 
-## Technical Details
+**File: `supabase/functions/ringcentral-oauth/index.ts`**
 
-```text
-handlePagesSaveMulti(newPages):
-  siblings = allPosts.filter(same title + platform + day)
-  existingPages = siblings.map(s => s.page_name)
-  
-  pagesToAdd = newPages.filter(p => !existingPages.includes(p))
-  pagesToRemove = siblings.filter(s => !newPages.includes(s.page_name))
-  
-  // Create new rows for added pages (clone from current post)
-  for page in pagesToAdd:
-    createPost({ ...post fields, page_name: page })
-  
-  // Delete rows for removed pages
-  for sibling in pagesToRemove:
-    deletePost(sibling.id)
-  
-  // Update remaining siblings if needed
-  invalidateQueries()
+- In the `handleOAuthCallback` function (after saving tokens, around line 385), add an upsert to `integration_connections` with `integration_id: "ringcentral"`, `status: "connected"`, same pattern as google-oauth
+- In the `check-status` action (around line 132), when returning "connected", also upsert the integration_connections row
+- In the `disconnect` action (around line 263), also delete the `integration_connections` row for ringcentral
 
-handlePlatformsSaveMulti / handleContentTypeSave:
-  Use direct supabase.from("social_posts").update(...)
-    .eq("platform", post.platform)
-    .eq("title", post.title)
-    .gte/lte("scheduled_date", dayRange)
-  Same pattern as the existing date bulk update.
-```
+### Step 4 — Deploy updated edge function
 
-**File to modify:** `src/components/social/PostReviewPanel.tsx` (3 handler functions)
+Deploy `ringcentral-oauth` so the fix takes effect immediately.
+
+## Files to Modify
+
+1. `src/hooks/useVoiceEngine.ts` — add `translationMode` flag, split filter patterns
+2. `supabase/functions/ringcentral-oauth/index.ts` — write/clean `integration_connections`
+
+## Expected Outcome
+
+- Vizzy's voice responses will appear in the transcript instead of being silently dropped
+- RingCentral will show as "Connected" on the Integrations page
+- Vizzy's context will correctly detect both Gmail and RingCentral as active integrations
 
