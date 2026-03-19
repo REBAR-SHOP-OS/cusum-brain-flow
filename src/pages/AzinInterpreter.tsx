@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRealtimeTranscribe } from "@/hooks/useRealtimeTranscribe";
 import { Trash2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
