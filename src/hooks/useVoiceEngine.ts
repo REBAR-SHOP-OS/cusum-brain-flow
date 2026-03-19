@@ -118,8 +118,12 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const dcRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const agentTextRef = useRef("");
+  const transcriptsRef = useRef<VoiceTranscript[]>([]);
   const configRef = useRef(config);
   configRef.current = config;
+
+  // Keep transcriptsRef in sync
+  useEffect(() => { transcriptsRef.current = transcripts; }, [transcripts]);
 
   const clearTimeout_ = () => {
     if (timeoutRef.current) {
