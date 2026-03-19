@@ -27,6 +27,9 @@ const WRITE_TOOLS = new Set([
   "wp_delete_product",
   "wp_create_post",
   "wp_optimize_speed",
+  "rc_make_call",
+  "rc_send_sms",
+  "rc_send_fax",
 ]);
 
 const JARVIS_TOOLS = [
