@@ -504,8 +504,72 @@ export async function buildFullVizzyContext(
     .map(([name, stats]) => `  • ${name}: ${stats.count} actions (${Array.from(stats.types).slice(0, 5).join(", ")})`)
     .join("\n");
 
+  // ═══ RINGCENTRAL CALLS TODAY (per employee) ═══
+  const rcCalls = (rcCallsToday || []).filter((r: any) => {
+    const meta = r.metadata as Record<string, unknown> | null;
+    return meta?.type === "call";
+  });
+  const rcCallsByEmployee: Record<string, { outbound: number; inbound: number; missed: number; talkTimeSec: number }> = {};
+  const rcCallDetails: string[] = [];
+
+  for (const call of rcCalls) {
+    const meta = call.metadata as Record<string, unknown> | null;
+    const dir = (call.direction || "inbound").toLowerCase();
+    const result = (meta?.result as string) || "Unknown";
+    const duration = (meta?.duration as number) || 0;
+    const isMissed = result === "Missed" || result === "No Answer";
+
+    // Match employee by from/to address against profile emails
+    const addr = dir === "outbound" ? call.from_address : call.to_address;
+    const addrClean = addr?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || addr || "";
+    const employeeName = emailProfileMap.get(addrClean) || addrClean;
+
+    if (!rcCallsByEmployee[employeeName]) rcCallsByEmployee[employeeName] = { outbound: 0, inbound: 0, missed: 0, talkTimeSec: 0 };
+    if (dir === "outbound") rcCallsByEmployee[employeeName].outbound++;
+    else rcCallsByEmployee[employeeName].inbound++;
+    if (isMissed) rcCallsByEmployee[employeeName].missed++;
+    rcCallsByEmployee[employeeName].talkTimeSec += duration;
+
+    // Detail line
+    const durationStr = duration > 0 ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "0s";
+    const timeStr = call.received_at ? new Date(call.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    rcCallDetails.push(`  • [${dir.toUpperCase()}] ${call.from_address || "?"} → ${call.to_address || "?"}: ${durationStr}, ${result} (${timeStr})`);
+  }
+
+  const totalRcCalls = rcCalls.length;
+  const totalRcInbound = rcCalls.filter((c: any) => (c.direction || "").toLowerCase() === "inbound").length;
+  const totalRcMissed = rcCalls.filter((c: any) => {
+    const meta = c.metadata as Record<string, unknown> | null;
+    const result = (meta?.result as string) || "";
+    return result === "Missed" || result === "No Answer";
+  }).length;
+
+  const rcEmployeeLines = Object.entries(rcCallsByEmployee)
+    .sort((a, b) => (b[1].outbound + b[1].inbound) - (a[1].outbound + a[1].inbound))
+    .map(([name, s]) => {
+      const talkMin = Math.round(s.talkTimeSec / 60);
+      return `  • ${name}: ${s.outbound} outbound, ${s.inbound} inbound, ${s.missed} missed, ${talkMin}min talk time`;
+    })
+    .join("\n");
+
+  // Sales supervision flags
+  const salesFlags: string[] = [];
+  for (const [name, s] of Object.entries(rcCallsByEmployee)) {
+    const avgCallSec = (s.outbound + s.inbound - s.missed) > 0 ? s.talkTimeSec / (s.outbound + s.inbound - s.missed) : 0;
+    if (avgCallSec > 0 && avgCallSec < 120 && (s.outbound + s.inbound) >= 2) {
+      salesFlags.push(`  ⚠️ ${name}: avg call under 2 min (${Math.round(avgCallSec)}s) — may be rushing through conversations`);
+    }
+    if (s.missed >= 3) {
+      salesFlags.push(`  ⚠️ ${name}: ${s.missed} missed calls today — needs follow-up`);
+    }
+    const emailActivity = emailsByEmployee[name];
+    if (s.outbound >= 3 && (!emailActivity || emailActivity.sent === 0)) {
+      salesFlags.push(`  ⚠️ ${name}: ${s.outbound} outbound calls but 0 email follow-ups — may need to send written recaps`);
+    }
+  }
+
   // Build structured facts block for anti-hallucination anchoring
-  const factsBlock = `[FACTS] staff=${totalStaff}, customers=${totalCustomerCount}, open_leads=${openLeads}, AR=${fmt(totalReceivable)}, AP=${fmt(totalPayable)}, scheduled_deliveries=${scheduledToday}, in_transit=${inTransit} [/FACTS]`;
+  const factsBlock = `[FACTS] staff=${totalStaff}, customers=${totalCustomerCount}, open_leads=${openLeads}, AR=${fmt(totalReceivable)}, AP=${fmt(totalPayable)}, scheduled_deliveries=${scheduledToday}, in_transit=${inTransit}, rc_calls_today=${totalRcCalls}, rc_missed=${totalRcMissed} [/FACTS]`;
 
   return `${factsBlock}
 
