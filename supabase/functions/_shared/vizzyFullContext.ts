@@ -716,6 +716,22 @@ export async function buildFullVizzyContext(
     }
   }
 
+  // ═══ SYNC STALENESS DETECTION ═══
+  // Check most recent RC call — if older than 24hrs, flag it
+  const allRcDates = (rcCallsToday || []).map((c: any) => c.received_at).filter(Boolean).sort().reverse();
+  let syncStalenessLine = "";
+  if (totalRcCalls === 0) {
+    // No calls today — check if there are ANY recent RC calls in last 7 days
+    // Since we only queried today, flag it as potentially stale
+    syncStalenessLine = "  ⚠️ SYNC STATUS: No RingCentral calls found today. Phone system sync may be down or no calls were made/received today. Ask the CEO to verify RC is connected.";
+  } else {
+    const mostRecent = allRcDates[0];
+    const hoursSinceLastCall = (Date.now() - new Date(mostRecent).getTime()) / 3600000;
+    if (hoursSinceLastCall > 8) {
+      syncStalenessLine = `  ⚠️ SYNC STATUS: Last RC call was ${Math.round(hoursSinceLastCall)} hours ago (${new Date(mostRecent).toLocaleString()}). Sync may be delayed.`;
+    }
+  }
+
   // Build structured facts block for anti-hallucination anchoring
   const factsBlock = `[FACTS] staff=${totalStaff}, customers=${totalCustomerCount}, open_leads=${openLeads}, AR=${fmt(totalReceivable)}, AP=${fmt(totalPayable)}, scheduled_deliveries=${scheduledToday}, in_transit=${inTransit}, rc_calls_today=${totalRcCalls}, rc_missed=${totalRcMissed} [/FACTS]`;
 
