@@ -751,6 +751,17 @@ ${rcEmployeeLines || "    No call activity today"}
 ${rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today"}
 ${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlags.join("\n")}` : ""}
 
+📝 CALL NOTES & TRANSCRIPTS (from RingCentral AI Assistant — ${(rcCallNoteEmails || []).length} today)
+${(rcCallNoteEmails || []).length > 0
+  ? (rcCallNoteEmails || []).map((note: any) => {
+      const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+      const recipient = note.to_address || "unknown";
+      const recipientName = emailProfileMap.get(recipient?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "") || recipient;
+      const preview = note.body_preview ? note.body_preview.replace(/\n/g, " ").slice(0, 500) : "(no preview)";
+      return `  • [${time}] ${note.subject || "Call Note"} → ${recipientName}\n      ${preview}`;
+    }).join("\n")
+  : "  No call notes today"}
+
 👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)
   Based on: page views, emails sent, calls, AI sessions, work orders, agent actions
   Idle gap threshold: 15 minutes (gaps longer than 15min = not counted as active)
