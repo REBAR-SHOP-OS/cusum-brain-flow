@@ -234,10 +234,21 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
       {/* End Call */}
       <div className="pb-6 flex flex-col items-center gap-4">
-        <button onClick={handleClose} className="flex items-center gap-2 px-6 py-3 rounded-full bg-destructive text-destructive-foreground font-medium shadow-lg hover:bg-destructive/90 transition-colors">
-          <Mic className="w-5 h-5" />
-          End Call
-        </button>
+        <div className="flex items-center gap-4">
+          {transcripts.length > 0 && (
+            <button
+              onClick={generateConversationPdf}
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              aria-label="Download conversation report"
+            >
+              <FileText className="w-5 h-5" />
+            </button>
+          )}
+          <button onClick={handleClose} className="flex items-center gap-2 px-6 py-3 rounded-full bg-destructive text-destructive-foreground font-medium shadow-lg hover:bg-destructive/90 transition-colors">
+            <Mic className="w-5 h-5" />
+            End Call
+          </button>
+        </div>
       </div>
     </motion.div>
   );
