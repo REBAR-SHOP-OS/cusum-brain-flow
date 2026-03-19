@@ -17,13 +17,21 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Parse mode from request body
-    let mode = "morning";
+    // Parse mode from request body — REQUIRED, no default
+    let mode: string | null = null;
     try {
       const body = await req.json();
       if (body?.mode) mode = body.mode;
     } catch {
-      // default to morning if no body
+      // no body — mode stays null
+    }
+
+    if (!mode || !["morning", "evening"].includes(mode)) {
+      console.log(`BLOCKED: auto-clockout called with invalid/missing mode: ${mode}`);
+      return new Response(
+        JSON.stringify({ ok: false, error: "Missing or invalid mode. Must be 'morning' or 'evening'." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Get current ET time info
@@ -44,9 +52,17 @@ serve(async (req) => {
     const currentETHour = parseInt(etHourFormatter.format(now));
 
     if (mode === "morning") {
-      // Morning mode: close ALL open shifts (no hour guard — works for cron and manual calls)
+      // HARD GUARD: only execute between 5-7 AM ET
       if (currentETHour < 5 || currentETHour > 7) {
-        console.log(`Warning: morning reset called at ET hour ${currentETHour} (expected ~6 AM)`);
+        console.log(`BLOCKED: morning reset rejected at ET hour ${currentETHour}`);
+        return new Response(
+          JSON.stringify({ 
+            ok: false, 
+            blocked: true, 
+            message: `Morning reset blocked — current ET hour is ${currentETHour}, only allowed 5-7 AM ET` 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       // Close ALL open shifts for everyone
