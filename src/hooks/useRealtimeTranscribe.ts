@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { toast } from "sonner";
 
+export type SourceLang = "auto" | "en" | "fa";
+
 interface CommittedTranscript {
   id: string;
   text: string;
@@ -11,6 +13,7 @@ interface CommittedTranscript {
   translatedText?: string;
   originalCleanText?: string;
   isTranslating?: boolean;
+  sourceLang: SourceLang;
 }
 
 export function useRealtimeTranscribe() {
@@ -18,8 +21,10 @@ export function useRealtimeTranscribe() {
   const [partialText, setPartialText] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [sourceLang, setSourceLang] = useState<SourceLang>("auto");
   const startTimeRef = useRef<number>(0);
   const contextRef = useRef<string[]>([]);
+  const sourceLangRef = useRef<SourceLang>("auto");
 
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
@@ -35,9 +40,11 @@ export function useRealtimeTranscribe() {
       if (wordCount < 2 || trimmed.length < 5) return;
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       const entryId = crypto.randomUUID();
+      const currentSourceLang = sourceLangRef.current;
+      const targetLangs = currentSourceLang === "en" ? ["fa"] : currentSourceLang === "fa" ? ["en"] : ["en", "fa"];
       setCommittedTranscripts((prev) => [
         ...prev,
-        { id: entryId, text: data.text, timestamp: elapsed, isTranslating: true },
+        { id: entryId, text: data.text, timestamp: elapsed, isTranslating: true, sourceLang: currentSourceLang },
       ]);
       setPartialText("");
 
@@ -48,8 +55,8 @@ export function useRealtimeTranscribe() {
         "translate-message",
         {
           text: data.text,
-          sourceLang: "auto",
-          targetLangs: ["en", "fa"],
+          sourceLang: currentSourceLang,
+          targetLangs,
           context: contextWindow || undefined,
         },
       )
@@ -58,13 +65,15 @@ export function useRealtimeTranscribe() {
           const translatedFa = res?.translations?.fa;
 
           // If AI determined it's unintelligible noise, silently remove the entry
-          if (!translatedEn || !translatedEn.trim()) {
+          // For auto/en source, check EN translation; for fa source, check EN translation
+          const primaryTranslation = currentSourceLang === "fa" ? translatedEn : (translatedEn || translatedFa);
+          if (!primaryTranslation || !primaryTranslation.trim()) {
             setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }
 
           // Push successful translation to context buffer
-          contextRef.current.push(translatedEn);
+          contextRef.current.push(translatedEn || translatedFa || data.text);
           if (contextRef.current.length > 10) {
             contextRef.current = contextRef.current.slice(-5);
           }
@@ -74,8 +83,8 @@ export function useRealtimeTranscribe() {
               t.id === entryId
                 ? {
                     ...t,
-                    translatedText: translatedEn,
-                    originalCleanText: translatedFa || undefined,
+                    translatedText: currentSourceLang === "fa" ? translatedEn : (currentSourceLang === "en" ? translatedFa : translatedEn),
+                    originalCleanText: currentSourceLang === "en" ? undefined : translatedFa,
                     isTranslating: false,
                   }
                 : t
@@ -136,11 +145,18 @@ export function useRealtimeTranscribe() {
     return committedTranscripts.map((t) => t.translatedText || t.text).join(" ");
   }, [committedTranscripts]);
 
+  const updateSourceLang = useCallback((lang: SourceLang) => {
+    setSourceLang(lang);
+    sourceLangRef.current = lang;
+  }, []);
+
   return {
     isConnected,
     isConnecting,
     partialText,
     committedTranscripts,
+    sourceLang,
+    setSourceLang: updateSourceLang,
     connect,
     disconnect,
     clearTranscripts,
