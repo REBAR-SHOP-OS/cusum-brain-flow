@@ -126,25 +126,20 @@ function DefaultRow({
         <Check className="w-3.5 h-3.5" />
       </Button>
       {/* Reject button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-7 w-7 rounded-full",
-          isRejected
-            ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-            : "text-muted-foreground hover:text-red-500"
-        )}
-        onClick={() => {
-          if (dbMatch) {
-            onToggleRejected?.(dbMatch.id, isRejected);
-          } else {
-            onMarkRejected(def.title, def.category);
-          }
-        }}
-      >
-        <X className="w-3.5 h-3.5" />
-      </Button>
+      {isPurchased && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            if (dbMatch) {
+              onTogglePurchased?.(dbMatch.id, true);
+            }
+          }}
+        >
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      )}
       <span className={cn(
         "flex-1 text-sm font-medium",
         isPurchased && "line-through text-green-600",
