@@ -107,6 +107,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name]));
   const profileIdMap = new Map((profiles || []).map((p: any) => [p.id, p.full_name]));
+  const emailProfileMap = new Map((profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"]));
 
   const activityMap = new Map<string, any>();
   for (const s of (agentSessions || [])) {
@@ -121,6 +122,34 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     clocked_in: e.clock_in,
     clocked_out: e.clock_out,
   }));
+
+  // RingCentral call aggregation
+  const rcCalls = (rcCallsToday || []).filter((r: any) => {
+    const meta = r.metadata as Record<string, unknown> | null;
+    return meta?.type === "call";
+  });
+  const rcCallsByEmployee: Record<string, { outbound: number; inbound: number; missed: number; talkTimeSec: number }> = {};
+  const rcCallDetailsList: any[] = [];
+
+  for (const call of rcCalls) {
+    const meta = call.metadata as Record<string, unknown> | null;
+    const dir = (call.direction || "inbound").toLowerCase();
+    const result = (meta?.result as string) || "Unknown";
+    const duration = (meta?.duration as number) || 0;
+    const isMissed = result === "Missed" || result === "No Answer";
+
+    const addr = dir === "outbound" ? call.from_address : call.to_address;
+    const addrClean = addr?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || addr || "";
+    const employeeName = emailProfileMap.get(addrClean) || addrClean;
+
+    if (!rcCallsByEmployee[employeeName]) rcCallsByEmployee[employeeName] = { outbound: 0, inbound: 0, missed: 0, talkTimeSec: 0 };
+    if (dir === "outbound") rcCallsByEmployee[employeeName].outbound++;
+    else rcCallsByEmployee[employeeName].inbound++;
+    if (isMissed) rcCallsByEmployee[employeeName].missed++;
+    rcCallsByEmployee[employeeName].talkTimeSec += duration;
+
+    rcCallDetailsList.push({ direction: dir, from: call.from_address, to: call.to_address, duration, result, received_at: call.received_at });
+  }
 
   return {
     financials: {
@@ -153,5 +182,12 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     agentActivity: Array.from(activityMap.values()),
     teamPresence,
     inboundEmails: communications || [],
+    ringcentralCalls: {
+      totalCalls: rcCalls.length,
+      totalInbound: rcCalls.filter((c: any) => (c.direction || "").toLowerCase() === "inbound").length,
+      totalMissed: rcCalls.filter((c: any) => { const m = c.metadata as any; return (m?.result === "Missed" || m?.result === "No Answer"); }).length,
+      perEmployee: rcCallsByEmployee,
+      details: rcCallDetailsList.slice(0, 50),
+    },
   };
 }

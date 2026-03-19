@@ -640,6 +640,14 @@ ${employeeEventLines || "    No activity events today"}
   Per-Employee Email Activity:
 ${emailByEmployeeLines || "    No email activity today"}
 
+📞 RINGCENTRAL CALLS TODAY (${totalRcCalls} total)
+  Inbound: ${totalRcInbound} | Outbound: ${totalRcCalls - totalRcInbound} | Missed: ${totalRcMissed}
+  Per-Employee Call Activity:
+${rcEmployeeLines || "    No call activity today"}
+  Call Details:
+${rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today"}
+${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlags.join("\n")}` : ""}
+
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
 
