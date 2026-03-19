@@ -211,6 +211,14 @@ export async function buildFullVizzyContext(
           .order("last_synced_at", { ascending: false })
           .limit(30)
       : Promise.resolve({ data: null }),
+    // RingCentral calls today
+    supabase
+      .from("communications")
+      .select("from_address, to_address, direction, received_at, metadata, source")
+      .eq("source", "ringcentral")
+      .gte("received_at", today + "T00:00:00")
+      .order("received_at", { ascending: false })
+      .limit(500),
   ]);
 
   // Compute financials
