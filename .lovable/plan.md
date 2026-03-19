@@ -1,31 +1,61 @@
 
 
-# Upgrade Nila Interpreter: Better Model + Silence Handling
+# Auto-Healing 24/7 Sync for Gmail and RingCentral
 
-## Problem
-1. Translation model (`gemini-2.5-flash`) can miss nuances in both Farsi and English
-2. When user is silent, the system still shows "Listening..." and may pick up noise — it should stay completely quiet
+## Overview
+
+Implement automated cron-based sync with self-healing token management so data flows 24/7 without manual intervention.
 
 ## Changes
 
-### 1. Upgrade translation model to `gemini-2.5-pro`
-**File:** `supabase/functions/translate-message/index.ts`
-- Change `model: "gemini-2.5-flash"` → `model: "gemini-2.5-pro"` for higher accuracy in both Farsi and English translation
-- Enhance the system prompt to emphasize natural fluency in both languages and proper Farsi colloquial expressions
+### 1. Add cron sync mode to `gmail-sync` edge function
 
-### 2. Strengthen silence/noise filtering
-**File:** `src/hooks/useAzinVoiceRelay.ts`
-- Increase minimum word count from 1 to 2 words for the noise blocklist filter (single filler words like "yeah", "hmm" already blocked, but extend to 2-word fillers)
-- Add minimum character threshold: reject committed transcripts shorter than 8 characters (matching the memory standard of "< 3 words/8 chars")
-- Add minimum word count of 3 for very short fragments that are likely noise
+**File:** `supabase/functions/gmail-sync/index.ts`
 
-### 3. Improve translation prompt for natural pronunciation
-**File:** `supabase/functions/translate-message/index.ts`
-- Update prompt to instruct: "For Farsi, use natural conversational Persian (محاوره‌ای) — not formal/literary. For English, use natural spoken English."
-- Add rule: "If the input is silence, noise, filler words, or meaningless fragments, return empty strings for all target languages."
+Add a `syncAllUsers()` function (matching the existing pattern in `ringcentral-sync`) that:
+- Activates when called with anon/service key (no user JWT) — same pattern as RC's line 429-446
+- Queries all rows from `user_gmail_tokens` via service role
+- For each user: refreshes token, syncs last 1 day of emails, upserts to `communications`
+- On `invalid_grant`: marks `integration_connections` status to `error` with message "Token expired — please reconnect" so the UI auto-shows a Reconnect button
+- Continues to next user on failure (no single user breaks the batch)
 
-## Summary
-- `gemini-2.5-pro` = more accurate hearing + better bilingual fluency
-- Stricter client-side noise gates = silence when user is silent
-- Prompt update = natural-sounding translations in both languages
+### 2. Self-healing: auto-mark integration status on token failure
+
+**Files:** `supabase/functions/gmail-sync/index.ts` and `supabase/functions/ringcentral-sync/index.ts`
+
+In both functions' cron mode, when a token refresh fails with `invalid_grant` or equivalent:
+- Upsert to `integration_connections` setting `status = 'error'` and `error_message = 'Token expired — please reconnect'`
+- The existing `ringcentral-sync` already deletes stale tokens but doesn't update `integration_connections` — add that
+
+### 3. Schedule pg_cron jobs (every 5 minutes)
+
+**Via SQL insert (not migration — contains project-specific URLs/keys):**
+
+Two cron jobs:
+- `gmail-cron-sync`: calls `gmail-sync` every 5 minutes with anon key
+- `ringcentral-cron-sync`: calls `ringcentral-sync` every 5 minutes with anon key
+
+Both use the existing architecture: anon key triggers the function, function escalates internally via service role key.
+
+### 4. Gmail Watch (Pub/Sub) auto-renewal
+
+**File:** `supabase/functions/gmail-sync/index.ts`
+
+Add handling for a `renewWatch` action in the cron path that calls `gmail.users.watch()` for each user with tokens. Schedule a daily cron job for this to keep push notifications alive (they expire every 7 days).
+
+### 5. Staleness alert banner on Integrations page
+
+**File:** `src/pages/Integrations.tsx`
+
+On mount, query `MAX(received_at)` from `communications` grouped by source. If any source has no data for 12+ hours, show a warning banner:
+```
+⚠️ Gmail sync appears stale — last data received 18 hours ago
+```
+
+## Technical Details
+
+- RingCentral already has `syncAllUsers()` (line 257) — Gmail needs the same pattern
+- Both functions already have `verify_jwt = false` in config.toml
+- `integration_connections` table has `user_id`, `integration_id`, `status`, `error_message` columns with per-user RLS
+- Cron uses anon key per project memory (service_role not accessible in pg_cron context)
 
