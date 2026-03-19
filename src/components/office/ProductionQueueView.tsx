@@ -85,8 +85,9 @@ export function ProductionQueueView() {
     // 1. Delete barlists (work_orders.barlist_id → SET NULL via FK; barlist_items etc → CASCADE)
     const projectBarlists = barlists.filter(b => b.project_id === projectId);
     for (const b of projectBarlists) {
-      const { error } = await supabase.from("barlists").delete().eq("id", b.id);
+      const { data, error } = await supabase.from("barlists").delete().eq("id", b.id).select();
       if (error) { toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" }); return false; }
+      if (!data || data.length === 0) { toast({ title: "Permission denied", description: "Cannot delete barlist — insufficient permissions.", variant: "destructive" }); return false; }
     }
 
     // 3. Delete cut plans (CASCADE handles cut_plan_items → clearance_evidence, cut_output_batches, inventory_reservations, loading_checklist)
