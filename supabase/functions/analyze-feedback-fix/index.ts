@@ -52,9 +52,22 @@ serve(async (req) => {
       title, description, screenshot_url, page_path,
       reopen_reason, original_task_id,
       clarification_answer, original_memory_id,
+      user_id, company_id,
     } = await req.json();
 
     if (!title && !description && !clarification_answer) {
+      return new Response(JSON.stringify({ error: "Title, description, or clarification required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!company_id) {
+      return new Response(JSON.stringify({ error: "company_id is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
       return new Response(JSON.stringify({ error: "Title, description, or clarification required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
