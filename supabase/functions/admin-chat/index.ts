@@ -27,6 +27,9 @@ const WRITE_TOOLS = new Set([
   "wp_delete_product",
   "wp_create_post",
   "wp_optimize_speed",
+  "rc_make_call",
+  "rc_send_sms",
+  "rc_send_fax",
 ]);
 
 const JARVIS_TOOLS = [
@@ -559,7 +562,141 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── RingCentral Read Tools ───
+  {
+    type: "function",
+    function: {
+      name: "rc_get_active_calls",
+      description: "Get currently active calls on the company's RingCentral account. Returns live call sessions with direction, from/to, status, and duration.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rc_get_team_presence",
+      description: "Get the DND/availability/telephony status of all RingCentral extensions in the company. Shows who is available, busy, on a call, or in DND.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rc_get_call_analytics",
+      description: "Pull call analytics from the communications table — total calls, per-employee breakdown, missed calls, average duration. Supports date filtering.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "Date filter YYYY-MM-DD. Defaults to today." },
+          days: { type: "number", description: "Number of days to look back (alternative to date). Default: 1" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  // ─── RingCentral Write Tools (require confirmation) ───
+  {
+    type: "function",
+    function: {
+      name: "rc_make_call",
+      description: "Initiate a RingOut call via RingCentral. Rings the company phone first, then connects to the destination number. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Destination phone number (E.164 format, e.g. +14155551234)" },
+          from: { type: "string", description: "Caller ID / from number. Optional — uses default extension if omitted." },
+        },
+        required: ["to"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rc_send_sms",
+      description: "Send an SMS message via RingCentral. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Recipient phone number (E.164 format)" },
+          text: { type: "string", description: "SMS message body" },
+        },
+        required: ["to", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rc_send_fax",
+      description: "Send a fax via RingCentral. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Fax number (E.164 format)" },
+          cover_page_text: { type: "string", description: "Cover page text for the fax" },
+        },
+        required: ["to"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
+
+const RC_SERVER = "https://platform.ringcentral.com";
+
+async function getRingCentralToken(supabase: any, companyId: string): Promise<{ accessToken: string; userId: string } | null> {
+  // Get all users in company
+  const { data: companyProfiles } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("company_id", companyId);
+  if (!companyProfiles?.length) return null;
+
+  const userIds = companyProfiles.map((p: any) => p.user_id);
+  const { data: tokenRow } = await supabase
+    .from("user_ringcentral_tokens")
+    .select("access_token, token_expires_at, refresh_token, user_id")
+    .in("user_id", userIds)
+    .order("token_expires_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!tokenRow) return null;
+
+  let accessToken = tokenRow.access_token;
+
+  // Refresh if expired
+  if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+    const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+    const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+    if (!clientId || !clientSecret || !tokenRow.refresh_token) return null;
+
+    const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokenRow.refresh_token,
+      }),
+    });
+    if (!resp.ok) return null;
+    const tokens = await resp.json();
+    accessToken = tokens.access_token;
+    await supabase.from("user_ringcentral_tokens").update({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+      token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+    }).eq("user_id", tokenRow.user_id);
+  }
+
+  return { accessToken, userId: tokenRow.user_id };
+}
 
 async function executeReadTool(supabase: any, toolName: string, args: any): Promise<string> {
   switch (toolName) {
@@ -911,6 +1048,153 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
       }))});
     }
 
+    // ─── RingCentral Read Tools ───
+    case "rc_get_active_calls": {
+      try {
+        // Get companyId from the supabase context — we need it for token lookup
+        // The supabase client here is service-role, so we query for any company's RC token
+        const { data: allTokens } = await supabase
+          .from("user_ringcentral_tokens")
+          .select("access_token, token_expires_at, refresh_token, user_id")
+          .order("token_expires_at", { ascending: false })
+          .limit(1);
+        if (!allTokens?.length) return JSON.stringify({ message: "No RingCentral connection found" });
+        
+        const tokenRow = allTokens[0];
+        let accessToken = tokenRow.access_token;
+        if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+          const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+          const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+          if (!clientId || !clientSecret || !tokenRow.refresh_token) return JSON.stringify({ error: "RC token expired, cannot refresh" });
+          const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+            body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+          });
+          if (!resp.ok) return JSON.stringify({ error: "Token refresh failed" });
+          const tokens = await resp.json();
+          accessToken = tokens.access_token;
+          await supabase.from("user_ringcentral_tokens").update({
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+            token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+          }).eq("user_id", tokenRow.user_id);
+        }
+
+        const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/active-calls?view=Detailed`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!resp.ok) return JSON.stringify({ error: `RC API error: ${resp.status}` });
+        const data = await resp.json();
+        const calls = (data.records || []).map((c: any) => ({
+          id: c.id, sessionId: c.sessionId, direction: c.direction,
+          from: c.from?.phoneNumber || c.from?.name || "Unknown",
+          to: c.to?.phoneNumber || c.to?.name || "Unknown",
+          status: c.telephonyStatus || c.result || "Active",
+          startTime: c.startTime, duration: c.duration || 0,
+        }));
+        return JSON.stringify({ activeCalls: calls, total: calls.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "rc_get_team_presence": {
+      try {
+        const { data: allTokens } = await supabase
+          .from("user_ringcentral_tokens")
+          .select("access_token, token_expires_at, refresh_token, user_id")
+          .order("token_expires_at", { ascending: false });
+        if (!allTokens?.length) return JSON.stringify({ message: "No RingCentral connections found" });
+
+        const presenceResults: any[] = [];
+        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+
+        for (const row of allTokens) {
+          let accessToken = row.access_token;
+          if (row.token_expires_at && new Date(row.token_expires_at) <= new Date()) {
+            if (!clientId || !clientSecret || !row.refresh_token) continue;
+            try {
+              const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+                body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
+              });
+              if (!resp.ok) continue;
+              const tokens = await resp.json();
+              accessToken = tokens.access_token;
+              await supabase.from("user_ringcentral_tokens").update({
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token || row.refresh_token,
+                token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+              }).eq("user_id", row.user_id);
+            } catch { continue; }
+          }
+
+          try {
+            const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/presence`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (!resp.ok) continue;
+            const data = await resp.json();
+            // Get user name
+            const { data: profile } = await supabase.from("profiles").select("full_name").eq("user_id", row.user_id).maybeSingle();
+            presenceResults.push({
+              user_id: row.user_id,
+              name: profile?.full_name || "Unknown",
+              status: data.presenceStatus || data.userStatus || "Offline",
+              dnd_status: data.dndStatus || null,
+              telephony_status: data.telephonyStatus || null,
+            });
+          } catch { continue; }
+        }
+        return JSON.stringify({ presenceData: presenceResults, total: presenceResults.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "rc_get_call_analytics": {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const days = args.days || 1;
+        const startDate = args.date || (days === 1 ? today : new Date(Date.now() - (days - 1) * 86400000).toISOString().split("T")[0]);
+        const endDate = args.date || today;
+
+        const { data: calls, error } = await supabase
+          .from("communications")
+          .select("direction, duration, from_address, to_address, received_at, missed, employee_name")
+          .eq("channel", "phone")
+          .gte("received_at", startDate + "T00:00:00")
+          .lte("received_at", endDate + "T23:59:59")
+          .limit(500);
+
+        if (error) return JSON.stringify({ error: error.message });
+
+        const total = (calls || []).length;
+        const missed = (calls || []).filter((c: any) => c.missed).length;
+        const inbound = (calls || []).filter((c: any) => c.direction === "inbound").length;
+        const outbound = (calls || []).filter((c: any) => c.direction === "outbound").length;
+        const durations = (calls || []).filter((c: any) => c.duration > 0).map((c: any) => c.duration);
+        const avgDuration = durations.length > 0 ? Math.round(durations.reduce((a: number, b: number) => a + b, 0) / durations.length) : 0;
+
+        // Per-employee breakdown
+        const byEmployee: Record<string, { total: number; missed: number; inbound: number; outbound: number; totalDuration: number }> = {};
+        for (const c of (calls || [])) {
+          const name = c.employee_name || "Unknown";
+          if (!byEmployee[name]) byEmployee[name] = { total: 0, missed: 0, inbound: 0, outbound: 0, totalDuration: 0 };
+          byEmployee[name].total++;
+          if (c.missed) byEmployee[name].missed++;
+          if (c.direction === "inbound") byEmployee[name].inbound++;
+          if (c.direction === "outbound") byEmployee[name].outbound++;
+          byEmployee[name].totalDuration += (c.duration || 0);
+        }
+
+        return JSON.stringify({
+          period: { from: startDate, to: endDate },
+          summary: { total, inbound, outbound, missed, avgDurationSeconds: avgDuration },
+          byEmployee,
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
@@ -1058,6 +1342,125 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
         data,
       };
     }
+    // ─── RingCentral Write Tools ───
+    case "rc_make_call": {
+      const { data: allTokens } = await supabase
+        .from("user_ringcentral_tokens")
+        .select("access_token, token_expires_at, refresh_token, user_id")
+        .order("token_expires_at", { ascending: false })
+        .limit(1);
+      if (!allTokens?.length) throw new Error("No RingCentral connection found");
+      const tokenRow = allTokens[0];
+      let accessToken = tokenRow.access_token;
+      if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
+        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
+        const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+        });
+        if (!resp.ok) throw new Error("Token refresh failed");
+        const tokens = await resp.json();
+        accessToken = tokens.access_token;
+        await supabase.from("user_ringcentral_tokens").update({
+          access_token: tokens.access_token, refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+          token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+        }).eq("user_id", tokenRow.user_id);
+      }
+
+      const body: any = { to: { phoneNumber: args.to }, playPrompt: true };
+      if (args.from) body.from = { phoneNumber: args.from };
+      const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/ring-out`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`RingOut failed: ${JSON.stringify(data)}`);
+      return { success: true, message: `Call initiated to ${args.to}`, ringout_id: data.id, status: data.status?.callStatus };
+    }
+
+    case "rc_send_sms": {
+      const { data: allTokens } = await supabase
+        .from("user_ringcentral_tokens")
+        .select("access_token, token_expires_at, refresh_token, user_id")
+        .order("token_expires_at", { ascending: false })
+        .limit(1);
+      if (!allTokens?.length) throw new Error("No RingCentral connection found");
+      const tokenRow = allTokens[0];
+      let accessToken = tokenRow.access_token;
+      if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
+        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
+        const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+        });
+        if (!resp.ok) throw new Error("Token refresh failed");
+        const tokens = await resp.json();
+        accessToken = tokens.access_token;
+        await supabase.from("user_ringcentral_tokens").update({
+          access_token: tokens.access_token, refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+          token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+        }).eq("user_id", tokenRow.user_id);
+      }
+
+      const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/sms`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ to: [{ phoneNumber: args.to }], text: args.text }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`SMS failed: ${JSON.stringify(data)}`);
+      return { success: true, message: `SMS sent to ${args.to}`, messageId: data.id };
+    }
+
+    case "rc_send_fax": {
+      const { data: allTokens } = await supabase
+        .from("user_ringcentral_tokens")
+        .select("access_token, token_expires_at, refresh_token, user_id")
+        .order("token_expires_at", { ascending: false })
+        .limit(1);
+      if (!allTokens?.length) throw new Error("No RingCentral connection found");
+      const tokenRow = allTokens[0];
+      let accessToken = tokenRow.access_token;
+      if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
+        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
+        const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+        });
+        if (!resp.ok) throw new Error("Token refresh failed");
+        const tokens = await resp.json();
+        accessToken = tokens.access_token;
+        await supabase.from("user_ringcentral_tokens").update({
+          access_token: tokens.access_token, refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+          token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+        }).eq("user_id", tokenRow.user_id);
+      }
+
+      const rcForm = new FormData();
+      const faxJson = JSON.stringify({
+        to: [{ phoneNumber: args.to }],
+        faxResolution: "High",
+        coverPageText: args.cover_page_text || undefined,
+      });
+      rcForm.append("json", new Blob([faxJson], { type: "application/json" }));
+
+      const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/fax`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: rcForm,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`Fax failed: ${JSON.stringify(data)}`);
+      return { success: true, message: `Fax sent to ${args.to}`, faxId: data.id, status: data.messageStatus };
+    }
+
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
   }
@@ -1312,6 +1715,14 @@ BUSINESS:
 - Cross-reference data: AR high + production slow → flag it
 - Monitor email inbox and surface urgent items
 
+RINGCENTRAL TELEPHONY:
+- Make outbound calls via RingOut (rc_make_call)
+- Send SMS messages (rc_send_sms)
+- Send faxes (rc_send_fax)
+- Check active/live calls in real-time (rc_get_active_calls)
+- View team presence/DND/availability status (rc_get_team_presence)
+- Pull call analytics with per-employee breakdowns (rc_get_call_analytics)
+
 PERSONAL:
 - Brainstorming and strategy sessions
 - Writing emails, messages, notes
@@ -1367,8 +1778,8 @@ Priority: Financial impact → Legal risk → Customer retention → Operational
 Every recommendation must include: data sources used, reasoning logic, risk assessment, and alternative interpretation.
 
 ═══ TOOL USAGE RULES ═══
-- You have READ tools (list_machines, list_deliveries, list_orders, list_leads, get_stock_levels) that execute immediately and return structured JSON.
-- You have WRITE tools (update_machine_status, update_delivery_status, update_lead_status, update_cut_plan_status, create_event) that require user confirmation before executing.
+- You have READ tools (list_machines, list_deliveries, list_orders, list_leads, get_stock_levels, rc_get_active_calls, rc_get_team_presence, rc_get_call_analytics) that execute immediately and return structured JSON.
+- You have WRITE tools (update_machine_status, update_delivery_status, update_lead_status, update_cut_plan_status, create_event, rc_make_call, rc_send_sms, rc_send_fax) that require user confirmation before executing.
 - ALWAYS use read tools to retrieve current entity IDs before performing write operations. Never assume or hallucinate entity IDs.
 - For write operations: call the write tool directly. Do NOT ask for confirmation in text — the system handles confirmation automatically via UI.
 - If an entity is ambiguous (e.g. "that machine"), ask for clarification BEFORE calling a tool.
@@ -1518,6 +1929,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
             wp_get_product: "product details", wp_get_page: "page details", wp_get_post: "post details",
             wp_inspect_page: "page content",
             get_employee_activity: "employee activity", get_employee_emails: "employee emails",
+            rc_get_active_calls: "active calls", rc_get_team_presence: "team presence", rc_get_call_analytics: "call analytics",
           };
           const checking = toolNames.map((n: string) => progressLabels[n]).filter(Boolean);
           if (checking.length > 0) {
@@ -1734,6 +2146,12 @@ function buildActionDescription(tool: string, args: any): string {
       return `Delete product #${args.product_id}${args.force ? " (permanent)" : ""}`;
     case "wp_create_post":
       return `Create post: "${args.title}"${args.status ? ` (${args.status})` : ""}`;
+    case "rc_make_call":
+      return `Call ${args.to}${args.from ? ` from ${args.from}` : ""}`;
+    case "rc_send_sms":
+      return `Send SMS to ${args.to}: "${(args.text || "").slice(0, 50)}${(args.text || "").length > 50 ? "..." : ""}"`;
+    case "rc_send_fax":
+      return `Send fax to ${args.to}${args.cover_page_text ? ` — "${args.cover_page_text.slice(0, 40)}"` : ""}`;
     default:
       return `Execute ${tool}`;
   }
