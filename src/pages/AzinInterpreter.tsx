@@ -101,7 +101,7 @@ export default function AzinInterpreter() {
       {/* Split columns */}
       <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden min-h-0">
         {/* English column */}
-        <div className="flex flex-col">
+        <div className="flex flex-col min-h-0">
           <div className="px-4 py-2 border-b border-border bg-muted/30">
             <span className="text-sm font-semibold text-foreground">English</span>
           </div>
