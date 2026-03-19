@@ -762,7 +762,7 @@ export default function Tasks() {
           page_path: undefined,
           reopen_reason: reason,
           original_task_id: task.id,
-          user_id: user?.id,
+          user_id: currentUserId || undefined,
           company_id: task.company_id,
         });
 
