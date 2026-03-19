@@ -15,6 +15,7 @@ import { normalizeNotificationRoute } from "@/lib/notificationRouting";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
 import { NotificationFilters } from "@/components/notifications/NotificationFilters";
 import { FeedbackReviewDialog } from "@/components/feedback/FeedbackReviewDialog";
+import { triggerFeedbackAnalysis } from "@/lib/triggerFeedbackAnalysis";
 
 interface InboxPanelProps {
   isOpen: boolean;
