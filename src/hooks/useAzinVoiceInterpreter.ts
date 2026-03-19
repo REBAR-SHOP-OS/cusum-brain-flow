@@ -125,9 +125,10 @@ export function useAzinVoiceInterpreter() {
     instructions: AZIN_INSTRUCTIONS,
     voice: "alloy",
     model: "gpt-4o-realtime-preview",
-    vadThreshold: 0.9,
-    silenceDurationMs: 400,
+    vadThreshold: 0.95,
+    silenceDurationMs: 500,
     prefixPaddingMs: 100,
     connectionTimeoutMs: 15_000,
+    temperature: 0.6,
   });
 }

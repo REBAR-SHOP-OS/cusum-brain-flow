@@ -55,6 +55,7 @@ serve(async (req) => {
       vadThreshold = 0.4,
       silenceDurationMs = 300,
       prefixPaddingMs = 200,
+      temperature = 0.8,
     } = body;
 
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
@@ -68,6 +69,7 @@ serve(async (req) => {
         voice,
         modalities: ["audio", "text"],
         instructions,
+        temperature,
         input_audio_transcription: {
           model: "whisper-1",
         },
