@@ -9,8 +9,10 @@ export interface WebPhoneState {
   error: string | null;
 }
 
+export type InboundCallHandler = (session: any, fromNumber: string) => void;
+
 export interface WebPhoneActions {
-  initialize: () => Promise<boolean>;
+  initialize: (onInboundCall?: InboundCallHandler) => Promise<boolean>;
   call: (phoneNumber: string, contactName?: string) => Promise<boolean>;
   hangup: () => void;
   dispose: () => void;
