@@ -110,11 +110,22 @@ export function useAzinVoiceRelay() {
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
     onPartialTranscript: (data) => {
-      setPartialText(data.text);
+      const pt = data.text.trim();
+      // Hide Scribe annotations from partial text
+      if (!pt || SCRIBE_ANNOTATION.test(pt) || pt.toLowerCase().includes("(speaking") || pt.toLowerCase().includes("(music")) {
+        setPartialText("");
+        return;
+      }
+      setPartialText(pt);
     },
     onCommittedTranscript: (data) => {
       const trimmed = data.text.trim();
       if (!trimmed) return;
+
+      // Block Scribe annotations like "(speaking in foreign language)", "(music)", "(laughter)"
+      if (SCRIBE_ANNOTATION.test(trimmed)) return;
+      // Block punctuation-only transcripts like "..."
+      if (ONLY_PUNCTUATION.test(trimmed)) return;
 
       // Strong noise filter
       const wordCount = trimmed.split(/\s+/).length;

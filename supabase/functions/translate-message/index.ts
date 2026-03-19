@@ -89,7 +89,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
 
     const result = await callAI({
       provider: "gemini",
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       agentName: "system",
       messages: [
         {
@@ -102,6 +102,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
         },
       ],
       temperature: 0.0,
+      maxTokens: 500,
     });
 
     const raw = result.content;
