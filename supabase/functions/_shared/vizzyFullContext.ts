@@ -767,3 +767,100 @@ ${brainList || "  No entries"}
 🧠 PERSISTENT MEMORY (${activeMemories.length} items)
 ${memorySection}`;
 }
+
+/** Build a unified mini daily report per employee combining ALL data sources */
+function buildPerPersonReports(
+  profiles: any[],
+  hoursWorked: Record<string, number>,
+  emailsByEmployee: Record<string, { sent: number; received: number }>,
+  rcCallsByEmployee: Record<string, { outbound: number; inbound: number; missed: number; talkTimeSec: number }>,
+  woByAssignee: Record<string, { total: number; completed: number; inProgress: number }>,
+  agentUsageByUser: Record<string, { sessions: number; agents: Set<string>; lastTopic: string }>,
+  actionsByUser: Record<string, { count: number; types: Set<string> }>,
+  eventsByEmployee: Record<string, { count: number; types: Set<string> }>,
+  footprintTimestamps: Record<string, number[]>,
+  machineOps: any[],
+  profileIdMap: Map<string, string>,
+): string {
+  // Collect all unique employee names that appear in ANY data source
+  const allNames = new Set<string>();
+  for (const p of profiles) if (p.full_name) allNames.add(p.full_name);
+  Object.keys(hoursWorked).forEach(n => allNames.add(n));
+  Object.keys(emailsByEmployee).forEach(n => allNames.add(n));
+  Object.keys(rcCallsByEmployee).forEach(n => allNames.add(n));
+  Object.keys(woByAssignee).forEach(n => allNames.add(n));
+  Object.keys(agentUsageByUser).forEach(n => allNames.add(n));
+  Object.keys(actionsByUser).forEach(n => allNames.add(n));
+  Object.keys(eventsByEmployee).forEach(n => allNames.add(n));
+  Object.keys(footprintTimestamps).forEach(n => allNames.add(n));
+  allNames.delete("Unknown");
+
+  if (allNames.size === 0) return "  No employee data today";
+
+  const IDLE_GAP_MS = 15 * 60 * 1000;
+  const reports: string[] = [];
+
+  for (const name of Array.from(allNames).sort()) {
+    const parts: string[] = [];
+
+    // Hours
+    const hrs = hoursWorked[name];
+    if (hrs !== undefined) parts.push(`⏱ ${hrs.toFixed(1)}hrs clocked`);
+
+    // Footprint / active time
+    const fp = footprintTimestamps[name];
+    if (fp && fp.length >= 2) {
+      const sorted = [...fp].sort((a, b) => a - b);
+      let activeMs = 0;
+      for (let i = 1; i < sorted.length; i++) {
+        const gap = sorted[i] - sorted[i - 1];
+        if (gap <= IDLE_GAP_MS) activeMs += gap;
+      }
+      const activeHrs = (activeMs / 3600000).toFixed(1);
+      const utilPct = hrs ? Math.round((activeMs / 3600000 / hrs) * 100) : 0;
+      parts.push(`👣 ${activeHrs}hrs active (${utilPct}% utilization, ${fp.length} actions)`);
+    } else if (fp && fp.length === 1) {
+      parts.push(`👣 1 action recorded`);
+    }
+
+    // Emails
+    const em = emailsByEmployee[name];
+    if (em) parts.push(`📧 ${em.sent} sent, ${em.received} received`);
+
+    // Calls
+    const calls = rcCallsByEmployee[name];
+    if (calls) {
+      const talkMin = Math.round(calls.talkTimeSec / 60);
+      parts.push(`📞 ${calls.outbound} out, ${calls.inbound} in, ${calls.missed} missed (${talkMin}min talk)`);
+    }
+
+    // Work orders
+    const wo = woByAssignee[name];
+    if (wo) parts.push(`🔧 ${wo.total} WOs (${wo.completed} done, ${wo.inProgress} active)`);
+
+    // Agent sessions
+    const agent = agentUsageByUser[name];
+    if (agent) parts.push(`🤖 ${agent.sessions} AI sessions (${Array.from(agent.agents).join(", ")})`);
+
+    // Agent actions
+    const actions = actionsByUser[name];
+    if (actions) parts.push(`⚡ ${actions.count} agent actions`);
+
+    // Activity events
+    const events = eventsByEmployee[name];
+    if (events) parts.push(`📊 ${events.count} logged events`);
+
+    // Machine operator
+    const operating = machineOps.filter((m: any) => profileIdMap.get(m.current_operator_profile_id) === name);
+    if (operating.length > 0) parts.push(`🏭 Operating: ${operating.map((m: any) => m.name).join(", ")}`);
+
+    // Build report
+    if (parts.length === 0) {
+      reports.push(`  👤 ${name}: No recorded activity today`);
+    } else {
+      reports.push(`  👤 ${name}:\n${parts.map(p => `      ${p}`).join("\n")}`);
+    }
+  }
+
+  return reports.join("\n");
+}
