@@ -1087,9 +1087,27 @@ function buildPerPersonReports(
       parts.push(`👣 1 action recorded`);
     }
 
-    // Emails
+    // Emails — with subject details and action items
     const em = emailsByEmployee[name];
-    if (em) parts.push(`📧 ${em.sent} sent, ${em.received} received`);
+    if (em) {
+      parts.push(`📧 ${em.sent} sent, ${em.received} received`);
+      // Show key emails for this employee (up to 8)
+      const keyEmails = em.emails.slice(0, 8);
+      for (const e of keyEmails) {
+        parts.push(`    [${e.direction.toUpperCase()} ${e.time}] "${e.subject}" ${e.direction === "inbound" ? "from " + e.from : "to " + e.to}`);
+        if (e.preview) parts.push(`      ${e.preview.slice(0, 150)}`);
+      }
+      // Flag unanswered inbound emails as pending tasks
+      const inboundEmails = em.emails.filter(e => e.direction === "inbound");
+      const outboundSubjects = new Set(em.emails.filter(e => e.direction === "outbound").map(e => e.subject.toLowerCase()));
+      const unanswered = inboundEmails.filter(e => !outboundSubjects.has("re: " + e.subject.toLowerCase()));
+      if (unanswered.length > 0) {
+        parts.push(`    ⚠️ ${unanswered.length} inbound email(s) may need a reply:`);
+        for (const u of unanswered.slice(0, 5)) {
+          parts.push(`      → "${u.subject}" from ${u.from} (${u.time})`);
+        }
+      }
+    }
 
     // Calls
     const calls = rcCallsByEmployee[name];
