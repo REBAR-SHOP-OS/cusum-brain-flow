@@ -358,6 +358,8 @@ export function TagsExportView() {
                     const size = row.bar_size_mapped || row.bar_size || "";
                     const shapeType = row.shape_code_mapped || row.shape_type || "";
                     const weight = getWeight(size, row.total_length_mm, row.quantity);
+                    const us = (selectedSession as any)?.unit_system || "metric";
+                    const unit = dimUnit(us);
 
                     return (
                       <tr key={row.id} className="border-b border-border/50 hover:bg-muted/30">
@@ -370,16 +372,16 @@ export function TagsExportView() {
                         <td className="text-xs px-3 py-2.5">{shapeType || "—"}</td>
                         <td className="text-xs font-bold text-primary px-3 py-2.5 whitespace-nowrap">
                           {row.total_length_mm ? (
-                            <>{row.total_length_mm} <sub className="text-[8px] text-primary/60">MM</sub></>
+                            <>{formatDim(row.total_length_mm, us)} {unit && <sub className="text-[8px] text-primary/60">{unit}</sub>}</>
                           ) : "—"}
                         </td>
                         {DIM_COLS.map((d) => {
                           const key = `dim_${d.toLowerCase()}` as keyof typeof row;
-                          const val = row[key];
+                          const val = row[key] as number | null;
                           return (
                             <td key={d} className="text-xs text-muted-foreground text-right px-3 py-2.5 whitespace-nowrap">
                               {val != null && val !== 0 ? (
-                                <>{String(val)} <sub className="text-[8px] ml-0.5">MM</sub></>
+                                <>{formatDim(val, us)} {unit && <sub className="text-[8px] ml-0.5">{unit}</sub>}</>
                               ) : ""}
                             </td>
                           );
