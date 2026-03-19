@@ -88,8 +88,8 @@ Example input: "سلام خوبی؟" → {"en": "Hello, how are you?"}
 Noise → {"en": "", "fa": ""}${contextSection}`;
 
     const result = await callAI({
-      provider: "gemini",
-      model: "gemini-3-flash-preview",
+      provider: "gpt",
+      model: "gpt-5-mini",
       agentName: "system",
       messages: [
         {
@@ -102,6 +102,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
         },
       ],
       temperature: 0.0,
+      maxTokens: 300,
     });
 
     const raw = result.content;

@@ -46,19 +46,6 @@ export default function AzinInterpreter() {
     }
   }, [isConnected, sourceLang, connect, disconnect, setSourceLang]);
 
-  // Wake-word detection: "Hey Nila"
-  useEffect(() => {
-    if (!isConnected || showVoiceChat) return;
-    const textsToCheck = [
-      partialText,
-      ...committedTranscripts.slice(-3).map((t) => t.text),
-    ];
-    const combined = textsToCheck.join(" ").toLowerCase();
-    if (combined.includes("hey nila") || combined.includes("هی نیلا")) {
-      disconnect();
-      setShowVoiceChat(true);
-    }
-  }, [partialText, committedTranscripts, isConnected, showVoiceChat, disconnect]);
 
   const statusLabel = isConnecting
     ? "Connecting..."

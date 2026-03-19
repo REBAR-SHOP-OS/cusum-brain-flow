@@ -26,13 +26,15 @@ export interface RelayTranscript {
 export type RelayState = "idle" | "connecting" | "connected" | "error";
 
 // TTS voices
-const VOICE_ENGLISH = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
-const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
+const VOICE_ENGLISH = "FGY2WhTYpPnrIDTdsKH5"; // Laura (female, clear English)
+const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2 - best for Farsi)
 
 // Noise filter helpers
 const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
 const HAS_FARSI_OR_LATIN = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
 const REPEATED_CHARS = /(.)\1{4,}/;
+const SCRIBE_ANNOTATION = /^\s*\(/; // Scribe annotations like "(speaking in foreign language)", "(music)", "(laughter)"
+const PUNCTUATION_ONLY = /^[\s.,!?…\-–—:;'"]+$/;
 
 export function useAzinVoiceRelay() {
   const [state, setState] = useState<RelayState>("idle");
@@ -108,11 +110,17 @@ export function useAzinVoiceRelay() {
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
     onPartialTranscript: (data) => {
+      // Filter out Scribe annotations from partial display
+      if (SCRIBE_ANNOTATION.test(data.text) || PUNCTUATION_ONLY.test(data.text)) return;
       setPartialText(data.text);
     },
     onCommittedTranscript: (data) => {
       const trimmed = data.text.trim();
       if (!trimmed) return;
+
+      // Block Scribe annotations and punctuation-only strings
+      if (SCRIBE_ANNOTATION.test(trimmed)) return;
+      if (PUNCTUATION_ONLY.test(trimmed)) return;
 
       // Strong noise filter
       const wordCount = trimmed.split(/\s+/).length;
