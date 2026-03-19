@@ -27,7 +27,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       btnSize: BTN_SIZE,
       defaultPos: (mobile) => ({
         x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 20 : 300,
-        y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 90 : 28) : 300,
+        y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 100 : 28) : 300,
       }),
     });
 
