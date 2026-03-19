@@ -319,6 +319,8 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
         description: `${description.trim()}\n\nFrom: ${submitterName}\nPage: ${pagePath}\nScreenshot: ${publicUrl}`,
         screenshot_url: publicUrl,
         page_path: pagePath,
+        user_id: user?.id,
+        company_id: resolvedCompanyId,
       });
 
       toast.success("Feedback sent!");

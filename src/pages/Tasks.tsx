@@ -762,6 +762,8 @@ export default function Tasks() {
           page_path: undefined,
           reopen_reason: reason,
           original_task_id: task.id,
+          user_id: user?.id,
+          company_id: task.company_id,
         });
 
         // Keep the current task completed

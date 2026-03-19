@@ -387,6 +387,8 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
         description: description || "",
         screenshot_url: (meta.original_attachment_url as string) || undefined,
         reopen_reason: comment || undefined,
+        user_id: user?.id,
+        company_id: companyId,
       });
 
       dismiss(item.id);
