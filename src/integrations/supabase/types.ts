@@ -4922,6 +4922,7 @@ export type Database = {
           site_address: string | null
           status: string
           target_eta: string | null
+          unit_system: string
           updated_at: string
         }
         Insert: {
@@ -4941,6 +4942,7 @@ export type Database = {
           site_address?: string | null
           status?: string
           target_eta?: string | null
+          unit_system?: string
           updated_at?: string
         }
         Update: {
@@ -4960,6 +4962,7 @@ export type Database = {
           site_address?: string | null
           status?: string
           target_eta?: string | null
+          unit_system?: string
           updated_at?: string
         }
         Relationships: []
