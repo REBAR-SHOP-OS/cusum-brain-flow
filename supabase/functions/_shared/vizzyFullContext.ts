@@ -538,8 +538,8 @@ export async function buildFullVizzyContext(
   for (const e of (allEmailsToday || [])) {
     if (e.direction === "outbound") {
       const fromEmail = e.from_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
-      const name = emailProfileMap.get(fromEmail);
-      if (name) addFootprint(name, e.received_at);
+      const eName = emailProfileMap.get(fromEmail);
+      if (eName) addFootprint(eName, e.received_at);
     }
   }
   // Source 3: Agent sessions (chat with AI)
