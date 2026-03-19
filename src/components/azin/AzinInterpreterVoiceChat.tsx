@@ -103,7 +103,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
                 : state === "error" ? "0 0 20px 5px hsl(var(--destructive) / 0.3)" : "none",
             }}
           >
-            <img src={azinAvatar} alt="AZIN" className="w-full h-full object-cover" draggable={false} />
+            <img src={azinAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
           </div>
           {state === "connecting" && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/60 rounded-full">

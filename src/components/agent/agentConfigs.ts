@@ -212,11 +212,11 @@ export const agentConfigs: Record<string, AgentConfig> = {
     capabilities: ["Manage purchasing list", "Add new items", "Track purchase status", "Filter by date"],
   },
   azin: {
-    name: "AZIN",
+    name: "Nila",
     role: "Real-Time Interpreter",
     image: azinHelper,
     agentType: "azin",
-    greeting: "Hi! I'm AZIN, your real-time English ↔ Farsi interpreter. Press the mic button and start speaking.",
+    greeting: "Hi! I'm Nila, your real-time English ↔ Farsi interpreter. Press the mic button and start speaking.",
     placeholder: "Use the microphone for live interpretation...",
     capabilities: ["Real-time EN→FA translation", "Real-time FA→EN translation", "Live microphone listening", "Bidirectional interpretation"],
   },
