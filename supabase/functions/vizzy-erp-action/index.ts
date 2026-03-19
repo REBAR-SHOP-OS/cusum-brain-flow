@@ -417,6 +417,87 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "create_task": {
+        const { title, description, assigned_to_name, priority } = params;
+        if (!title) throw new Error("Task title is required");
+
+        const { data: profile } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        const companyId = profile?.company_id;
+
+        // Resolve employee name to profile ID (fuzzy match)
+        let assignedTo: string | null = null;
+        if (assigned_to_name) {
+          const { data: allProfiles } = await supabaseAdmin
+            .from("profiles")
+            .select("id, full_name, user_id")
+            .eq("company_id", companyId)
+            .not("full_name", "is", null);
+
+          const nameNorm = assigned_to_name.toLowerCase().trim();
+          const match = (allProfiles || []).find((p: any) => {
+            const fn = (p.full_name || "").toLowerCase();
+            return fn === nameNorm
+              || fn.includes(nameNorm)
+              || nameNorm.includes(fn.split(" ")[0])
+              || fn.split(" ")[0] === nameNorm.split(" ")[0];
+          });
+          if (match) assignedTo = (match as any).id;
+        }
+
+        const { data, error } = await supabaseAdmin.from("human_tasks").insert({
+          company_id: companyId,
+          title,
+          description: description || null,
+          status: "open",
+          priority: priority || "medium",
+          created_by: userId,
+          ...(assignedTo ? { assigned_to: assignedTo } : {}),
+        } as any).select().single();
+        if (error) throw error;
+
+        result = {
+          success: true,
+          message: `Task created: "${title}"${assigned_to_name ? ` → assigned to ${assigned_to_name}` : ""}`,
+          data,
+        };
+        break;
+      }
+
+      case "send_email": {
+        const { to, subject, body, threadId, replyToMessageId } = params;
+        if (!to || !subject || !body) throw new Error("to, subject, and body are required");
+
+        // Call gmail-send edge function internally using the user's auth
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const response = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            to,
+            subject,
+            body,
+            threadId: threadId || undefined,
+            replyToMessageId: replyToMessageId || undefined,
+          }),
+        });
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          throw new Error(`Gmail send failed: ${errBody}`);
+        }
+
+        const sendResult = await response.json();
+        result = {
+          success: true,
+          message: `Email sent to ${to}: "${subject}"`,
+          data: sendResult,
+        };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: corsHeaders });
     }

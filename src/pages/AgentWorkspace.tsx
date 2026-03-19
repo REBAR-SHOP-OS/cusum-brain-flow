@@ -298,44 +298,66 @@ export default function AgentWorkspace() {
 
         let replyContent = response.reply;
 
-        // Parse vizzy-action blocks for RingCentral actions (assistant only)
+        // Parse vizzy-action blocks for actions (assistant only)
         if (agentId === "assistant" && isSuperAdmin) {
           const actionMatch = replyContent.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
           if (actionMatch) {
             try {
               const actionData = JSON.parse(actionMatch[1]);
-              const desc = actionData.type === "ringcentral_call"
-                ? `Call ${actionData.contact_name || actionData.phone}`
-                : `Send SMS to ${actionData.contact_name || actionData.phone}: "${actionData.message?.slice(0, 80)}..."`;
               
-              setPendingAction({
-                id: crypto.randomUUID(),
-                action: actionData.type,
-                description: desc,
-                params: actionData,
-                resolve: async (approved: boolean) => {
-                  setPendingAction(null);
-                  if (approved) {
-                    try {
-                      if (actionData.type === "ringcentral_call") {
-                        const success = await webPhoneActions.call(actionData.phone, actionData.contact_name);
-                        if (!success) throw new Error("WebPhone call failed");
-                      } else {
-                        const { data, error } = await supabase.functions.invoke("ringcentral-action", {
-                          body: actionData,
-                        });
-                        if (error) throw error;
-                        if (data?.error) throw new Error(data.error);
-                        toast.success("SMS sent!");
+              if (actionData.type === "ringcentral_call" || actionData.type === "sms") {
+                const desc = actionData.type === "ringcentral_call"
+                  ? `Call ${actionData.contact_name || actionData.phone}`
+                  : `Send SMS to ${actionData.contact_name || actionData.phone}: "${actionData.message?.slice(0, 80)}..."`;
+                
+                setPendingAction({
+                  id: crypto.randomUUID(),
+                  action: actionData.type,
+                  description: desc,
+                  params: actionData,
+                  resolve: async (approved: boolean) => {
+                    setPendingAction(null);
+                    if (approved) {
+                      try {
+                        if (actionData.type === "ringcentral_call") {
+                          const success = await webPhoneActions.call(actionData.phone, actionData.contact_name);
+                          if (!success) throw new Error("WebPhone call failed");
+                        } else {
+                          const { data, error } = await supabase.functions.invoke("ringcentral-action", {
+                            body: actionData,
+                          });
+                          if (error) throw error;
+                          if (data?.error) throw new Error(data.error);
+                          toast.success("SMS sent!");
+                        }
+                      } catch (err) {
+                        toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
                       }
-                    } catch (err) {
-                      toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+                    } else {
+                      toast.info("Action cancelled");
                     }
-                  } else {
-                    toast.info("Action cancelled");
+                  },
+                });
+              } else if (actionData.type === "create_task" || actionData.type === "send_email") {
+                // Auto-execute task creation and email sending via vizzy-erp-action
+                (async () => {
+                  try {
+                    const { data, error } = await supabase.functions.invoke("vizzy-erp-action", {
+                      body: { action: actionData.type, params: actionData },
+                    });
+                    if (error) throw error;
+                    if (data?.error) throw new Error(data.error);
+                    
+                    if (actionData.type === "create_task") {
+                      toast.success(`Task created: "${actionData.title}"${actionData.assigned_to_name ? ` → ${actionData.assigned_to_name}` : ""}`);
+                    } else if (actionData.type === "send_email") {
+                      toast.success(`Email sent to ${actionData.to}`);
+                    }
+                  } catch (err) {
+                    toast.error(`Action failed: ${err instanceof Error ? err.message : "Unknown error"}`);
                   }
-                },
-              });
+                })();
+              }
             } catch (e) {
               console.warn("Failed to parse vizzy-action:", e);
             }
