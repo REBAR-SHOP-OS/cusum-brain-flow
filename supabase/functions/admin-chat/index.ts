@@ -1715,6 +1715,14 @@ BUSINESS:
 - Cross-reference data: AR high + production slow → flag it
 - Monitor email inbox and surface urgent items
 
+RINGCENTRAL TELEPHONY:
+- Make outbound calls via RingOut (rc_make_call)
+- Send SMS messages (rc_send_sms)
+- Send faxes (rc_send_fax)
+- Check active/live calls in real-time (rc_get_active_calls)
+- View team presence/DND/availability status (rc_get_team_presence)
+- Pull call analytics with per-employee breakdowns (rc_get_call_analytics)
+
 PERSONAL:
 - Brainstorming and strategy sessions
 - Writing emails, messages, notes
