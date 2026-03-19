@@ -1,71 +1,78 @@
 
+Fix Chat Vizzy’s RingCentral analytics/runtime bug
 
-# Give Vizzy Full RingCentral Access via Tools
+What’s actually wrong:
+- The Vite output shown is not the real failure; the frontend build is succeeding.
+- The real issue is in Chat Vizzy’s backend tool execution.
+- I confirmed `admin-chat` is querying non-existent `communications` columns:
+  - `channel`
+  - `duration`
+  - `missed`
+  - `employee_name`
+- The actual `communications` table stores call details in `metadata` and identifies RingCentral records with `source = "ringcentral"`.
+- I also found a second backend bug in `admin-chat`: the SSE stream is being closed multiple times, which matches the edge logs:
+  - `TypeError: The associated stream is already closing`
 
-## What This Does
+Implementation plan
 
-Adds RingCentral action tools to Vizzy's (admin-chat) tool suite so she can make calls, send SMS/fax, check active calls, get team presence, and pull call analytics — all from the chat or voice interface, without the super-admin email restriction.
+1. Fix `rc_get_call_analytics` in `supabase/functions/admin-chat/index.ts`
+- Replace the broken query:
+  - remove `.eq("channel", "phone")`
+  - stop selecting `duration`, `missed`, `employee_name`
+- Query fields that really exist:
+  - `user_id`, `company_id`, `source`, `direction`, `from_address`, `to_address`, `received_at`, `metadata`
+- Filter RingCentral calls correctly:
+  - `source = "ringcentral"`
+  - then filter rows where `metadata.type === "call"`
+- Derive analytics from `metadata`:
+  - duration from `metadata.duration`
+  - missed from `metadata.result === "Missed"` or `"No Answer"`
+  - outcome distribution from `metadata.result`
 
-## Current State
+2. Restore per-employee breakdown properly
+- Use each communication row’s `user_id`
+- Load matching `profiles.full_name` for those users
+- Build `byEmployee` from the profile name map instead of the fake `employee_name` column
+- Keep “Unknown” fallback if a profile is missing
 
-- RingCentral edge functions exist (`ringcentral-action`, `ringcentral-active-calls`, `ringcentral-fax-send`, `ringcentral-presence`, `ringcentral-call-analytics`) but they are standalone functions locked behind `SUPER_ADMIN_EMAILS = ["sattar@rebar.shop"]`
-- Vizzy (admin-chat) has tools for ERP, WordPress, email, memory — but ZERO RingCentral tools
-- The voice engine (`useVizzyVoiceEngine.ts`) mentions RC tools in memory docs but they don't actually exist in the code
+3. Keep the tool contract aligned with how Vizzy uses it
+- Preserve support for:
+  - `date`
+  - `days`
+- Make sure the returned JSON still includes:
+  - period
+  - summary
+  - byEmployee
+- This avoids needing prompt changes elsewhere unless the response shape changed
 
-## Plan
+4. Fix the `admin-chat` stream lifecycle bug
+- Refactor the SSE writer closing flow so it only closes once
+- Add a single guarded close helper (for example, a `closed` boolean)
+- Replace repeated `writer.close()` calls and make the `finally` block idempotent
+- This should remove the `associated stream is already closing` crashes seen in logs
 
-### Step 1 — Add RingCentral Tool Definitions to admin-chat
+5. Validate the fix end-to-end
+- Test the `admin-chat` function directly with the RingCentral analytics tool path
+- Confirm:
+  - no “column does not exist” errors
+  - no double-close stream error in logs
+  - Chat Vizzy returns analytics normally in the `/chat` UI
+- If analytics still look incomplete, verify the synced call rows exist and that `metadata.type = "call"` is present in recent records
 
-**File: `supabase/functions/admin-chat/index.ts`**
+Files to update
+- `supabase/functions/admin-chat/index.ts`
 
-Add 6 new tool definitions to `JARVIS_TOOLS`:
+Technical details
+- Confirmed schema:
+  - `communications` has `source`, `source_id`, `direction`, `from_address`, `to_address`, `metadata`, `received_at`, `user_id`, `company_id`
+  - it does not have `channel`, `duration`, `missed`, or `employee_name`
+- Confirmed working pattern elsewhere:
+  - `ringcentral-call-analytics` already reads from `communications` and extracts `duration`/`result` from `metadata`
+  - `vizzy-context` also computes call stats from `metadata.type`, `metadata.duration`, and `metadata.result`
+- Confirmed runtime log issue:
+  - `admin-chat` has multiple `writer.close()` paths plus a `finally` close, which explains the stream error
 
-1. **`rc_make_call`** — Initiate a RingOut call to a phone number
-2. **`rc_send_sms`** — Send an SMS message to a phone number
-3. **`rc_send_fax`** — Send a fax to a phone number
-4. **`rc_get_active_calls`** — Get currently active calls on the company's RC account
-5. **`rc_get_team_presence`** — Get DND/availability status of all RC extensions
-6. **`rc_get_call_analytics`** — Pull call analytics (total calls, per-employee breakdown, missed calls)
-
-Add `rc_make_call`, `rc_send_sms`, `rc_send_fax` to the `WRITE_TOOLS` set (require confirmation).
-
-### Step 2 — Implement RC Tool Execution in admin-chat
-
-**File: `supabase/functions/admin-chat/index.ts`**
-
-Add a helper function to get a valid RC access token (reuse the token refresh pattern from `ringcentral-action`). Then implement execution for each tool:
-
-- **Read tools** (in `executeReadTool`):
-  - `rc_get_active_calls` — Call RC API `/restapi/v1.0/account/~/extension/~/active-calls?view=Detailed`
-  - `rc_get_team_presence` — Call RC API `/restapi/v1.0/account/~/extension/~/presence`
-  - `rc_get_call_analytics` — Query `communications` table for RC calls with date filters, aggregate per-employee
-
-- **Write tools** (in `executeWriteTool`):
-  - `rc_make_call` — Call RC RingOut API
-  - `rc_send_sms` — Call RC SMS API
-  - `rc_send_fax` — Call RC Fax API
-
-All RC API calls use the company's RC token (from `user_ringcentral_tokens`), not the requesting user's personal token — since this is an admin-level capability.
-
-### Step 3 — Update Voice Engine Prompt
-
-**File: `src/hooks/useVizzyVoiceEngine.ts`**
-
-Add a section documenting Vizzy's RC capabilities:
-- "You can make calls, send SMS, send faxes, check active calls, and see team presence via RingCentral"
-- For voice: use `[VIZZY-ACTION]{"type":"rc_make_call","phone":"+1..."}[/VIZZY-ACTION]` pattern
-- For text chat: tools are called natively via the function-calling API
-
-### Step 4 — Deploy
-
-Deploy `admin-chat` edge function to apply changes.
-
-## Files Modified
-1. `supabase/functions/admin-chat/index.ts` — Add 6 RC tools + execution logic + token helper
-2. `src/hooks/useVizzyVoiceEngine.ts` — Add RC capability documentation to prompt
-
-## Security
-- All RC tools remain gated behind admin-chat's existing admin role check (line 1207-1219)
-- Write tools (call, SMS, fax) require user confirmation via the existing confirmation flow
-- No changes to the standalone RC edge functions — they continue to work independently
-
+Expected outcome
+- Chat Vizzy stops telling users the database is missing `communications.duration`
+- RingCentral call analytics works inside chat
+- The `admin-chat` function stops throwing stream-closing runtime errors
