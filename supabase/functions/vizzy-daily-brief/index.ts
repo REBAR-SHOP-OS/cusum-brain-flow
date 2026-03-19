@@ -107,7 +107,7 @@ Always respond in English for the daily briefing.`,
     const briefing = result.content || "No briefing available.";
 
     return new Response(
-      JSON.stringify({ briefing, generated_at: new Date().toISOString() }),
+      JSON.stringify({ briefing, rawContext: context, generated_at: new Date().toISOString() }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
