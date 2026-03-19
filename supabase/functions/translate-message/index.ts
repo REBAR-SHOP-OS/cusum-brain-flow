@@ -89,7 +89,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
 
     const result = await callAI({
       provider: "gpt",
-      model: "gpt-5-mini",
+      model: "gpt-5",
       agentName: "system",
       messages: [
         {
@@ -102,7 +102,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
         },
       ],
       temperature: 0.0,
-      maxTokens: 300,
+      maxTokens: 500,
     });
 
     const raw = result.content;
