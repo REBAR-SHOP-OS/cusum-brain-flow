@@ -93,8 +93,9 @@ export function ProductionQueueView() {
     // 3. Delete cut plans (CASCADE handles cut_plan_items → clearance_evidence, cut_output_batches, inventory_reservations, loading_checklist)
     const projectPlans = plans.filter(p => p.project_id === projectId);
     for (const p of projectPlans) {
-      const { error } = await supabase.from("cut_plans").delete().eq("id", p.id);
+      const { data, error } = await supabase.from("cut_plans").delete().eq("id", p.id).select();
       if (error) { toast({ title: "Error deleting cut plan", description: error.message, variant: "destructive" }); return false; }
+      if (!data || data.length === 0) { toast({ title: "Permission denied", description: "Cannot delete cut plan — insufficient permissions.", variant: "destructive" }); return false; }
     }
 
     // 4. Delete project (CASCADE handles project_events, project_milestones, project_tasks; work_orders SET NULL)
