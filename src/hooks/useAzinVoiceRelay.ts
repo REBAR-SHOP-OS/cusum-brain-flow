@@ -158,10 +158,12 @@ export function useAzinVoiceRelay() {
 
           const translation = res?.translations?.[targetLang]?.trim();
           if (!translation) {
+            console.warn("[relay] empty translation returned for:", trimmed);
             setTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }
 
+          console.log("[relay] translation received:", translation.slice(0, 40));
           contextRef.current.push(translation);
           if (contextRef.current.length > 10) contextRef.current = contextRef.current.slice(-5);
 
@@ -173,6 +175,7 @@ export function useAzinVoiceRelay() {
         })
         .catch((err) => {
           if (err?.name === "AbortError") return;
+          console.error("[relay] translation failed:", err);
           setTranscripts((prev) => prev.filter((t) => t.id !== entryId));
         });
     },

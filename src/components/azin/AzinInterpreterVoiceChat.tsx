@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { detectRtl } from "@/utils/textDirection";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 interface Props {
   onClose: () => void;
@@ -19,8 +20,9 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [connectingElapsed, setConnectingElapsed] = useState(0);
 
-  // Auto-start
+  // Prime audio + auto-start session on mount
   useEffect(() => {
+    primeMobileAudio();
     startSession();
     return () => { endSession(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
