@@ -41,9 +41,11 @@ export function useRealtimeTranscribe() {
       if (wordCount < 2 || trimmed.length < 5) return;
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       const entryId = crypto.randomUUID();
+      const currentSourceLang = sourceLangRef.current;
+      const targetLangs = currentSourceLang === "en" ? ["fa"] : currentSourceLang === "fa" ? ["en"] : ["en", "fa"];
       setCommittedTranscripts((prev) => [
         ...prev,
-        { id: entryId, text: data.text, timestamp: elapsed, isTranslating: true },
+        { id: entryId, text: data.text, timestamp: elapsed, isTranslating: true, sourceLang: currentSourceLang },
       ]);
       setPartialText("");
 
