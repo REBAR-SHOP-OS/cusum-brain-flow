@@ -207,7 +207,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           agentTextRef.current = "";
           // Get last user transcript for language-mismatch filtering
           const lastUser = [...transcriptsRef.current].reverse().find(t => t.role === "user");
-          if (text && !isSelfTalk(text, lastUser?.text)) {
+          if (text && !isSelfTalk(text, lastUser?.text, configRef.current.translationMode)) {
             setTranscripts(prev => [
               ...prev,
               { id: String(++idCounter.current), role: "agent", text, timestamp: Date.now() },
