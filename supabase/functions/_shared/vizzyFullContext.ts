@@ -757,7 +757,6 @@ export async function buildFullVizzyContext(
     }
     // If totalRcCalls > 0 OR last call was within 24h, no warning needed
   }
-  }
 
   // Build structured facts block for anti-hallucination anchoring
   const factsBlock = `[FACTS] staff=${totalStaff}, customers=${totalCustomerCount}, open_leads=${openLeads}, AR=${fmt(totalReceivable)}, AP=${fmt(totalPayable)}, scheduled_deliveries=${scheduledToday}, in_transit=${inTransit}, rc_calls_today=${totalRcCalls}, rc_missed=${totalRcMissed} [/FACTS]`;
