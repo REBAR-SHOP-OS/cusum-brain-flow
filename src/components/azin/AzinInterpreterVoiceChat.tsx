@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Mic, Loader2 } from "lucide-react";
-import { useAzinVoiceInterpreter, InterpreterTranscript } from "@/hooks/useAzinVoiceInterpreter";
+import { useAzinVoiceRelay, RelayTranscript } from "@/hooks/useAzinVoiceRelay";
 import { cn } from "@/lib/utils";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,9 +12,9 @@ interface Props {
 
 export function AzinInterpreterVoiceChat({ onClose }: Props) {
   const {
-    state, transcripts, isSpeaking, mode,
+    state, transcripts, partialText,
     startSession, endSession,
-  } = useAzinVoiceInterpreter();
+  } = useAzinVoiceRelay();
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const [connectingElapsed, setConnectingElapsed] = useState(0);
@@ -45,15 +45,19 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
   const handleClose = () => { endSession(); onClose(); };
 
+  const isSpeaking = transcripts.some((t) => t.isSpeaking);
+  const isTranslating = transcripts.some((t) => t.isTranslating);
+
   const statusLabel =
     state === "connecting"
       ? connectingElapsed >= 10 ? "Taking longer than expected..." : "Connecting to Nila..."
       : state === "error" ? "Connection failed"
-      : mode === "speaking" || isSpeaking ? "Translating..."
+      : isSpeaking ? "Speaking..."
+      : isTranslating ? "Translating..."
       : state === "connected" ? "Listening..."
       : "";
 
-  const isActive = mode === "speaking" || isSpeaking;
+  const isActive = isSpeaking || isTranslating;
   const orbScale = isActive ? 1.15 : 1;
 
   return (
@@ -70,10 +74,9 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
         </button>
       </div>
 
-      {/* Orb — compact */}
+      {/* Orb */}
       <div className="flex flex-col items-center justify-center gap-4 py-4">
         <div className="relative">
-          {/* Glow ring */}
           <div className="absolute rounded-full transition-all duration-300" style={{
             inset: "-24px", borderRadius: "50%",
             background: isActive
@@ -81,7 +84,6 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
               : "radial-gradient(circle, hsl(245 58% 55% / 0.05) 0%, transparent 70%)",
             transform: `scale(${isActive ? 1.3 : 1})`,
           }} />
-          {/* Pulse ring */}
           <div className="absolute rounded-full border-2 transition-all duration-300" style={{
             inset: "-16px", borderRadius: "50%",
             borderColor: isActive ? "hsl(245 58% 55% / 0.7)" : "hsl(245 58% 55% / 0.3)",
@@ -129,35 +131,71 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
         )}
       </div>
 
-      {/* Transcripts — large area */}
+      {/* Transcripts */}
       <div className="w-full max-w-lg px-4 pb-2 flex-1 overflow-y-auto">
         <AnimatePresence>
-          {transcripts.slice(-20).map((t: InterpreterTranscript) => {
-            const isRtl = detectRtl(t.text);
+          {transcripts.slice(-20).map((t: RelayTranscript) => {
+            const origRtl = detectRtl(t.original);
+            const transRtl = t.translation ? detectRtl(t.translation) : false;
             return (
               <motion.div
                 key={t.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                dir={isRtl ? "rtl" : "ltr"}
-                lang={isRtl ? "fa" : "en"}
-                className={cn(
-                  "mb-2 px-3 py-2 rounded-xl text-sm max-w-[85%]",
-                  t.role === "user"
-                    ? isRtl ? "mr-auto bg-primary/15 text-foreground text-right" : "ml-auto bg-primary/15 text-foreground"
-                    : isRtl ? "mr-auto bg-muted text-foreground text-right" : "mr-auto bg-muted text-foreground"
-                )}
-                style={isRtl ? { fontFamily: '"Vazirmatn", "Tahoma", "Arial", sans-serif' } : undefined}
+                className="mb-3"
               >
-                <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
-                  {t.role === "user" ? "🎙️ Original" : "🔄 Translation"}
-                </span>
-                {t.text}
+                {/* Original */}
+                <div
+                  dir={origRtl ? "rtl" : "ltr"}
+                  lang={origRtl ? "fa" : "en"}
+                  className={cn(
+                    "px-3 py-2 rounded-xl text-sm max-w-[85%]",
+                    origRtl ? "mr-auto bg-primary/15 text-foreground text-right" : "ml-auto bg-primary/15 text-foreground"
+                  )}
+                  style={origRtl ? { fontFamily: '"Vazirmatn", "Tahoma", "Arial", sans-serif' } : undefined}
+                >
+                  <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
+                    🎙️ Original
+                  </span>
+                  {t.original}
+                </div>
+
+                {/* Translation */}
+                {t.isTranslating ? (
+                  <div className="mt-1 px-3 py-2 rounded-xl text-sm max-w-[85%] mr-auto bg-muted text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
+                    Translating...
+                  </div>
+                ) : t.translation ? (
+                  <div
+                    dir={transRtl ? "rtl" : "ltr"}
+                    lang={transRtl ? "fa" : "en"}
+                    className={cn(
+                      "mt-1 px-3 py-2 rounded-xl text-sm max-w-[85%]",
+                      transRtl ? "mr-auto bg-muted text-foreground text-right" : "mr-auto bg-muted text-foreground",
+                      t.isSpeaking && "ring-2 ring-indigo-500/50"
+                    )}
+                    style={transRtl ? { fontFamily: '"Vazirmatn", "Tahoma", "Arial", sans-serif' } : undefined}
+                  >
+                    <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
+                      🔄 Translation {t.isSpeaking && "🔊"}
+                    </span>
+                    {t.translation}
+                  </div>
+                ) : null}
               </motion.div>
             );
           })}
         </AnimatePresence>
+
+        {/* Partial text indicator */}
+        {partialText && (
+          <div className="mb-2 px-3 py-2 rounded-xl text-sm max-w-[85%] ml-auto bg-primary/10 text-muted-foreground italic">
+            {partialText}...
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
