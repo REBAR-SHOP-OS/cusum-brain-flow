@@ -116,17 +116,31 @@ Structure it as:
    - 8:00 AM — Review [specific item]
    - 9:00 AM — Follow up on [overdue invoice / hot lead]
    - etc.
-   Base this on: overdue invoices, hot leads needing action, deliveries to track, production issues, emails requiring replies.
+    Base this on: overdue invoices, hot leads needing action, deliveries to track, production issues, emails requiring replies.
+13. AUTO-DELEGATION PLAN — For EACH red flag found in the data, output a pre-built task:
+    - Task title (actionable, specific)
+    - Which employee should handle it (by name)
+    - Priority (high/medium/low)
+    - Category (follow-up, production, accounting, sales, support)
+    Format: "DELEGATE: [title] → [employee_name] (priority: [high/medium/low], category: [cat])"
+    Check the OPEN TASKS section first — do NOT create duplicates of tasks that already exist.
+14. CEO-ONLY DECISIONS — Items that genuinely require the CEO's human judgment, ranked by business impact:
+    - Financial decisions (credit terms, write-offs, large payments)
+    - Personnel issues requiring CEO intervention
+    - Strategic decisions, pricing changes
+    - Client escalation situations
+    Format: "CEO-DECIDE: [description] — Impact: [high/medium] — Why only CEO: [reason]"
+15. SELF-IMPROVEMENT NOTES — Operational patterns you noticed that could improve the business:
+    - Employee behavior patterns (e.g., "Neel consistently misses follow-up emails after calls")
+    - Process inefficiencies (e.g., "Invoices over 30 days are not being followed up systematically")
+    - System gaps (e.g., "No one is checking production queue daily")
+    Format: "IMPROVE: [observation] — Suggestion: [actionable improvement]"
 
 CRITICAL RULES:
 - Preserve ALL specific numbers, names, amounts — Vizzy needs these for voice answers
 - Pre-analyze patterns so Vizzy doesn't have to think — just speak
 - Compare against previous benchmarks when available: "AR is up 12% from last week"
 - Be opinionated — this is Vizzy's internal analysis, not a neutral report
-
-═══ OUTPUT 2: TODAY'S BENCHMARK (JSON on last line) ═══
-On the very last line, output a JSON object with today's key metrics for future comparison:
-BENCHMARK_JSON:{"ar":NUMBER,"ap":NUMBER,"open_leads":NUMBER,"staff_clocked":NUMBER,"total_calls":NUMBER,"missed_calls":NUMBER,"emails_sent":NUMBER,"emails_received":NUMBER,"active_cut_plans":NUMBER,"deliveries_scheduled":NUMBER}
 
 ${benchmarkHistory ? `\n═══ PREVIOUS BENCHMARKS ═══\n${benchmarkHistory}` : "No previous benchmarks — this is the first session."}`,
         },

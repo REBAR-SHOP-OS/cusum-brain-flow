@@ -498,6 +498,115 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "batch_create_tasks": {
+        const { tasks: taskList } = params;
+        if (!Array.isArray(taskList) || taskList.length === 0) {
+          throw new Error("tasks array is required and must not be empty");
+        }
+
+        const { data: profile } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        const companyId = profile?.company_id;
+
+        // Load all profiles once for fuzzy matching
+        const { data: allProfiles } = await supabaseAdmin
+          .from("profiles")
+          .select("id, full_name, user_id")
+          .eq("company_id", companyId)
+          .not("full_name", "is", null);
+
+        const resolveProfile = (name: string): string | null => {
+          if (!name) return null;
+          const nameNorm = name.toLowerCase().trim();
+          const match = (allProfiles || []).find((p: any) => {
+            const fn = (p.full_name || "").toLowerCase();
+            return fn === nameNorm
+              || fn.includes(nameNorm)
+              || nameNorm.includes(fn.split(" ")[0])
+              || fn.split(" ")[0] === nameNorm.split(" ")[0];
+          });
+          return match ? (match as any).id : null;
+        };
+
+        const created: string[] = [];
+        const failed: string[] = [];
+
+        for (const task of taskList) {
+          try {
+            const assignedTo = task.assigned_to_name ? resolveProfile(task.assigned_to_name) : null;
+            const { error: insertErr } = await supabaseAdmin.from("human_tasks").insert({
+              company_id: companyId,
+              title: task.title,
+              description: task.description || null,
+              status: "open",
+              priority: task.priority || "medium",
+              category: task.category || null,
+              created_by: userId,
+              ...(assignedTo ? { assigned_to: assignedTo } : {}),
+            } as any);
+            if (insertErr) throw insertErr;
+            created.push(task.title);
+          } catch (e) {
+            failed.push(`${task.title}: ${e.message}`);
+          }
+        }
+
+        result = {
+          success: true,
+          message: `Created ${created.length} tasks${failed.length > 0 ? `, ${failed.length} failed` : ""}`,
+          created_count: created.length,
+          failed_count: failed.length,
+          created_titles: created,
+          failed_details: failed,
+        };
+        break;
+      }
+
+      case "update_task_status": {
+        const { task_id, status: newStatus, reassign_to_name } = params;
+        if (!task_id || !newStatus) throw new Error("task_id and status are required");
+
+        const validStatuses = ["open", "acted", "dismissed", "snoozed"];
+        if (!validStatuses.includes(newStatus)) {
+          throw new Error(`Invalid status. Must be one of: ${validStatuses.join(", ")}`);
+        }
+
+        const updatePayload: any = { status: newStatus };
+        if (newStatus === "acted" || newStatus === "dismissed") {
+          updatePayload.resolved_at = new Date().toISOString();
+        }
+
+        if (reassign_to_name) {
+          const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+          const { data: allProfiles } = await supabaseAdmin
+            .from("profiles")
+            .select("id, full_name")
+            .eq("company_id", prof?.company_id)
+            .not("full_name", "is", null);
+
+          const nameNorm = reassign_to_name.toLowerCase().trim();
+          const match = (allProfiles || []).find((p: any) => {
+            const fn = (p.full_name || "").toLowerCase();
+            return fn === nameNorm || fn.includes(nameNorm) || fn.split(" ")[0] === nameNorm.split(" ")[0];
+          });
+          if (match) updatePayload.assigned_to = (match as any).id;
+        }
+
+        const { data, error } = await supabaseAdmin
+          .from("human_tasks")
+          .update(updatePayload)
+          .eq("id", task_id)
+          .select()
+          .single();
+        if (error) throw error;
+
+        result = {
+          success: true,
+          message: `Task ${task_id} updated to ${newStatus}${reassign_to_name ? ` and reassigned to ${reassign_to_name}` : ""}`,
+          data,
+        };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: corsHeaders });
     }

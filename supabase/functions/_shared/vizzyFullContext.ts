@@ -89,6 +89,7 @@ export async function buildFullVizzyContext(
     { data: recentInvoiceDetails },
     { data: rcCallsToday },
     { data: rcCallNoteEmails },
+    { data: openHumanTasks },
   ] = await Promise.all([
     supabase
       .from("work_orders")
@@ -234,6 +235,13 @@ export async function buildFullVizzyContext(
         .order("received_at", { ascending: false })
         .limit(100);
     })(),
+    // Open human tasks (to avoid duplicates in autopilot)
+    supabase
+      .from("human_tasks")
+      .select("id, title, description, status, priority, assigned_to, category, created_at, snoozed_until")
+      .in("status", ["open", "snoozed"])
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   // Compute financials
@@ -850,7 +858,16 @@ ${(stockSummary || []).map((s: any) => `  • ${s.bar_code}: ${s.qty_on_hand} @ 
 ${brainList || "  No entries"}
 
 🧠 PERSISTENT MEMORY (${activeMemories.length} items)
-${memorySection}`;
+${memorySection}
+
+═══ OPEN TASKS (${(openHumanTasks || []).length} active — DO NOT create duplicates) ═══
+${(openHumanTasks || []).length > 0
+  ? (openHumanTasks || []).map((t: any) => {
+      const assignee = t.assigned_to ? (profileIdMap.get(t.assigned_to) || "Unassigned") : "Unassigned";
+      const created = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      return `  • [${t.priority || "medium"}] "${t.title}" → ${assignee} (${t.status}, created ${created})${t.category ? ` [${t.category}]` : ""}`;
+    }).join("\n")
+  : "  No open tasks"}`;
 }
 
 /** Build a unified mini daily report per employee combining ALL data sources */
