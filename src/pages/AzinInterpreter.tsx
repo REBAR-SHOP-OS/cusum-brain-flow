@@ -100,7 +100,6 @@ export default function AzinInterpreter() {
           <ScrollArea className="flex-1 px-4 py-2">
             <div className="space-y-3">
               {committedTranscripts.map((t) => {
-                // For EN column: show original if sourceLang is "en", translation if "fa", translatedText if "auto"
                 const isOriginal = t.sourceLang === "en";
                 const isFaSource = t.sourceLang === "fa";
                 const displayText = isOriginal
@@ -122,6 +121,7 @@ export default function AzinInterpreter() {
               {partialText && sourceLang !== "fa" && (
                 <div className="text-sm text-muted-foreground italic">{partialText}</div>
               )}
+              <div ref={enBottomRef} />
             </div>
           </ScrollArea>
         </div>
