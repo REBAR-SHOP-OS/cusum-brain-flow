@@ -129,10 +129,11 @@ If uncertain about the input being real speech, return empty strings.${contextSe
     try {
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       translations = JSON.parse(cleaned);
-      // Post-parse validation: strip translations shorter than 3 words
+      // Post-parse validation: strip very short translations
       for (const key of Object.keys(translations)) {
         const val = (translations[key] || "").trim();
-        if (val.split(/\s+/).length < 3) {
+        const minWords = key === "fa" ? 2 : 3;
+        if (val.split(/\s+/).length < minWords) {
           translations[key] = "";
         }
       }

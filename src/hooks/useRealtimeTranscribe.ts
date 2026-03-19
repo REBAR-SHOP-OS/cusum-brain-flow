@@ -79,7 +79,7 @@ export function useRealtimeTranscribe() {
 
           // Post-translation length check: if translation is too short, discard
           const translationWordCount = primaryTranslation.trim().split(/\s+/).length;
-          if (translationWordCount < 3) {
+          if (translationWordCount < 2) {
             setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }
