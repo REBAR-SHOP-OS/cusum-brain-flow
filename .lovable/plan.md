@@ -1,32 +1,31 @@
 
 
-# Add PDF Report Download to Nila Interpreter Voice Chat
+# Upgrade Nila Interpreter: Better Model + Silence Handling
 
-## What It Does
-
-Adds a download button next to the "End Call" button in the Nila interpreter voice chat. When clicked, it generates a PDF report summarizing the entire conversation in English, ready for download.
+## Problem
+1. Translation model (`gemini-2.5-flash`) can miss nuances in both Farsi and English
+2. When user is silent, the system still shows "Listening..." and may pick up noise — it should stay completely quiet
 
 ## Changes
 
-### 1. `src/components/azin/AzinInterpreterVoiceChat.tsx`
+### 1. Upgrade translation model to `gemini-2.5-pro`
+**File:** `supabase/functions/translate-message/index.ts`
+- Change `model: "gemini-2.5-flash"` → `model: "gemini-2.5-pro"` for higher accuracy in both Farsi and English translation
+- Enhance the system prompt to emphasize natural fluency in both languages and proper Farsi colloquial expressions
 
-- Import `FileText` icon from lucide-react and `jsPDF` 
-- Add a "Download Report" button next to the "End Call" button (only visible when there are transcripts)
-- Create a `generateConversationPdf()` function that:
-  - Collects all transcripts (original + translation pairs)
-  - Builds a formatted PDF with:
-    - Title: "Nila Interpreter — Conversation Report"
-    - Date/time header
-    - Each exchange listed with speaker direction (English → Farsi or Farsi → English)
-    - All text displayed in English (originals for English segments, translations for Farsi segments)
-  - Uses `addMarkdownToPdf` from `src/lib/pdfMarkdownRenderer.ts` for consistent formatting
-  - Triggers browser download as `nila-report-YYYY-MM-DD.pdf`
+### 2. Strengthen silence/noise filtering
+**File:** `src/hooks/useAzinVoiceRelay.ts`
+- Increase minimum word count from 1 to 2 words for the noise blocklist filter (single filler words like "yeah", "hmm" already blocked, but extend to 2-word fillers)
+- Add minimum character threshold: reject committed transcripts shorter than 8 characters (matching the memory standard of "< 3 words/8 chars")
+- Add minimum word count of 3 for very short fragments that are likely noise
 
-### 2. No backend changes needed
+### 3. Improve translation prompt for natural pronunciation
+**File:** `supabase/functions/translate-message/index.ts`
+- Update prompt to instruct: "For Farsi, use natural conversational Persian (محاوره‌ای) — not formal/literary. For English, use natural spoken English."
+- Add rule: "If the input is silence, noise, filler words, or meaningless fragments, return empty strings for all target languages."
 
-The PDF is generated entirely client-side using jsPDF + the existing `pdfMarkdownRenderer` utility. The transcript data is already available in the component state.
-
-## UI Layout
-
-The download button appears as a small icon button in the bottom bar, next to the End Call button — styled as a ghost/muted button with a `FileText` icon.
+## Summary
+- `gemini-2.5-pro` = more accurate hearing + better bilingual fluency
+- Stricter client-side noise gates = silence when user is silent
+- Prompt update = natural-sounding translations in both languages
 
