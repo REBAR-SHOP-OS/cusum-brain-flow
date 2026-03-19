@@ -283,11 +283,6 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   }, [cleanup, handleDataChannelMessage, endSession]);
 
   const toggleMute = useCallback(() => {
-    if (streamRef.current) {
-      const newMuted = !streamRef.current.getAudioTracks()[0]?.enabled;
-      streamRef.current.getAudioTracks().forEach(t => { t.enabled = !t.enabled; });
-      setIsMuted(!newMuted ? false : true);
-    }
     setIsMuted(prev => {
       const next = !prev;
       if (streamRef.current) {
