@@ -176,7 +176,7 @@ export default function AzinInterpreter() {
         <button
           onClick={() => setShowVoiceChat(true)}
           className="relative w-14 h-14 rounded-full focus:outline-none group"
-          aria-label="Start voice interpreter with AZIN"
+          aria-label="Start voice interpreter with Nila"
         >
           <div className="w-14 h-14 rounded-full overflow-hidden ring-2 ring-primary/50 group-hover:ring-primary transition-all shadow-lg">
             <img src={azinAvatar} alt="AZIN" className="w-full h-full object-cover" draggable={false} />
