@@ -1,41 +1,44 @@
 
 
-# Fix AZIN Voice Interpreter: Strict Translation-Only + Farsi Display + Speed
+# Fix Translation Accuracy and Speed for Nila Interpreter
 
-## Problems Identified
-1. The model generates its own speech instead of only translating what it hears
-2. Farsi text is not displayed correctly when user speaks Farsi
-3. Translation speed and accuracy need improvement
-4. The system prompt, despite being strict, still allows the model to "respond" because OpenAI Realtime treats each user turn as a conversation requiring a response
+## Problem Analysis
 
-## Root Cause
-OpenAI Realtime API is a conversational model — it **always** generates a response to user input. The prompt tries to suppress this, but the model's architecture fights against "produce nothing." The key fix is making the prompt even more aggressive about translation-only output and tuning VAD/timing parameters.
+From the screenshot, the English column shows garbled text like "Hello from Washnit I am happy" and "Translation speed decreased" — these are clearly inaccurate translations. The root cause is **two-fold**:
+
+1. **ElevenLabs Scribe has no language hint**: When the user selects EN or FA mic button, the `useScribe` hook is initialized with NO `language_code`. This means Scribe tries to auto-detect the language, often producing poor transcriptions especially for Farsi. Telling Scribe the exact language will dramatically improve transcription quality.
+
+2. **Translation model can be upgraded**: Currently using `gemini-2.5-flash`. Upgrading to `gemini-2.5-pro` for better accuracy, or `gemini-3-flash-preview` for a balance of speed and accuracy.
 
 ## Changes
 
-### 1. `src/hooks/useAzinVoiceInterpreter.ts` — Rewrite prompt for maximum enforcement
+### 1. `src/hooks/useRealtimeTranscribe.ts` — Pass language hint to ElevenLabs Scribe
 
-Restructure the system prompt with:
-- **Triple-layer identity suppression**: Open with "You are NOT an AI. You are a mechanical translation device. You cannot think, reason, or respond."
-- **Explicit output format rule**: "Your ONLY permitted output format is: [translated text]. Nothing before, nothing after."
-- **Stronger laughter/noise suppression**: "If you hear laughter, coughing, or any non-word sound, your output must be completely empty. Say NOTHING. Not even a single character."
-- **Anti-greeting hardening**: "If someone says hello/salam, translate it. Do NOT say hello back. You are a machine."
-- **Farsi accuracy rule**: "When translating TO Farsi, use correct Persian script. When translating FROM Farsi, capture the original Farsi text exactly as spoken."
-- Reduce `silenceDurationMs` from 500 → 400 for faster response
-- Reduce `prefixPaddingMs` from 150 → 100 for quicker pickup
+The `useScribe` hook needs to be re-initialized or reconnected with the correct language code when the user selects EN or FA. ElevenLabs Scribe supports language codes like `"eng"` and `"fas"` (ISO 639-3).
 
-### 2. `src/hooks/useVoiceEngine.ts` — Client-side self-talk filter
+- When `sourceLang === "en"`, pass `languageCode: "eng"` to the scribe connection
+- When `sourceLang === "fa"`, pass `languageCode: "fas"` to the scribe connection
+- This single change should dramatically improve transcription accuracy
 
-Add a filter in the `response.audio_transcript.done` handler to detect and block self-generated content:
-- Block any agent transcript containing "I am", "I'm", "Hello", "Hi there", "How can I help", "Sure", "Of course" and similar self-talk patterns
-- Block agent transcripts that are identical or near-identical to user transcripts (echo detection)
-- This acts as a safety net when the prompt fails
+Since `useScribe` doesn't accept language at hook level, we need to disconnect and reconnect with the language parameter when the source language changes. Check if the `connect()` method accepts a language parameter, or if we need to pass it differently.
 
-### 3. `supabase/functions/voice-engine-token/index.ts` — Faster turn detection
+### 2. `supabase/functions/translate-message/index.ts` — Upgrade model + optimize prompt
 
-No changes needed — VAD params already come from the client config.
+- Change model from `gemini-2.5-flash` to `gemini-3-flash-preview` for better accuracy with similar speed
+- Simplify the system prompt to reduce token count (faster processing)
+- Remove the rate limit DB call overhead (or make it async/non-blocking)
 
-## Files
-- `src/hooks/useAzinVoiceInterpreter.ts` — hardened prompt + faster timing
-- `src/hooks/useVoiceEngine.ts` — client-side self-talk filter on agent transcripts
+### 3. `src/hooks/useRealtimeTranscribe.ts` — Reduce client-side filtering delay
+
+- Relax the overly aggressive noise filters that may be discarding valid short Farsi phrases
+- Farsi phrases can be very short but meaningful — reduce `wordCount < 3` to `wordCount < 2` and `trimmed.length < 10` to `trimmed.length < 5`
+
+## Technical Details
+
+### Files to modify:
+- `src/hooks/useRealtimeTranscribe.ts` — language hint on Scribe connect, relaxed noise filters
+- `supabase/functions/translate-message/index.ts` — upgraded model, streamlined prompt
+
+### Key insight:
+The biggest accuracy gain will come from telling ElevenLabs Scribe which language to expect. Without this, it's guessing and producing garbage transcriptions that no translation model can fix.
 
