@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { X, Mic, MicOff, Loader2 } from "lucide-react";
+import { X, Mic, MicOff, Loader2, Copy, Check } from "lucide-react";
 import { useVizzyVoiceEngine } from "@/hooks/useVizzyVoiceEngine";
 import type { VizzyVoiceTranscript } from "@/hooks/useVizzyVoiceEngine";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,53 @@ import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+/** Renders LOVABLE COMMAND blocks with a copy button */
+function LovableCommandRenderer({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const cleanText = text.replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/g, "").trim();
+  const cmdMatch = cleanText.match(/(LOVABLE COMMAND:[\s\S]*?DO NOT TOUCH:[^\n]*)/);
+
+  if (!cmdMatch) return <>{cleanText}</>;
+
+  const before = cleanText.slice(0, cleanText.indexOf(cmdMatch[0])).trim();
+  const command = cmdMatch[1].trim();
+  const after = cleanText.slice(cleanText.indexOf(cmdMatch[0]) + cmdMatch[0].length).trim();
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command);
+    setCopied(true);
+    toast.success("Lovable command copied!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <>
+      {before && <p className="mb-2">{before}</p>}
+      <div
+        className="relative my-2 p-3 rounded-lg text-xs font-mono whitespace-pre-wrap"
+        style={{
+          background: "hsl(172 66% 50% / 0.08)",
+          border: "1px solid hsl(172 66% 50% / 0.25)",
+        }}
+      >
+        <button
+          onClick={handleCopy}
+          className="absolute top-2 right-2 p-1.5 rounded-md transition-colors"
+          style={{
+            background: copied ? "hsl(152 69% 40%)" : "hsl(0 0% 100% / 0.1)",
+            color: copied ? "white" : "hsl(172 66% 65%)",
+          }}
+          aria-label="Copy Lovable command"
+        >
+          {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
+        {command}
+      </div>
+      {after && <p className="mt-2">{after}</p>}
+    </>
+  );
+}
 
 interface VizzyVoiceChatProps {
   onClose: () => void;
