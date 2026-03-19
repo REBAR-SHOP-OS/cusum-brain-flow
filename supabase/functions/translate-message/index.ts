@@ -120,7 +120,7 @@ If uncertain, return empty strings.${contextSection}`;
           content: `The source language is "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate into ${targetList}:\n\n${text}`,
         },
       ],
-      temperature: 0.05,
+      temperature: 0.01,
     });
 
     const raw = result.content;
