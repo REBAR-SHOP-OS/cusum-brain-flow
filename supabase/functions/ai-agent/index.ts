@@ -690,7 +690,7 @@ Deno.serve(async (req) => {
 
         const resolvedSlotNum = isRegenerate
           ? parseInt(regenMatch![1])
-          : (timeSlotNum || parseInt(slotMatch?.[1] || "1"));
+          : (timeSlotNum || timeMatch || parseInt(slotMatch?.[1] || "1"));
         const slotsToGenerate = isAllSlots
           ? PIXEL_SLOTS
           : [PIXEL_SLOTS[resolvedSlotNum - 1]];
