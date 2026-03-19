@@ -381,6 +381,14 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
           .eq("id", humanTaskId);
       }
 
+      // Fire-and-forget: auto-analyze re-reported feedback
+      triggerFeedbackAnalysis({
+        title: (meta.original_title as string) || "گزارش مجدد باگ",
+        description: description || "",
+        screenshot_url: (meta.original_attachment_url as string) || undefined,
+        reopen_reason: comment || undefined,
+      });
+
       dismiss(item.id);
       toast.success("مشکل مجدداً گزارش شد");
     } catch (err: any) {

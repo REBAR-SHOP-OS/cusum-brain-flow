@@ -313,6 +313,14 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
         });
       }
 
+      // Fire-and-forget: auto-analyze feedback and generate Lovable patch
+      triggerFeedbackAnalysis({
+        title: `Feedback: ${description.trim().slice(0, 80) || "Screenshot annotation"}`,
+        description: `${description.trim()}\n\nFrom: ${submitterName}\nPage: ${pagePath}\nScreenshot: ${publicUrl}`,
+        screenshot_url: publicUrl,
+        page_path: pagePath,
+      });
+
       toast.success("Feedback sent!");
       setDescription("");
       setHasDrawn(false);
