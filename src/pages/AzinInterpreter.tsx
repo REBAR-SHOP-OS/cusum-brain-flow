@@ -2,11 +2,11 @@ import { useState, useCallback, useRef } from "react";
 import { useRealtimeTranscribe } from "@/hooks/useRealtimeTranscribe";
 import { Trash2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AzinVoiceOrb } from "@/components/azin/AzinVoiceOrb";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AzinInterpreterVoiceChat } from "@/components/azin/AzinInterpreterVoiceChat";
+import { LanguageMicButton } from "@/components/azin/LanguageMicButton";
 import { AnimatePresence } from "framer-motion";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
 
@@ -18,26 +18,33 @@ export default function AzinInterpreter() {
     isConnecting,
     partialText,
     committedTranscripts,
+    sourceLang,
+    setSourceLang,
     connect,
     disconnect,
     clearTranscripts,
   } = useRealtimeTranscribe();
 
-  const enScrollRef = useRef<HTMLDivElement>(null);
-  const faScrollRef = useRef<HTMLDivElement>(null);
-
-  const handleToggle = useCallback(() => {
-    if (isConnected) {
+  const handleLangToggle = useCallback((lang: "en" | "fa") => {
+    if (isConnected && sourceLang === lang) {
+      // Same button pressed while active → stop
       disconnect();
+    } else if (isConnected && sourceLang !== lang) {
+      // Switch language while recording
+      disconnect();
+      setSourceLang(lang);
+      setTimeout(() => connect(), 100);
     } else {
+      // Not connected → start with this language
+      setSourceLang(lang);
       connect();
     }
-  }, [isConnected, connect, disconnect]);
+  }, [isConnected, sourceLang, connect, disconnect, setSourceLang]);
 
   const statusLabel = isConnecting
     ? "Connecting..."
     : isConnected
-    ? "Listening..."
+    ? `Listening (${sourceLang === "en" ? "English" : sourceLang === "fa" ? "فارسی" : "Auto"})...`
     : "Ready";
 
   const statusColor = isConnecting
@@ -79,18 +86,29 @@ export default function AzinInterpreter() {
           <div className="px-4 py-2 border-b border-border bg-muted/30">
             <span className="text-sm font-semibold text-foreground">English</span>
           </div>
-          <ScrollArea className="flex-1 px-4 py-2" ref={enScrollRef}>
+          <ScrollArea className="flex-1 px-4 py-2">
             <div className="space-y-3">
-              {committedTranscripts.map((t) => (
-                <div key={t.id} className="text-sm text-foreground">
-                  {t.isTranslating ? (
-                    <span className="text-muted-foreground italic">translating...</span>
-                  ) : (
-                    <span>{t.translatedText || t.text}</span>
-                  )}
-                </div>
-              ))}
-              {partialText && (
+              {committedTranscripts.map((t) => {
+                // For EN column: show original if sourceLang is "en", translation if "fa", translatedText if "auto"
+                const isOriginal = t.sourceLang === "en";
+                const isFaSource = t.sourceLang === "fa";
+                const displayText = isOriginal
+                  ? t.text
+                  : isFaSource
+                  ? t.translatedText
+                  : t.translatedText || t.text;
+
+                return (
+                  <div key={t.id} className="text-sm text-foreground">
+                    {t.isTranslating ? (
+                      <span className="text-muted-foreground italic">translating...</span>
+                    ) : (
+                      <span>{displayText}</span>
+                    )}
+                  </div>
+                );
+              })}
+              {partialText && sourceLang !== "fa" && (
                 <div className="text-sm text-muted-foreground italic">{partialText}</div>
               )}
             </div>
@@ -102,18 +120,28 @@ export default function AzinInterpreter() {
           <div className="px-4 py-2 border-b border-border bg-muted/30 text-right">
             <span className="text-sm font-semibold text-foreground">فارسی</span>
           </div>
-          <ScrollArea className="flex-1 px-4 py-2" ref={faScrollRef}>
+          <ScrollArea className="flex-1 px-4 py-2">
             <div className="space-y-3" dir="rtl">
-              {committedTranscripts.map((t) => (
-                <div key={t.id} className="text-sm text-foreground">
-                  {t.isTranslating ? (
-                    <span className="text-muted-foreground italic">در حال ترجمه...</span>
-                  ) : (
-                    <span>{t.originalCleanText || t.text}</span>
-                  )}
-                </div>
-              ))}
-              {partialText && (
+              {committedTranscripts.map((t) => {
+                const isOriginal = t.sourceLang === "fa";
+                const isEnSource = t.sourceLang === "en";
+                const displayText = isOriginal
+                  ? t.text
+                  : isEnSource
+                  ? t.translatedText
+                  : t.originalCleanText || t.text;
+
+                return (
+                  <div key={t.id} className="text-sm text-foreground">
+                    {t.isTranslating ? (
+                      <span className="text-muted-foreground italic">در حال ترجمه...</span>
+                    ) : (
+                      <span>{displayText}</span>
+                    )}
+                  </div>
+                );
+              })}
+              {partialText && sourceLang === "fa" && (
                 <div className="text-sm text-muted-foreground italic">{partialText}</div>
               )}
             </div>
@@ -121,8 +149,18 @@ export default function AzinInterpreter() {
         </div>
       </div>
 
-      {/* Bottom bar: AZIN avatar + Voice Orb */}
+      {/* Bottom bar: EN mic + AZIN avatar + FA mic */}
       <div className="flex items-center justify-center gap-6 py-6 border-t border-border">
+        {/* EN Record Button */}
+        <LanguageMicButton
+          lang="en"
+          label="EN"
+          isActive={isConnected && sourceLang === "en"}
+          isConnecting={isConnecting && sourceLang === "en"}
+          disabled={isConnecting && sourceLang !== "en"}
+          onToggle={() => handleLangToggle("en")}
+        />
+
         {/* AZIN Voice Interpreter Button */}
         <button
           onClick={() => setShowVoiceChat(true)}
@@ -134,11 +172,14 @@ export default function AzinInterpreter() {
           </div>
         </button>
 
-        {/* Mic Orb */}
-        <AzinVoiceOrb
-          isConnected={isConnected}
-          isConnecting={isConnecting}
-          onToggle={handleToggle}
+        {/* FA Record Button */}
+        <LanguageMicButton
+          lang="fa"
+          label="فا"
+          isActive={isConnected && sourceLang === "fa"}
+          isConnecting={isConnecting && sourceLang === "fa"}
+          disabled={isConnecting && sourceLang !== "fa"}
+          onToggle={() => handleLangToggle("fa")}
         />
       </div>
 
