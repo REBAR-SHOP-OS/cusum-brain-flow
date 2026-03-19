@@ -10,7 +10,7 @@ import { VizzyVoiceChat } from "./VizzyVoiceChat";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { motion, AnimatePresence } from "framer-motion";
 
-const BTN_SIZE = 64;
+const BTN_SIZE = 80;
 
 export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
   function FloatingVizzyButton(_props, ref) {
