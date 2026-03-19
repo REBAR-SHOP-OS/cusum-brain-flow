@@ -1,44 +1,33 @@
 
 
-# Fix Translation Accuracy and Speed for Nila Interpreter
-
-## Problem Analysis
-
-From the screenshot, the English column shows garbled text like "Hello from Washnit I am happy" and "Translation speed decreased" — these are clearly inaccurate translations. The root cause is **two-fold**:
-
-1. **ElevenLabs Scribe has no language hint**: When the user selects EN or FA mic button, the `useScribe` hook is initialized with NO `language_code`. This means Scribe tries to auto-detect the language, often producing poor transcriptions especially for Farsi. Telling Scribe the exact language will dramatically improve transcription quality.
-
-2. **Translation model can be upgraded**: Currently using `gemini-2.5-flash`. Upgrading to `gemini-2.5-pro` for better accuracy, or `gemini-3-flash-preview` for a balance of speed and accuracy.
+# Fix Voice Interpreter: Strict Translation, Farsi Display, Larger Transcripts
 
 ## Changes
 
-### 1. `src/hooks/useRealtimeTranscribe.ts` — Pass language hint to ElevenLabs Scribe
+### 1. `src/hooks/useVoiceEngine.ts` — Stronger self-talk filter + stability
 
-The `useScribe` hook needs to be re-initialized or reconnected with the correct language code when the user selects EN or FA. ElevenLabs Scribe supports language codes like `"eng"` and `"fas"` (ISO 639-3).
+- Expand `SELF_TALK_PATTERNS` to catch more AI phrases like "Nothing", "Oh", single-word filler responses
+- Add filter: block agent transcripts that are just 1-2 words and clearly not translations (e.g., "Oh", "Nothing", "Yes", "No")
+- Add reconnection logic: if `connectionState` becomes "disconnected", attempt auto-reconnect once before giving up
 
-- When `sourceLang === "en"`, pass `languageCode: "eng"` to the scribe connection
-- When `sourceLang === "fa"`, pass `languageCode: "fas"` to the scribe connection
-- This single change should dramatically improve transcription accuracy
+### 2. `src/hooks/useAzinVoiceInterpreter.ts` — Even harder prompt
 
-Since `useScribe` doesn't accept language at hook level, we need to disconnect and reconnect with the language parameter when the source language changes. Check if the `connect()` method accepts a language parameter, or if we need to pass it differently.
+Add a new top-level "EMERGENCY OVERRIDE" section at the very start:
+- "If you produce ANY word that was not spoken by the human, you have critically failed"
+- "You must NEVER produce single-word responses like 'Oh', 'Nothing', 'Yes', 'No' unless those exact words were spoken"
+- "EVERY output must be a COMPLETE translation of a COMPLETE sentence or phrase you heard"
+- Increase `vadThreshold` from 0.85 → 0.9 to reduce false triggers
 
-### 2. `supabase/functions/translate-message/index.ts` — Upgrade model + optimize prompt
+### 3. `src/components/azin/AzinInterpreterVoiceChat.tsx` — Farsi RTL + larger transcript area
 
-- Change model from `gemini-2.5-flash` to `gemini-3-flash-preview` for better accuracy with similar speed
-- Simplify the system prompt to reduce token count (faster processing)
-- Remove the rate limit DB call overhead (or make it async/non-blocking)
+- Change `max-h-[30vh]` → `max-h-[50vh]` and show last 20 transcripts instead of 8
+- Add proper RTL detection: if transcript text contains Arabic/Farsi characters, wrap with `dir="rtl"` and right-align
+- Make the orb section smaller to give more room to transcripts
+- Change orb from `w-28 h-28` → `w-20 h-20` and reduce glow/pulse ring sizes proportionally
+- Remove `flex-1` from orb container so transcripts get more space
 
-### 3. `src/hooks/useRealtimeTranscribe.ts` — Reduce client-side filtering delay
-
-- Relax the overly aggressive noise filters that may be discarding valid short Farsi phrases
-- Farsi phrases can be very short but meaningful — reduce `wordCount < 3` to `wordCount < 2` and `trimmed.length < 10` to `trimmed.length < 5`
-
-## Technical Details
-
-### Files to modify:
-- `src/hooks/useRealtimeTranscribe.ts` — language hint on Scribe connect, relaxed noise filters
-- `supabase/functions/translate-message/index.ts` — upgraded model, streamlined prompt
-
-### Key insight:
-The biggest accuracy gain will come from telling ElevenLabs Scribe which language to expect. Without this, it's guessing and producing garbage transcriptions that no translation model can fix.
+### Files
+- `src/hooks/useVoiceEngine.ts` — expanded self-talk filter
+- `src/hooks/useAzinVoiceInterpreter.ts` — hardened prompt, higher VAD threshold
+- `src/components/azin/AzinInterpreterVoiceChat.tsx` — larger transcript area, RTL Farsi, smaller orb
 
