@@ -44,11 +44,13 @@ export function useAzinVoiceRelay() {
       isPlayingRef.current = false;
       playNextAudio();
     };
-    audio.onerror = () => {
+    audio.onerror = (e) => {
+      console.error("[relay] audio error:", e);
       isPlayingRef.current = false;
       playNextAudio();
     };
-    audio.play().catch(() => {
+    audio.play().catch((err) => {
+      console.warn("[relay] audio.play() blocked:", err?.message);
       isPlayingRef.current = false;
       playNextAudio();
     });
@@ -60,6 +62,7 @@ export function useAzinVoiceRelay() {
 
     try {
       const voiceId = lang === "fa" ? VOICE_FARSI : VOICE_ENGLISH;
+      console.log("[relay] TTS request:", { text: text.slice(0, 40), lang, voiceId });
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -75,7 +78,10 @@ export function useAzinVoiceRelay() {
       );
 
       if (signal?.aborted) return;
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.error("[relay] TTS response not OK:", response.status);
+        return;
+      }
 
       const audioBlob = await response.blob();
       if (signal?.aborted) return;
@@ -120,14 +126,15 @@ export function useAzinVoiceRelay() {
       if (SCRIBE_ANNOTATION.test(trimmed)) return;
       if (PUNCTUATION_ONLY.test(trimmed)) return;
 
-      const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 3 || trimmed.length < 8) return;
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
-      if (letterCount / trimmed.length < 0.6) return;
+      if (letterCount < 1) return;
+      if (letterCount / trimmed.length < 0.5) return;
       if (!HAS_FARSI_OR_LATIN.test(trimmed)) return;
       if (FOREIGN_SCRIPT.test(trimmed)) return;
       if (REPEATED_CHARS.test(trimmed)) return;
-      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
+      const wordCount = trimmed.split(/\s+/).length;
+      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 1) return;
+      console.log("[relay] committed transcript accepted:", trimmed, `(${wordCount} words, ${trimmed.length} chars)`);
 
       const isRtl = detectRtl(trimmed);
       const detectedLang: "en" | "fa" = isRtl ? "fa" : "en";
@@ -151,10 +158,12 @@ export function useAzinVoiceRelay() {
 
           const translation = res?.translations?.[targetLang]?.trim();
           if (!translation) {
+            console.warn("[relay] empty translation returned for:", trimmed);
             setTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }
 
+          console.log("[relay] translation received:", translation.slice(0, 40));
           contextRef.current.push(translation);
           if (contextRef.current.length > 10) contextRef.current = contextRef.current.slice(-5);
 
@@ -166,6 +175,7 @@ export function useAzinVoiceRelay() {
         })
         .catch((err) => {
           if (err?.name === "AbortError") return;
+          console.error("[relay] translation failed:", err);
           setTranscripts((prev) => prev.filter((t) => t.id !== entryId));
         });
     },

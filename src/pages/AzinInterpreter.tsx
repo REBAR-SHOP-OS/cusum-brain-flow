@@ -9,6 +9,7 @@ import { AzinInterpreterVoiceChat } from "@/components/azin/AzinInterpreterVoice
 import { LanguageMicButton } from "@/components/azin/LanguageMicButton";
 import { AnimatePresence } from "framer-motion";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 export default function AzinInterpreter() {
   const navigate = useNavigate();
@@ -170,7 +171,10 @@ export default function AzinInterpreter() {
 
         {/* AZIN Voice Interpreter Button */}
         <button
-          onClick={() => setShowVoiceChat(true)}
+          onClick={() => {
+            primeMobileAudio();
+            setShowVoiceChat(true);
+          }}
           className="relative w-14 h-14 rounded-full focus:outline-none group"
           aria-label="Start voice interpreter with Nila"
         >
