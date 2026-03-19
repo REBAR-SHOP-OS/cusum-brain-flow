@@ -645,6 +645,59 @@ const JARVIS_TOOLS = [
   },
 ];
 
+const RC_SERVER = "https://platform.ringcentral.com";
+
+async function getRingCentralToken(supabase: any, companyId: string): Promise<{ accessToken: string; userId: string } | null> {
+  // Get all users in company
+  const { data: companyProfiles } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("company_id", companyId);
+  if (!companyProfiles?.length) return null;
+
+  const userIds = companyProfiles.map((p: any) => p.user_id);
+  const { data: tokenRow } = await supabase
+    .from("user_ringcentral_tokens")
+    .select("access_token, token_expires_at, refresh_token, user_id")
+    .in("user_id", userIds)
+    .order("token_expires_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!tokenRow) return null;
+
+  let accessToken = tokenRow.access_token;
+
+  // Refresh if expired
+  if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+    const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+    const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+    if (!clientId || !clientSecret || !tokenRow.refresh_token) return null;
+
+    const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokenRow.refresh_token,
+      }),
+    });
+    if (!resp.ok) return null;
+    const tokens = await resp.json();
+    accessToken = tokens.access_token;
+    await supabase.from("user_ringcentral_tokens").update({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+      token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+    }).eq("user_id", tokenRow.user_id);
+  }
+
+  return { accessToken, userId: tokenRow.user_id };
+}
+
 async function executeReadTool(supabase: any, toolName: string, args: any): Promise<string> {
   switch (toolName) {
     case "list_machines": {
