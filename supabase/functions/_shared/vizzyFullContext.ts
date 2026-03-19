@@ -146,13 +146,13 @@ export async function buildFullVizzyContext(
       : Promise.resolve({ data: null }),
     supabase
       .from("communications")
-      .select("id, subject, from_address, to_address, body_preview, received_at, ai_urgency, gmail_thread_id")
+      .select("id, subject, from_address, to_address, body_preview, received_at, ai_urgency, thread_id")
       .eq("direction", "inbound")
       .order("received_at", { ascending: false })
       .limit(30),
     supabase
       .from("communications")
-      .select("from_address, to_address, direction, received_at, gmail_thread_id")
+      .select("from_address, to_address, direction, received_at, thread_id")
       .gte("received_at", today + "T00:00:00")
       .order("received_at", { ascending: false })
       .limit(500),
@@ -377,7 +377,7 @@ export async function buildFullVizzyContext(
             day: "numeric",
           })
         : "unknown";
-      const threadId = e.gmail_thread_id ? ` [thread:${e.gmail_thread_id}]` : "";
+      const threadId = e.thread_id ? ` [thread:${e.thread_id}]` : "";
       const toAddr = e.to_address ? ` to:${e.to_address}` : "";
       return `  • [${e.subject || "No subject"}] from ${e.from_address || "unknown"}${toAddr} — ${preview} (${date})${threadId}`;
     })
@@ -649,8 +649,8 @@ export async function buildFullVizzyContext(
   const totalInbound = (allEmailsToday || []).filter((e: any) => e.direction === "inbound").length;
 
   // Unanswered inbound: threads with inbound but no outbound today
-  const inboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "inbound" && e.gmail_thread_id).map((e: any) => e.gmail_thread_id));
-  const outboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "outbound" && e.gmail_thread_id).map((e: any) => e.gmail_thread_id));
+  const inboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "inbound" && e.thread_id).map((e: any) => e.thread_id));
+  const outboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "outbound" && e.thread_id).map((e: any) => e.thread_id));
   const unansweredCount = [...inboundThreads].filter((t) => !outboundThreads.has(t)).length;
 
   const emailByEmployeeLines = Object.entries(emailsByEmployee)
