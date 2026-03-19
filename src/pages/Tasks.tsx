@@ -30,6 +30,7 @@ import { uploadToStorage } from "@/lib/storageUpload";
 import { cn } from "@/lib/utils";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { format, isPast, isToday, startOfDay } from "date-fns";
+import { triggerFeedbackAnalysis } from "@/lib/triggerFeedbackAnalysis";
 
 // ─── Helpers ─────────────────────────────────────────────
 function getTaskCreatorName(task: TaskRow): string | null {
@@ -757,19 +758,15 @@ export default function Tasks() {
         const originalDesc = task.description || "";
         const attachmentUrl = (task as any).attachment_url || null;
 
-        for (const recipientId of FEEDBACK_RECIPIENTS) {
-          await supabase.from("tasks").insert({
-            title: `🔄 مشکل حل نشده: ${originalTitle}`,
-            description: `${originalDesc}\n\n--- دلیل بازگشت ---\n${reason}`.trim(),
-            assigned_to: recipientId,
-            created_by_profile_id: currentProfileId,
-            priority: "high",
-            status: "open",
-            company_id: companyId,
-            source: "screenshot_feedback",
-            attachment_url: attachmentUrl,
-          } as any);
-        }
+        // Fire-and-forget: auto-analyze reopened feedback instead of delegating to Radin
+        triggerFeedbackAnalysis({
+          title: `🔄 مشکل حل نشده: ${originalTitle}`,
+          description: `${originalDesc}\n\n--- دلیل بازگشت ---\n${reason}`.trim(),
+          screenshot_url: attachmentUrl || undefined,
+          page_path: undefined,
+          reopen_reason: reason,
+          original_task_id: task.id,
+        });
 
         // Keep the current task completed
         await supabase.from("tasks").update({

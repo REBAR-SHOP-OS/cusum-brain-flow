@@ -539,3 +539,6 @@ verify_jwt = false
 
 [functions.voice-engine-token]
 verify_jwt = false
+
+[functions.analyze-feedback-fix]
+verify_jwt = false

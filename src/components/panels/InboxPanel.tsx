@@ -15,6 +15,7 @@ import { normalizeNotificationRoute } from "@/lib/notificationRouting";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
 import { NotificationFilters } from "@/components/notifications/NotificationFilters";
 import { FeedbackReviewDialog } from "@/components/feedback/FeedbackReviewDialog";
+import { triggerFeedbackAnalysis } from "@/lib/triggerFeedbackAnalysis";
 
 interface InboxPanelProps {
   isOpen: boolean;
@@ -379,6 +380,14 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
           .update({ status: "completed", completed_at: new Date().toISOString() } as any)
           .eq("id", humanTaskId);
       }
+
+      // Fire-and-forget: auto-analyze re-reported feedback
+      triggerFeedbackAnalysis({
+        title: (meta.original_title as string) || "گزارش مجدد باگ",
+        description: description || "",
+        screenshot_url: (meta.original_attachment_url as string) || undefined,
+        reopen_reason: comment || undefined,
+      });
 
       dismiss(item.id);
       toast.success("مشکل مجدداً گزارش شد");
