@@ -1,24 +1,26 @@
 
 
-# Fix: FloatingVizzyButton Avatar Display
-
-## Problem
-The floating Vizzy button (bottom-right orbital button) displays the avatar with excessive zoom (`scale(1.8)`) and offset positioning (`objectPosition: "center 38%"`), making the agent's face look cropped/distorted.
+# Plan: Nila Interpreter — Switch from GPT to Gemini
 
 ## Change
 
-### File: `src/components/vizzy/FloatingVizzyButton.tsx`
+### File: `supabase/functions/translate-message/index.ts`
 
-Remove the aggressive `transform: scale(1.8)` and `objectPosition` from the avatar `<img>` tag (line 180). Replace with a natural fit:
+Line 90-93: Switch the `callAI` provider from GPT-5 to Gemini Flash:
 
-```tsx
-<img
-  src={vizzyAvatar}
-  alt="Vizzy AI"
-  className="w-full h-full object-cover pointer-events-none"
-  draggable={false}
-/>
+**Before:**
+```typescript
+provider: "gpt",
+model: "gpt-5",
+temperature: 1.0,
 ```
 
-This will display the full agent avatar naturally within the circular button without distortion.
+**After:**
+```typescript
+provider: "gemini",
+model: "gemini-2.5-flash",
+temperature: 0.5,
+```
+
+This changes Nila's translation engine from OpenAI GPT-5 to Google Gemini 2.5 Flash — faster, cheaper, and no GPT temperature constraint.
 
