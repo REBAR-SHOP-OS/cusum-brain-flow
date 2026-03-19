@@ -552,15 +552,14 @@ export async function buildFullVizzyContext(
     const name = profileUserIdMap.get(a.user_id) || "Unknown";
     addFootprint(name, a.created_at);
   }
-  // Source 5: RingCentral calls
+  // Source 5: RingCentral calls (using phone-to-employee mapping)
   for (const call of (rcCallsToday || [])) {
     const meta = call.metadata as Record<string, unknown> | null;
     if (meta?.type !== "call") continue;
     const dir = (call.direction || "inbound").toLowerCase();
     const addr = dir === "outbound" ? call.from_address : call.to_address;
-    const addrClean = addr?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || addr || "";
-    const name = emailProfileMap.get(addrClean);
-    if (name) addFootprint(name, call.received_at);
+    const name = resolveEmployeeName(addr);
+    if (name && name !== "Unknown") addFootprint(name, call.received_at);
   }
   // Source 6: Work orders updated
   for (const wo of (workOrdersToday || [])) {
