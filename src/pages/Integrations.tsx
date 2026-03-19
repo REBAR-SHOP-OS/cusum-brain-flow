@@ -1,11 +1,82 @@
-import { useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { IntegrationCard, type Integration } from "@/components/integrations/IntegrationCard";
 import { IntegrationSetupDialog } from "@/components/integrations/IntegrationSetupDialog";
 import { ConnectDialog } from "@/components/integrations/ConnectDialog";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { StripeQBSyncPanel } from "@/components/integrations/StripeQBSyncPanel";
+import { supabase } from "@/integrations/supabase/client";
+
+interface StalenessInfo {
+  source: string;
+  label: string;
+  lastReceived: string | null;
+  hoursAgo: number | null;
+}
+
+function useStalenessCheck() {
+  const [staleItems, setStaleItems] = useState<StalenessInfo[]>([]);
+
+  const check = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Query max received_at per source
+      const { data: gmailData } = await supabase
+        .from("communications")
+        .select("received_at")
+        .eq("user_id", user.id)
+        .eq("source", "gmail")
+        .order("received_at", { ascending: false })
+        .limit(1);
+
+      const { data: rcData } = await supabase
+        .from("communications")
+        .select("received_at")
+        .eq("user_id", user.id)
+        .eq("source", "ringcentral")
+        .order("received_at", { ascending: false })
+        .limit(1);
+
+      const now = Date.now();
+      const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
+      const items: StalenessInfo[] = [];
+
+      const sources = [
+        { key: "gmail", label: "Gmail", data: gmailData },
+        { key: "ringcentral", label: "RingCentral", data: rcData },
+      ];
+
+      for (const s of sources) {
+        if (s.data && s.data.length > 0) {
+          const lastTime = new Date(s.data[0].received_at).getTime();
+          const diff = now - lastTime;
+          if (diff > STALE_THRESHOLD_MS) {
+            items.push({
+              source: s.key,
+              label: s.label,
+              lastReceived: s.data[0].received_at,
+              hoursAgo: Math.round(diff / (1000 * 60 * 60)),
+            });
+          }
+        }
+      }
+
+      setStaleItems(items);
+    } catch (e) {
+      console.warn("Staleness check failed:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    check();
+  }, [check]);
+
+  return staleItems;
+}
 
 export default function Integrations() {
   const {
@@ -23,6 +94,7 @@ export default function Integrations() {
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [connectDialogIntegration, setConnectDialogIntegration] = useState<Integration | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const staleItems = useStalenessCheck();
 
   const oauthIntegrations = [
     "gmail", "google-calendar", "google-drive", "youtube",
@@ -79,6 +151,21 @@ export default function Integrations() {
       </header>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-8">
+        {/* Staleness warnings */}
+        {staleItems.length > 0 && (
+          <div className="space-y-2">
+            {staleItems.map((item) => (
+              <Alert key={item.source} variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>{item.label} sync appears stale</AlertTitle>
+                <AlertDescription>
+                  Last data received {item.hoursAgo} hours ago. The connection may need to be re-authorized.
+                </AlertDescription>
+              </Alert>
+            ))}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {integrations.map((integration) => (
             <IntegrationCard
