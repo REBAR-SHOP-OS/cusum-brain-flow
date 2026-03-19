@@ -4,6 +4,7 @@ import { useAzinVoiceInterpreter, InterpreterTranscript } from "@/hooks/useAzinV
 import { cn } from "@/lib/utils";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
+import { detectRtl } from "@/utils/textDirection";
 
 interface Props {
   onClose: () => void;
@@ -69,12 +70,12 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
         </button>
       </div>
 
-      {/* Orb */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-6">
+      {/* Orb — compact */}
+      <div className="flex flex-col items-center justify-center gap-4 py-4">
         <div className="relative">
           {/* Glow ring */}
           <div className="absolute rounded-full transition-all duration-300" style={{
-            inset: "-32px", borderRadius: "50%",
+            inset: "-24px", borderRadius: "50%",
             background: isActive
               ? "radial-gradient(circle, hsl(245 58% 55% / 0.3) 0%, transparent 70%)"
               : "radial-gradient(circle, hsl(245 58% 55% / 0.05) 0%, transparent 70%)",
@@ -82,16 +83,16 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
           }} />
           {/* Pulse ring */}
           <div className="absolute rounded-full border-2 transition-all duration-300" style={{
-            inset: "-24px", borderRadius: "50%",
+            inset: "-16px", borderRadius: "50%",
             borderColor: isActive ? "hsl(245 58% 55% / 0.7)" : "hsl(245 58% 55% / 0.3)",
             transform: `scale(${isActive ? 1.1 : 1})`,
           }} />
           {state === "connecting" && (
-            <div className="absolute inset-0 rounded-full animate-ping" style={{ margin: "-20px", borderRadius: "50%", background: "hsl(245 58% 55% / 0.15)" }} />
+            <div className="absolute inset-0 rounded-full animate-ping" style={{ margin: "-14px", borderRadius: "50%", background: "hsl(245 58% 55% / 0.15)" }} />
           )}
           <div
             className={cn(
-              "w-28 h-28 rounded-full overflow-hidden shadow-2xl transition-all duration-200",
+              "w-20 h-20 rounded-full overflow-hidden shadow-2xl transition-all duration-200",
               state === "connected" ? "ring-4 ring-indigo-500/60" :
               state === "connecting" ? "ring-4 ring-indigo-500/30" :
               state === "error" ? "ring-4 ring-destructive/50" : "ring-4 ring-muted"
@@ -107,7 +108,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
           </div>
           {state === "connecting" && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/60 rounded-full">
-              <Loader2 className="w-10 h-10 text-primary animate-spin" />
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
           )}
         </div>
@@ -128,34 +129,38 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
         )}
       </div>
 
-      {/* Transcripts */}
-      <div className="w-full max-w-md px-4 pb-2 max-h-[30vh] overflow-y-auto">
+      {/* Transcripts — large area */}
+      <div className="w-full max-w-lg px-4 pb-2 flex-1 overflow-y-auto">
         <AnimatePresence>
-          {transcripts.slice(-8).map((t: InterpreterTranscript) => (
-            <motion.div
-              key={t.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className={cn(
-                "mb-2 px-3 py-2 rounded-xl text-sm max-w-[85%]",
-                t.role === "user"
-                  ? "ml-auto bg-primary/15 text-foreground"
-                  : "mr-auto bg-muted text-foreground"
-              )}
-            >
-              <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
-                {t.role === "user" ? "🎙️ Original" : "🔄 Translation"}
-              </span>
-              {t.text}
-            </motion.div>
-          ))}
+          {transcripts.slice(-20).map((t: InterpreterTranscript) => {
+            const isRtl = detectRtl(t.text);
+            return (
+              <motion.div
+                key={t.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                dir={isRtl ? "rtl" : "ltr"}
+                className={cn(
+                  "mb-2 px-3 py-2 rounded-xl text-sm max-w-[85%]",
+                  t.role === "user"
+                    ? isRtl ? "mr-auto bg-primary/15 text-foreground text-right" : "ml-auto bg-primary/15 text-foreground"
+                    : isRtl ? "mr-auto bg-muted text-foreground text-right" : "mr-auto bg-muted text-foreground"
+                )}
+              >
+                <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
+                  {t.role === "user" ? "🎙️ Original" : "🔄 Translation"}
+                </span>
+                {t.text}
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
         <div ref={bottomRef} />
       </div>
 
       {/* End Call */}
-      <div className="pb-8 flex flex-col items-center gap-4">
+      <div className="pb-6 flex flex-col items-center gap-4">
         <button onClick={handleClose} className="flex items-center gap-2 px-6 py-3 rounded-full bg-destructive text-destructive-foreground font-medium shadow-lg hover:bg-destructive/90 transition-colors">
           <Mic className="w-5 h-5" />
           End Call

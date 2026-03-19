@@ -289,14 +289,26 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       }, maxDuration);
 
       // Connection state monitoring
+      // Auto-reconnect once on disconnect, give up on "failed"
+      let hasAutoReconnected = false;
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+        const cs = pc.connectionState;
+        if (cs === "failed") {
           clearTimeout_();
           clearSessionTimer();
-          setState("idle");
+          setState("error");
           setMode(null);
           setIsSpeaking(false);
           cleanup();
+          toast.error("Voice connection lost.");
+        } else if (cs === "disconnected" && !hasAutoReconnected) {
+          hasAutoReconnected = true;
+          console.warn("Voice engine disconnected — attempting auto-reconnect...");
+          cleanup();
+          // Small delay then retry
+          setTimeout(() => {
+            startSession();
+          }, 1500);
         }
       };
 
