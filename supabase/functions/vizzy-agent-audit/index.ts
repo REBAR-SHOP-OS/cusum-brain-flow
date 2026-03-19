@@ -1,9 +1,34 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI } from "../_shared/aiRouter.ts";
+import { salesPrompts } from "../_shared/agents/sales.ts";
+import { accountingPrompts } from "../_shared/agents/accounting.ts";
+import { operationsPrompts } from "../_shared/agents/operations.ts";
+import { supportPrompts } from "../_shared/agents/support.ts";
+import { marketingPrompts } from "../_shared/agents/marketing.ts";
+import { growthPrompts } from "../_shared/agents/growth.ts";
+import { specialistsPrompts } from "../_shared/agents/specialists.ts";
+import { empirePrompts } from "../_shared/agents/empire.ts";
+import { purchasingPrompts } from "../_shared/agents/purchasing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+// Merge all prompts (excluding social/pixel)
+const ALL_PROMPTS: Record<string, string> = {
+  ...salesPrompts,
+  ...accountingPrompts,
+  ...operationsPrompts,
+  ...supportPrompts,
+  ...growthPrompts,
+  ...specialistsPrompts,
+  ...empirePrompts,
+  ...purchasingPrompts,
+  // marketing prompts minus social — only include non-social keys
+  ...Object.fromEntries(
+    Object.entries(marketingPrompts).filter(([k]) => !["social"].includes(k))
+  ),
 };
 
 // Agent → prompt file mapping for Lovable patch commands
