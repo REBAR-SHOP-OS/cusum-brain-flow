@@ -323,7 +323,7 @@ ${digest}`;
   }
 
   // Fallback: raw context only (no digest available)
-  return `${VIZZY_INSTRUCTIONS}\n\n═══ LIVE BUSINESS DATA (as of ${now}) ═══\n${rawContext}`;
+  return `${VIZZY_INSTRUCTIONS}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} (${nowStr}). Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n\n═══ LIVE BUSINESS DATA (as of ${nowStr}) ═══\n${rawContext}`;
 }
 
 export function useVizzyVoiceEngine() {

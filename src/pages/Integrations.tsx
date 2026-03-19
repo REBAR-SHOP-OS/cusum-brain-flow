@@ -41,6 +41,18 @@ function useStalenessCheck() {
         .order("received_at", { ascending: false })
         .limit(1);
 
+      // Also check integration_connections for last_sync_at
+      const { data: syncRows } = await supabase
+        .from("integration_connections")
+        .select("integration_id, last_sync_at")
+        .eq("user_id", user.id)
+        .in("integration_id", ["gmail", "ringcentral"]);
+
+      const syncMap: Record<string, string | null> = {};
+      for (const row of syncRows ?? []) {
+        syncMap[row.integration_id] = row.last_sync_at;
+      }
+
       const now = Date.now();
       const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
       const items: StalenessInfo[] = [];
@@ -51,6 +63,13 @@ function useStalenessCheck() {
       ];
 
       for (const s of sources) {
+        // If last_sync_at is recent, the connection is healthy — skip warning
+        const lastSync = syncMap[s.key];
+        if (lastSync) {
+          const syncAge = now - new Date(lastSync).getTime();
+          if (syncAge < STALE_THRESHOLD_MS) continue; // sync is healthy
+        }
+
         if (s.data && s.data.length > 0) {
           const lastTime = new Date(s.data[0].received_at).getTime();
           const diff = now - lastTime;
