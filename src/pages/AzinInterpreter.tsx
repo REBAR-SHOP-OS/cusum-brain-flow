@@ -161,7 +161,7 @@ export default function AzinInterpreter() {
                 );
               })}
               {partialText && sourceLang === "fa" && (
-                <div className="text-sm text-muted-foreground italic">{partialText}</div>
+                <div className="text-base text-muted-foreground italic leading-relaxed" style={{ fontFamily: '"Vazirmatn", "Tahoma", sans-serif' }}>{partialText}</div>
               )}
               <div ref={faBottomRef} />
             </div>
