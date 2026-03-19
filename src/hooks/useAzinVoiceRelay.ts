@@ -126,7 +126,7 @@ export function useAzinVoiceRelay() {
       const wordCount = trimmed.split(/\s+/).length;
       if (wordCount < 3 || trimmed.length < 8) return;
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
-      if (letterCount / trimmed.length < 0.5) return;
+      if (letterCount / trimmed.length < 0.6) return;
 
       // Block non-Farsi/non-Latin scripts (e.g. Tamil, Devanagari)
       if (!HAS_FARSI_OR_LATIN.test(trimmed)) return;
