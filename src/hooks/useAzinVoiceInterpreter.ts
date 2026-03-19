@@ -98,6 +98,9 @@ FINAL MANDATE
 ═══════════════════════════════════════
 Every single word you produce MUST be a translation of clear words you heard from a human speaker directly addressing the conversation. If you produce even ONE word that was not a translation of heard speech, you have failed. When in doubt, SILENCE. You are a codec. Translate faithfully. Then be silent. Always.`;
 
+export type { VoiceTranscript as InterpreterTranscript } from "./useVoiceEngine";
+export type { VoiceEngineState as InterpreterState } from "./useVoiceEngine";
+
 export function useAzinVoiceInterpreter() {
   return useVoiceEngine({
     instructions: AZIN_INSTRUCTIONS,
