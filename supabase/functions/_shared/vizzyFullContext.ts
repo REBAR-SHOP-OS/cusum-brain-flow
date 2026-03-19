@@ -13,7 +13,13 @@ export async function buildFullVizzyContext(
   options: VizzyContextOptions = {}
 ): Promise<string> {
   const { includeFinancials = true } = options;
-  const today = new Date().toISOString().split("T")[0];
+  // Use ET (America/New_York) for "today" — business operates in Eastern Time
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
