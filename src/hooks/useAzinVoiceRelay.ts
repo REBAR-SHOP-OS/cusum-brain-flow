@@ -5,15 +5,6 @@ import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { toast } from "sonner";
 import { detectRtl } from "@/utils/textDirection";
 
-/**
- * AZIN Voice Relay — deterministic 3-step pipeline:
- * 1. ElevenLabs Scribe STT (accurate, no hallucination)
- * 2. Gemini translation via translate-message edge function
- * 3. ElevenLabs TTS for spoken translation output
- *
- * Replaces OpenAI Realtime to eliminate self-talk and Farsi errors.
- */
-
 export interface RelayTranscript {
   id: string;
   original: string;
@@ -25,15 +16,13 @@ export interface RelayTranscript {
 
 export type RelayState = "idle" | "connecting" | "connected" | "error";
 
-// TTS voices
-const VOICE_ENGLISH = "FGY2WhTYpPnrIDTdsKH5"; // Laura (female, clear English)
-const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2 - best for Farsi)
+const VOICE_ENGLISH = "FGY2WhTYpPnrIDTdsKH5";
+const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL";
 
-// Noise filter helpers
 const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
 const HAS_FARSI_OR_LATIN = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
 const REPEATED_CHARS = /(.)\1{4,}/;
-const SCRIBE_ANNOTATION = /^\s*\(/; // Scribe annotations like "(speaking in foreign language)", "(music)", "(laughter)"
+const SCRIBE_ANNOTATION = /^\s*\(/;
 const PUNCTUATION_ONLY = /^[\s.,!?…\-–—:;'"]+$/;
 
 export function useAzinVoiceRelay() {
@@ -43,8 +32,8 @@ export function useAzinVoiceRelay() {
   const contextRef = useRef<string[]>([]);
   const audioQueueRef = useRef<HTMLAudioElement[]>([]);
   const isPlayingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Play next audio in queue (non-blocking)
   const playNextAudio = useCallback(() => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
     isPlayingRef.current = true;
@@ -63,11 +52,12 @@ export function useAzinVoiceRelay() {
     });
   }, []);
 
-  // Speak translation via TTS
   const speakTranslation = useCallback(async (text: string, lang: "en" | "fa", entryId: string) => {
+    const signal = abortRef.current?.signal;
+    if (signal?.aborted) return;
+
     try {
       const voiceId = lang === "fa" ? VOICE_FARSI : VOICE_ENGLISH;
-      const speed = 1.1;
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -77,17 +67,20 @@ export function useAzinVoiceRelay() {
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ text, voiceId, speed }),
+          body: JSON.stringify({ text, voiceId, speed: 1.1 }),
+          signal,
         }
       );
 
+      if (signal?.aborted) return;
       if (!response.ok) return;
 
       const audioBlob = await response.blob();
+      if (signal?.aborted) return;
+
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
 
-      // Mark speaking state
       setTranscripts((prev) =>
         prev.map((t) => (t.id === entryId ? { ...t, isSpeaking: true } : t))
       );
@@ -101,7 +94,8 @@ export function useAzinVoiceRelay() {
 
       audioQueueRef.current.push(audio);
       playNextAudio();
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === "AbortError") return;
       console.error("TTS error:", err);
     }
   }, [playNextAudio]);
@@ -110,90 +104,64 @@ export function useAzinVoiceRelay() {
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
     onPartialTranscript: (data) => {
-      // Filter out Scribe annotations from partial display
+      if (abortRef.current?.signal.aborted) return;
       if (SCRIBE_ANNOTATION.test(data.text) || PUNCTUATION_ONLY.test(data.text)) return;
       setPartialText(data.text);
     },
     onCommittedTranscript: (data) => {
+      const signal = abortRef.current?.signal;
+      if (signal?.aborted) return;
+
       const trimmed = data.text.trim();
       if (!trimmed) return;
-
-      // Block Scribe annotations and punctuation-only strings
       if (SCRIBE_ANNOTATION.test(trimmed)) return;
       if (PUNCTUATION_ONLY.test(trimmed)) return;
 
-      // Strong noise filter
       const wordCount = trimmed.split(/\s+/).length;
       if (wordCount < 3 || trimmed.length < 8) return;
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.6) return;
-
-      // Block non-Farsi/non-Latin scripts (e.g. Tamil, Devanagari)
       if (!HAS_FARSI_OR_LATIN.test(trimmed)) return;
-
-      // Block repeated chars and filler words
       if (REPEATED_CHARS.test(trimmed)) return;
       if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
 
-      // Detect source language
       const isRtl = detectRtl(trimmed);
       const detectedLang: "en" | "fa" = isRtl ? "fa" : "en";
       const targetLang = detectedLang === "fa" ? "en" : "fa";
-
       const entryId = crypto.randomUUID();
 
       setTranscripts((prev) => [
         ...prev,
-        {
-          id: entryId,
-          original: trimmed,
-          translation: "",
-          sourceLang: detectedLang,
-          isTranslating: true,
-          isSpeaking: false,
-        },
+        { id: entryId, original: trimmed, translation: "", sourceLang: detectedLang, isTranslating: true, isSpeaking: false },
       ]);
       setPartialText("");
 
-      // Translate via Gemini
       const contextWindow = contextRef.current.slice(-3).join(" | ");
 
       invokeEdgeFunction<{ translations: Record<string, string> }>(
         "translate-message",
-        {
-          text: trimmed,
-          sourceLang: detectedLang,
-          targetLangs: [targetLang],
-          context: contextWindow || undefined,
-        }
+        { text: trimmed, sourceLang: detectedLang, targetLangs: [targetLang], context: contextWindow || undefined },
       )
         .then((res) => {
-          const translation = res?.translations?.[targetLang]?.trim();
+          if (signal?.aborted) return;
 
+          const translation = res?.translations?.[targetLang]?.trim();
           if (!translation) {
-            // Noise — silently remove
             setTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }
 
-          // Update context buffer
           contextRef.current.push(translation);
-          if (contextRef.current.length > 10) {
-            contextRef.current = contextRef.current.slice(-5);
-          }
+          if (contextRef.current.length > 10) contextRef.current = contextRef.current.slice(-5);
 
           setTranscripts((prev) =>
-            prev.map((t) =>
-              t.id === entryId
-                ? { ...t, translation, isTranslating: false }
-                : t
-            )
+            prev.map((t) => t.id === entryId ? { ...t, translation, isTranslating: false } : t)
           );
 
-          // Speak the translation
           speakTranslation(translation, targetLang as "en" | "fa", entryId);
         })
-        .catch(() => {
+        .catch((err) => {
+          if (err?.name === "AbortError") return;
           setTranscripts((prev) => prev.filter((t) => t.id !== entryId));
         });
     },
@@ -202,18 +170,15 @@ export function useAzinVoiceRelay() {
   const startSession = useCallback(async () => {
     setState("connecting");
     try {
+      // Fresh abort controller for this session
+      abortRef.current = new AbortController();
+
       const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
-      if (error || !data?.token) {
-        throw new Error(error?.message || "Failed to get scribe token");
-      }
+      if (error || !data?.token) throw new Error(error?.message || "Failed to get scribe token");
 
       await scribe.connect({
         token: data.token,
-        microphone: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
 
       contextRef.current = [];
@@ -226,13 +191,30 @@ export function useAzinVoiceRelay() {
   }, [scribe]);
 
   const endSession = useCallback(() => {
+    // 1. Abort all in-flight fetch requests (translate + TTS)
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+
+    // 2. Disconnect Scribe STT
     scribe.disconnect();
-    // Stop all queued audio
-    audioQueueRef.current.forEach((a) => { a.pause(); a.src = ""; });
+
+    // 3. Stop and clean up all queued/playing audio
+    audioQueueRef.current.forEach((a) => {
+      a.onended = null;
+      a.onerror = null;
+      a.pause();
+      a.src = "";
+    });
     audioQueueRef.current = [];
     isPlayingRef.current = false;
+
+    // 4. Clear all state
     setState("idle");
     setPartialText("");
+    setTranscripts([]);
+    contextRef.current = [];
   }, [scribe]);
 
   const clearTranscripts = useCallback(() => {
@@ -241,12 +223,5 @@ export function useAzinVoiceRelay() {
     contextRef.current = [];
   }, []);
 
-  return {
-    state,
-    transcripts,
-    partialText,
-    startSession,
-    endSession,
-    clearTranscripts,
-  };
+  return { state, transcripts, partialText, startSession, endSession, clearTranscripts };
 }
