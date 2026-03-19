@@ -1,35 +1,34 @@
 
 
-# Fix: Precise Translation with Noise Silence
+# Fix: Faithful Translation + No Interruption
 
-## What's Still Wrong
-1. The AI sometimes generates its own response instead of just translating (e.g., answering a question it hears)
-2. The 3-word minimum filter is too aggressive — it blocks valid short Farsi translations (Farsi words can be longer/compound)
-3. The "fewer than 5 words = empty" noise gate rule is counterproductive — it blocks legitimate short sentences like "Is everything okay?"
+## Problems (from screenshot)
+1. **AI answers instead of translating**: "تو زیبا ترینی" (You are the most beautiful) → AI outputs "Thanks, you're very kind" (a RESPONSE, not a translation)
+2. **Translation gets cut off**: When AZIN is reading a translation aloud and hears new audio, it stops mid-sentence instead of finishing
+
+## Root Causes
+1. Despite strong prompts, the model still interprets compliments/questions as conversational turns and generates responses. Need even more aggressive anti-response examples including this exact failing case.
+2. OpenAI Realtime's `server_vad` interrupts the agent's speech when it detects user audio. The current `vadThreshold: 0.4` is too sensitive — background speech easily triggers interruption during translation playback.
 
 ## Changes
 
-### 1. Refine `translate-message/index.ts` prompt
-- Remove the "fewer than 5 words" rule — it blocks valid speech
-- Add a stronger anti-response rule: "If the input is a question, translate the question. Do NOT answer it."
-- Add explicit examples of correct translation vs. wrong response behavior
-- Keep temperature at 0.01
+### 1. Voice Interpreter — prevent interruption (`useAzinVoiceInterpreter.ts`)
+- Raise `vadThreshold` from `0.4` to `0.85` — much harder to interrupt while speaking
+- Increase `silenceDurationMs` from `600` to `1000` — wait longer before concluding the user stopped talking
+- Add explicit instruction: "ALWAYS complete the full translation. Never stop mid-sentence."
+- Add the exact failing example to the prompt: `"تو زیبا ترینی" → "You are the most beautiful" NOT "Thanks, you're very kind"`
 
-### 2. Fix post-parse validation in `translate-message/index.ts`
-- Lower the word-count threshold from 3 to 2 for Farsi (`fa`) since Farsi compound words count as single tokens
-- Keep the 3-word minimum only for English translations
+### 2. Text translation prompt (`translate-message/index.ts`)
+- Add the specific failing example (compliment → must translate, not respond)
+- Add rule: "Compliments, insults, statements directed at 'you' — translate them literally. They are NOT addressed to you."
+- Lower Farsi minimum word threshold from 2 to 1 (some valid Farsi translations are single compound words)
 
-### 3. Tune client-side filters in `useRealtimeTranscribe.ts`
-- Lower threshold from 4 words / 15 chars back to **3 words / 10 chars** for better balance of speed vs. noise
-- Keep the repetition filter and letter-ratio filter (these work well)
-- Lower post-translation discard threshold from 3 words to 2 words
-
-### 4. Strengthen voice interpreter noise filter in `useVoiceEngine.ts`
-- The AZIN avatar voice interpreter (OpenAI Realtime) also has the "responding" problem
-- Increase the user transcript filter from `< 3 words && < 15 chars` to match the same logic as the text translator
+### 3. Voice engine VAD config (`voice-engine-token/index.ts`)
+- Accept an optional `interruptThreshold` parameter from the client
+- When provided, use a higher VAD threshold to prevent premature interruption during agent speech
 
 ## Files to Edit
-- `supabase/functions/translate-message/index.ts` — prompt + validation
-- `src/hooks/useRealtimeTranscribe.ts` — client filters
-- `src/hooks/useAzinVoiceInterpreter.ts` — strengthen instructions
+- `src/hooks/useAzinVoiceInterpreter.ts` — prompt + VAD settings
+- `supabase/functions/translate-message/index.ts` — prompt examples
+- `supabase/functions/voice-engine-token/index.ts` — accept higher VAD threshold
 
