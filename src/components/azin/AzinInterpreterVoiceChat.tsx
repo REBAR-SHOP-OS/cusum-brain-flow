@@ -46,7 +46,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
   const statusLabel =
     state === "connecting"
-      ? connectingElapsed >= 10 ? "Taking longer than expected..." : "Connecting to AZIN..."
+      ? connectingElapsed >= 10 ? "Taking longer than expected..." : "Connecting to Nila..."
       : state === "error" ? "Connection failed"
       : mode === "speaking" || isSpeaking ? "Translating..."
       : state === "connected" ? "Listening..."
