@@ -133,7 +133,9 @@ export function useAzinVoiceRelay() {
       if (FOREIGN_SCRIPT.test(trimmed)) return;
       if (REPEATED_CHARS.test(trimmed)) return;
       const wordCount = trimmed.split(/\s+/).length;
-      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 1) return;
+      // Stricter noise gates: minimum 3 words or 8 chars
+      if (wordCount < 3 && trimmed.length < 8) return;
+      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 2) return;
       console.log("[relay] committed transcript accepted:", trimmed, `(${wordCount} words, ${trimmed.length} chars)`);
 
       const isRtl = detectRtl(trimmed);
