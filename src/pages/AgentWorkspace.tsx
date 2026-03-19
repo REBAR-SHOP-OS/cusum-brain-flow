@@ -222,6 +222,7 @@ export default function AgentWorkspace() {
       today.setHours(0, 0, 0, 0);
       setPurchasingDate(today);
       setActivePurchasingDateStr(today.toISOString().split("T")[0]);
+      setPurchasingKey((k) => k + 1);
     }
   }, [agentId]);
 
