@@ -101,7 +101,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
           content: `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`,
         },
       ],
-      temperature: 0.0,
+      temperature: 1.0,
       maxTokens: 500,
     });
 
