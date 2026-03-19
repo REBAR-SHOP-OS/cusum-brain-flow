@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Mic, Loader2 } from "lucide-react";
+import { X, Mic, Loader2, FileText } from "lucide-react";
 import { useAzinVoiceRelay, RelayTranscript } from "@/hooks/useAzinVoiceRelay";
 import { cn } from "@/lib/utils";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { detectRtl } from "@/utils/textDirection";
 import { primeMobileAudio } from "@/lib/audioPlayer";
+import jsPDF from "jspdf";
+import { addMarkdownToPdf } from "@/lib/pdfMarkdownRenderer";
 
 interface Props {
   onClose: () => void;
@@ -46,6 +48,35 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
   }, [state]);
 
   const handleClose = () => { endSession(); onClose(); };
+
+  const generateConversationPdf = () => {
+    if (transcripts.length === 0) return;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const margin = 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const maxWidth = pageWidth - margin * 2;
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+    let md = `# Nila Interpreter — Conversation Report\n\n`;
+    md += `**Date:** ${dateStr} at ${timeStr}\n\n`;
+    md += `**Total exchanges:** ${transcripts.length}\n\n`;
+    md += `## Conversation\n\n`;
+
+    transcripts.forEach((t, i) => {
+      const direction = t.sourceLang === "en" ? "English → Farsi" : "Farsi → English";
+      const englishText = t.sourceLang === "en" ? t.original : t.translation;
+      md += `- **${i + 1}. [${direction}]:** ${englishText || "(no translation)"}\n`;
+    });
+
+    addMarkdownToPdf(doc, md, { margin, maxWidth, pageHeight, startY: margin });
+
+    const fileName = `nila-report-${now.toISOString().slice(0, 10)}.pdf`;
+    doc.save(fileName);
+  };
 
   const isSpeaking = transcripts.some((t) => t.isSpeaking);
   const isTranslating = transcripts.some((t) => t.isTranslating);
@@ -203,10 +234,21 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
 
       {/* End Call */}
       <div className="pb-6 flex flex-col items-center gap-4">
-        <button onClick={handleClose} className="flex items-center gap-2 px-6 py-3 rounded-full bg-destructive text-destructive-foreground font-medium shadow-lg hover:bg-destructive/90 transition-colors">
-          <Mic className="w-5 h-5" />
-          End Call
-        </button>
+        <div className="flex items-center gap-4">
+          {transcripts.length > 0 && (
+            <button
+              onClick={generateConversationPdf}
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              aria-label="Download conversation report"
+            >
+              <FileText className="w-5 h-5" />
+            </button>
+          )}
+          <button onClick={handleClose} className="flex items-center gap-2 px-6 py-3 rounded-full bg-destructive text-destructive-foreground font-medium shadow-lg hover:bg-destructive/90 transition-colors">
+            <Mic className="w-5 h-5" />
+            End Call
+          </button>
+        </div>
       </div>
     </motion.div>
   );
