@@ -26,4 +26,11 @@ export interface VizzyBusinessSnapshot {
   agentActivity: { agent_name: string; session_count: number; last_topic: string; user_name: string }[];
   teamPresence: { name: string; clocked_in: string; clocked_out: string | null }[];
   inboundEmails: { subject: string; from_address: string; to_address: string; body_preview: string; received_at: string }[];
+  ringcentralCalls?: {
+    totalCalls: number;
+    totalInbound: number;
+    totalMissed: number;
+    perEmployee: Record<string, { outbound: number; inbound: number; missed: number; talkTimeSec: number }>;
+    details: { direction: string; from: string; to: string; duration: number; result: string; received_at: string }[];
+  };
 }

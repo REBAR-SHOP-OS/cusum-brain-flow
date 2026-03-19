@@ -79,6 +79,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     { data: accountingInv },
     { data: accountingBill },
     { data: communications },
+    { data: rcCallsToday },
   ] = await Promise.all([
     supabase.from("cut_plans").select("id, status").in("status", ["queued", "running"]),
     supabase.from("cut_plan_items").select("id, phase, completed_pieces, total_pieces").in("phase", ["queued", "cutting", "bending"]).limit(500),
@@ -86,7 +87,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     supabase.from("leads").select("id, title, stage, expected_value, probability").in("stage", ["new", "contacted", "qualified", "proposal"]).order("probability", { ascending: false }).limit(20),
     supabase.from("customers").select("id").eq("status", "active").limit(100),
     supabase.from("deliveries").select("id, status, scheduled_date").gte("scheduled_date", today).lte("scheduled_date", today).limit(50),
-    supabase.from("profiles").select("id, full_name, user_id").not("full_name", "is", null),
+    supabase.from("profiles").select("id, full_name, user_id, email").not("full_name", "is", null),
     supabase.from("activity_events").select("id, event_type, entity_type, description, created_at").order("created_at", { ascending: false }).limit(20),
     supabase.from("knowledge").select("title, category, content").order("created_at", { ascending: false }).limit(50),
     supabase.from("chat_sessions").select("id, title, agent_name, user_id, created_at").gte("created_at", today + "T00:00:00").order("created_at", { ascending: false }).limit(100),
@@ -94,6 +95,8 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Invoice").gt("balance", 0).limit(50),
     supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Vendor").gt("balance", 0).limit(50),
     supabase.from("communications").select("subject, from_address, to_address, body_preview, received_at").eq("direction", "inbound").ilike("to_address", "%@rebar.shop%").order("received_at", { ascending: false }).limit(50),
+    // RingCentral calls today
+    supabase.from("communications").select("from_address, to_address, direction, received_at, metadata, source").eq("source", "ringcentral").gte("received_at", today + "T00:00:00").order("received_at", { ascending: false }).limit(500),
   ]);
 
   const invoices = (accountingInv || []).map((r: any) => ({ Balance: r.balance, DueDate: r.data?.DueDate, CustomerRef: r.data?.CustomerRef }));
@@ -104,6 +107,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name]));
   const profileIdMap = new Map((profiles || []).map((p: any) => [p.id, p.full_name]));
+  const emailProfileMap = new Map((profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"]));
 
   const activityMap = new Map<string, any>();
   for (const s of (agentSessions || [])) {
@@ -118,6 +122,34 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     clocked_in: e.clock_in,
     clocked_out: e.clock_out,
   }));
+
+  // RingCentral call aggregation
+  const rcCalls = (rcCallsToday || []).filter((r: any) => {
+    const meta = r.metadata as Record<string, unknown> | null;
+    return meta?.type === "call";
+  });
+  const rcCallsByEmployee: Record<string, { outbound: number; inbound: number; missed: number; talkTimeSec: number }> = {};
+  const rcCallDetailsList: any[] = [];
+
+  for (const call of rcCalls) {
+    const meta = call.metadata as Record<string, unknown> | null;
+    const dir = (call.direction || "inbound").toLowerCase();
+    const result = (meta?.result as string) || "Unknown";
+    const duration = (meta?.duration as number) || 0;
+    const isMissed = result === "Missed" || result === "No Answer";
+
+    const addr = dir === "outbound" ? call.from_address : call.to_address;
+    const addrClean = addr?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || addr || "";
+    const employeeName = emailProfileMap.get(addrClean) || addrClean;
+
+    if (!rcCallsByEmployee[employeeName]) rcCallsByEmployee[employeeName] = { outbound: 0, inbound: 0, missed: 0, talkTimeSec: 0 };
+    if (dir === "outbound") rcCallsByEmployee[employeeName].outbound++;
+    else rcCallsByEmployee[employeeName].inbound++;
+    if (isMissed) rcCallsByEmployee[employeeName].missed++;
+    rcCallsByEmployee[employeeName].talkTimeSec += duration;
+
+    rcCallDetailsList.push({ direction: dir, from: call.from_address, to: call.to_address, duration, result, received_at: call.received_at });
+  }
 
   return {
     financials: {
@@ -150,5 +182,12 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     agentActivity: Array.from(activityMap.values()),
     teamPresence,
     inboundEmails: communications || [],
+    ringcentralCalls: {
+      totalCalls: rcCalls.length,
+      totalInbound: rcCalls.filter((c: any) => (c.direction || "").toLowerCase() === "inbound").length,
+      totalMissed: rcCalls.filter((c: any) => { const m = c.metadata as any; return (m?.result === "Missed" || m?.result === "No Answer"); }).length,
+      perEmployee: rcCallsByEmployee,
+      details: rcCallDetailsList.slice(0, 50),
+    },
   };
 }
