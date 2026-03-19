@@ -1,28 +1,31 @@
 
 
-# بهبود سرعت، صدای زنانه، و فیلتر نویز قوی‌تر
+# بهبود دقت شنیداری، سرعت ترجمه، و حذف کامل خروجی در سکوت
+
+## مشکلات فعلی (از اسکرین‌شات)
+
+1. **"(speaking in foreign language)..."** — Scribe هنگام سکوت یا صدای نامشخص این متن را تولید می‌کند
+2. سرعت ترجمه می‌تواند بهتر شود
 
 ## تغییرات
 
-### 1. `src/hooks/useAzinVoiceRelay.ts` — صدای زنانه + سرعت + فیلتر قوی‌تر
+### 1. `src/hooks/useAzinVoiceRelay.ts` — فیلتر قوی‌تر + سرعت
 
-**صدا**: هر دو صدا زنانه شوند:
-- انگلیسی: **Sarah** (`EXAVITQu4vr4xnSDxMaL`) — multilingual v2
-- فارسی: **Sarah** (همان voice، multilingual v2 فارسی هم ساپورت می‌کند)
+**فیلتر سکوت/نویز:**
+- بلاک کردن متن‌هایی که با پرانتز شروع می‌شوند: `(speaking in foreign language)`, `(music)`, `(laughter)` — اینها annotation های Scribe هستند، نه گفتار واقعی
+- بلاک کردن متن‌هایی که فقط نقطه‌گذاری هستند (مثل `...`)
+- حفظ فیلتر ۳ کلمه / ۸ کاراکتر برای جلوگیری از نویز کوتاه
 
-**سرعت**: پارامتر `speed: 1.1` به TTS request اضافه شود (10% سریع‌تر بدون خرابی کیفیت)
+**حذف partial text نویزی:**
+- اگر partial text حاوی `(speaking` یا `(music` باشد، نمایش ندهد
 
-**فیلتر نویز قوی‌تر** برای جلوگیری از نوشتن متن الکی:
-- حداقل **3 کلمه** (به جای 2) و حداقل **8 کاراکتر** (به جای 5)
-- بلاک‌لیست کلمات تکراری و بی‌معنی (مثل "yeah yeah", "hmm", تکرار حروف)
-- تشخیص زبان‌های غیر فارسی/انگلیسی (مثل تامیل در اسکرین‌شات) و حذف آن‌ها — اگر متن حاوی حروف فارسی/عربی یا لاتین نباشد، نادیده گرفته شود
+### 2. `supabase/functions/translate-message/index.ts` — مدل سریع‌تر
 
-### 2. `supabase/functions/elevenlabs-tts/index.ts` — مدل سریع‌تر
-
-- تغییر مدل TTS از `eleven_multilingual_v2` به `eleven_turbo_v2_5` — لیتنسی کمتر، کیفیت خوب
-- `speed` پارامتر از کلاینت دریافت شود (پیش‌فرض 1.0)
+- تغییر مدل از `gemini-3-flash-preview` به `gemini-2.5-flash` — پایدارتر و سریع‌تر
+- کاهش temperature از 0.0 به 0.0 (همان — حداکثر دقت)
+- اضافه کردن `maxTokens: 500` برای پاسخ سریع‌تر
 
 ### فایل‌ها
-- `src/hooks/useAzinVoiceRelay.ts` — voice IDs، speed، noise filter
-- `supabase/functions/elevenlabs-tts/index.ts` — مدل turbo
+- `src/hooks/useAzinVoiceRelay.ts`
+- `supabase/functions/translate-message/index.ts`
 
