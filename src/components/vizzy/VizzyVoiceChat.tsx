@@ -69,7 +69,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     : isActive
     ? "Vizzy is speaking..."
     : isConnected
-    ? "Listening..."
+    ? (isMuted ? "Muted" : "Listening...")
     : "";
 
   // Orbit animation handled via CSS keyframes instead of RAF state updates
