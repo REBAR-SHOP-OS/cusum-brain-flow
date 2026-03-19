@@ -570,13 +570,7 @@ serve(async (req) => {
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const accessToken = await getAccessTokenForUser(userId, clientIp);
 
-    // Parse body for parameters
-    let body: { maxResults?: number; pageToken?: string; query?: string } = {};
-    try {
-      body = await clonedReq.json();
-    } catch {
-      // No body or invalid JSON
-    }
+    // body already parsed above (before auth check)
 
     const maxResults = String(body.maxResults ?? 20);
     const pageToken = body.pageToken ?? "";
