@@ -460,7 +460,99 @@ export async function buildFullVizzyContext(
     .map(([name, hrs]) => `  • ${name}: ${hrs.toFixed(1)} hrs`)
     .join("\n");
 
-  // ═══ EMAIL BIRD'S-EYE VIEW (per employee) ═══
+  // ═══ DIGITAL FOOTPRINT — Real Active Time per Employee ═══
+  // Collect ALL timestamped actions per employee from every data source
+  const footprintTimestamps: Record<string, number[]> = {};
+  const addFootprint = (name: string, isoTime: string) => {
+    if (!name || name === "Unknown" || !isoTime) return;
+    if (!footprintTimestamps[name]) footprintTimestamps[name] = [];
+    footprintTimestamps[name].push(new Date(isoTime).getTime());
+  };
+
+  // Source 1: Activity events (page views, mutations, clicks)
+  for (const ev of (employeeEvents || [])) {
+    const name = profileUserIdMap.get(ev.actor_id) || "Unknown";
+    addFootprint(name, ev.created_at);
+  }
+  // Source 2: Emails sent/received
+  for (const e of (allEmailsToday || [])) {
+    if (e.direction === "outbound") {
+      const fromEmail = e.from_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
+      const name = emailProfileMap.get(fromEmail);
+      if (name) addFootprint(name, e.received_at);
+    }
+  }
+  // Source 3: Agent sessions (chat with AI)
+  for (const s of (agentSessions || [])) {
+    const name = profileUserIdMap.get(s.user_id) || "Unknown";
+    addFootprint(name, s.created_at);
+  }
+  // Source 4: Agent actions
+  for (const a of (agentActions || [])) {
+    const name = profileUserIdMap.get(a.user_id) || "Unknown";
+    addFootprint(name, a.created_at);
+  }
+  // Source 5: RingCentral calls
+  for (const call of (rcCallsToday || [])) {
+    const meta = call.metadata as Record<string, unknown> | null;
+    if (meta?.type !== "call") continue;
+    const dir = (call.direction || "inbound").toLowerCase();
+    const addr = dir === "outbound" ? call.from_address : call.to_address;
+    const addrClean = addr?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || addr || "";
+    const name = emailProfileMap.get(addrClean);
+    if (name) addFootprint(name, call.received_at);
+  }
+  // Source 6: Work orders updated
+  for (const wo of (workOrdersToday || [])) {
+    if (!wo.assigned_to) continue;
+    const name = profileIdMap.get(wo.assigned_to) || "Unknown";
+    if (wo.actual_start) addFootprint(name, wo.actual_start);
+    if (wo.actual_end) addFootprint(name, wo.actual_end);
+  }
+
+  // Compute active time: group timestamps into "active windows" (gap > 15min = idle)
+  const IDLE_GAP_MS = 15 * 60 * 1000; // 15 minutes
+  const footprintLines: string[] = [];
+  const footprintAlerts: string[] = [];
+
+  for (const [name, timestamps] of Object.entries(footprintTimestamps)) {
+    if (timestamps.length < 2) {
+      footprintLines.push(`  • ${name}: ${timestamps.length} action(s) — insufficient data for active time`);
+      continue;
+    }
+    timestamps.sort((a, b) => a - b);
+    let activeMs = 0;
+    let gapCount = 0;
+    let longestGapMin = 0;
+    for (let i = 1; i < timestamps.length; i++) {
+      const gap = timestamps[i] - timestamps[i - 1];
+      if (gap <= IDLE_GAP_MS) {
+        activeMs += gap;
+      } else {
+        gapCount++;
+        const gapMin = Math.round(gap / 60000);
+        if (gapMin > longestGapMin) longestGapMin = gapMin;
+      }
+    }
+    const activeHrs = (activeMs / 3600000).toFixed(1);
+    const clockedHrs = hoursWorked[name]?.toFixed(1) || "?";
+    const firstAction = new Date(timestamps[0]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const lastAction = new Date(timestamps[timestamps.length - 1]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const density = (timestamps.length / (activeMs / 3600000 || 1)).toFixed(0);
+
+    footprintLines.push(`  • ${name}: ${activeHrs}hrs active / ${clockedHrs}hrs clocked | ${timestamps.length} actions | ${firstAction}–${lastAction} | ${gapCount} idle gaps (longest: ${longestGapMin}min) | ${density} actions/hr`);
+
+    // Flag significant discrepancies
+    const clockedNum = hoursWorked[name] || 0;
+    const activeNum = activeMs / 3600000;
+    if (clockedNum > 2 && activeNum < clockedNum * 0.4) {
+      footprintAlerts.push(`  ⚠️ ${name}: Only ${activeHrs}hrs active out of ${clockedHrs}hrs clocked (${Math.round((activeNum / clockedNum) * 100)}% utilization) — may need attention`);
+    }
+    if (longestGapMin >= 60) {
+      footprintAlerts.push(`  ⚠️ ${name}: ${longestGapMin}-minute idle gap detected — long break or away from system`);
+    }
+  }
+
   const emailProfileMap = new Map(
     (profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"])
   );
@@ -647,6 +739,12 @@ ${rcEmployeeLines || "    No call activity today"}
   Call Details:
 ${rcCallDetails.length > 0 ? rcCallDetails.join("\n") : "    No calls today"}
 ${salesFlags.length > 0 ? `\n  🚨 SALES & CALL SUPERVISION FLAGS:\n${salesFlags.join("\n")}` : ""}
+
+👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)
+  Based on: page views, emails sent, calls, AI sessions, work orders, agent actions
+  Idle gap threshold: 15 minutes (gaps longer than 15min = not counted as active)
+${footprintLines.length > 0 ? footprintLines.join("\n") : "  No footprint data today"}
+${footprintAlerts.length > 0 ? `\n  🚨 UTILIZATION ALERTS:\n${footprintAlerts.join("\n")}` : ""}
 
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
