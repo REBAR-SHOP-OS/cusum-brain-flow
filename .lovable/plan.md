@@ -1,121 +1,105 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+# Vizzy System Audit
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+## Architecture Overview
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+```text
+┌─────────────────────────────────────────────────────────┐
+│                    CLIENT LAYER                          │
+│  VizzyVoiceChat.tsx → useVizzyVoiceEngine → useVoiceEngine│
+│  (OpenAI Realtime WebRTC, shimmer voice, gpt-4o-mini)    │
+│  AgentWorkspace.tsx (text chat via admin-chat function)   │
+└──────────────┬──────────────────────────────┬────────────┘
+               │                              │
+┌──────────────▼──────────────┐  ┌────────────▼────────────┐
+│   INTELLIGENCE PIPELINE      │  │   ACTION EXECUTION       │
+│  vizzy-pre-digest (primary)  │  │  vizzy-erp-action        │
+│  vizzy-daily-brief (fallback)│  │  (create_task, send_email,│
+│  vizzy-briefing (compressor) │  │   merge_customers, etc.)  │
+│  vizzy-context (snapshot API)│  │  vizzy-agent-audit        │
+└──────────────┬──────────────┘  └────────────────────────────┘
+               │
+┌──────────────▼──────────────┐
+│   SHARED DATA LAYER          │
+│  vizzyFullContext.ts (998 ln) │
+│  23 parallel DB queries       │
+│  5 cached, 18 realtime        │
+│  Phone/email → employee map   │
+│  Digital footprint engine     │
+│  Per-person daily reports     │
+└──────────────────────────────┘
+```
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+## Component Scores
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+| Component | Score | Status |
+|-----------|-------|--------|
+| Voice Engine (`useVoiceEngine.ts`) | 8/10 | Solid — clean WebRTC, timeout, mute, session cap |
+| Vizzy Prompt (`useVizzyVoiceEngine.ts`) | 9/10 | Excellent — comprehensive, anti-hallucination, banned phrases |
+| Pre-Digest Pipeline | 8/10 | Strong — benchmark history, agent audit integration |
+| Full Context Builder | 7/10 | Functional but massive (998 lines, ~25 queries) |
+| ERP Action Handler | 8/10 | Well-structured, proper auth, good coverage |
+| Call Receptionist | 8/10 | Clean, focused, proper confidentiality rules |
+| Agent Audit | 9/10 | Thorough — reads source + logs, generates patches |
+| VizzyVoiceChat UI | 7/10 | Good UX, but action parsing in useEffect is fragile |
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+## Issues Found
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+### 1. Context Builder Performance Risk (Medium)
+**vizzyFullContext.ts** runs 23 parallel queries (18 uncached) on every session start. At ~998 lines, it's the single largest shared module. Any single query timeout cascades to a failed session.
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+**Recommendation**: Add per-query timeouts and graceful degradation — if one query fails, omit that section rather than failing the entire context build.
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+### 2. Hardcoded Phone-to-Employee Map (Medium)
+Lines 494-507 of `vizzyFullContext.ts` hardcode phone numbers for employee mapping. When employees change numbers or new hires arrive, this breaks silently.
 
-### Changes
+**Recommendation**: Move phone mappings to a `employee_phones` table or a column on `profiles`. The auto-enrichment from call notes (lines 509-520) is smart but only catches numbers that appear in call note subjects.
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+### 3. VIZZY-ACTION Parsing in useEffect (Low-Medium)
+`VizzyVoiceChat.tsx` lines 88-158 parse and execute `[VIZZY-ACTION]` blocks inside a `useEffect` triggered by transcript changes. This has no debounce, no retry on failure, and could double-fire if React re-renders.
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+**Current mitigation**: `processedActionsRef` prevents re-processing the same transcript ID. This works but is fragile.
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+### 4. Duplicate Context Endpoints (Low)
+Three functions serve similar purposes:
+- `vizzy-context` — returns raw snapshot object
+- `vizzy-daily-brief` — returns AI-summarized briefing + raw context
+- `vizzy-pre-digest` — returns AI-digested + benchmark-aware briefing + raw context
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+`vizzy-context` appears unused by the voice flow (only `pre-digest` and `daily-brief` are called from `useVizzyVoiceEngine`).
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+### 5. Token/Context Size (Medium)
+The full prompt (`VIZZY_INSTRUCTIONS` at 300 lines) + pre-digest output + raw context can exceed `gpt-4o-mini-realtime-preview`'s effective context window. The pre-digest step helps compress, but `rawContext` is still passed alongside the digest (line 320), potentially doubling the payload.
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+**Recommendation**: When digest is available, truncate or omit rawContext to stay within token limits. The digest should be self-sufficient for voice answers.
 
-## Completed: Odoo Mirror Pipeline + Sales Department Patch
+### 6. Rate Limiting Discrepancy (Low)
+- `vizzy-pre-digest`: 5 per 10 minutes
+- `vizzy-daily-brief`: 10 per 5 minutes
+- `vizzy-agent-audit`: 3 per 30 minutes
 
-### Assessment
-Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+These seem reasonable, but there's no rate limit on `vizzy-context` or `vizzy-call-receptionist`.
 
-### Changes Implemented
+### 7. No Session Logging (Low)
+Voice sessions aren't persisted to any table. The text chat logs to `chat_messages`, but voice transcripts are only held in React state and lost on page close. This means no audit trail for voice-initiated actions.
 
-**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
-- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
-- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
-- 30s cooldown per lead to prevent API rate limiting
-- Shows "Syncing…" indicator in header during refresh
-- Invalidates all lead-related query keys on completion
+## What's Working Well
 
-**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
-- New `mode: "single"` + `odoo_id` parameter
-- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
-- Logs stage change events if stage differs
-- Returns fast without touching other leads
+- **Tiered autonomy model** (auto-execute / confirm / CEO-only) is well-defined and enforced
+- **Anti-hallucination anchoring** via `[FACTS]` block is smart
+- **Digital footprint engine** (15-min idle gap calculation) is genuinely useful
+- **Per-person daily reports** combining all data sources is comprehensive
+- **Benchmark history** (last 7 sessions) enables trend detection
+- **Fuzzy name matching** for voice input handles accent/mishearing well
+- **Sync staleness detection** prevents false "no calls" answers
+- **Call note integration** (7-day window) provides real conversation context
 
-**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
-- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
-- Logs reconciliation events with reason
-- Only archives non-terminal leads (skips already won/lost)
+## Recommended Next Steps (Priority Order)
 
-**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
-- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
-- Improves timeline readability
+1. **Truncate rawContext when digest exists** — prevent token overflow, improve response quality
+2. **Add voice session persistence** — save transcripts + actions to DB for audit trail
+3. **Move phone mappings to database** — eliminate hardcoded values
+4. **Add graceful degradation to context builder** — individual query failure shouldn't kill the session
+5. **Add rate limiting to vizzy-context and vizzy-call-receptionist**
 
-**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
-- Footer shows "Synced X minutes ago" with color-coded status dot
-- Green: <5min, Yellow: <30min, Red: >30min
-
-### Files Changed
-- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
-- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
-- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
-
-### No Changes Needed (Already Existed)
-- Sales Department sidebar, routes, pages, tables, hooks
-- Odoo chatter sync single mode (already existed)
-- OdooChatter unified timeline (already existed)
-
-### Risks
-- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
-- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
