@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Mic, Loader2 } from "lucide-react";
+import { X, Mic, Loader2, FileText } from "lucide-react";
 import { useAzinVoiceRelay, RelayTranscript } from "@/hooks/useAzinVoiceRelay";
 import { cn } from "@/lib/utils";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { detectRtl } from "@/utils/textDirection";
 import { primeMobileAudio } from "@/lib/audioPlayer";
+import jsPDF from "jspdf";
+import { addMarkdownToPdf } from "@/lib/pdfMarkdownRenderer";
 
 interface Props {
   onClose: () => void;
