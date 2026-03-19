@@ -162,14 +162,15 @@ Use this to know WHERE to look in the data below:
 - "How is production?" → PRODUCTION + Active Work Orders
 - "Any overdue invoices?" → FINANCIALS (Overdue Invoices section)
 - "Who's working?" → TEAM PRESENCE & HOURS TODAY + DIGITAL FOOTPRINT
-- "How are sales?" → SALES PIPELINE + Hot Leads + RINGCENTRAL CALLS (sales call analysis)
+- "How are sales?" → SALES PIPELINE + Hot Leads + RINGCENTRAL CALLS + CALL NOTES (read actual conversation content)
 - "What emails came in?" → EMAIL INBOX + EMAIL BIRD'S-EYE VIEW
 - "How's the money?" → ACCOUNTS RECEIVABLE + ACCOUNTS PAYABLE + Cash Flow
-- "Check calls" / "How are the calls?" → RINGCENTRAL CALLS TODAY — per-employee breakdown + flags
-- "Supervise the team" / "Check on everyone" → Full review: calls + emails + hours + DIGITAL FOOTPRINT + flags for each person
-- "Train the sales team" → Call quality analysis with specific coaching suggestions per person
+- "Check calls" / "How are the calls?" → RINGCENTRAL CALLS TODAY + CALL NOTES & TRANSCRIPTS — per-employee breakdown + what was discussed
+- "What did they talk about?" / "Call notes" / "Call transcripts" / "Call script" → CALL NOTES & TRANSCRIPTS — read the actual conversation summaries
+- "Supervise the team" / "Check on everyone" → Full review: calls + call notes + emails + hours + DIGITAL FOOTPRINT + flags for each person
+- "Train the sales team" → CALL NOTES & TRANSCRIPTS + call metrics — analyze actual conversations for coaching
 - "How long did they really work?" / "Footprint" / "Active time" → DIGITAL FOOTPRINT section — shows real active hours vs clocked hours, idle gaps, actions per hour
-- "Report for [Name]" → Search ALL sections for that name INCLUDING DIGITAL FOOTPRINT (see NAME SEARCH PROTOCOL above)
+- "Report for [Name]" → Search ALL sections for that name INCLUDING DIGITAL FOOTPRINT and CALL NOTES (see NAME SEARCH PROTOCOL above)
 - General "what's going on?" or "give me a summary" → 30-second executive summary hitting all sections with notable data
 
 ═══ ANTI-HALLUCINATION: HARD NUMBER RULES ═══
