@@ -39,6 +39,9 @@ export interface VoiceEngineConfig {
 const OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime";
 const DEFAULT_MAX_SESSION_MS = 30 * 60 * 1000; // 30 minutes
 
+// RTL character detection for Farsi/Arabic
+const FARSI_RE = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
 // Client-side self-talk filter — blocks agent transcripts that are self-generated
 const SELF_TALK_PATTERNS = [
   /^(hello|hi|hey|salam|welcome)/i,
@@ -50,18 +53,55 @@ const SELF_TALK_PATTERNS = [
   /\b(that's interesting|good question|i see|i understand)\b/i,
   /^(oh|nothing|hmm|well|so|alright|yes|no|yeah|nah|uh|um|huh)\.?$/i,
   /^(sorry|pardon|excuse me|right|okay then|now|wait)\.?$/i,
+  /\b(what do you|what should|can you|do you want|would you like)\b/i,
+  /\b(first|listen|carefully|you shouldn't|you should)\b/i,
+  /^(go ahead|please|thank you|thanks|you're welcome)\.?$/i,
+  /^\.{1,3}$/,  // just dots
 ];
 
 // Single-word or two-word filler that is clearly not a translation
-const SHORT_FILLER_RE = /^[a-zA-Z]{1,8}\.?$/; // single short English word
+const SHORT_FILLER_RE = /^[a-zA-Z]{1,12}\.?$/; // single short English word
 
-function isSelfTalk(text: string): boolean {
-  const lower = text.toLowerCase().trim();
+function isSelfTalk(text: string, lastUserText?: string): boolean {
+  const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+  
+  // Block empty or whitespace
+  if (!trimmed || trimmed.length < 2) return true;
+  
+  // Pattern match
   if (SELF_TALK_PATTERNS.some(p => p.test(lower))) return true;
-  // Block very short agent outputs (1-2 words) that look like filler, not translations
+  
+  // Block very short agent outputs (1-2 words) that look like filler
   const words = lower.split(/\s+/);
-  if (words.length <= 2 && SHORT_FILLER_RE.test(words[0]) && !lower.match(/[\u0600-\u06FF]/)) return true;
+  if (words.length <= 2 && SHORT_FILLER_RE.test(words[0]) && !FARSI_RE.test(trimmed)) return true;
+  
+  // Language-mismatch filter: translation must switch languages
+  if (lastUserText) {
+    const userIsFarsi = FARSI_RE.test(lastUserText);
+    const agentIsFarsi = FARSI_RE.test(trimmed);
+    // If user spoke Farsi, agent MUST output English (no Farsi chars)
+    // If user spoke English, agent MUST output Farsi (has Farsi chars)
+    if (userIsFarsi && agentIsFarsi) return true;  // same language = self-talk
+    if (!userIsFarsi && !agentIsFarsi) return true; // same language = self-talk
+  }
+  
+  // Echo detection: if agent text is very similar to user text, it's parroting
+  if (lastUserText && lastUserText.length > 5) {
+    const similarity = textSimilarity(lower, lastUserText.toLowerCase());
+    if (similarity > 0.7) return true;
+  }
+  
   return false;
+}
+
+// Simple Jaccard similarity for echo detection
+function textSimilarity(a: string, b: string): number {
+  const setA = new Set(a.split(/\s+/));
+  const setB = new Set(b.split(/\s+/));
+  const intersection = new Set([...setA].filter(x => setB.has(x)));
+  const union = new Set([...setA, ...setB]);
+  return union.size === 0 ? 0 : intersection.size / union.size;
 }
 
 export function useVoiceEngine(config: VoiceEngineConfig) {
