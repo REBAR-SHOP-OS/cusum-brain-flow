@@ -34,6 +34,7 @@ import { DailyBriefingCard } from "@/components/ceo/DailyBriefingCard";
 import { SLATrackerCard } from "@/components/ceo/SLATrackerCard";
 import { DailyAssignments } from "@/components/ceo/DailyAssignments";
 import { FixRequestQueue } from "@/components/ceo/FixRequestQueue";
+import { FixesQueue } from "@/components/ceo/FixesQueue";
 
 /* ─── Helpers ─── */
 
