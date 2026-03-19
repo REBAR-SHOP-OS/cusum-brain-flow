@@ -75,6 +75,20 @@ Deno.serve(async (req) => {
       return `[${date}] ${b.content}`;
     }).join("\n");
 
+    // Step 2b: Load latest agent audit from vizzy_memory
+    const { data: prevAudit } = await supabase
+      .from("vizzy_memory")
+      .select("content, created_at")
+      .eq("user_id", user.id)
+      .eq("category", "agent_audit")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const agentAuditContext = prevAudit
+      ? `\n═══ PREVIOUS AGENT AUDIT (${new Date(prevAudit.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}) ═══\n${prevAudit.content}`
+      : "\nNo previous agent audit available.";
+
     // Step 3: AI pre-digestion — produce a concise intelligence briefing
     const result = await callAI({
       provider: "gemini",
