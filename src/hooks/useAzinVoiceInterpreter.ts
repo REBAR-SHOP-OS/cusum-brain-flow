@@ -1,4 +1,8 @@
 import { useVoiceEngine } from "./useVoiceEngine";
+import type { VoiceTranscript, VoiceEngineState } from "./useVoiceEngine";
+
+export type InterpreterTranscript = VoiceTranscript;
+export type InterpreterState = VoiceEngineState;
 
 /**
  * AZIN Voice Interpreter — thin wrapper around useVoiceEngine
