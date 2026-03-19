@@ -235,6 +235,29 @@ serve(async (req) => {
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      // Pre-flight: verify pages_manage_posts permission is granted
+      try {
+        const permRes = await fetch(`${GRAPH_API}/me/permissions?access_token=${pageAccessToken}`);
+        const permData = await permRes.json();
+        if (permData.data && Array.isArray(permData.data)) {
+          const managePostsPerm = permData.data.find((p: any) => p.permission === "pages_manage_posts");
+          if (!managePostsPerm || managePostsPerm.status !== "granted") {
+            const errMsg = "Facebook App does not have 'pages_manage_posts' permission approved. If the app is in Development mode, add this user as a Tester/Admin in Meta Developer Console → App Roles. If the app is Live, submit 'pages_manage_posts' for App Review.";
+            console.error("[social-publish] Missing pages_manage_posts permission");
+            if (post_id) {
+              await supabaseAdmin.from("social_posts").update({ last_error: errMsg }).eq("id", post_id);
+            }
+            return new Response(
+              JSON.stringify({ error: errMsg }),
+              { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          console.log("[social-publish] pages_manage_posts permission verified ✓");
+        }
+      } catch (permErr) {
+        console.warn("[social-publish] Permission check call failed, proceeding anyway:", permErr);
+      }
       result = await publishToFacebook(pageId, pageAccessToken, message, image_url);
     } else if (platform === "instagram") {
       const igAccounts = (tokenData.instagram_accounts as Array<{ id: string; username: string; pageId: string }>) || [];
