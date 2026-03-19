@@ -128,6 +128,13 @@ If uncertain, return empty strings.${contextSection}`;
     try {
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       translations = JSON.parse(cleaned);
+      // Post-parse validation: strip translations shorter than 3 words
+      for (const key of Object.keys(translations)) {
+        const val = (translations[key] || "").trim();
+        if (val.split(/\s+/).length < 3) {
+          translations[key] = "";
+        }
+      }
     } catch {
       console.error("Failed to parse translation:", raw);
       translations = {};

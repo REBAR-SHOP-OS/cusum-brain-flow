@@ -71,9 +71,15 @@ export function useRealtimeTranscribe() {
           const translatedFa = res?.translations?.fa;
 
           // If AI determined it's unintelligible noise, silently remove the entry
-          // For auto/en source, check EN translation; for fa source, check EN translation
           const primaryTranslation = currentSourceLang === "fa" ? translatedEn : (translatedEn || translatedFa);
           if (!primaryTranslation || !primaryTranslation.trim()) {
+            setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
+            return;
+          }
+
+          // Post-translation length check: if translation is too short, discard
+          const translationWordCount = primaryTranslation.trim().split(/\s+/).length;
+          if (translationWordCount < 3) {
             setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }
@@ -98,11 +104,8 @@ export function useRealtimeTranscribe() {
           );
         })
         .catch(() => {
-          setCommittedTranscripts((prev) =>
-            prev.map((t) =>
-              t.id === entryId ? { ...t, translatedText: t.text, isTranslating: false } : t
-            )
-          );
+          // Silent discard on error — never show raw transcription
+          setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
         });
     },
   });
