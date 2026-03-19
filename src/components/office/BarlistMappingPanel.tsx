@@ -159,7 +159,7 @@ function buildDimensionsJson(row: ExtractRow, factor: number): Record<string, nu
 interface BarlistMappingPanelProps {
   rows: ExtractRow[];
   sessionId: string;
-  onConfirmMapping: (mappedRows: MappedRow[]) => void;
+  onConfirmMapping: (mappedRows: MappedRow[], unitSystem: string) => void;
   disabled?: boolean;
 }
 
@@ -224,7 +224,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       grade: String((row as any)[mapping.grade] ?? ""),
     }));
     setConfirmed(true);
-    onConfirmMapping(allMapped);
+    onConfirmMapping(allMapped, lengthUnit === "imperial" || lengthUnit === "ft" || lengthUnit === "in" ? "imperial" : "metric");
   };
 
   return (
