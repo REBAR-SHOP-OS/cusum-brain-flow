@@ -1,78 +1,61 @@
 
-Fix Chat Vizzy’s RingCentral analytics/runtime bug
 
-What’s actually wrong:
-- The Vite output shown is not the real failure; the frontend build is succeeding.
-- The real issue is in Chat Vizzy’s backend tool execution.
-- I confirmed `admin-chat` is querying non-existent `communications` columns:
-  - `channel`
-  - `duration`
-  - `missed`
-  - `employee_name`
-- The actual `communications` table stores call details in `metadata` and identifies RingCentral records with `source = "ringcentral"`.
-- I also found a second backend bug in `admin-chat`: the SSE stream is being closed multiple times, which matches the edge logs:
-  - `TypeError: The associated stream is already closing`
+# Fix: Sync ALL Company RingCentral Calls (Not Just One User)
 
-Implementation plan
+## Problem
+The `ringcentral-sync` function currently fetches calls per-extension (`/account/~/extension/~/call-log`), meaning it only gets calls for the specific authenticated user's extension. Since only `sattar@rebar.shop` has a stored RC token, only his calls sync. The rest of the company's calls, SMS, voicemails, and faxes are missing.
 
-1. Fix `rc_get_call_analytics` in `supabase/functions/admin-chat/index.ts`
-- Replace the broken query:
-  - remove `.eq("channel", "phone")`
-  - stop selecting `duration`, `missed`, `employee_name`
-- Query fields that really exist:
-  - `user_id`, `company_id`, `source`, `direction`, `from_address`, `to_address`, `received_at`, `metadata`
-- Filter RingCentral calls correctly:
-  - `source = "ringcentral"`
-  - then filter rows where `metadata.type === "call"`
-- Derive analytics from `metadata`:
-  - duration from `metadata.duration`
-  - missed from `metadata.result === "Missed"` or `"No Answer"`
-  - outcome distribution from `metadata.result`
+## Solution
+Use RingCentral's **account-level API** endpoints to fetch ALL extensions' data in one pass, using the admin JWT token. Then map each record to the correct employee by matching RC extension IDs to user profiles.
 
-2. Restore per-employee breakdown properly
-- Use each communication row’s `user_id`
-- Load matching `profiles.full_name` for those users
-- Build `byEmployee` from the profile name map instead of the fake `employee_name` column
-- Keep “Unknown” fallback if a profile is missing
+## Implementation
 
-3. Keep the tool contract aligned with how Vizzy uses it
-- Preserve support for:
-  - `date`
-  - `days`
-- Make sure the returned JSON still includes:
-  - period
-  - summary
-  - byEmployee
-- This avoids needing prompt changes elsewhere unless the response shape changed
+### 1. Add account-level fetch functions
+- **New `fetchCompanyCallLog`**: calls `/account/~/call-log` (no `/extension/~`) — returns calls across ALL extensions
+- **New `fetchCompanyMessages`**: calls `/account/~/message-store` — returns SMS/voicemail/fax across ALL extensions
+- Both include `perPage: 250` and pagination support to get all records
+- Each record returned includes an `extension` object with `id` and `extensionNumber`
 
-4. Fix the `admin-chat` stream lifecycle bug
-- Refactor the SSE writer closing flow so it only closes once
-- Add a single guarded close helper (for example, a `closed` boolean)
-- Replace repeated `writer.close()` calls and make the `finally` block idempotent
-- This should remove the `associated stream is already closing` crashes seen in logs
+### 2. Build extension-to-user mapping
+- Fetch all company extensions from RC: `GET /account/~/extension` → list of extensions with email, name, extensionNumber
+- Query `profiles` table for all users in the company
+- Match RC extension email → profile email to build `extensionId → user_id` map
+- Fallback: if no match found, attribute to the admin user (sattar)
 
-5. Validate the fix end-to-end
-- Test the `admin-chat` function directly with the RingCentral analytics tool path
-- Confirm:
-  - no “column does not exist” errors
-  - no double-close stream error in logs
-  - Chat Vizzy returns analytics normally in the `/chat` UI
-- If analytics still look incomplete, verify the synced call rows exist and that `metadata.type = "call"` is present in recent records
+### 3. Refactor `syncAllUsers` to use company-wide fetch
+- Instead of looping per-user token and fetching per-extension:
+  - Get one admin access token (from JWT or first available token)
+  - Fetch ALL company calls/SMS/voicemail/fax in bulk
+  - Map each record to the correct `user_id` using the extension map
+  - Upsert into `communications` with proper `user_id` and `company_id`
 
-Files to update
-- `supabase/functions/admin-chat/index.ts`
+### 4. Keep per-user sync as fallback
+- The individual user sync path (when a user triggers sync from the UI) stays the same
+- The CRON/company-wide path uses the new bulk approach
 
-Technical details
-- Confirmed schema:
-  - `communications` has `source`, `source_id`, `direction`, `from_address`, `to_address`, `metadata`, `received_at`, `user_id`, `company_id`
-  - it does not have `channel`, `duration`, `missed`, or `employee_name`
-- Confirmed working pattern elsewhere:
-  - `ringcentral-call-analytics` already reads from `communications` and extracts `duration`/`result` from `metadata`
-  - `vizzy-context` also computes call stats from `metadata.type`, `metadata.duration`, and `metadata.result`
-- Confirmed runtime log issue:
-  - `admin-chat` has multiple `writer.close()` paths plus a `finally` close, which explains the stream error
+## File to update
+- `supabase/functions/ringcentral-sync/index.ts`
 
-Expected outcome
-- Chat Vizzy stops telling users the database is missing `communications.duration`
-- RingCentral call analytics works inside chat
-- The `admin-chat` function stops throwing stream-closing runtime errors
+## Technical details
+
+**Key API change:**
+```
+# Before (per-extension, misses other employees)
+GET /restapi/v1.0/account/~/extension/~/call-log
+
+# After (account-level, gets ALL employees)
+GET /restapi/v1.0/account/~/call-log
+GET /restapi/v1.0/account/~/extension (to map extensions → users)
+```
+
+**Extension mapping flow:**
+```text
+RC API: /account/~/extension → [{id: 123, email: "radin@rebar.shop", ...}, ...]
+DB: profiles → [{user_id: "abc", email: "radin@rebar.shop", company_id: "xyz"}, ...]
+Map: extensionId 123 → user_id "abc"
+```
+
+**Pagination:** Account-level endpoints may return hundreds of records. Will implement cursor-based pagination using the `navigation.nextPage` URI returned by RC.
+
+**Rate limiting:** Add 200ms delay between paginated requests to stay within RC API limits.
+
