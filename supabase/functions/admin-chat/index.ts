@@ -2138,6 +2138,12 @@ function buildActionDescription(tool: string, args: any): string {
       return `Delete product #${args.product_id}${args.force ? " (permanent)" : ""}`;
     case "wp_create_post":
       return `Create post: "${args.title}"${args.status ? ` (${args.status})` : ""}`;
+    case "rc_make_call":
+      return `Call ${args.to}${args.from ? ` from ${args.from}` : ""}`;
+    case "rc_send_sms":
+      return `Send SMS to ${args.to}: "${(args.text || "").slice(0, 50)}${(args.text || "").length > 50 ? "..." : ""}"`;
+    case "rc_send_fax":
+      return `Send fax to ${args.to}${args.cover_page_text ? ` — "${args.cover_page_text.slice(0, 40)}"` : ""}`;
     default:
       return `Execute ${tool}`;
   }
