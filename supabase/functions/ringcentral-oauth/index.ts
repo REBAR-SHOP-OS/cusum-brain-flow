@@ -130,6 +130,16 @@ serve(async (req) => {
         .maybeSingle();
 
       if (tokenData) {
+        // Ensure integration_connections row exists
+        await supabaseAdmin.from("integration_connections").upsert({
+          user_id: userId,
+          integration_id: "ringcentral",
+          status: "connected",
+          last_checked_at: new Date().toISOString(),
+          error_message: null,
+          config: { rc_email: tokenData.rc_email },
+        }, { onConflict: "user_id,integration_id" });
+
         return new Response(
           JSON.stringify({ status: "connected", email: tokenData.rc_email }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
