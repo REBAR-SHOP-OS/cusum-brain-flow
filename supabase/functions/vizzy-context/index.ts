@@ -57,7 +57,12 @@ Deno.serve(async (req) => {
 
 // Build a minimal snapshot for client-side buildVizzyContext compatibility
 async function buildSnapshotFromContext(supabase: any, userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 
   const [
     { data: cutPlans },

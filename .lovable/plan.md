@@ -1,65 +1,121 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Fix Vizzy Person Lookup Failures (4 Areas)
+## Completed: Add All Wan 2.6 Capabilities
 
-### Problem Summary
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-Vizzy says "Vicky Anderson doesn't appear in today's data" even though she clocked in. Three root causes:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-1. **Timezone bug**: `vizzyFullContext.ts` uses UTC for "today" (`new Date().toISOString().split("T")[0]`), but the business runs on ET. After 7-8pm ET, queries miss the entire day's data because UTC has rolled to the next day.
-2. **Name mismatch**: Speech-to-text produces "Neil" but the DB has "Neel Mahajan". "Radin" may be a misheard name. Vizzy has no name alias table to fuzzy-match.
-3. **Unhelpful fallback**: When no data is found, Vizzy just says "not in snapshot" without explaining what was checked or offering alternatives.
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-### Plan
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-**1. Fix timezone in `vizzyFullContext.ts`** (lines 16, and all `today + "T00:00:00"` references)
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-Replace UTC-based `today` with ET-based date:
-```typescript
-const etDate = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/New_York",
-  year: "numeric", month: "2-digit", day: "2-digit"
-}).format(new Date());
-const today = etDate; // "2026-03-19" in ET
-```
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-This ensures all time-clock, email, agent session, and activity queries match the business day.
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
 
-**2. Add employee name directory with aliases to `VIZZY_INSTRUCTIONS`** in `useVizzyVoiceEngine.ts`
+## Completed: Pipeline Unified Timeline & Data Quality Patch
 
-Add a section that maps known employees to speech-to-text variants:
-```
-═══ EMPLOYEE NAME DIRECTORY ═══
-These are the real employee names. Voice input may mishear them — use fuzzy matching:
-- Neel Mahajan (may be heard as: Neil, Neal, Nil) — Sales Manager
-- Vicky Anderson (may be heard as: Vicki, Vikki) — Accountant
-- Sattar Esmaeili (may be heard as: Satar, Sataar) — CEO
-- Saurabh Sehgal (may be heard as: Sourab, Sorab) — Sales
-- Ben Rajabifar / Behnam (may be heard as: Bin, Benn) — Estimator
-- Radin (may be heard as: Radin, Raiden, Riding) — check for this name
-When you hear a name that SOUNDS LIKE any of these, treat it as that person.
-```
+### Changes
 
-**3. Improve fallback behavior in `VIZZY_INSTRUCTIONS`**
+**Backend — Sync Fixes:**
+- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
+- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
+- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
 
-Update the NAME SEARCH PROTOCOL fallback (line 81) from the current generic message to:
-```
-If the name appears NOWHERE in the data, say: "[Name] has no recorded activity today — I checked time clock, work orders, emails, agent sessions, and activity logs. They may have the day off, or their activity hasn't synced yet. Want me to check anything else about them?"
-```
+**Frontend — Lead Detail:**
+- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
 
-**4. Add cross-check reporting requirement**
+**Frontend — Pipeline Board:**
+- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
 
-Add to NAME SEARCH PROTOCOL:
-```
-5. When delivering a person report, ALWAYS state which data sources you checked:
-   "I checked: time clock, work orders, emails, agent sessions, and activity logs."
-   This builds trust and shows thoroughness.
-```
+**Migration:**
+- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
+- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
 
-### Files to Modify
+### Known Risks
+- Priority re-mapping changes existing lead priorities on next sync (intentional)
+- File linkage fix uses both int/string ID matching — monitor results after next sync
+- Stage group filter is additive/safe — "Show all" restores full board
 
-| File | Change |
-|------|--------|
-| `supabase/functions/_shared/vizzyFullContext.ts` | Fix UTC → ET timezone for "today" |
-| `src/hooks/useVizzyVoiceEngine.ts` | Add name directory with aliases, improve fallback text, add cross-check reporting |
+### Follow-up
+- Run a full Odoo sync to apply priority and revenue fixes to existing data
+- Monitor file linkage stats in chatter sync response after deployment
 
+## Completed: Odoo Mirror Pipeline + Sales Department Patch
+
+### Assessment
+Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+
+### Changes Implemented
+
+**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
+- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
+- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
+- 30s cooldown per lead to prevent API rate limiting
+- Shows "Syncing…" indicator in header during refresh
+- Invalidates all lead-related query keys on completion
+
+**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
+- New `mode: "single"` + `odoo_id` parameter
+- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
+- Logs stage change events if stage differs
+- Returns fast without touching other leads
+
+**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
+- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
+- Logs reconciliation events with reason
+- Only archives non-terminal leads (skips already won/lost)
+
+**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
+- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
+- Improves timeline readability
+
+**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
+- Footer shows "Synced X minutes ago" with color-coded status dot
+- Green: <5min, Yellow: <30min, Red: >30min
+
+### Files Changed
+- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
+- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
+- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+
+### No Changes Needed (Already Existed)
+- Sales Department sidebar, routes, pages, tables, hooks
+- Odoo chatter sync single mode (already existed)
+- OdooChatter unified timeline (already existed)
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
+- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
