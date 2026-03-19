@@ -103,6 +103,8 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         case "conversation.item.input_audio_transcription.completed": {
           const text = msg.transcript?.trim();
           if (text) {
+            // Filter short noise fragments (greetings, filler, mic artifacts)
+            if (text.split(/\s+/).length < 3 && text.length < 15) break;
             setTranscripts(prev => [
               ...prev,
               { id: String(++idCounter.current), role: "user", text, timestamp: Date.now() },
