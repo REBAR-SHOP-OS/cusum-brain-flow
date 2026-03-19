@@ -120,14 +120,15 @@ export function useAzinVoiceRelay() {
       if (SCRIBE_ANNOTATION.test(trimmed)) return;
       if (PUNCTUATION_ONLY.test(trimmed)) return;
 
-      const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 3 || trimmed.length < 8) return;
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
-      if (letterCount / trimmed.length < 0.6) return;
+      if (letterCount < 1) return;
+      if (letterCount / trimmed.length < 0.5) return;
       if (!HAS_FARSI_OR_LATIN.test(trimmed)) return;
       if (FOREIGN_SCRIPT.test(trimmed)) return;
       if (REPEATED_CHARS.test(trimmed)) return;
-      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
+      const wordCount = trimmed.split(/\s+/).length;
+      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 1) return;
+      console.log("[relay] committed transcript accepted:", trimmed, `(${wordCount} words, ${trimmed.length} chars)`);
 
       const isRtl = detectRtl(trimmed);
       const detectedLang: "en" | "fa" = isRtl ? "fa" : "en";
