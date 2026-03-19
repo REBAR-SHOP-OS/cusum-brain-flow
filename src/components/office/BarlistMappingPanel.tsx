@@ -159,7 +159,7 @@ function buildDimensionsJson(row: ExtractRow, factor: number): Record<string, nu
 interface BarlistMappingPanelProps {
   rows: ExtractRow[];
   sessionId: string;
-  onConfirmMapping: (mappedRows: MappedRow[]) => void;
+  onConfirmMapping: (mappedRows: MappedRow[], unitSystem: string) => void;
   disabled?: boolean;
 }
 
