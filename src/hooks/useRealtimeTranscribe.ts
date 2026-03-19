@@ -21,7 +21,10 @@ export function useRealtimeTranscribe() {
   const [partialText, setPartialText] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [sourceLang, setSourceLang] = useState<SourceLang>("auto");
   const startTimeRef = useRef<number>(0);
+  const contextRef = useRef<string[]>([]);
+  const sourceLangRef = useRef<SourceLang>("auto");
   const contextRef = useRef<string[]>([]);
 
   const scribe = useScribe({
