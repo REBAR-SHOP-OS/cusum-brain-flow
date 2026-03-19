@@ -37,13 +37,13 @@ export function useRealtimeTranscribe() {
       if (!trimmed) return;
       // Filter out very short fragments (likely background noise)
       const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 3 || trimmed.length < 10) return;
+      if (wordCount < 4 || trimmed.length < 15) return;
       // Filter noise patterns: mostly non-letter chars, repeated syllables, etc.
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.5) return;
       const words = trimmed.split(/\s+/);
       const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
-      if (words.length >= 3 && uniqueWords.size === 1) return; // "da da da"
+      if (uniqueWords.size <= 2 && words.length >= 3) return; // "God, God", "da da da"
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       const entryId = crypto.randomUUID();
       const currentSourceLang = sourceLangRef.current;
@@ -71,9 +71,15 @@ export function useRealtimeTranscribe() {
           const translatedFa = res?.translations?.fa;
 
           // If AI determined it's unintelligible noise, silently remove the entry
-          // For auto/en source, check EN translation; for fa source, check EN translation
           const primaryTranslation = currentSourceLang === "fa" ? translatedEn : (translatedEn || translatedFa);
           if (!primaryTranslation || !primaryTranslation.trim()) {
+            setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
+            return;
+          }
+
+          // Post-translation length check: if translation is too short, discard
+          const translationWordCount = primaryTranslation.trim().split(/\s+/).length;
+          if (translationWordCount < 3) {
             setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }
@@ -98,11 +104,8 @@ export function useRealtimeTranscribe() {
           );
         })
         .catch(() => {
-          setCommittedTranscripts((prev) =>
-            prev.map((t) =>
-              t.id === entryId ? { ...t, translatedText: t.text, isTranslating: false } : t
-            )
-          );
+          // Silent discard on error — never show raw transcription
+          setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
         });
     },
   });
