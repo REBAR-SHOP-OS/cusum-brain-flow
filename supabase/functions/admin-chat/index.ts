@@ -1158,38 +1158,69 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
         const startDate = args.date || (days === 1 ? today : new Date(Date.now() - (days - 1) * 86400000).toISOString().split("T")[0]);
         const endDate = args.date || today;
 
-        const { data: calls, error } = await supabase
+        // Query actual communications schema — call data lives in metadata
+        const { data: rows, error } = await supabase
           .from("communications")
-          .select("direction, duration, from_address, to_address, received_at, missed, employee_name")
-          .eq("channel", "phone")
+          .select("direction, from_address, to_address, received_at, metadata, user_id")
+          .eq("source", "ringcentral")
           .gte("received_at", startDate + "T00:00:00")
           .lte("received_at", endDate + "T23:59:59")
+          .order("received_at", { ascending: false })
           .limit(500);
 
         if (error) return JSON.stringify({ error: error.message });
 
-        const total = (calls || []).length;
-        const missed = (calls || []).filter((c: any) => c.missed).length;
-        const inbound = (calls || []).filter((c: any) => c.direction === "inbound").length;
-        const outbound = (calls || []).filter((c: any) => c.direction === "outbound").length;
-        const durations = (calls || []).filter((c: any) => c.duration > 0).map((c: any) => c.duration);
-        const avgDuration = durations.length > 0 ? Math.round(durations.reduce((a: number, b: number) => a + b, 0) / durations.length) : 0;
+        // Filter to actual calls (metadata.type === "call")
+        const calls = (rows || []).filter((r: any) => {
+          const meta = r.metadata as Record<string, unknown> | null;
+          return meta?.type === "call";
+        });
 
-        // Per-employee breakdown
+        // Collect unique user_ids to resolve employee names
+        const userIds = [...new Set(calls.map((c: any) => c.user_id).filter(Boolean))];
+        let profileMap = new Map<string, string>();
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("user_id, full_name")
+            .in("user_id", userIds);
+          profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name || "Unknown"]));
+        }
+
+        // Derive analytics from metadata
+        let totalMissed = 0;
+        let totalInbound = 0;
+        let totalOutbound = 0;
+        let totalDuration = 0;
         const byEmployee: Record<string, { total: number; missed: number; inbound: number; outbound: number; totalDuration: number }> = {};
-        for (const c of (calls || [])) {
-          const name = c.employee_name || "Unknown";
+
+        for (const c of calls) {
+          const meta = c.metadata as Record<string, unknown> | null;
+          const dir = (c.direction || "inbound").toLowerCase();
+          const result = (meta?.result as string) || "Unknown";
+          const duration = (meta?.duration as number) || 0;
+          const isMissed = result === "Missed" || result === "No Answer";
+
+          if (dir === "inbound") totalInbound++;
+          else totalOutbound++;
+          if (isMissed) totalMissed++;
+          totalDuration += duration;
+
+          const name = profileMap.get(c.user_id) || "Unknown";
           if (!byEmployee[name]) byEmployee[name] = { total: 0, missed: 0, inbound: 0, outbound: 0, totalDuration: 0 };
           byEmployee[name].total++;
-          if (c.missed) byEmployee[name].missed++;
-          if (c.direction === "inbound") byEmployee[name].inbound++;
-          if (c.direction === "outbound") byEmployee[name].outbound++;
-          byEmployee[name].totalDuration += (c.duration || 0);
+          if (isMissed) byEmployee[name].missed++;
+          if (dir === "inbound") byEmployee[name].inbound++;
+          if (dir === "outbound") byEmployee[name].outbound++;
+          byEmployee[name].totalDuration += duration;
         }
+
+        const total = calls.length;
+        const avgDuration = total > 0 ? Math.round(totalDuration / total) : 0;
 
         return JSON.stringify({
           period: { from: startDate, to: endDate },
-          summary: { total, inbound, outbound, missed, avgDurationSeconds: avgDuration },
+          summary: { total, inbound: totalInbound, outbound: totalOutbound, missed: totalMissed, avgDurationSeconds: avgDuration },
           byEmployee,
         });
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
@@ -1930,8 +1961,16 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
       const enc = new TextEncoder();
+      let writerClosed = false;
+      const safeCloseWriter = () => {
+        if (writerClosed) return;
+        writerClosed = true;
+        try { writer.write(enc.encode("data: [DONE]\n\n")); } catch { /* ignore */ }
+        try { writer.close(); } catch { /* ignore */ }
+      };
 
       const sendSSE = (content: string) => {
+        if (writerClosed) return;
         writer.write(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`));
       };
 
@@ -2061,8 +2100,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
               const desc = buildActionDescription(pa.tool, pa.args);
               writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
             }
-            writer.write(enc.encode("data: [DONE]\n\n"));
-            writer.close();
+            safeCloseWriter();
             return;
           }
           
@@ -2080,8 +2118,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
               const desc = buildActionDescription(pa.tool, pa.args);
               writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
             }
-            writer.write(enc.encode("data: [DONE]\n\n"));
-            writer.close();
+            safeCloseWriter();
             return;
           }
 
@@ -2115,8 +2152,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
             writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
           }
 
-          writer.write(enc.encode("data: [DONE]\n\n"));
-          writer.close();
+          safeCloseWriter();
         } catch (bgErr) {
           console.error("Background tool processing error:", bgErr);
           try {
@@ -2124,8 +2160,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
             writer.write(enc.encode("data: [DONE]\n\n"));
           } catch { /* writer may be closed */ }
         } finally {
-          // Safety net: always close writer to prevent browser hangs
-          try { writer.close(); } catch { /* already closed */ }
+          safeCloseWriter();
         }
       })();
 
