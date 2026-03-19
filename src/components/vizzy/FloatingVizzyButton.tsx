@@ -20,7 +20,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
     const [expanded, setExpanded] = useState(false);
     const [showVoiceChat, setShowVoiceChat] = useState(false);
-    const [pulseActive, setPulseActive] = useState(true);
+    const [pulseActive] = useState(false);
 
     const { pos, handlers, wasDragged } = useDraggablePosition({
       storageKey: "vizzy-btn-pos",
