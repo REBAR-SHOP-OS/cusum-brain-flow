@@ -10,7 +10,7 @@ export function AzinVoiceChatButton({ onClick }: AzinVoiceChatButtonProps) {
     <button
       onClick={onClick}
       className="relative w-12 h-12 rounded-full focus:outline-none group"
-      aria-label="Start voice chat with AZIN"
+      aria-label="Start voice chat with Nila"
     >
       {/* Outer animated rings */}
       <motion.div
