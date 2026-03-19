@@ -138,7 +138,7 @@ If uncertain about the input being real speech, return empty strings.${contextSe
       // Post-parse validation: strip very short translations
       for (const key of Object.keys(translations)) {
         const val = (translations[key] || "").trim();
-        const minWords = key === "fa" ? 2 : 3;
+        const minWords = key === "fa" ? 1 : 2;
         if (val.split(/\s+/).length < minWords) {
           translations[key] = "";
         }
