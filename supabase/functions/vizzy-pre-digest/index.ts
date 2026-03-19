@@ -135,6 +135,17 @@ Structure it as:
     - Process inefficiencies (e.g., "Invoices over 30 days are not being followed up systematically")
     - System gaps (e.g., "No one is checking production queue daily")
     Format: "IMPROVE: [observation] — Suggestion: [actionable improvement]"
+16. AGENT INTELLIGENCE AUDIT — Review ALL AI agents (EXCEPT social/Pixel) based on the PREVIOUS AGENT AUDIT data if available:
+    - For each agent: score (1-10), key strength, key weakness
+    - Sales agent gets special attention: coaching notes for Radin
+    - If any agent needs a prompt fix, include a ready-to-paste LOVABLE COMMAND block:
+      LOVABLE COMMAND:
+      Fix the [Agent] prompt in \`supabase/functions/_shared/agents/[file].ts\`.
+      PROBLEM: [issue]
+      FIX: [exact change]
+      FILE: supabase/functions/_shared/agents/[file].ts
+      DO NOT TOUCH: All other files
+    - Summary line: "Agent Health: X agents audited, Y need attention, Z Lovable patches ready"
 
 CRITICAL RULES:
 - Preserve ALL specific numbers, names, amounts — Vizzy needs these for voice answers

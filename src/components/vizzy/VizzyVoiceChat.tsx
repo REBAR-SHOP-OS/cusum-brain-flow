@@ -359,7 +359,12 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               >
                 {t.role === "user" ? "YOU" : "VIZZY"}
               </span>
-              {t.text}
+              {/* Detect LOVABLE COMMAND blocks and render with copy button */}
+              {t.text.includes("LOVABLE COMMAND:") ? (
+                <LovableCommandRenderer text={t.text} />
+              ) : (
+                t.text.replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/g, "").trim()
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
