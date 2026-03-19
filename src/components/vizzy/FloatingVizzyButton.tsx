@@ -10,7 +10,7 @@ import { VizzyVoiceChat } from "./VizzyVoiceChat";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { motion, AnimatePresence } from "framer-motion";
 
-const BTN_SIZE = 64;
+const BTN_SIZE = 80;
 
 export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
   function FloatingVizzyButton(_props, ref) {
@@ -20,22 +20,18 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
     const [expanded, setExpanded] = useState(false);
     const [showVoiceChat, setShowVoiceChat] = useState(false);
-    const [pulseActive, setPulseActive] = useState(true);
+    const [pulseActive] = useState(false);
 
     const { pos, handlers, wasDragged } = useDraggablePosition({
       storageKey: "vizzy-btn-pos",
       btnSize: BTN_SIZE,
       defaultPos: (mobile) => ({
         x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 20 : 300,
-        y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 90 : 28) : 300,
+        y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 100 : 28) : 300,
       }),
     });
 
-    // Stop pulse after 10 seconds
-    useEffect(() => {
-      const t = setTimeout(() => setPulseActive(false), 10000);
-      return () => clearTimeout(t);
-    }, []);
+    // Pulse removed — clean face-only design
 
     const handleAvatarClick = useCallback(() => {
       if (wasDragged.current) return;
@@ -126,58 +122,21 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
             className="relative cursor-grab active:cursor-grabbing group"
             aria-label="Open Vizzy AI Assistant"
           >
-            {/* Outer orbital ring */}
-            <svg
-              className="absolute -inset-3"
-              width={BTN_SIZE + 24}
-              height={BTN_SIZE + 24}
-              viewBox={`0 0 ${BTN_SIZE + 24} ${BTN_SIZE + 24}`}
-            >
-              <circle
-                cx={(BTN_SIZE + 24) / 2}
-                cy={(BTN_SIZE + 24) / 2}
-                r={(BTN_SIZE + 24) / 2 - 3}
-                fill="none"
-                stroke="hsl(172 66% 50%)"
-                strokeWidth="2.5"
-                strokeDasharray="6 4"
-                opacity="0.5"
-                className="animate-[spin_12s_linear_infinite]"
-              />
-              <circle
-                cx={(BTN_SIZE + 24) / 2}
-                cy={(BTN_SIZE + 24) / 2}
-                r={(BTN_SIZE + 24) / 2 - 3}
-                fill="none"
-                stroke="hsl(172 66% 50%)"
-                strokeWidth="1.5"
-                opacity="0.25"
-              />
-            </svg>
-
-            {/* Pulse ring */}
-            {pulseActive && (
-              <span
-                className="absolute -inset-1 rounded-full animate-ping"
-                style={{ background: "hsl(172 66% 50% / 0.15)" }}
-              />
-            )}
-
-            {/* Avatar container */}
+            {/* Avatar container — face IS the button */}
             <div
               className="relative rounded-full overflow-hidden shadow-xl transition-transform duration-200 group-hover:scale-105"
               style={{
                 width: BTN_SIZE,
                 height: BTN_SIZE,
-                boxShadow: "0 0 24px 4px hsl(172 66% 50% / 0.3), 0 4px 16px hsl(0 0% 0% / 0.4)",
-                border: "2.5px solid hsl(172 66% 50% / 0.7)",
+                boxShadow: "0 0 18px 2px hsl(172 66% 50% / 0.25), 0 4px 12px hsl(0 0% 0% / 0.35)",
+                border: "2.5px solid hsl(172 66% 50% / 0.6)",
               }}
             >
               <img
                 src={vizzyAvatar}
                 alt="Vizzy AI"
                 className="w-full h-full object-cover pointer-events-none"
-                style={{ transform: "scale(1.5)", objectPosition: "center 30%" }}
+                style={{ transform: "scale(1.25)", objectPosition: "center 28%" }}
                 draggable={false}
               />
             </div>
