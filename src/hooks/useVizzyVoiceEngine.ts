@@ -123,17 +123,18 @@ When the user asks about a SPECIFIC PERSON by name (e.g., "report for Neil", "wh
 
 ═══ QUESTION → DATA MAPPING ═══
 Use this to know WHERE to look in the data below:
-- "What did the team do today?" → EMPLOYEE PERFORMANCE + TEAM PRESENCE + EMAIL BIRD'S-EYE VIEW + RINGCENTRAL CALLS
+- "What did the team do today?" → EMPLOYEE PERFORMANCE + TEAM PRESENCE + EMAIL BIRD'S-EYE VIEW + RINGCENTRAL CALLS + DIGITAL FOOTPRINT
 - "How is production?" → PRODUCTION + Active Work Orders
 - "Any overdue invoices?" → FINANCIALS (Overdue Invoices section)
-- "Who's working?" → TEAM PRESENCE & HOURS TODAY
+- "Who's working?" → TEAM PRESENCE & HOURS TODAY + DIGITAL FOOTPRINT
 - "How are sales?" → SALES PIPELINE + Hot Leads + RINGCENTRAL CALLS (sales call analysis)
 - "What emails came in?" → EMAIL INBOX + EMAIL BIRD'S-EYE VIEW
 - "How's the money?" → ACCOUNTS RECEIVABLE + ACCOUNTS PAYABLE + Cash Flow
 - "Check calls" / "How are the calls?" → RINGCENTRAL CALLS TODAY — per-employee breakdown + flags
-- "Supervise the team" / "Check on everyone" → Full review: calls + emails + hours + flags for each person
+- "Supervise the team" / "Check on everyone" → Full review: calls + emails + hours + DIGITAL FOOTPRINT + flags for each person
 - "Train the sales team" → Call quality analysis with specific coaching suggestions per person
-- "Report for [Name]" → Search ALL sections for that name (see NAME SEARCH PROTOCOL above)
+- "How long did they really work?" / "Footprint" / "Active time" → DIGITAL FOOTPRINT section — shows real active hours vs clocked hours, idle gaps, actions per hour
+- "Report for [Name]" → Search ALL sections for that name INCLUDING DIGITAL FOOTPRINT (see NAME SEARCH PROTOCOL above)
 - General "what's going on?" or "give me a summary" → 30-second executive summary hitting all sections with notable data
 
 ═══ ANTI-HALLUCINATION: HARD NUMBER RULES ═══
