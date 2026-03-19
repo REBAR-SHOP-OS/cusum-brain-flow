@@ -143,11 +143,18 @@ export function useRealtimeTranscribe() {
     return committedTranscripts.map((t) => t.translatedText || t.text).join(" ");
   }, [committedTranscripts]);
 
+  const updateSourceLang = useCallback((lang: SourceLang) => {
+    setSourceLang(lang);
+    sourceLangRef.current = lang;
+  }, []);
+
   return {
     isConnected,
     isConnecting,
     partialText,
     committedTranscripts,
+    sourceLang,
+    setSourceLang: updateSourceLang,
     connect,
     disconnect,
     clearTranscripts,
