@@ -37,7 +37,7 @@ export function useRealtimeTranscribe() {
       if (!trimmed) return;
       // Filter out very short fragments (likely background noise)
       const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 4 || trimmed.length < 15) return;
+      if (wordCount < 3 || trimmed.length < 10) return;
       // Filter noise patterns: mostly non-letter chars, repeated syllables, etc.
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.5) return;
@@ -79,7 +79,7 @@ export function useRealtimeTranscribe() {
 
           // Post-translation length check: if translation is too short, discard
           const translationWordCount = primaryTranslation.trim().split(/\s+/).length;
-          if (translationWordCount < 3) {
+          if (translationWordCount < 2) {
             setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }

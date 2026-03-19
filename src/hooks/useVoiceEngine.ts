@@ -104,7 +104,11 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           const text = msg.transcript?.trim();
           if (text) {
             // Filter short noise fragments (greetings, filler, mic artifacts)
-            if (text.split(/\s+/).length < 3 && text.length < 15) break;
+            const words = text.split(/\s+/);
+            if (words.length < 3 && text.length < 10) break;
+            // Repetition filter
+            const uniqueWords = new Set(words.map(w => w.toLowerCase()));
+            if (uniqueWords.size <= 2 && words.length >= 3) break;
             setTranscripts(prev => [
               ...prev,
               { id: String(++idCounter.current), role: "user", text, timestamp: Date.now() },
