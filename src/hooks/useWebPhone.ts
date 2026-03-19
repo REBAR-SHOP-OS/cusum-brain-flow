@@ -9,8 +9,10 @@ export interface WebPhoneState {
   error: string | null;
 }
 
+export type InboundCallHandler = (session: any, fromNumber: string) => void;
+
 export interface WebPhoneActions {
-  initialize: () => Promise<boolean>;
+  initialize: (onInboundCall?: InboundCallHandler) => Promise<boolean>;
   call: (phoneNumber: string, contactName?: string) => Promise<boolean>;
   hangup: () => void;
   dispose: () => void;
@@ -28,7 +30,10 @@ export function useWebPhone(): [WebPhoneState, WebPhoneActions] {
   const webPhoneRef = useRef<any>(null);
   const callSessionRef = useRef<any>(null);
 
-  const initialize = useCallback(async (): Promise<boolean> => {
+  const onInboundCallRef = useRef<InboundCallHandler | null>(null);
+
+  const initialize = useCallback(async (onInboundCall?: InboundCallHandler): Promise<boolean> => {
+    if (onInboundCall) onInboundCallRef.current = onInboundCall;
     try {
       setState((s) => ({ ...s, status: "registering", error: null }));
 
@@ -72,11 +77,30 @@ export function useWebPhone(): [WebPhoneState, WebPhoneActions] {
 
       webPhoneRef.current = webPhone;
 
-      // Listen for inbound calls (optional, but good to handle)
+      // Listen for inbound calls — auto-answer on ext 101 if handler is registered
       webPhone.on("inboundCall", (session: any) => {
-        console.log("Inbound WebRTC call:", session);
-        // For now, auto-answer inbound calls
-        // session.answer();
+        const fromNumber = session?.request?.from?.uri?.user || session?.remoteIdentity?.uri?.user || "Unknown";
+        console.log("Inbound WebRTC call from:", fromNumber);
+
+        if (onInboundCallRef.current) {
+          // Auto-answer the call
+          try {
+            session.answer();
+            callSessionRef.current = session;
+            setState((s) => ({ ...s, status: "in_call" }));
+
+            // Notify the handler
+            onInboundCallRef.current(session, fromNumber);
+
+            // Listen for call end
+            session.on("disposed", () => {
+              callSessionRef.current = null;
+              setState((s) => ({ ...s, status: "ready" }));
+            });
+          } catch (e) {
+            console.error("Auto-answer error:", e);
+          }
+        }
       });
 
       setState({

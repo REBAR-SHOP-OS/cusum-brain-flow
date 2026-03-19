@@ -542,3 +542,6 @@ verify_jwt = false
 
 [functions.analyze-feedback-fix]
 verify_jwt = false
+
+[functions.vizzy-call-receptionist]
+verify_jwt = false

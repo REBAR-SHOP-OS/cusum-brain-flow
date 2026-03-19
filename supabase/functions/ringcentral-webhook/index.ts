@@ -47,6 +47,8 @@ serve(async (req) => {
       await handleCallEvent(supabase, body);
     } else if (event.includes("/message-store")) {
       await handleMessageEvent(supabase, body);
+      // Also check for voicemail events
+      await handleVoicemailEvent(supabase, body);
     } else {
       console.log("Unhandled RC event type:", event);
     }
@@ -329,5 +331,221 @@ async function handleMessageEvent(supabase: any, body: any) {
       dedupe_key: dedupeKey,
       metadata: { msgId, direction, fromAddr, toAddr },
     }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+  }
+}
+
+// ─── Voicemail event handler — auto-transcribe + save to vizzy_memory ─────
+
+async function handleVoicemailEvent(supabase: any, body: any) {
+  const msgBody = body.body;
+  if (!msgBody) return;
+
+  const messages = msgBody.changes || [msgBody];
+
+  for (const msg of messages) {
+    // Only process voicemail messages
+    const msgType = (msg.type || "").toLowerCase();
+    if (msgType !== "voicemail" && msgType !== "voicemail") {
+      // Check availability / messageStatus for voicemail indicators
+      if (!msg.vmTranscriptionStatus && !msg.attachments?.some((a: any) => a.type === "AudioRecording")) {
+        continue;
+      }
+    }
+
+    const msgId = msg.id || `rc-vm-${Date.now()}`;
+    const dedupeKey = `rc:voicemail:${msgId}`;
+
+    // Check dedupe
+    const { data: existing } = await supabase
+      .from("activity_events")
+      .select("id")
+      .eq("dedupe_key", dedupeKey)
+      .maybeSingle();
+
+    if (existing) continue;
+
+    const fromNumber = msg.from?.phoneNumber || msg.from?.name || "Unknown";
+    const direction = "inbound";
+
+    // Determine company / user
+    const extensionId = msg.extension?.id || msgBody.extensionId;
+    let userId: string | null = null;
+    let companyId: string | null = null;
+
+    if (extensionId) {
+      const { data: tokenRow } = await supabase
+        .from("user_ringcentral_tokens")
+        .select("user_id")
+        .eq("rc_extension_id", String(extensionId))
+        .maybeSingle();
+
+      if (tokenRow) {
+        userId = tokenRow.user_id;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("user_id", userId)
+          .maybeSingle();
+        companyId = profile?.company_id;
+      }
+    }
+
+    if (!companyId) {
+      const { data: firstProfile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .not("company_id", "is", null)
+        .limit(1)
+        .maybeSingle();
+      companyId = firstProfile?.company_id;
+    }
+
+    if (!companyId) continue;
+
+    // Extract transcript if RC already provides one
+    let transcript = msg.vmTranscription?.text || "";
+
+    // If no RC transcript, try to use AI transcription
+    if (!transcript && msg.attachments?.length > 0) {
+      const audioAttachment = msg.attachments.find((a: any) => a.type === "AudioRecording");
+      if (audioAttachment?.uri) {
+        try {
+          // Call ringcentral-ai for transcription
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+          const aiResp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-ai`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${serviceKey}`,
+            },
+            body: JSON.stringify({
+              action: "transcribe",
+              recording_url: audioAttachment.uri,
+              user_id: userId,
+            }),
+          });
+
+          if (aiResp.ok) {
+            const aiResult = await aiResp.json();
+            transcript = aiResult?.transcript || aiResult?.text || "";
+          }
+        } catch (e) {
+          console.error("Voicemail AI transcription failed:", e);
+        }
+      }
+    }
+
+    // Contact matching
+    const contactId = companyId ? await matchContactByPhone(supabase, fromNumber, companyId) : null;
+    let contactName: string | null = null;
+    if (contactId) {
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("name")
+        .eq("id", contactId)
+        .maybeSingle();
+      contactName = contact?.name || null;
+    }
+
+    // Generate summary using summarize-call
+    let summary = transcript ? `Voicemail from ${contactName || fromNumber}: ${transcript.slice(0, 200)}` : `Voicemail from ${contactName || fromNumber} (no transcript available)`;
+    let tasks: any[] = [];
+
+    if (transcript && transcript.length >= 10) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+        const sumResp = await fetch(`${supabaseUrl}/functions/v1/summarize-call`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({
+            transcript: `[Voicemail] ${transcript}`,
+            fromNumber,
+            toNumber: "Voicemail",
+          }),
+        });
+
+        if (sumResp.ok) {
+          const sumResult = await sumResp.json();
+          summary = sumResult?.summary || summary;
+          tasks = sumResult?.tasks || [];
+        }
+      } catch (e) {
+        console.error("Voicemail summarization failed:", e);
+      }
+    }
+
+    // Find CEO user to save memory and notify — look for admin role
+    let ceoUserId = userId;
+    if (!ceoUserId) {
+      const { data: adminProfile } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("email", "sattar@rebar.shop")
+        .maybeSingle();
+      ceoUserId = adminProfile?.user_id;
+    }
+
+    // Save to vizzy_memory (category: voicemail_summary)
+    if (ceoUserId) {
+      await supabase.from("vizzy_memory").insert({
+        user_id: ceoUserId,
+        category: "voicemail_summary",
+        content: summary,
+        company_id: companyId,
+        metadata: {
+          from_number: fromNumber,
+          contact_name: contactName,
+          contact_id: contactId,
+          transcript,
+          tasks,
+          msg_id: msgId,
+          received_at: msg.creationTime || new Date().toISOString(),
+          processed: false,
+        },
+      });
+
+      // Create notification for CEO
+      const taskList = tasks.length > 0
+        ? ` | Actions: ${tasks.map((t: any) => t.title).join(", ")}`
+        : "";
+
+      await supabase.from("notifications").insert({
+        user_id: ceoUserId,
+        title: `📞 New voicemail from ${contactName || fromNumber}`,
+        description: `${summary}${taskList}`.slice(0, 500),
+        type: "voicemail",
+        link_to: "/communications",
+        metadata: {
+          from_number: fromNumber,
+          contact_name: contactName,
+          transcript: transcript?.slice(0, 300),
+          tasks,
+          msg_id: msgId,
+        },
+      });
+    }
+
+    // Activity event for dedupe
+    await supabase.from("activity_events").upsert({
+      entity_type: "communication",
+      entity_id: String(msgId),
+      event_type: "voicemail_processed",
+      actor_id: null,
+      actor_type: "system",
+      description: `Voicemail from ${contactName || fromNumber}: ${summary.slice(0, 100)}`,
+      company_id: companyId,
+      source: "ringcentral",
+      dedupe_key: dedupeKey,
+      metadata: { msgId, fromNumber, contactName, hasTasks: tasks.length > 0 },
+    }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+
+    console.log(`Voicemail processed: ${msgId} from ${fromNumber}`);
   }
 }

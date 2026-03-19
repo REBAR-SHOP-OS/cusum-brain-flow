@@ -860,6 +860,36 @@ ${brainList || "  No entries"}
 🧠 PERSISTENT MEMORY (${activeMemories.length} items)
 ${memorySection}
 
+📞 VOICEMAIL INBOX (unprocessed)
+${(() => {
+  const voicemails = activeMemories.filter((m: any) => m.category === "voicemail_summary" && !(m.metadata as any)?.processed);
+  if (voicemails.length === 0) return "  No new voicemails";
+  return voicemails.map((vm: any) => {
+    const meta = (vm.metadata || {}) as any;
+    const time = vm.created_at ? new Date(vm.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    const caller = meta.contact_name || meta.from_number || "Unknown";
+    const taskStr = (meta.tasks || []).length > 0
+      ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
+      : "";
+    return "  • [" + time + "] From " + caller + ": " + (vm.content || "").slice(0, 200) + taskStr;
+  }).join("\n");
+})()}
+
+📞 RECENT CALL SUMMARIES (auto-answered by Vizzy)
+${(() => {
+  const callSummaries = activeMemories.filter((m: any) => m.category === "call_summary");
+  if (callSummaries.length === 0) return "  No auto-answered calls";
+  return callSummaries.slice(0, 10).map((cs: any) => {
+    const meta = (cs.metadata || {}) as any;
+    const time = cs.created_at ? new Date(cs.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    const caller = meta.contact_name || meta.from_number || "Unknown";
+    const taskStr = (meta.tasks || []).length > 0
+      ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
+      : "";
+    return "  • [" + time + "] " + caller + ": " + (cs.content || "").slice(0, 200) + taskStr;
+  }).join("\n");
+})()}
+
 ═══ OPEN TASKS (${(openHumanTasks || []).length} active — DO NOT create duplicates) ═══
 ${(openHumanTasks || []).length > 0
   ? (openHumanTasks || []).map((t: any) => {

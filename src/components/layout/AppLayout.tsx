@@ -7,6 +7,7 @@ import { RoleGuard } from "@/components/auth/RoleGuard";
 import { LiveChatWidget } from "./LiveChatWidget";
 import { FloatingVizzyButton } from "@/components/vizzy/FloatingVizzyButton";
 import { ScreenshotFeedbackButton } from "@/components/feedback/ScreenshotFeedbackButton";
+import { VizzyCallHandler } from "@/components/vizzy/VizzyCallHandler";
 import { useFixRequestMonitor } from "@/hooks/useFixRequestMonitor";
 import { ChatPanelProvider } from "@/contexts/ChatPanelContext";
 import { DockChatProvider } from "@/contexts/DockChatContext";
@@ -75,6 +76,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
             {/* Mobile bottom nav */}
             <MobileNavV2 />
+
+            {/* Vizzy Phone Manager — auto-answers calls on ext 101 */}
+            {isInternal && <VizzyCallHandler />}
 
             {/* Floating Vizzy avatar — visible for all @rebar.shop employees */}
             {isInternal && <FloatingVizzyButton />}
