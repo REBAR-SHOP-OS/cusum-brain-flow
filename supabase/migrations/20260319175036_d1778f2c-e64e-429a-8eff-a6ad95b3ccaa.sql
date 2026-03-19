@@ -1,0 +1,1 @@
+ALTER TABLE public.extract_sessions ADD COLUMN IF NOT EXISTS unit_system TEXT NOT NULL DEFAULT 'metric';

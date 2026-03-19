@@ -17,6 +17,7 @@ export interface ExtractSession {
   status: string;
   optimization_mode: string | null;
   dedupe_status: string;
+  unit_system: string;
   created_at: string;
   updated_at: string;
 }
