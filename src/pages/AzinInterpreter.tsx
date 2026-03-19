@@ -179,7 +179,7 @@ export default function AzinInterpreter() {
           aria-label="Start voice interpreter with Nila"
         >
           <div className="w-14 h-14 rounded-full overflow-hidden ring-2 ring-primary/50 group-hover:ring-primary transition-all shadow-lg">
-            <img src={azinAvatar} alt="AZIN" className="w-full h-full object-cover" draggable={false} />
+            <img src={azinAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
           </div>
         </button>
 
