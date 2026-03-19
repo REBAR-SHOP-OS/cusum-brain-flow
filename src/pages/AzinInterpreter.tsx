@@ -9,6 +9,7 @@ import { AzinInterpreterVoiceChat } from "@/components/azin/AzinInterpreterVoice
 import { LanguageMicButton } from "@/components/azin/LanguageMicButton";
 import { AnimatePresence } from "framer-motion";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 export default function AzinInterpreter() {
   const navigate = useNavigate();
