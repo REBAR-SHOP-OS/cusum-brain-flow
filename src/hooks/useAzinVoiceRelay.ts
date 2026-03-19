@@ -26,8 +26,13 @@ export interface RelayTranscript {
 export type RelayState = "idle" | "connecting" | "connected" | "error";
 
 // TTS voices
-const VOICE_ENGLISH = "JBFqnCBsd6RMkjVDRZzb"; // George
-const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (multilingual v2)
+const VOICE_ENGLISH = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
+const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
+
+// Noise filter helpers
+const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
+const HAS_FARSI_OR_LATIN = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
+const REPEATED_CHARS = /(.)\1{4,}/;
 
 export function useAzinVoiceRelay() {
   const [state, setState] = useState<RelayState>("idle");
@@ -60,6 +65,7 @@ export function useAzinVoiceRelay() {
   const speakTranslation = useCallback(async (text: string, lang: "en" | "fa", entryId: string) => {
     try {
       const voiceId = lang === "fa" ? VOICE_FARSI : VOICE_ENGLISH;
+      const speed = 1.1;
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -69,7 +75,7 @@ export function useAzinVoiceRelay() {
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ text, voiceId }),
+          body: JSON.stringify({ text, voiceId, speed }),
         }
       );
 
@@ -108,11 +114,18 @@ export function useAzinVoiceRelay() {
       const trimmed = data.text.trim();
       if (!trimmed) return;
 
-      // Basic noise filter
+      // Strong noise filter
       const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 2 || trimmed.length < 5) return;
+      if (wordCount < 3 || trimmed.length < 8) return;
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.5) return;
+
+      // Block non-Farsi/non-Latin scripts (e.g. Tamil, Devanagari)
+      if (!HAS_FARSI_OR_LATIN.test(trimmed)) return;
+
+      // Block repeated chars and filler words
+      if (REPEATED_CHARS.test(trimmed)) return;
+      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
 
       // Detect source language
       const isRtl = detectRtl(trimmed);
