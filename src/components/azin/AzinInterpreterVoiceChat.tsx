@@ -141,12 +141,14 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 dir={isRtl ? "rtl" : "ltr"}
+                lang={isRtl ? "fa" : "en"}
                 className={cn(
                   "mb-2 px-3 py-2 rounded-xl text-sm max-w-[85%]",
                   t.role === "user"
                     ? isRtl ? "mr-auto bg-primary/15 text-foreground text-right" : "ml-auto bg-primary/15 text-foreground"
                     : isRtl ? "mr-auto bg-muted text-foreground text-right" : "mr-auto bg-muted text-foreground"
                 )}
+                style={isRtl ? { fontFamily: '"Vazirmatn", "Tahoma", "Arial", sans-serif' } : undefined}
               >
                 <span className="text-[10px] font-medium text-muted-foreground block mb-0.5">
                   {t.role === "user" ? "🎙️ Original" : "🔄 Translation"}

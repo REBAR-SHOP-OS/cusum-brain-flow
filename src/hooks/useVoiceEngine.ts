@@ -274,6 +274,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           vadThreshold: cfg.vadThreshold ?? 0.4,
           silenceDurationMs: cfg.silenceDurationMs ?? 300,
           prefixPaddingMs: cfg.prefixPaddingMs ?? 200,
+          temperature: cfg.temperature ?? 0.8,
         },
       });
 
