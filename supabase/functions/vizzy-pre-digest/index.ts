@@ -75,6 +75,20 @@ Deno.serve(async (req) => {
       return `[${date}] ${b.content}`;
     }).join("\n");
 
+    // Step 2b: Load latest agent audit from vizzy_memory
+    const { data: prevAudit } = await supabase
+      .from("vizzy_memory")
+      .select("content, created_at")
+      .eq("user_id", user.id)
+      .eq("category", "agent_audit")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const agentAuditContext = prevAudit
+      ? `\n═══ PREVIOUS AGENT AUDIT (${new Date(prevAudit.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}) ═══\n${prevAudit.content}`
+      : "\nNo previous agent audit available.";
+
     // Step 3: AI pre-digestion — produce a concise intelligence briefing
     const result = await callAI({
       provider: "gemini",
@@ -135,6 +149,17 @@ Structure it as:
     - Process inefficiencies (e.g., "Invoices over 30 days are not being followed up systematically")
     - System gaps (e.g., "No one is checking production queue daily")
     Format: "IMPROVE: [observation] — Suggestion: [actionable improvement]"
+16. AGENT INTELLIGENCE AUDIT — Review ALL AI agents (EXCEPT social/Pixel) based on the PREVIOUS AGENT AUDIT data if available:
+    - For each agent: score (1-10), key strength, key weakness
+    - Sales agent gets special attention: coaching notes for Radin
+    - If any agent needs a prompt fix, include a ready-to-paste LOVABLE COMMAND block:
+      LOVABLE COMMAND:
+      Fix the [Agent] prompt in \`supabase/functions/_shared/agents/[file].ts\`.
+      PROBLEM: [issue]
+      FIX: [exact change]
+      FILE: supabase/functions/_shared/agents/[file].ts
+      DO NOT TOUCH: All other files
+    - Summary line: "Agent Health: X agents audited, Y need attention, Z Lovable patches ready"
 
 CRITICAL RULES:
 - Preserve ALL specific numbers, names, amounts — Vizzy needs these for voice answers
@@ -142,7 +167,8 @@ CRITICAL RULES:
 - Compare against previous benchmarks when available: "AR is up 12% from last week"
 - Be opinionated — this is Vizzy's internal analysis, not a neutral report
 
-${benchmarkHistory ? `\n═══ PREVIOUS BENCHMARKS ═══\n${benchmarkHistory}` : "No previous benchmarks — this is the first session."}`,
+${benchmarkHistory ? `\n═══ PREVIOUS BENCHMARKS ═══\n${benchmarkHistory}` : "No previous benchmarks — this is the first session."}
+${agentAuditContext}`,
         },
         {
           role: "user",
