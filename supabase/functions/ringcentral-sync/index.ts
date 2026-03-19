@@ -250,9 +250,120 @@ async function fetchMessages(accessToken: string, dateFrom: string, messageType 
   return data.records || [];
 }
 
+// ─── Account-level fetch functions (for company-wide CRON sync) ───
+
+async function fetchWithPagination(url: string, accessToken: string, delayMs = 200): Promise<any[]> {
+  const allRecords: any[] = [];
+  let nextUrl: string | null = url;
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`RC API error: ${response.status} ${errText}`);
+    }
+
+    const data = await response.json();
+    allRecords.push(...(data.records || []));
+
+    nextUrl = data.navigation?.nextPage?.uri || null;
+    if (nextUrl && delayMs > 0) {
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+
+  return allRecords;
+}
+
+async function fetchCompanyCallLog(accessToken: string, dateFrom: string): Promise<any[]> {
+  const params = new URLSearchParams({
+    dateFrom,
+    perPage: "250",
+    view: "Detailed",
+  });
+  return fetchWithPagination(
+    `${RC_SERVER}/restapi/v1.0/account/~/call-log?${params}`,
+    accessToken
+  );
+}
+
+async function fetchCompanyMessages(accessToken: string, dateFrom: string, messageType: string): Promise<any[]> {
+  const params = new URLSearchParams({
+    dateFrom,
+    perPage: "250",
+    messageType,
+  });
+  return fetchWithPagination(
+    `${RC_SERVER}/restapi/v1.0/account/~/message-store?${params}`,
+    accessToken
+  );
+}
+
+async function fetchCompanyExtensions(accessToken: string): Promise<any[]> {
+  return fetchWithPagination(
+    `${RC_SERVER}/restapi/v1.0/account/~/extension?perPage=250&status=Enabled`,
+    accessToken
+  );
+}
+
 /**
- * CRON MODE: Sync all users with active RC tokens.
- * Triggered when no valid user JWT is present (e.g. pg_cron with anon key).
+ * Build a map of RC extensionId → user_id by matching extension emails to profile emails.
+ */
+async function buildExtensionUserMap(
+  accessToken: string,
+  companyId: string,
+  supabaseAdmin: ReturnType<typeof createClient>,
+  fallbackUserId: string
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+
+  // Fetch all RC extensions
+  let extensions: any[] = [];
+  try {
+    extensions = await fetchCompanyExtensions(accessToken);
+  } catch (e) {
+    console.warn("Could not fetch company extensions, falling back to single-user mode:", e);
+    return map;
+  }
+
+  // Get all company profiles
+  const { data: profiles } = await supabaseAdmin
+    .from("profiles")
+    .select("user_id, email")
+    .eq("company_id", companyId);
+
+  const emailToUserId = new Map<string, string>();
+  for (const p of profiles || []) {
+    if (p.email) emailToUserId.set(p.email.toLowerCase(), p.user_id);
+  }
+
+  for (const ext of extensions) {
+    const extId = String(ext.id);
+    const extEmail = (ext.contact?.email || "").toLowerCase();
+    if (extEmail && emailToUserId.has(extEmail)) {
+      map.set(extId, emailToUserId.get(extEmail)!);
+    } else {
+      map.set(extId, fallbackUserId); // attribute to admin if no match
+    }
+  }
+
+  console.log(`Extension map: ${map.size} extensions mapped (${extensions.length} total, ${emailToUserId.size} profiles)`);
+  return map;
+}
+
+function resolveUserId(record: any, extMap: Map<string, string>, fallbackUserId: string): string {
+  // Account-level records include extension.id
+  const extId = String(record.extension?.id || "");
+  if (extId && extMap.has(extId)) return extMap.get(extId)!;
+  return fallbackUserId;
+}
+
+/**
+ * CRON MODE: Sync ALL company calls/SMS/voicemail/fax using account-level API.
+ * Uses one admin token to fetch data for all extensions, then maps each record to the correct user.
  */
 async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
   const supabaseAdmin = createClient(
@@ -264,10 +375,11 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
   const daysBack = body.daysBack || 1;
   const dateFrom = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
 
-  // Get all users with RC tokens
+  // Get the first available RC token (admin user)
   const { data: tokenRows, error: tokErr } = await supabaseAdmin
     .from("user_ringcentral_tokens")
-    .select("user_id");
+    .select("user_id")
+    .limit(10);
 
   if (tokErr || !tokenRows?.length) {
     console.log("CRON: No RC tokens found", tokErr?.message);
@@ -277,139 +389,29 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
     );
   }
 
-  const results: Array<{ user_id: string; ok: boolean; calls?: number; sms?: number; voicemails?: number; faxes?: number; error?: string }> = [];
+  // Try to get a working access token from any available token row
+  let accessToken: string | null = null;
+  let adminUserId: string | null = null;
+  let companyId: string | null = null;
 
   for (const row of tokenRows) {
     try {
-      const accessToken = await getAccessTokenForUser(row.user_id, supabaseAdmin);
+      accessToken = await getAccessTokenForUser(row.user_id, supabaseAdmin);
+      adminUserId = row.user_id;
 
-      // Get company_id
       const { data: profile } = await supabaseAdmin
         .from("profiles")
         .select("company_id")
         .eq("user_id", row.user_id)
         .maybeSingle();
 
-      if (!profile?.company_id) {
-        results.push({ user_id: row.user_id, ok: false, error: "no_company" });
-        continue;
-      }
-
-      let callsUpserted = 0, smsUpserted = 0, voicemailsUpserted = 0, faxesUpserted = 0;
-
-      // Calls
-      if (syncType === "calls" || syncType === "all") {
-        try {
-          const calls = await fetchCallLog(accessToken, dateFrom);
-          for (const call of calls) {
-            const { error } = await supabaseAdmin.from("communications").upsert({
-              source: "ringcentral", source_id: call.id, thread_id: call.sessionId,
-              from_address: call.from?.phoneNumber || call.from?.name || "Unknown",
-              to_address: call.to?.phoneNumber || call.to?.name || "Unknown",
-              subject: `${call.direction} call - ${call.result}`,
-              body_preview: `Duration: ${Math.floor(call.duration / 60)}m ${call.duration % 60}s | ${call.action}`,
-              received_at: call.startTime, direction: call.direction.toLowerCase(),
-              status: call.result === "Missed" ? "unread" : "read",
-              metadata: {
-                type: "call", duration: call.duration, action: call.action, result: call.result,
-                ...(call.recording ? { recording_id: call.recording.id, recording_uri: call.recording.contentUri, recording_type: call.recording.type } : {}),
-              },
-              user_id: row.user_id, company_id: profile.company_id,
-            }, { onConflict: "source,source_id", ignoreDuplicates: false });
-            if (!error) {
-              callsUpserted++;
-              await supabaseAdmin.from("activity_events").upsert({
-                entity_type: "communication", entity_id: call.id, event_type: "call_logged",
-                actor_id: row.user_id, actor_type: "system",
-                description: `${call.direction} call ${call.from?.phoneNumber || "?"} → ${call.to?.phoneNumber || "?"}: ${call.result}`,
-                company_id: profile.company_id, source: "ringcentral", dedupe_key: `rc:${call.id}`,
-                metadata: { direction: call.direction, result: call.result, duration: call.duration },
-              }, { onConflict: "dedupe_key", ignoreDuplicates: true });
-            }
-          }
-        } catch (e) { console.warn(`CRON: calls sync failed for ${row.user_id}:`, e); }
-      }
-
-      // SMS
-      if (syncType === "sms" || syncType === "all") {
-        try {
-          const messages = await fetchMessages(accessToken, dateFrom);
-          for (const msg of messages) {
-            const toAddress = msg.to?.map(t => t.phoneNumber || t.name).join(", ") || "Unknown";
-            const { error } = await supabaseAdmin.from("communications").upsert({
-              source: "ringcentral", source_id: String(msg.id), thread_id: msg.conversationId,
-              from_address: msg.from?.phoneNumber || msg.from?.name || "Unknown", to_address: toAddress,
-              subject: msg.subject || "SMS", body_preview: msg.subject || "",
-              received_at: msg.creationTime, direction: msg.direction.toLowerCase(),
-              status: msg.readStatus === "Unread" ? "unread" : "read",
-              metadata: { type: "sms" }, user_id: row.user_id, company_id: profile.company_id,
-            }, { onConflict: "source,source_id", ignoreDuplicates: false });
-            if (!error) smsUpserted++;
-          }
-        } catch (e) { console.warn(`CRON: SMS sync failed for ${row.user_id}:`, e); }
-      }
-
-      // Voicemail
-      if (syncType === "voicemail" || syncType === "all") {
-        try {
-          const voicemails = await fetchMessages(accessToken, dateFrom, "VoiceMail");
-          for (const vm of voicemails) {
-            const toAddress = vm.to?.map(t => t.phoneNumber || t.name).join(", ") || "Unknown";
-            const vmAttachments = (vm as any).attachments || [];
-            const { error } = await supabaseAdmin.from("communications").upsert({
-              source: "ringcentral", source_id: String(vm.id), thread_id: vm.conversationId,
-              from_address: vm.from?.phoneNumber || vm.from?.name || "Unknown", to_address: toAddress,
-              subject: "Voicemail", body_preview: vm.subject || "Voicemail message",
-              received_at: vm.creationTime, direction: vm.direction.toLowerCase(),
-              status: vm.readStatus === "Unread" ? "unread" : "read",
-              metadata: { type: "voicemail", duration: (vm as any).vmDuration || 0, recording_uri: vmAttachments[0]?.uri || null, recording_id: vmAttachments[0]?.id || null },
-              user_id: row.user_id, company_id: profile.company_id,
-            }, { onConflict: "source,source_id", ignoreDuplicates: false });
-            if (!error) voicemailsUpserted++;
-          }
-        } catch (e) { console.warn(`CRON: voicemail sync failed for ${row.user_id}:`, e); }
-      }
-
-      // Fax
-      if (syncType === "fax" || syncType === "all") {
-        try {
-          const faxes = await fetchMessages(accessToken, dateFrom, "Fax");
-          for (const fax of faxes) {
-            const toAddress = fax.to?.map(t => t.phoneNumber || t.name).join(", ") || "Unknown";
-            const faxAttachments = ((fax as any).attachments || []).map((a: any) => ({ id: a.id, uri: a.uri, type: a.contentType, name: a.fileName }));
-            const { error } = await supabaseAdmin.from("communications").upsert({
-              source: "ringcentral", source_id: String(fax.id), thread_id: fax.conversationId,
-              from_address: fax.from?.phoneNumber || fax.from?.name || "Unknown", to_address: toAddress,
-              subject: "Fax", body_preview: fax.subject || "Fax document",
-              received_at: fax.creationTime, direction: fax.direction.toLowerCase(),
-              status: fax.readStatus === "Unread" ? "unread" : "read",
-              metadata: { type: "fax", page_count: (fax as any).pgCnt || 0, resolution: (fax as any).faxResolution || "Standard", attachments: faxAttachments },
-              user_id: row.user_id, company_id: profile.company_id,
-            }, { onConflict: "source,source_id", ignoreDuplicates: false });
-            if (!error) faxesUpserted++;
-          }
-        } catch (e) { console.warn(`CRON: fax sync failed for ${row.user_id}:`, e); }
-      }
-
-      // Mark integration as synced successfully
-      await supabaseAdmin
-        .from("integration_connections")
-        .upsert({
-          user_id: row.user_id,
-          integration_id: "ringcentral",
-          status: "connected",
-          error_message: null,
-          last_sync_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "user_id,integration_id" });
-
-      results.push({ user_id: row.user_id, ok: true, calls: callsUpserted, sms: smsUpserted, voicemails: voicemailsUpserted, faxes: faxesUpserted });
+      companyId = profile?.company_id || null;
+      if (companyId) break;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown";
-      console.warn(`CRON: sync failed for user ${row.user_id}:`, msg);
+      console.warn(`CRON: Token for ${row.user_id} failed: ${msg}`);
 
-      // Self-healing: mark integration as error if token expired
-      if (msg === "not_connected" || msg.includes("invalid_grant") || msg.includes("Token not found") || msg.includes("expired")) {
+      if (msg === "not_connected" || msg.includes("invalid_grant") || msg.includes("Token not found")) {
         await supabaseAdmin
           .from("integration_connections")
           .upsert({
@@ -420,16 +422,172 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id,integration_id" });
       }
-
-      results.push({ user_id: row.user_id, ok: false, error: msg });
+      continue;
     }
   }
 
-  const synced = results.filter(r => r.ok).length;
-  console.log(`CRON: RC sync complete. ${synced}/${results.length} users synced.`, JSON.stringify(results));
+  if (!accessToken || !adminUserId || !companyId) {
+    console.log("CRON: Could not obtain a working RC token for any user");
+    return new Response(
+      JSON.stringify({ cronMode: true, users_synced: 0, message: "No working RC tokens" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  console.log(`CRON: Using admin token from user ${adminUserId}, company ${companyId}`);
+
+  // Build extension → user_id map
+  const extMap = await buildExtensionUserMap(accessToken, companyId, supabaseAdmin, adminUserId);
+
+  let callsUpserted = 0, smsUpserted = 0, voicemailsUpserted = 0, faxesUpserted = 0;
+  const usersSeen = new Set<string>();
+
+  // ── Calls ──
+  if (syncType === "calls" || syncType === "all") {
+    try {
+      const calls = await fetchCompanyCallLog(accessToken, dateFrom);
+      console.log(`CRON: Fetched ${calls.length} account-level call records`);
+
+      for (const call of calls) {
+        const userId = resolveUserId(call, extMap, adminUserId);
+        usersSeen.add(userId);
+
+        const { error } = await supabaseAdmin.from("communications").upsert({
+          source: "ringcentral", source_id: call.id, thread_id: call.sessionId,
+          from_address: call.from?.phoneNumber || call.from?.name || "Unknown",
+          to_address: call.to?.phoneNumber || call.to?.name || "Unknown",
+          subject: `${call.direction} call - ${call.result}`,
+          body_preview: `Duration: ${Math.floor((call.duration || 0) / 60)}m ${(call.duration || 0) % 60}s | ${call.action || ""}`,
+          received_at: call.startTime, direction: (call.direction || "").toLowerCase(),
+          status: call.result === "Missed" ? "unread" : "read",
+          metadata: {
+            type: "call", duration: call.duration || 0, action: call.action, result: call.result,
+            ...(call.recording ? { recording_id: call.recording.id, recording_uri: call.recording.contentUri, recording_type: call.recording.type } : {}),
+          },
+          user_id: userId, company_id: companyId,
+        }, { onConflict: "source,source_id", ignoreDuplicates: false });
+
+        if (!error) {
+          callsUpserted++;
+          await supabaseAdmin.from("activity_events").upsert({
+            entity_type: "communication", entity_id: call.id, event_type: "call_logged",
+            actor_id: userId, actor_type: "system",
+            description: `${call.direction} call ${call.from?.phoneNumber || "?"} → ${call.to?.phoneNumber || "?"}: ${call.result}`,
+            company_id: companyId, source: "ringcentral", dedupe_key: `rc:${call.id}`,
+            metadata: { direction: call.direction, result: call.result, duration: call.duration },
+          }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+        }
+      }
+    } catch (e) { console.warn("CRON: account-level call sync failed:", e); }
+  }
+
+  // ── SMS ──
+  if (syncType === "sms" || syncType === "all") {
+    try {
+      const messages = await fetchCompanyMessages(accessToken, dateFrom, "SMS");
+      console.log(`CRON: Fetched ${messages.length} account-level SMS records`);
+
+      for (const msg of messages) {
+        const userId = resolveUserId(msg, extMap, adminUserId);
+        usersSeen.add(userId);
+        const toAddress = msg.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
+
+        const { error } = await supabaseAdmin.from("communications").upsert({
+          source: "ringcentral", source_id: String(msg.id), thread_id: msg.conversationId,
+          from_address: msg.from?.phoneNumber || msg.from?.name || "Unknown", to_address: toAddress,
+          subject: msg.subject || "SMS", body_preview: msg.subject || "",
+          received_at: msg.creationTime, direction: (msg.direction || "").toLowerCase(),
+          status: msg.readStatus === "Unread" ? "unread" : "read",
+          metadata: { type: "sms" }, user_id: userId, company_id: companyId,
+        }, { onConflict: "source,source_id", ignoreDuplicates: false });
+        if (!error) smsUpserted++;
+      }
+    } catch (e) { console.warn("CRON: account-level SMS sync failed:", e); }
+  }
+
+  // ── Voicemail ──
+  if (syncType === "voicemail" || syncType === "all") {
+    try {
+      const voicemails = await fetchCompanyMessages(accessToken, dateFrom, "VoiceMail");
+      console.log(`CRON: Fetched ${voicemails.length} account-level voicemail records`);
+
+      for (const vm of voicemails) {
+        const userId = resolveUserId(vm, extMap, adminUserId);
+        usersSeen.add(userId);
+        const toAddress = vm.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
+        const vmAttachments = vm.attachments || [];
+
+        const { error } = await supabaseAdmin.from("communications").upsert({
+          source: "ringcentral", source_id: String(vm.id), thread_id: vm.conversationId,
+          from_address: vm.from?.phoneNumber || vm.from?.name || "Unknown", to_address: toAddress,
+          subject: "Voicemail", body_preview: vm.subject || "Voicemail message",
+          received_at: vm.creationTime, direction: (vm.direction || "").toLowerCase(),
+          status: vm.readStatus === "Unread" ? "unread" : "read",
+          metadata: { type: "voicemail", duration: vm.vmDuration || 0, recording_uri: vmAttachments[0]?.uri || null, recording_id: vmAttachments[0]?.id || null },
+          user_id: userId, company_id: companyId,
+        }, { onConflict: "source,source_id", ignoreDuplicates: false });
+        if (!error) voicemailsUpserted++;
+      }
+    } catch (e) { console.warn("CRON: account-level voicemail sync failed:", e); }
+  }
+
+  // ── Fax ──
+  if (syncType === "fax" || syncType === "all") {
+    try {
+      const faxes = await fetchCompanyMessages(accessToken, dateFrom, "Fax");
+      console.log(`CRON: Fetched ${faxes.length} account-level fax records`);
+
+      for (const fax of faxes) {
+        const userId = resolveUserId(fax, extMap, adminUserId);
+        usersSeen.add(userId);
+        const toAddress = fax.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
+        const faxAttachments = (fax.attachments || []).map((a: any) => ({ id: a.id, uri: a.uri, type: a.contentType, name: a.fileName }));
+
+        const { error } = await supabaseAdmin.from("communications").upsert({
+          source: "ringcentral", source_id: String(fax.id), thread_id: fax.conversationId,
+          from_address: fax.from?.phoneNumber || fax.from?.name || "Unknown", to_address: toAddress,
+          subject: "Fax", body_preview: fax.subject || "Fax document",
+          received_at: fax.creationTime, direction: (fax.direction || "").toLowerCase(),
+          status: fax.readStatus === "Unread" ? "unread" : "read",
+          metadata: { type: "fax", page_count: fax.pgCnt || 0, resolution: fax.faxResolution || "Standard", attachments: faxAttachments },
+          user_id: userId, company_id: companyId,
+        }, { onConflict: "source,source_id", ignoreDuplicates: false });
+        if (!error) faxesUpserted++;
+      }
+    } catch (e) { console.warn("CRON: account-level fax sync failed:", e); }
+  }
+
+  // Mark integration as synced for all users who had data
+  for (const uid of usersSeen) {
+    await supabaseAdmin
+      .from("integration_connections")
+      .upsert({
+        user_id: uid,
+        integration_id: "ringcentral",
+        status: "connected",
+        error_message: null,
+        last_sync_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,integration_id" });
+  }
+
+  // Also mark the admin user
+  await supabaseAdmin
+    .from("integration_connections")
+    .upsert({
+      user_id: adminUserId,
+      integration_id: "ringcentral",
+      status: "connected",
+      error_message: null,
+      last_sync_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,integration_id" });
+
+  const summary = { cronMode: true, accountLevel: true, users_synced: usersSeen.size, calls: callsUpserted, sms: smsUpserted, voicemails: voicemailsUpserted, faxes: faxesUpserted, dateFrom };
+  console.log(`CRON: Account-level RC sync complete.`, JSON.stringify(summary));
 
   return new Response(
-    JSON.stringify({ cronMode: true, users_synced: synced, total_users: results.length, results, dateFrom }),
+    JSON.stringify(summary),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
 }
