@@ -356,7 +356,7 @@ export function PostReviewPanel({
     tiktok: "tiktok",
   };
 
-  const handlePlatformsSaveMulti = (values: string[]) => {
+  const handlePlatformsSaveMulti = async (values: string[]) => {
     // Sanitize: strip "unassigned" when real platforms are selected
     const realValues = values.filter(v => v !== "unassigned");
     const sanitized = realValues.length > 0 ? realValues : values;
@@ -364,23 +364,97 @@ export function PostReviewPanel({
     // Reset pages to only valid ones for new platform selection
     const validPages = new Set(sanitized.flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value)));
     setLocalPages(prev => prev.filter(p => validPages.has(p)));
-    // Update the primary post's platform to the first selected
+    // Batch update all siblings (same title + old platform + day)
     if (sanitized.length > 0) {
       const dbPlatform = platformMap[sanitized[0]] || sanitized[0];
-      updatePost.mutate({ id: post.id, platform: dbPlatform as SocialPost["platform"] });
+      const day = post.scheduled_date?.substring(0, 10);
+      let query = supabase
+        .from("social_posts")
+        .update({ platform: dbPlatform as SocialPost["platform"] })
+        .eq("platform", post.platform)
+        .eq("title", post.title);
+      if (day) {
+        query = query.gte("scheduled_date", `${day}T00:00:00`).lte("scheduled_date", `${day}T23:59:59`);
+      } else {
+        query = query.eq("id", post.id);
+      }
+      const { error } = await query;
+      if (error) {
+        toast({ title: "Failed to update platform", description: error.message, variant: "destructive" });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+      }
     }
     setSubPanel(null);
   };
 
-  const handleContentTypeSave = (value: string) => {
+  const handleContentTypeSave = async (value: string) => {
     setLocalContentType(value);
-    updatePost.mutate({ id: post.id, content_type: value });
+    // Batch update all siblings (same title + platform + day)
+    const day = post.scheduled_date?.substring(0, 10);
+    let query = supabase
+      .from("social_posts")
+      .update({ content_type: value })
+      .eq("platform", post.platform)
+      .eq("title", post.title);
+    if (day) {
+      query = query.gte("scheduled_date", `${day}T00:00:00`).lte("scheduled_date", `${day}T23:59:59`);
+    } else {
+      query = query.eq("id", post.id);
+    }
+    const { error } = await query;
+    if (error) {
+      toast({ title: "Failed to update content type", description: error.message, variant: "destructive" });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+    }
     setSubPanel(null);
   };
 
-  const handlePagesSaveMulti = (values: string[]) => {
+  const handlePagesSaveMulti = async (values: string[]) => {
     setLocalPages(values);
-    updatePost.mutate({ id: post.id, page_name: values.join(", ") });
+    // Reconcile sibling rows: find all siblings for this title + platform + day
+    const day = post.scheduled_date?.substring(0, 10);
+    const siblings = allPosts.filter(p =>
+      p.title === post.title &&
+      p.platform === post.platform &&
+      (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
+    );
+    const existingPageMap = new Map(siblings.map(s => [s.page_name || "", s]));
+    const selectedSet = new Set(values);
+
+    // Delete siblings whose page is no longer selected
+    const toDelete = siblings.filter(s => !selectedSet.has(s.page_name || ""));
+    // Create new rows for newly selected pages
+    const existingPages = new Set(siblings.map(s => s.page_name || ""));
+    const toAdd = values.filter(p => !existingPages.has(p));
+
+    const promises: Promise<any>[] = [];
+    for (const sib of toDelete) {
+      promises.push(supabase.from("social_posts").delete().eq("id", sib.id));
+    }
+    for (const pageName of toAdd) {
+      promises.push(
+        supabase.from("social_posts").insert({
+          user_id: post.user_id,
+          platform: post.platform,
+          status: post.status,
+          qa_status: post.qa_status,
+          title: post.title,
+          content: post.content,
+          image_url: post.image_url,
+          scheduled_date: post.scheduled_date,
+          hashtags: post.hashtags,
+          page_name: pageName,
+          content_type: post.content_type,
+          neel_approved: post.neel_approved,
+        })
+      );
+    }
+    if (promises.length > 0) {
+      await Promise.all(promises);
+      queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+    }
     setSubPanel(null);
   };
 
