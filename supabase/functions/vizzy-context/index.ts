@@ -79,6 +79,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     { data: accountingInv },
     { data: accountingBill },
     { data: communications },
+    { data: rcCallsToday },
   ] = await Promise.all([
     supabase.from("cut_plans").select("id, status").in("status", ["queued", "running"]),
     supabase.from("cut_plan_items").select("id, phase, completed_pieces, total_pieces").in("phase", ["queued", "cutting", "bending"]).limit(500),
