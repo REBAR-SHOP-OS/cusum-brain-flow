@@ -73,7 +73,7 @@ export default function AzinInterpreter() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-lg font-bold text-foreground">AZIN — Real-Time Interpreter</h1>
+            <h1 className="text-lg font-bold text-foreground">Nila — Real-Time Interpreter</h1>
             <p className={cn("text-sm font-medium", statusColor)}>{statusLabel}</p>
           </div>
         </div>
