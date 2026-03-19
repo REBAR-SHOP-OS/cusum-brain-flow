@@ -65,13 +65,15 @@ export function useRealtimeTranscribe() {
           const translatedFa = res?.translations?.fa;
 
           // If AI determined it's unintelligible noise, silently remove the entry
-          if (!translatedEn || !translatedEn.trim()) {
+          // For auto/en source, check EN translation; for fa source, check EN translation
+          const primaryTranslation = currentSourceLang === "fa" ? translatedEn : (translatedEn || translatedFa);
+          if (!primaryTranslation || !primaryTranslation.trim()) {
             setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
             return;
           }
 
           // Push successful translation to context buffer
-          contextRef.current.push(translatedEn);
+          contextRef.current.push(translatedEn || translatedFa || data.text);
           if (contextRef.current.length > 10) {
             contextRef.current = contextRef.current.slice(-5);
           }
@@ -81,8 +83,8 @@ export function useRealtimeTranscribe() {
               t.id === entryId
                 ? {
                     ...t,
-                    translatedText: translatedEn,
-                    originalCleanText: translatedFa || undefined,
+                    translatedText: currentSourceLang === "fa" ? translatedEn : (currentSourceLang === "en" ? translatedFa : translatedEn),
+                    originalCleanText: currentSourceLang === "en" ? undefined : translatedFa,
                     isTranslating: false,
                   }
                 : t
