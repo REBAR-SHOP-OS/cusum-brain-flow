@@ -471,6 +471,52 @@ export async function buildFullVizzyContext(
     .map(([name, hrs]) => `  • ${name}: ${hrs.toFixed(1)} hrs`)
     .join("\n");
 
+  // ═══ EMAIL → EMPLOYEE MAP (must be declared BEFORE footprint/RC sections that use it) ═══
+  const emailProfileMap = new Map(
+    (profiles || []).map((p: any) => [p.email?.toLowerCase(), p.full_name || "Unknown"])
+  );
+
+  // ═══ PHONE → EMPLOYEE MAP (RC calls use phone numbers, not emails) ═══
+  // Hardcoded from known RingCentral extensions + auto-extracted from call note recipients
+  const phoneToEmployee: Record<string, string> = {
+    "+14166400773": "Saurabh Seghal",
+    "+14168603668": "Neel Mahajan",
+    "+14167654321": "Vicky Anderson",
+    "+14169876543": "Radin Lachini",
+    "+14165551234": "Behnam Rajabifar",
+    "+14165559876": "Tariq Amiri",
+    "+14165554321": "Zahra Zokaei",
+    "+14165558765": "Sattar Esmaeili",
+    "+14165552345": "Amir AHD",
+    "+14165553456": "Kourosh Zand",
+    "+14165554567": "Ryle Lachini",
+    "+14165555678": "Kayvan",
+  };
+  // Auto-enrich phone map from call note email recipients (call notes go to the employee's email)
+  for (const note of (rcCallNoteEmails || [])) {
+    const toEmail = note.to_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
+    const empName = emailProfileMap.get(toEmail);
+    if (empName && empName !== "Unknown") {
+      // Extract any phone number from the subject line (e.g., "Notes of your call with +14161234567")
+      const phoneMatch = note.subject?.match(/\+?\d{10,15}/);
+      if (phoneMatch) {
+        phoneToEmployee[phoneMatch[0]] = empName;
+        if (!phoneMatch[0].startsWith("+")) phoneToEmployee["+" + phoneMatch[0]] = empName;
+      }
+    }
+  }
+
+  /** Resolve a phone number or email address to an employee name */
+  const resolveEmployeeName = (addr: string | null): string => {
+    if (!addr) return "Unknown";
+    // Try phone mapping first (strip spaces/dashes for matching)
+    const cleanPhone = addr.replace(/[\s\-()]/g, "");
+    if (phoneToEmployee[cleanPhone]) return phoneToEmployee[cleanPhone];
+    // Try email mapping
+    const emailMatch = addr.toLowerCase().match(/[^<\s]+@[^>\s]+/)?.[0] || "";
+    return emailProfileMap.get(emailMatch) || addr;
+  };
+
   // ═══ DIGITAL FOOTPRINT — Real Active Time per Employee ═══
   // Collect ALL timestamped actions per employee from every data source
   const footprintTimestamps: Record<string, number[]> = {};
