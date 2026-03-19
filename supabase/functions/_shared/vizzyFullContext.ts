@@ -88,6 +88,7 @@ export async function buildFullVizzyContext(
     { data: customerDirectory },
     { data: recentInvoiceDetails },
     { data: rcCallsToday },
+    { data: rcCallNoteEmails },
   ] = await Promise.all([
     supabase
       .from("work_orders")
