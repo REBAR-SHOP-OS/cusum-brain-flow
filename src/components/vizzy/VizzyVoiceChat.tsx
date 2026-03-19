@@ -41,40 +41,70 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 
-    // Parse VIZZY-ACTION tags from agent transcripts and auto-execute
+    // Parse ALL VIZZY-ACTION tags from agent transcripts and batch-execute
+    const pendingActions: { actionData: any; transcriptId: string }[] = [];
+
     for (const t of transcripts) {
       if (t.role !== "agent" || processedActionsRef.current.has(t.id)) continue;
-      const actionMatch = t.text.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
-      if (!actionMatch) continue;
-      processedActionsRef.current.add(t.id);
-
-      try {
-        const actionData = JSON.parse(actionMatch[1]);
-        // Auto-execute via vizzy-erp-action
-        (async () => {
-          try {
-            const { data, error } = await supabase.functions.invoke("vizzy-erp-action", {
-              body: { action: actionData.type, params: actionData },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            
-            if (actionData.type === "create_task") {
-              toast.success(`Task created: "${actionData.title}"${actionData.assigned_to_name ? ` → ${actionData.assigned_to_name}` : ""}`);
-            } else if (actionData.type === "send_email") {
-              toast.success(`Email sent to ${actionData.to}`);
-            } else {
-              toast.success(data?.message || "Action executed");
-            }
-          } catch (err) {
-            console.error("Vizzy voice action failed:", err);
-            toast.error(`Action failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-          }
-        })();
-      } catch (e) {
-        console.warn("Failed to parse VIZZY-ACTION from voice transcript:", e);
+      
+      // Find ALL action tags in this transcript (supports multiple per message)
+      const actionRegex = /\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/g;
+      let match;
+      let foundAny = false;
+      while ((match = actionRegex.exec(t.text)) !== null) {
+        foundAny = true;
+        try {
+          const actionData = JSON.parse(match[1]);
+          pendingActions.push({ actionData, transcriptId: t.id });
+        } catch (e) {
+          console.warn("Failed to parse VIZZY-ACTION from voice transcript:", e);
+        }
       }
+      if (foundAny) processedActionsRef.current.add(t.id);
     }
+
+    if (pendingActions.length === 0) return;
+
+    // Execute all actions and show summary toast
+    (async () => {
+      const results = { tasks: 0, emails: 0, other: 0, errors: 0 };
+
+      for (const { actionData } of pendingActions) {
+        try {
+          const { data, error } = await supabase.functions.invoke("vizzy-erp-action", {
+            body: { action: actionData.type, params: actionData },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+
+          if (actionData.type === "create_task") {
+            results.tasks++;
+          } else if (actionData.type === "batch_create_tasks") {
+            results.tasks += data?.created_count || actionData.tasks?.length || 0;
+          } else if (actionData.type === "send_email") {
+            results.emails++;
+          } else {
+            results.other++;
+          }
+        } catch (err) {
+          console.error("Vizzy voice action failed:", err);
+          results.errors++;
+        }
+      }
+
+      // Build summary toast
+      const parts: string[] = [];
+      if (results.tasks > 0) parts.push(`${results.tasks} task${results.tasks > 1 ? "s" : ""} created`);
+      if (results.emails > 0) parts.push(`${results.emails} email${results.emails > 1 ? "s" : ""} sent`);
+      if (results.other > 0) parts.push(`${results.other} action${results.other > 1 ? "s" : ""} executed`);
+      
+      if (parts.length > 0) {
+        toast.success(`Vizzy auto-${parts.join(" and ")}`);
+      }
+      if (results.errors > 0) {
+        toast.error(`${results.errors} action${results.errors > 1 ? "s" : ""} failed`);
+      }
+    })();
   }, [transcripts]);
 
   // Connecting timer
