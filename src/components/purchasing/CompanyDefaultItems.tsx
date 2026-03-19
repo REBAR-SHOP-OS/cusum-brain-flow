@@ -126,25 +126,20 @@ function DefaultRow({
         <Check className="w-3.5 h-3.5" />
       </Button>
       {/* Reject button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-7 w-7 rounded-full",
-          isRejected
-            ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-            : "text-muted-foreground hover:text-red-500"
-        )}
-        onClick={() => {
-          if (dbMatch) {
-            onToggleRejected?.(dbMatch.id, isRejected);
-          } else {
-            onMarkRejected(def.title, def.category);
-          }
-        }}
-      >
-        <X className="w-3.5 h-3.5" />
-      </Button>
+      {isPurchased && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            if (dbMatch) {
+              onTogglePurchased?.(dbMatch.id, true);
+            }
+          }}
+        >
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      )}
       <span className={cn(
         "flex-1 text-sm font-medium",
         isPurchased && "line-through text-green-600",
@@ -186,9 +181,11 @@ export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased
       <Button variant="ghost" size="icon" className={cn("h-7 w-7 rounded-full", item.is_purchased ? "bg-green-500/20 text-green-500 hover:bg-green-500/30" : "text-muted-foreground hover:text-green-500")} onClick={() => onTogglePurchased?.(item.id, item.is_purchased)}>
         <Check className="w-3.5 h-3.5" />
       </Button>
-      <Button variant="ghost" size="icon" className={cn("h-7 w-7 rounded-full", item.is_rejected ? "bg-red-500/20 text-red-500 hover:bg-red-500/30" : "text-muted-foreground hover:text-red-500")} onClick={() => onToggleRejected?.(item.id, item.is_rejected)}>
-        <X className="w-3.5 h-3.5" />
-      </Button>
+      {item.is_purchased && (
+        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground" onClick={() => onTogglePurchased?.(item.id, true)}>
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      )}
       <div className="flex-1 min-w-0">
         <div className={cn("font-medium text-sm", item.is_purchased && "line-through text-green-600", item.is_rejected && "line-through text-red-500")}>{item.title}</div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
