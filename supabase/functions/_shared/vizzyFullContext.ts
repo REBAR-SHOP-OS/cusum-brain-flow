@@ -377,7 +377,7 @@ export async function buildFullVizzyContext(
             day: "numeric",
           })
         : "unknown";
-      const threadId = e.gmail_thread_id ? ` [thread:${e.gmail_thread_id}]` : "";
+      const threadId = e.thread_id ? ` [thread:${e.thread_id}]` : "";
       const toAddr = e.to_address ? ` to:${e.to_address}` : "";
       return `  • [${e.subject || "No subject"}] from ${e.from_address || "unknown"}${toAddr} — ${preview} (${date})${threadId}`;
     })
