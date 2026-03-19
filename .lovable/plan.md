@@ -1,111 +1,43 @@
 
-## Issue identified
 
-I inspected the interpreter flow and there are three concrete problems causing the “Listening…” state without useful output:
+# Fix: Display Dimensions in Original Imperial Format After Extraction
 
-1. `src/hooks/useAzinVoiceRelay.ts` drops short real phrases before translation:
-   - current filter rejects anything with fewer than 3 words or under 8 chars
-   - normal interpreter inputs like `سلام`, `مرسی`, `yes`, `no`, `okay` get discarded
+## Problem
 
-2. `supabase/functions/translate-message/index.ts` strips valid one-word English translations:
-   - it currently requires at least 2 words for English output
-   - so `سلام → Hello` becomes empty, the client removes the transcript, and TTS never runs
+The extraction correctly reads imperial dimensions from bar lists (e.g., `0'-4"`, `1'-5"`, `5'-8"`) but converts them to total inches for storage (4, 17, 68). The `AIExtractView` table then displays these raw numbers without converting them back to imperial format. The user sees `68, 4, 17, 13` instead of `5'-8", 0'-4", 1'-5", 1'-1"`.
 
-3. Audio playback is not primed from a user gesture:
-   - the voice overlay auto-starts after mount
-   - TTS audio is created and played asynchronously later
-   - on many browsers this gets blocked by autoplay rules
-   - the current code swallows `audio.play()` failures, so it looks like nothing happens
+The `TagsExportView` already has a working `formatDim` function that converts back — but `AIExtractView` never uses it.
 
-## What I will change
+## Changes
 
-### 1) Fix the relay filtering
-File: `src/hooks/useAzinVoiceRelay.ts`
+### 1. `src/components/office/AIExtractView.tsx` — Format dimensions and length for display
 
-- relax transcript filters to allow short but meaningful interpreter phrases
-- keep noise protection, but stop rejecting legitimate short EN/FA speech
-- preserve filtering for punctuation, annotations, obvious garbage, and foreign scripts
+- Read `activeSession.unit_system` (already available on the session object)
+- Create or import a `formatDim` helper that converts total-inches back to feet-inches for imperial sessions
+- Apply it to:
+  - **LENGTH column** (line ~2034): format `row.total_length_mm` as `X'-Y"` when imperial
+  - **Dimension columns A–R** (line ~2043): format each `dim_*` value as `X'-Y"` when imperial
+- Keep raw numeric display for metric sessions
+- Keep inline edit inputs as raw numbers (no formatting needed in edit mode)
 
-### 2) Fix translation post-validation
-File: `supabase/functions/translate-message/index.ts`
+### 2. Handle fractional inches in display
 
-- stop requiring 2 English words
-- allow valid one-word translations in both English and Farsi
-- replace the current word-count rule with a lighter sanity check so short real translations survive
+The source documents contain values like `1'-6½"`, `4'-10½"`. The current `parseDimension` converts `1'-6½"` by parsing the ½ fraction. The display formatter needs to handle half-inch precision:
+- If the stored value has a `.5` fractional part, display as `X'-Y½"` 
+- This applies to both `formatDim` in `AIExtractView` and the existing one in `TagsExportView`
 
-### 3) Fix browser audio unlock
-Files:
-- `src/pages/AzinInterpreter.tsx`
-- `src/components/azin/AzinInterpreterVoiceChat.tsx`
-- `src/hooks/useAzinVoiceRelay.ts`
-- likely reuse `src/lib/audioPlayer.ts`
-
-Plan:
-- prime audio synchronously when the user taps the Nila avatar button
-- pass that primed playback capability into the voice chat flow
-- use the primed audio element / unlocked audio path for TTS playback
-- stop silently swallowing playback failures; surface them in logs and optionally toast once
-
-### 4) Improve runtime diagnostics
-File: `src/hooks/useAzinVoiceRelay.ts`
-
-- log whether failure is:
-  - no committed transcript
-  - empty translation returned
-  - TTS request failed
-  - audio playback blocked
-- this prevents another “looks connected but does nothing” situation
-
-## Expected result
-
-After these changes:
-
-- short phrases like `سلام`, `مرسی`, `بله`, `yes`, `no`, `okay` will translate instead of disappearing
-- the interpreter will actually produce translated text entries
-- TTS playback will work reliably on browser/mobile autoplay-restricted environments
-- if playback still fails, the error will be visible instead of silently ignored
-
-## Technical notes
+### Technical detail
 
 ```text
-Current failing path:
-voice chat opens
-→ STT partial appears
-→ short phrase filtered OR translation emptied
-→ transcript removed
-→ no TTS
-OR
-→ TTS succeeds but browser blocks async audio playback
-→ play() error swallowed
-→ user hears nothing
+Storage: dim_a = 4 (total inches from 0'-4")
+Display: formatDim(4, "imperial") → "0'-4""
+
+Storage: total_length_mm = 68 (total inches from 5'-8")  
+Display: formatDim(68, "imperial") → "5'-8""
+
+Storage: dim_b = 18.5 (total inches from 1'-6½")
+Display: formatDim(18.5, "imperial") → "1'-6½""
 ```
 
-```text
-Fix path:
-user taps Nila
-→ audio is primed during click
-→ STT commits short valid phrase
-→ translation preserves one-word outputs
-→ TTS plays through unlocked audio path
-```
+No database changes needed — the data is stored correctly, only the display layer needs the formatting applied.
 
-## Verification after implementation
-
-1. Test with short Farsi inputs:
-   - `سلام`
-   - `مرسی`
-   - `بله`
-
-2. Test with short English inputs:
-   - `hello`
-   - `thanks`
-   - `yes`
-
-3. Confirm all 3 layers work:
-   - partial transcript appears
-   - committed translation renders
-   - audio speaks the translated phrase
-
-4. Re-test on the overlay flow specifically, not just the split-screen mic mode
-
-5. During QA, dismiss the training modal first because it can block interaction while testing the interpreter page
