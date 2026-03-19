@@ -1,37 +1,29 @@
 
 
-# Audit: GRADE BEAM - KCA Extraction Failures
+# فیکس: قطع کامل مکالمه Nila با دکمه End Call
 
-## Root Cause
+## مشکل
+وقتی End Call زده می‌شود، `endSession()` صدا زده می‌شود ولی:
+1. Audio در صف ممکن است همچنان پخش شود (فقط `pause` می‌شود ولی `onended` callback ها باقی می‌مانند)
+2. درخواست‌های ترجمه در حال اجرا (`fetch` به edge function) ادامه پیدا می‌کنند و بعد از پایان، دوباره audio queue را پر می‌کنند
+3. TTS fetch های در حال اجرا هم همینطور
 
-Four failed sessions, two distinct errors:
+## تغییرات
 
-### Error 1: `invalid input syntax for type integer: "1727.2"` (3 sessions)
-- `total_length_mm` column is **integer** in database
-- `parseDimension()` returns **float** values like `1727.2`
-- Postgres rejects non-integer values for integer columns
+### فایل: `src/hooks/useAzinVoiceRelay.ts`
 
-### Error 2: `invalid input syntax for type numeric: "0'-4""` (1 session)
-- The `quantity` field received an imperial string like `"0'-4""`
-- `parseDimension(item.quantity)` parses it to a number, but the AI likely put a dimension value into the quantity field
-- The raw string may have been passed directly without parsing in some code path
+1. **اضافه کردن `AbortController`** — یک ref برای abort controller که هنگام `endSession` همه fetch های در حال اجرا (translate + TTS) را cancel می‌کند
+2. **در `endSession`**:
+   - ابتدا `abortController.abort()` برای لغو همه درخواست‌های شبکه‌ای
+   - سپس Scribe disconnect
+   - سپس stop و cleanup همه audio ها
+   - Clear کردن transcripts (نه فقط partial)
+3. **در `speakTranslation` و `onCommittedTranscript`**: پاس دادن `signal` از AbortController به همه `fetch` ها تا قابل لغو باشند
+4. **Guard در callback ها**: بعد از هر await، چک کردن اینکه آیا session هنوز active است (abort نشده) تا هیچ عملیاتی بعد از End Call اجرا نشود
 
-## Fix
+### فایل: `src/components/azin/AzinInterpreterVoiceChat.tsx`
+- بدون تغییر — `handleClose` فعلی کافی است چون `endSession` را صدا می‌زند
 
-### File: `supabase/functions/extract-manifest/index.ts`
-
-1. **Round integer columns** — wrap `total_length_mm` and `quantity` with `Math.round()` after `parseDimension()`:
-   - `total_length_mm: Math.round(parseDimension(item.total_length) || 0)`
-   - `quantity: Math.round(parseDimension(item.quantity)) || 0`
-
-2. **Safety-round all dimension columns** — while `dim_a` through `dim_r` are `numeric` (accepts decimals), apply `Math.round()` to `total_length_mm` and `quantity` since they are integer columns.
-
-3. **Add null/NaN guard** — ensure if `parseDimension` returns something unexpected, it defaults to `null` or `0` for required fields.
-
-### Changes summary
-- **1 file**: `supabase/functions/extract-manifest/index.ts` — round integer fields before insert
-- **Redeploy** the edge function
-
-### Result
-All four "GRADE BEAM - KCA" sessions failed due to type mismatches. After fix, re-extraction should succeed.
+### نتیجه
+با زدن End Call، همه فعالیت‌ها (STT, ترجمه, TTS, پخش صدا) فوراً متوقف شده و هیچ چیزی در پس‌زمینه اجرا نمی‌شود.
 
