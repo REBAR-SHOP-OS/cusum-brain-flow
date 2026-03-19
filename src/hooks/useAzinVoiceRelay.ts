@@ -32,8 +32,6 @@ const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
 // Noise filter helpers
 const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
 const HAS_FARSI_OR_LATIN = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
-const SCRIBE_ANNOTATION = /^\(.*\)\.?$/; // e.g. "(speaking in foreign language)", "(music)", "(laughter)"
-const ONLY_PUNCTUATION = /^[.\s!?,;:…\-–—]+$/;
 const REPEATED_CHARS = /(.)\1{4,}/;
 
 export function useAzinVoiceRelay() {
@@ -110,22 +108,11 @@ export function useAzinVoiceRelay() {
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
     onPartialTranscript: (data) => {
-      const pt = data.text.trim();
-      // Hide Scribe annotations from partial text
-      if (!pt || SCRIBE_ANNOTATION.test(pt) || pt.toLowerCase().includes("(speaking") || pt.toLowerCase().includes("(music")) {
-        setPartialText("");
-        return;
-      }
-      setPartialText(pt);
+      setPartialText(data.text);
     },
     onCommittedTranscript: (data) => {
       const trimmed = data.text.trim();
       if (!trimmed) return;
-
-      // Block Scribe annotations like "(speaking in foreign language)", "(music)", "(laughter)"
-      if (SCRIBE_ANNOTATION.test(trimmed)) return;
-      // Block punctuation-only transcripts like "..."
-      if (ONLY_PUNCTUATION.test(trimmed)) return;
 
       // Strong noise filter
       const wordCount = trimmed.split(/\s+/).length;

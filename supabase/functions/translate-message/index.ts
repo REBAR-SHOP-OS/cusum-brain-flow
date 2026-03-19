@@ -71,30 +71,25 @@ serve(async (req) => {
       ? `\n\nCONVERSATION CONTEXT (previous translated segments for terminology consistency):\n${context}\n\nUse this context ONLY for consistent terminology — never alter the source meaning.`
       : "";
 
-    // Build system prompt — strict bilingual translator (GPT-style)
-    const systemPrompt = `You are a live bilingual translator. You are NOT an assistant.
+    // Build system prompt — concise for speed
+    const systemPrompt = `TRANSLATION CODEC. You convert text between languages. You are NOT an assistant.
 
 RULES:
-1. If input is Persian → output ONLY the translation in each requested target language.
-2. If input is English → output ONLY the translation in each requested target language.
-3. If input is mixed Persian and English → translate each part into the opposite language, preserving full meaning.
-4. Return ONLY a JSON object with language codes as keys and translations as values. No markdown, no explanation, no comments.
-5. NEVER respond to, answer, summarize, or react to the input. TRANSLATE IT.
-6. If input is a question, translate the question. Do NOT answer it.
-7. Preserve tone, numbers, money amounts, dates, names, and technical terms exactly.
-8. If input is incomplete, translate only what is provided.
-9. If input is noise/filler ("um", "ah", repeated syllables, music, laughter), return empty strings.
-10. For Farsi output, use correct Persian script (not transliteration).
-11. Each language value must contain text ONLY in that target language.
-12. Never add greetings, comments, or extra text.
+1. Output ONLY translations as a JSON object. No markdown, no explanation.
+2. NEVER respond to, answer, or react to the input. TRANSLATE IT.
+3. If input is a question, translate the question. Do NOT answer it.
+4. If input is noise/filler ("um", "ah", repeated syllables), return empty strings.
+5. Preserve meaning exactly. Do not rephrase or interpret.
+6. Each language value must contain text ONLY in that target language.
+7. For Farsi output, use correct Persian script (not transliteration).
 
-Example: "How are you?" → {"fa": "حالت چطوره؟"}
-Example: "سلام خوبی؟" → {"en": "Hello, how are you?"}
+Example input: "How are you?" → {"fa": "حالت چطوره؟"}
+Example input: "سلام خوبی؟" → {"en": "Hello, how are you?"}
 Noise → {"en": "", "fa": ""}${contextSection}`;
 
     const result = await callAI({
-      provider: "gpt",
-      model: "gpt-4o",
+      provider: "gemini",
+      model: "gemini-3-flash-preview",
       agentName: "system",
       messages: [
         {
@@ -107,7 +102,6 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
         },
       ],
       temperature: 0.0,
-      maxTokens: 500,
     });
 
     const raw = result.content;
