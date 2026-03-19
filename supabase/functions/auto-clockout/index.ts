@@ -108,6 +108,19 @@ serve(async (req) => {
       );
 
     } else {
+      // HARD GUARD: only execute between 5-7 PM ET (17-19)
+      if (currentETHour < 17 || currentETHour > 19) {
+        console.log(`BLOCKED: evening auto clock-out rejected at ET hour ${currentETHour}`);
+        return new Response(
+          JSON.stringify({ 
+            ok: false, 
+            blocked: true, 
+            message: `Evening auto clock-out blocked — current ET hour is ${currentETHour}, only allowed 5-7 PM ET` 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // Evening mode: close ONLY office worker shifts at 6 PM ET
       // Shop workers (non-@rebar.shop emails OR Kourosh Zand) are exempt
       const clockOutTime = new Date().toISOString();
