@@ -135,15 +135,17 @@ export function useVizzyVoiceEngine() {
       contextFetched.current = true;
       setContextLoading(true);
       try {
-        const data = await invokeEdgeFunction<{ briefing: string }>(
+        const data = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
           "vizzy-daily-brief",
           {},
           { timeoutMs: 25000 }
         );
-        if (data?.briefing) {
-          setErpContext(data.briefing);
+        // Prefer raw context (granular employee-level data) over summarized briefing
+        const contextData = data?.rawContext || data?.briefing;
+        if (contextData) {
+          setErpContext(contextData);
           // Update the ref immediately — don't wait for React re-render
-          instructionsRef.current = buildInstructions(data.briefing);
+          instructionsRef.current = buildInstructions(contextData);
         }
       } catch (err) {
         console.warn("Failed to fetch ERP context for Vizzy voice:", err);
