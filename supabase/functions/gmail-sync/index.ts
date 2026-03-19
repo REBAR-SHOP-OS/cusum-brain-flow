@@ -286,6 +286,250 @@ function extractAttachments(payload: GmailMessage["payload"]): GmailAttachment[]
   return attachments;
 }
 
+/**
+ * Mark an integration_connections row as error for a specific user+integration.
+ * Used by cron mode to surface token failures in the UI.
+ */
+async function markIntegrationError(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  integrationId: string,
+  errorMessage: string
+) {
+  await supabaseAdmin
+    .from("integration_connections")
+    .upsert({
+      user_id: userId,
+      integration_id: integrationId,
+      status: "error",
+      error_message: errorMessage,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,integration_id" });
+}
+
+/**
+ * Mark integration_connections as connected with last_sync_at timestamp.
+ */
+async function markIntegrationSynced(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  integrationId: string
+) {
+  await supabaseAdmin
+    .from("integration_connections")
+    .upsert({
+      user_id: userId,
+      integration_id: integrationId,
+      status: "connected",
+      error_message: null,
+      last_sync_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,integration_id" });
+}
+
+/**
+ * CRON MODE: Sync all users with active Gmail tokens.
+ * Triggered when no valid user JWT is present (e.g. pg_cron with anon key).
+ */
+async function syncAllUsers(body: { action?: string }) {
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const isRenewWatch = body.action === "renewWatch";
+
+  // Get all users with Gmail tokens
+  const { data: tokenRows, error: tokErr } = await supabaseAdmin
+    .from("user_gmail_tokens")
+    .select("user_id, gmail_email");
+
+  if (tokErr || !tokenRows?.length) {
+    console.log("CRON: No Gmail tokens found", tokErr?.message);
+    return new Response(
+      JSON.stringify({ cronMode: true, users_synced: 0, message: "No Gmail tokens found" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const results: Array<{ user_id: string; ok: boolean; messages?: number; error?: string }> = [];
+
+  for (const row of tokenRows) {
+    try {
+      const accessToken = await getAccessTokenForUser(row.user_id, "cron");
+
+      // Renew Gmail Watch (Pub/Sub push notifications)
+      if (isRenewWatch) {
+        try {
+          const topicName = Deno.env.get("GMAIL_PUBSUB_TOPIC");
+          if (topicName) {
+            const watchRes = await fetch(
+              "https://gmail.googleapis.com/gmail/v1/users/me/watch",
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  topicName,
+                  labelIds: ["INBOX"],
+                }),
+              }
+            );
+            if (watchRes.ok) {
+              console.log(`CRON: Gmail watch renewed for user ${row.user_id}`);
+            } else {
+              console.warn(`CRON: Gmail watch renewal failed for ${row.user_id}:`, await watchRes.text());
+            }
+          }
+        } catch (e) {
+          console.warn(`CRON: watch renewal error for ${row.user_id}:`, e);
+        }
+        results.push({ user_id: row.user_id, ok: true });
+        continue;
+      }
+
+      // Get company_id
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", row.user_id)
+        .maybeSingle();
+
+      if (!profile?.company_id) {
+        results.push({ user_id: row.user_id, ok: false, error: "no_company" });
+        continue;
+      }
+
+      // Fetch last 1 day of emails
+      const dateAfter = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+      const listParams = new URLSearchParams({
+        maxResults: "30",
+        q: `after:${dateAfter}`,
+      });
+
+      const listResponse = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      if (!listResponse.ok) {
+        const errText = await listResponse.text();
+        console.warn(`CRON: Gmail list failed for ${row.user_id}:`, errText);
+        results.push({ user_id: row.user_id, ok: false, error: errText });
+        continue;
+      }
+
+      const listData: ListMessagesResponse = await listResponse.json();
+      let messagesUpserted = 0;
+
+      if (listData.messages?.length) {
+        for (const msgRef of listData.messages) {
+          try {
+            const msgResponse = await fetch(
+              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgRef.id}?format=full`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            if (!msgResponse.ok) continue;
+
+            const msgData: GmailMessage = await msgResponse.json();
+            const headers = msgData.payload.headers;
+            const attachments = extractAttachments(msgData.payload);
+
+            const msg = {
+              id: msgData.id,
+              threadId: msgData.threadId,
+              from: getHeader(headers, "From"),
+              to: getHeader(headers, "To"),
+              subject: getHeader(headers, "Subject"),
+              date: getHeader(headers, "Date"),
+              snippet: decodeHtmlEntities(msgData.snippet || ""),
+              body: sanitizeHtmlServerSide(getBodyContent(msgData)),
+              internalDate: parseInt(msgData.internalDate),
+              isUnread: msgData.labelIds?.includes("UNREAD") || false,
+              attachments,
+            };
+
+            const { error: upsertError } = await supabaseAdmin
+              .from("communications")
+              .upsert({
+                source: "gmail",
+                source_id: msg.id,
+                thread_id: msg.threadId,
+                from_address: msg.from,
+                to_address: msg.to,
+                subject: msg.subject,
+                body_preview: decodeHtmlEntities(
+                  msg.body
+                    ? msg.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
+                    : (msg.snippet || "")
+                ),
+                received_at: new Date(msg.internalDate).toISOString(),
+                direction: "inbound",
+                status: msg.isUnread ? "unread" : "read",
+                metadata: {
+                  body: msg.body,
+                  date: msg.date,
+                  ...(msg.attachments && msg.attachments.length > 0 ? {
+                    attachments: msg.attachments.map(a => ({
+                      filename: a.filename,
+                      mimeType: a.mimeType,
+                      size: a.size,
+                      attachmentId: a.attachmentId,
+                    })),
+                  } : {}),
+                },
+                user_id: row.user_id,
+                company_id: profile.company_id,
+              }, { onConflict: "source,source_id", ignoreDuplicates: false });
+
+            if (!upsertError) {
+              messagesUpserted++;
+              await supabaseAdmin.from("activity_events").upsert({
+                entity_type: "communication",
+                entity_id: msg.id,
+                event_type: "email_received",
+                actor_id: row.user_id,
+                actor_type: "system",
+                description: `Email from ${msg.from}: ${msg.subject?.slice(0, 80) || "(no subject)"}`,
+                company_id: profile.company_id,
+                source: "gmail",
+                dedupe_key: `gmail:${msg.id}`,
+                metadata: { from: msg.from, to: msg.to, subject: msg.subject, threadId: msg.threadId },
+              }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+            }
+          } catch (msgErr) {
+            console.warn(`CRON: failed to process message ${msgRef.id}:`, msgErr);
+          }
+        }
+      }
+
+      // Mark integration as synced successfully
+      await markIntegrationSynced(supabaseAdmin, row.user_id, "gmail");
+      results.push({ user_id: row.user_id, ok: true, messages: messagesUpserted });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown";
+      console.warn(`CRON: Gmail sync failed for user ${row.user_id}:`, msg);
+
+      // Self-healing: mark integration as error if token expired
+      if (msg.includes("expired") || msg.includes("invalid_grant") || msg.includes("reconnect")) {
+        await markIntegrationError(supabaseAdmin, row.user_id, "gmail", "Token expired — please reconnect");
+      }
+
+      results.push({ user_id: row.user_id, ok: false, error: msg });
+    }
+  }
+
+  const synced = results.filter(r => r.ok).length;
+  console.log(`CRON: Gmail sync complete. ${synced}/${results.length} users synced.`, JSON.stringify(results));
+
+  return new Response(
+    JSON.stringify({ cronMode: true, action: isRenewWatch ? "renewWatch" : "sync", users_synced: synced, total_users: results.length, results }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -294,8 +538,28 @@ serve(async (req) => {
   try {
     const clonedReq = req.clone();
 
+    // Parse body early
+    let body: { maxResults?: number; pageToken?: string; query?: string; action?: string } = {};
+    try {
+      body = await clonedReq.json();
+    } catch {
+      // No body
+    }
+
     const userId = await verifyAuth(req);
+
     if (!userId) {
+      // Check if cron call (anon/service key)
+      const authHeader = req.headers.get("Authorization") || "";
+      const token = authHeader.replace("Bearer ", "");
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+      if (token === anonKey || token === serviceKey) {
+        console.log("CRON MODE: Syncing all Gmail users");
+        return await syncAllUsers(body);
+      }
+
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -306,13 +570,7 @@ serve(async (req) => {
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const accessToken = await getAccessTokenForUser(userId, clientIp);
 
-    // Parse body for parameters
-    let body: { maxResults?: number; pageToken?: string; query?: string } = {};
-    try {
-      body = await clonedReq.json();
-    } catch {
-      // No body or invalid JSON
-    }
+    // body already parsed above (before auth check)
 
     const maxResults = String(body.maxResults ?? 20);
     const pageToken = body.pageToken ?? "";

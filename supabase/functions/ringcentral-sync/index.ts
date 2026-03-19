@@ -391,10 +391,36 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
         } catch (e) { console.warn(`CRON: fax sync failed for ${row.user_id}:`, e); }
       }
 
+      // Mark integration as synced successfully
+      await supabaseAdmin
+        .from("integration_connections")
+        .upsert({
+          user_id: row.user_id,
+          integration_id: "ringcentral",
+          status: "connected",
+          error_message: null,
+          last_sync_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,integration_id" });
+
       results.push({ user_id: row.user_id, ok: true, calls: callsUpserted, sms: smsUpserted, voicemails: voicemailsUpserted, faxes: faxesUpserted });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown";
       console.warn(`CRON: sync failed for user ${row.user_id}:`, msg);
+
+      // Self-healing: mark integration as error if token expired
+      if (msg === "not_connected" || msg.includes("invalid_grant") || msg.includes("Token not found") || msg.includes("expired")) {
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: row.user_id,
+            integration_id: "ringcentral",
+            status: "error",
+            error_message: "Token expired — please reconnect",
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,integration_id" });
+      }
+
       results.push({ user_id: row.user_id, ok: false, error: msg });
     }
   }
