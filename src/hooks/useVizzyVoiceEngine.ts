@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useVoiceEngine } from "./useVoiceEngine";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
@@ -185,23 +185,34 @@ Use this to know WHERE to look in the data below:
 export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
 export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
 
-function buildInstructions(erpContext: string | null): string {
-  if (!erpContext) return VIZZY_INSTRUCTIONS;
-  return `${VIZZY_INSTRUCTIONS}\n\n═══ LIVE BUSINESS DATA (as of ${new Date().toLocaleString()}) ═══\n${erpContext}`;
+function buildInstructions(digest: string | null, rawContext: string | null): string {
+  if (!digest && !rawContext) return VIZZY_INSTRUCTIONS;
+
+  const now = new Date().toLocaleString();
+
+  if (digest) {
+    // Pre-digested mode: Vizzy has already "studied" everything
+    return `${VIZZY_INSTRUCTIONS}
+
+═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${now}) ═══
+You have ALREADY gone through all the raw data, analyzed every employee, read every call note, checked every email, compared benchmarks. The analysis below is YOUR OWN work. Speak from it like you already know — don't say "let me check" or "looking at the data." You KNOW.
+
+${digest}
+
+═══ RAW REFERENCE DATA (for specific lookups) ═══
+${rawContext || "(raw data not available — use your study notes above)"}`;
+  }
+
+  // Fallback: raw context only (no digest available)
+  return `${VIZZY_INSTRUCTIONS}\n\n═══ LIVE BUSINESS DATA (as of ${now}) ═══\n${rawContext}`;
 }
 
 export function useVizzyVoiceEngine() {
-  const [erpContext, setErpContext] = useState<string | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const contextFetched = useRef(false);
 
   // Ref always holds the latest instructions — avoids stale closure
-  const instructionsRef = useRef(buildInstructions(null));
-
-  // Keep ref in sync with erpContext state
-  useEffect(() => {
-    instructionsRef.current = buildInstructions(erpContext);
-  }, [erpContext]);
+  const instructionsRef = useRef(buildInstructions(null, null));
 
   // Pass a getter function so useVoiceEngine reads the latest instructions at connection time
   const engine = useVoiceEngine({
@@ -217,25 +228,46 @@ export function useVizzyVoiceEngine() {
   const originalStartSession = engine.startSession;
 
   const startSession = useCallback(async () => {
-    // Fetch ERP context first if not yet fetched
+    // Fetch pre-digested context first if not yet fetched
     if (!contextFetched.current) {
       contextFetched.current = true;
       setContextLoading(true);
       try {
-        const data = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
-          "vizzy-daily-brief",
-          {},
-          { timeoutMs: 25000 }
-        );
-        // Prefer raw context (granular employee-level data) over summarized briefing
-        const contextData = data?.rawContext || data?.briefing;
-        if (contextData) {
-          setErpContext(contextData);
-          // Update the ref immediately — don't wait for React re-render
-          instructionsRef.current = buildInstructions(contextData);
+        // Try pre-digest first (AI-analyzed, benchmark-aware)
+        const data = await invokeEdgeFunction<{
+          digest: string;
+          rawContext?: string;
+        }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
+
+        if (data?.digest) {
+          instructionsRef.current = buildInstructions(data.digest, data.rawContext || null);
+        } else {
+          // Fallback to daily-brief if pre-digest fails
+          const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
+            "vizzy-daily-brief",
+            {},
+            { timeoutMs: 25000 }
+          );
+          const contextData = fallback?.rawContext || fallback?.briefing;
+          if (contextData) {
+            instructionsRef.current = buildInstructions(null, contextData);
+          }
         }
       } catch (err) {
-        console.warn("Failed to fetch ERP context for Vizzy voice:", err);
+        console.warn("Pre-digest failed, trying daily-brief fallback:", err);
+        try {
+          const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
+            "vizzy-daily-brief",
+            {},
+            { timeoutMs: 25000 }
+          );
+          const contextData = fallback?.rawContext || fallback?.briefing;
+          if (contextData) {
+            instructionsRef.current = buildInstructions(null, contextData);
+          }
+        } catch (err2) {
+          console.warn("Daily-brief fallback also failed:", err2);
+        }
       } finally {
         setContextLoading(false);
       }
