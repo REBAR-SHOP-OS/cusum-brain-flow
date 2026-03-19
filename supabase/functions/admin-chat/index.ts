@@ -1048,6 +1048,153 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
       }))});
     }
 
+    // ─── RingCentral Read Tools ───
+    case "rc_get_active_calls": {
+      try {
+        // Get companyId from the supabase context — we need it for token lookup
+        // The supabase client here is service-role, so we query for any company's RC token
+        const { data: allTokens } = await supabase
+          .from("user_ringcentral_tokens")
+          .select("access_token, token_expires_at, refresh_token, user_id")
+          .order("token_expires_at", { ascending: false })
+          .limit(1);
+        if (!allTokens?.length) return JSON.stringify({ message: "No RingCentral connection found" });
+        
+        const tokenRow = allTokens[0];
+        let accessToken = tokenRow.access_token;
+        if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
+          const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+          const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+          if (!clientId || !clientSecret || !tokenRow.refresh_token) return JSON.stringify({ error: "RC token expired, cannot refresh" });
+          const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+            body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+          });
+          if (!resp.ok) return JSON.stringify({ error: "Token refresh failed" });
+          const tokens = await resp.json();
+          accessToken = tokens.access_token;
+          await supabase.from("user_ringcentral_tokens").update({
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+            token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+          }).eq("user_id", tokenRow.user_id);
+        }
+
+        const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/active-calls?view=Detailed`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!resp.ok) return JSON.stringify({ error: `RC API error: ${resp.status}` });
+        const data = await resp.json();
+        const calls = (data.records || []).map((c: any) => ({
+          id: c.id, sessionId: c.sessionId, direction: c.direction,
+          from: c.from?.phoneNumber || c.from?.name || "Unknown",
+          to: c.to?.phoneNumber || c.to?.name || "Unknown",
+          status: c.telephonyStatus || c.result || "Active",
+          startTime: c.startTime, duration: c.duration || 0,
+        }));
+        return JSON.stringify({ activeCalls: calls, total: calls.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "rc_get_team_presence": {
+      try {
+        const { data: allTokens } = await supabase
+          .from("user_ringcentral_tokens")
+          .select("access_token, token_expires_at, refresh_token, user_id")
+          .order("token_expires_at", { ascending: false });
+        if (!allTokens?.length) return JSON.stringify({ message: "No RingCentral connections found" });
+
+        const presenceResults: any[] = [];
+        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+
+        for (const row of allTokens) {
+          let accessToken = row.access_token;
+          if (row.token_expires_at && new Date(row.token_expires_at) <= new Date()) {
+            if (!clientId || !clientSecret || !row.refresh_token) continue;
+            try {
+              const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
+                body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
+              });
+              if (!resp.ok) continue;
+              const tokens = await resp.json();
+              accessToken = tokens.access_token;
+              await supabase.from("user_ringcentral_tokens").update({
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token || row.refresh_token,
+                token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+              }).eq("user_id", row.user_id);
+            } catch { continue; }
+          }
+
+          try {
+            const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/presence`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (!resp.ok) continue;
+            const data = await resp.json();
+            // Get user name
+            const { data: profile } = await supabase.from("profiles").select("full_name").eq("user_id", row.user_id).maybeSingle();
+            presenceResults.push({
+              user_id: row.user_id,
+              name: profile?.full_name || "Unknown",
+              status: data.presenceStatus || data.userStatus || "Offline",
+              dnd_status: data.dndStatus || null,
+              telephony_status: data.telephonyStatus || null,
+            });
+          } catch { continue; }
+        }
+        return JSON.stringify({ presenceData: presenceResults, total: presenceResults.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "rc_get_call_analytics": {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const days = args.days || 1;
+        const startDate = args.date || (days === 1 ? today : new Date(Date.now() - (days - 1) * 86400000).toISOString().split("T")[0]);
+        const endDate = args.date || today;
+
+        const { data: calls, error } = await supabase
+          .from("communications")
+          .select("direction, duration, from_address, to_address, received_at, missed, employee_name")
+          .eq("channel", "phone")
+          .gte("received_at", startDate + "T00:00:00")
+          .lte("received_at", endDate + "T23:59:59")
+          .limit(500);
+
+        if (error) return JSON.stringify({ error: error.message });
+
+        const total = (calls || []).length;
+        const missed = (calls || []).filter((c: any) => c.missed).length;
+        const inbound = (calls || []).filter((c: any) => c.direction === "inbound").length;
+        const outbound = (calls || []).filter((c: any) => c.direction === "outbound").length;
+        const durations = (calls || []).filter((c: any) => c.duration > 0).map((c: any) => c.duration);
+        const avgDuration = durations.length > 0 ? Math.round(durations.reduce((a: number, b: number) => a + b, 0) / durations.length) : 0;
+
+        // Per-employee breakdown
+        const byEmployee: Record<string, { total: number; missed: number; inbound: number; outbound: number; totalDuration: number }> = {};
+        for (const c of (calls || [])) {
+          const name = c.employee_name || "Unknown";
+          if (!byEmployee[name]) byEmployee[name] = { total: 0, missed: 0, inbound: 0, outbound: 0, totalDuration: 0 };
+          byEmployee[name].total++;
+          if (c.missed) byEmployee[name].missed++;
+          if (c.direction === "inbound") byEmployee[name].inbound++;
+          if (c.direction === "outbound") byEmployee[name].outbound++;
+          byEmployee[name].totalDuration += (c.duration || 0);
+        }
+
+        return JSON.stringify({
+          period: { from: startDate, to: endDate },
+          summary: { total, inbound, outbound, missed, avgDurationSeconds: avgDuration },
+          byEmployee,
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
