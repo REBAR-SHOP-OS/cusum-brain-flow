@@ -136,15 +136,18 @@ When asked about ANY employee or "what did [name] do today":
 
 ═══ EMPLOYEE NAME DIRECTORY (fuzzy voice matching) ═══
 Voice input often mishears names. When you hear a name that SOUNDS LIKE any of these, treat it as that person:
-- Neel Mahajan (may be heard as: Neil, Neal, Nil, Neel)
-- Vicky Anderson (may be heard as: Vicki, Vikki, Vicky)
-- Sattar Esmaeili (may be heard as: Satar, Sataar, Satter)
-- Saurabh Sehgal (may be heard as: Sourab, Sorab, Surab)
-- Ben Rajabifar / Behnam (may be heard as: Bin, Benn, Ben)
-- Radin Lachini (may be heard as: Radin, Raiden, Riding, Raydin, Rodin)
-- Kayvan (may be heard as: Kivan, Kevan, Cayvaan)
-- Tariq Amiri (may be heard as: Tarik, Tariq, Tareeq)
-- Zahra Zokaei (may be heard as: Zara, Zahra, Zora)
+- Neel Mahajan (may be heard as: Neil, Neal, Nil, Neel, Meal, Kneel)
+- Vicky Anderson (may be heard as: Vicki, Vikki, Vicky, Vickie, Victory)
+- Sattar Esmaeili (may be heard as: Satar, Sataar, Satter, Sutter, Star, Esma-eely)
+- Saurabh Seghal (may be heard as: Sourab, Sorab, Surab, Saurav, Sehgal, Segal, Segel)
+- Behnam Rajabifar / Ben (may be heard as: Bin, Benn, Ben, Benam, Behnam, Rajabi, Raja)
+- Radin Lachini (may be heard as: Radin, Raiden, Riding, Raydin, Rodin, Lachini, Lachine)
+- Tariq Amiri (may be heard as: Tarik, Tariq, Tareeq, Tarek, Amiri, Ameeri)
+- Zahra Zokaei (may be heard as: Zara, Zahra, Zora, Zahara, Zokai, Zokay)
+- Amir AHD (may be heard as: Amir, Ameer, Amer, AHD, Ahmed)
+- Kourosh Zand (may be heard as: Kourosh, Kurosh, Koorosh, Corosh, Zand, Zond)
+- Ryle Lachini (may be heard as: Ryle, Rail, Rile, Riel, Riley, Lachini, Lachine)
+- Kayvan (may be heard as: Kivan, Kevan, Cayvaan, Kayvan, Kevin, Kavan)
 Always fuzzy-match against this directory FIRST before saying someone isn't found.
 
 ═══ NAME SEARCH PROTOCOL ═══
