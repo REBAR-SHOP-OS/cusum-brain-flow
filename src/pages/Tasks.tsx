@@ -30,6 +30,7 @@ import { uploadToStorage } from "@/lib/storageUpload";
 import { cn } from "@/lib/utils";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { format, isPast, isToday, startOfDay } from "date-fns";
+import { triggerFeedbackAnalysis } from "@/lib/triggerFeedbackAnalysis";
 
 // ─── Helpers ─────────────────────────────────────────────
 function getTaskCreatorName(task: TaskRow): string | null {
