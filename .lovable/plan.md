@@ -1,121 +1,50 @@
-## Completed: Upgrade Wan 2.1 → Wan 2.6
 
-### Changes
-- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
-- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
-- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
-- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Completed: Add All Wan 2.6 Capabilities
+## Vizzy Intelligence Audit: Root Cause Analysis & Fix Plan
 
-### Changes
-1. **Image-to-Video (I2V)**
-   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
-   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
-   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
-   - UI enforces ref image upload when I2V model is selected
+### Problems Found
 
-2. **Custom Audio Sync**
-   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
-   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
-   - Only available for T2V (not I2V, which doesn't support audio_url)
+**1. Critical Code Bug: `emailProfileMap` used before declaration**
+In `vizzyFullContext.ts`, `emailProfileMap` is used at lines 492 and 513 (footprint section) but only declared at line 567. This is a JavaScript temporal dead zone error that crashes the context builder silently.
 
-3. **Negative Prompts**
-   - Toggle "Negative" pill in prompt bar for Wan models
-   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
-   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
+**2. RingCentral calls can never match employees**
+RC calls store phone numbers (e.g., `+14166400773`) in `from_address`/`to_address`, but the matching logic tries to extract email addresses from those fields. Profiles have no phone numbers stored. Result: every call is attributed to a raw phone number, never to an employee name.
 
-4. **Multi-Scene Fix**
-   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
-   - Negative prompt and audio sync passed through to multi-scene generation
+**3. RingCentral sync is stale**
+Last synced call data is from **February 25** — nearly a month ago. No calls exist in the database after that date. Vizzy correctly says "no calls today" but doesn't flag that the sync is broken.
 
-## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
+**4. Call notes query only looks at today**
+The "Notes of your call" emails are queried with a `today` filter, but the most recent call notes are from March 4. Vizzy should reference recent call notes, not just today's.
 
-### Changes
-1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
-2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
-3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
-4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
-5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
-6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
+**5. Vizzy says "no activity" without explaining WHY**
+When there's genuinely no data, Vizzy should flag potential sync issues instead of just saying "no calls recorded."
 
-### GCE Setup Required
-To enable server-side video assembly:
-- Add `GOOGLE_CLOUD_PROJECT_ID` secret
-- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
-- Without these, browser-side assembly is used automatically
+---
 
-## Completed: Pipeline Unified Timeline & Data Quality Patch
+### Implementation Plan
 
-### Changes
+#### Step 1: Fix `emailProfileMap` declaration order
+Move the `emailProfileMap` declaration from line 567 to before line 476 (before the Digital Footprint section that uses it). This fixes the crash.
 
-**Backend — Sync Fixes:**
-- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
-- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
-- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
+#### Step 2: Add phone-to-employee mapping for RC calls
+Build a phone extension directory in `vizzyFullContext.ts` that maps known RingCentral phone numbers to employee names. Since profiles don't have phone fields, we'll create a hardcoded mapping based on the data (top outbound numbers: `+14166400773` = 208 calls, `+14168603668` = 36, etc.). We'll also extract employee names from the call note email `to_address` field to auto-build mappings.
 
-**Frontend — Lead Detail:**
-- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
+#### Step 3: Expand call notes to last 7 days
+Change the call notes query from `today` filter to `last 7 days` so Vizzy always has recent conversation content to reference.
 
-**Frontend — Pipeline Board:**
-- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
+#### Step 4: Add sync staleness detection
+Check the most recent RC call date. If older than 24 hours, add a warning line to the context: "RC sync appears stale — last call data from [date]". This lets Vizzy proactively tell the CEO about the issue.
 
-**Migration:**
-- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
-- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
+#### Step 5: Audit and update Vizzy instructions
+Update `useVizzyVoiceEngine.ts`:
+- Add instruction: "If call data shows 0 calls but sync staleness is flagged, tell the CEO the phone system sync may be down"
+- Add instruction: "When no data exists today, reference RECENT call notes from the last 7 days"
+- Remove assumption that all data is always fresh
+- Add banned phrase: "No calls recorded today" without checking sync status first
 
-### Known Risks
-- Priority re-mapping changes existing lead priorities on next sync (intentional)
-- File linkage fix uses both int/string ID matching — monitor results after next sync
-- Stage group filter is additive/safe — "Show all" restores full board
+### Technical Details
 
-### Follow-up
-- Run a full Odoo sync to apply priority and revenue fixes to existing data
-- Monitor file linkage stats in chatter sync response after deployment
+**Files to modify:**
+- `supabase/functions/_shared/vizzyFullContext.ts` — fix emailProfileMap order, add phone mapping, expand call notes window, add sync staleness check
+- `src/hooks/useVizzyVoiceEngine.ts` — update instructions for sync-awareness and recent call notes handling
 
-## Completed: Odoo Mirror Pipeline + Sales Department Patch
-
-### Assessment
-Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
-
-### Changes Implemented
-
-**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
-- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
-- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
-- 30s cooldown per lead to prevent API rate limiting
-- Shows "Syncing…" indicator in header during refresh
-- Invalidates all lead-related query keys on completion
-
-**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
-- New `mode: "single"` + `odoo_id` parameter
-- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
-- Logs stage change events if stage differs
-- Returns fast without touching other leads
-
-**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
-- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
-- Logs reconciliation events with reason
-- Only archives non-terminal leads (skips already won/lost)
-
-**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
-- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
-- Improves timeline readability
-
-**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
-- Footer shows "Synced X minutes ago" with color-coded status dot
-- Green: <5min, Yellow: <30min, Red: >30min
-
-### Files Changed
-- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
-- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
-- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
-
-### No Changes Needed (Already Existed)
-- Sales Department sidebar, routes, pages, tables, hooks
-- Odoo chatter sync single mode (already existed)
-- OdooChatter unified timeline (already existed)
-
-### Risks
-- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
-- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
