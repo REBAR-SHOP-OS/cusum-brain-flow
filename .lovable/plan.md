@@ -1,31 +1,34 @@
 
 
-# Fix: Allow Zahra to Publish Without Approval Gate
+# Fix: Preserve Original Imperial Measurements in Extraction
 
 ## Problem
-The frontend correctly allows `zahra@rebar.shop` and `radin@rebar.shop` to click "Publish Now" (`canPublish`), but the **edge function** (`social-publish/index.ts`) has a hard gate at line 128-135 that blocks ALL users when `neel_approved = false`. This causes the "requires approval from Neel or Sattar" error.
+The source bar list uses imperial measurements (e.g., Length: 5'-8", A: 0'-4", B: 1'-5"). After extraction, the `parseDimension()` function converts these to total inches (68, 4, 17) and the UI incorrectly labels them "MM". The user wants to see the exact same measurements as the source document.
 
-## Change
+## Root Cause
+1. `parseDimension()` in `extract-manifest/index.ts` converts "0'-4"" → 4 inches, "1'-5"" → 17 inches
+2. The AI prompt correctly says "keep values exactly as they appear" but `parseDimension()` overrides this by converting
+3. The UI displays raw numbers with "MM" label regardless of the actual unit system
 
-### File: `supabase/functions/social-publish/index.ts` (lines 128-135)
+## Solution
+Store values in inches (current behavior is fine for storage), but add unit detection and proper imperial display formatting.
 
-Before the `neel_approved` check, look up the publishing user's email. If the user is `radin@rebar.shop` or `zahra@rebar.shop`, skip the approval gate (same logic as the frontend `canPublish`).
+### 1. Edge Function: `extract-manifest/index.ts`
+- After AI extraction, detect if values are imperial by checking the AI response for feet-inches patterns (e.g., "X'-Y"")
+- Store a `unit_system` field on the `extract_sessions` table: `"imperial"` or `"metric"`
+- Keep `parseDimension()` as-is (converting to total inches is fine for calculations)
 
-```typescript
-// Look up publisher's email for canPublish bypass
-const { data: publisher } = await supabaseAdmin
-  .from("profiles")
-  .select("email")
-  .eq("user_id", userId)
-  .maybeSingle();
-const publisherEmail = publisher?.email || "";
-const canBypassApproval = ["radin@rebar.shop", "zahra@rebar.shop"].includes(publisherEmail);
+### 2. Database Migration
+- Add `unit_system TEXT DEFAULT 'metric'` column to `extract_sessions` table
 
-// HARD GATE: require neel_approved unless user has publish bypass
-if (!existing?.neel_approved && !canBypassApproval) {
-  // ... existing 403 response
-}
-```
+### 3. UI: `TagsExportView.tsx`
+- Add a helper function `formatDimension(inches: number): string` that converts inches back to feet-inches format (e.g., 17 → `1'-5"`, 68 → `5'-8"`)
+- When `unit_system` is `"imperial"`, display dimensions and length in feet-inches format instead of raw numbers with "MM"
+- When `unit_system` is `"metric"`, keep current "MM" display
 
-This aligns the server-side gate with the existing frontend permission, fixing the error for Zahra.
+### 4. Fetch unit_system
+- Update the extract session query in the parent component or TagsExportView to include `unit_system`
+- Pass it to the dimension display logic
 
+### Display Format Examples
+| Stored Value (
