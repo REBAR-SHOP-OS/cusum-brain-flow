@@ -24,6 +24,8 @@ const HAS_FARSI_OR_LATIN = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
 const REPEATED_CHARS = /(.)\1{4,}/;
 const SCRIBE_ANNOTATION = /^\s*\(/;
 const PUNCTUATION_ONLY = /^[\s.,!?…\-–—:;'"]+$/;
+// Foreign scripts: Bengali, Devanagari, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, Thai, Myanmar, CJK, Korean
+const FOREIGN_SCRIPT = /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0D7F\u0E00-\u0E7F\u1000-\u109F\u3000-\u9FFF\uAC00-\uD7AF]/;
 
 export function useAzinVoiceRelay() {
   const [state, setState] = useState<RelayState>("idle");
@@ -106,6 +108,7 @@ export function useAzinVoiceRelay() {
     onPartialTranscript: (data) => {
       if (abortRef.current?.signal.aborted) return;
       if (SCRIBE_ANNOTATION.test(data.text) || PUNCTUATION_ONLY.test(data.text)) return;
+      if (FOREIGN_SCRIPT.test(data.text)) return;
       setPartialText(data.text);
     },
     onCommittedTranscript: (data) => {
@@ -122,6 +125,7 @@ export function useAzinVoiceRelay() {
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
       if (letterCount / trimmed.length < 0.6) return;
       if (!HAS_FARSI_OR_LATIN.test(trimmed)) return;
+      if (FOREIGN_SCRIPT.test(trimmed)) return;
       if (REPEATED_CHARS.test(trimmed)) return;
       if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
 
