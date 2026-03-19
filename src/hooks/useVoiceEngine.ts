@@ -44,6 +44,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const [transcripts, setTranscripts] = useState<VoiceTranscript[]>([]);
   const [mode, setMode] = useState<VoiceEngineMode>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
   const idCounter = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -281,6 +282,16 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     }
   }, [cleanup, handleDataChannelMessage, endSession]);
 
+  const toggleMute = useCallback(() => {
+    setIsMuted(prev => {
+      const next = !prev;
+      if (streamRef.current) {
+        streamRef.current.getAudioTracks().forEach(t => { t.enabled = !next; });
+      }
+      return next;
+    });
+  }, []);
+
   const clearTranscripts = useCallback(() => {
     setTranscripts([]);
   }, []);
@@ -293,9 +304,11 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     state,
     transcripts,
     isSpeaking,
+    isMuted,
     mode,
     startSession,
     endSession,
+    toggleMute,
     clearTranscripts,
   };
 }

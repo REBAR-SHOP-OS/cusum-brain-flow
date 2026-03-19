@@ -15,9 +15,11 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     state: voiceState,
     transcripts,
     isSpeaking,
+    isMuted,
     mode,
     startSession,
     endSession,
+    toggleMute,
     contextLoading,
   } = useVizzyVoiceEngine();
 
@@ -67,7 +69,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     : isActive
     ? "Vizzy is speaking..."
     : isConnected
-    ? "Listening..."
+    ? (isMuted ? "Muted" : "Listening...")
     : "";
 
   // Orbit animation handled via CSS keyframes instead of RAF state updates
@@ -199,7 +201,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           </p>
 
           {/* Audio wave indicator when connected */}
-          {isConnected && !isActive && (
+          {isConnected && !isActive && !isMuted && (
             <div className="flex items-center gap-1 h-4">
               {[...Array(5)].map((_, i) => (
                 <motion.div
@@ -300,18 +302,36 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             Live ERP Data Connected
           </div>
         )}
-        <button
-          onClick={handleClose}
-          className="flex items-center gap-2.5 px-8 py-3.5 rounded-full font-medium shadow-lg transition-all hover:scale-105 active:scale-95"
-          style={{
-            background: "linear-gradient(135deg, hsl(0 75% 50%), hsl(0 75% 42%))",
-            color: "white",
-            boxShadow: "0 4px 20px hsl(0 75% 50% / 0.3)",
-          }}
-        >
-          <MicOff className="w-5 h-5" />
-          End Session
-        </button>
+        <div className="flex items-center gap-3">
+          {isConnected && (
+            <button
+              onClick={toggleMute}
+              className="flex items-center justify-center w-14 h-14 rounded-full font-medium shadow-lg transition-all hover:scale-105 active:scale-95"
+              style={{
+                background: isMuted
+                  ? "hsl(0 0% 20%)"
+                  : "hsl(172 66% 50% / 0.15)",
+                border: `2px solid ${isMuted ? "hsl(0 0% 35%)" : "hsl(172 66% 50% / 0.4)"}`,
+                color: isMuted ? "hsl(0 0% 50%)" : "hsl(172 66% 65%)",
+              }}
+              aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+            >
+              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+          )}
+          <button
+            onClick={handleClose}
+            className="flex items-center gap-2.5 px-8 py-3.5 rounded-full font-medium shadow-lg transition-all hover:scale-105 active:scale-95"
+            style={{
+              background: "linear-gradient(135deg, hsl(0 75% 50%), hsl(0 75% 42%))",
+              color: "white",
+              boxShadow: "0 4px 20px hsl(0 75% 50% / 0.3)",
+            }}
+          >
+            <MicOff className="w-5 h-5" />
+            End Session
+          </button>
+        </div>
       </div>
     </motion.div>
   );
