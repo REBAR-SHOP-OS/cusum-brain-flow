@@ -26,8 +26,8 @@ export interface RelayTranscript {
 export type RelayState = "idle" | "connecting" | "connected" | "error";
 
 // TTS voices
-const VOICE_ENGLISH = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
-const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2)
+const VOICE_ENGLISH = "FGY2WhTYpPnrIDTdsKH5"; // Laura (female, clear English)
+const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL"; // Sarah (female, multilingual v2 - best for Farsi)
 
 // Noise filter helpers
 const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
