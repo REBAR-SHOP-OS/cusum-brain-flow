@@ -743,27 +743,39 @@ export async function buildFullVizzyContext(
   }
 
   // ═══ SYNC STALENESS DETECTION ═══
-  // Use the most recent RC call EVER (not just today) to determine sync health
+  // Check integration_connections FIRST for actual sync health, then fall back to call data
+  const rcConnection = rcSyncStatus?.[0];
+  const rcSyncLastAt = rcConnection?.last_sync_at ? new Date(rcConnection.last_sync_at) : null;
+  const rcSyncConnected = rcConnection?.status === "connected";
+  const rcSyncHoursSinceSync = rcSyncLastAt ? (Date.now() - rcSyncLastAt.getTime()) / 3600000 : null;
+
   const lastRcCallDate = rcLastCallEver?.[0]?.received_at
     ? new Date(rcLastCallEver[0].received_at)
     : null;
   let syncStalenessLine = "";
 
-  if (!lastRcCallDate) {
-    // No RC calls have EVER been recorded — sync may not be configured
-    syncStalenessLine = "  ⚠️ SYNC STATUS: No RingCentral calls found in the system. Phone sync may not be configured yet.";
-  } else {
-    const hoursSinceLastCall = (Date.now() - lastRcCallDate.getTime()) / 3600000;
-    const daysSinceLastCall = hoursSinceLastCall / 24;
-
-    if (daysSinceLastCall > 3) {
-      // More than 3 days with no calls at all — likely a real sync issue
-      syncStalenessLine = `  ⚠️ SYNC STATUS: Last RC call was ${Math.round(daysSinceLastCall)} days ago (${lastRcCallDate.toLocaleString()}). Phone sync may be down — check the RingCentral connection.`;
-    } else if (totalRcCalls === 0 && hoursSinceLastCall > 24) {
-      // No calls today but there were calls in the last 3 days — just a quiet day
-      syncStalenessLine = `  ℹ️ No RingCentral calls today. Last call was ${Math.round(hoursSinceLastCall)} hours ago (${lastRcCallDate.toLocaleString()}). Sync appears healthy — likely just a quiet day.`;
+  if (rcConnection && rcSyncConnected && rcSyncHoursSinceSync !== null && rcSyncHoursSinceSync < 2) {
+    // Sync connection is healthy and recently synced — no warning regardless of call volume
+    if (totalRcCalls === 0) {
+      syncStalenessLine = "  ✅ SYNC STATUS: RingCentral sync is running normally. No calls recorded today — just a quiet day.";
     }
-    // If totalRcCalls > 0 OR last call was within 24h, no warning needed
+    // If there ARE calls today, no status line needed at all
+  } else if (rcConnection && (rcConnection.status === "error" || (rcSyncHoursSinceSync !== null && rcSyncHoursSinceSync > 12))) {
+    // Sync connection exists but is errored or stale
+    syncStalenessLine = `  ⚠️ SYNC STATUS: RingCentral connection is ${rcConnection.status}. Last sync was ${rcSyncHoursSinceSync ? Math.round(rcSyncHoursSinceSync) + " hours ago" : "unknown"}. Check the RingCentral connection.`;
+  } else if (!rcConnection) {
+    // No integration_connections row — fall back to call-based detection
+    if (!lastRcCallDate) {
+      syncStalenessLine = "  ⚠️ SYNC STATUS: No RingCentral calls found in the system. Phone sync may not be configured yet.";
+    } else {
+      const hoursSinceLastCall = (Date.now() - lastRcCallDate.getTime()) / 3600000;
+      const daysSinceLastCall = hoursSinceLastCall / 24;
+      if (daysSinceLastCall > 3) {
+        syncStalenessLine = `  ⚠️ SYNC STATUS: Last RC call was ${Math.round(daysSinceLastCall)} days ago. Phone sync may be down — check the RingCentral connection.`;
+      } else if (totalRcCalls === 0 && hoursSinceLastCall > 24) {
+        syncStalenessLine = "  ✅ SYNC STATUS: RingCentral sync appears healthy. No calls recorded today.";
+      }
+    }
   }
 
   // Build structured facts block for anti-hallucination anchoring
