@@ -11,6 +11,8 @@ export function triggerFeedbackAnalysis(params: {
   page_path?: string;
   reopen_reason?: string;
   original_task_id?: string;
+  user_id?: string;
+  company_id?: string;
 }) {
   // Fire and forget — don't await, don't block UI
   supabase.functions.invoke("analyze-feedback-fix", {

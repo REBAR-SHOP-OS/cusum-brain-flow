@@ -52,9 +52,22 @@ serve(async (req) => {
       title, description, screenshot_url, page_path,
       reopen_reason, original_task_id,
       clarification_answer, original_memory_id,
+      user_id, company_id,
     } = await req.json();
 
     if (!title && !description && !clarification_answer) {
+      return new Response(JSON.stringify({ error: "Title, description, or clarification required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!company_id) {
+      return new Response(JSON.stringify({ error: "company_id is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
       return new Response(JSON.stringify({ error: "Title, description, or clarification required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -289,6 +302,7 @@ serve(async (req) => {
             status: "open",
             priority: "high",
             source: "system",
+            company_id,
           });
         }
       }
@@ -298,9 +312,38 @@ serve(async (req) => {
       savedContent = reasoning;
     }
 
+    // Resolve user_id: use provided or fall back to auth header
+    let resolvedUserId = user_id;
+    if (!resolvedUserId) {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        const anonClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_ANON_KEY")!,
+          { global: { headers: { Authorization: authHeader } } },
+        );
+        const { data: { user: authUser } } = await anonClient.auth.getUser();
+        resolvedUserId = authUser?.id;
+      }
+    }
+
+    if (!resolvedUserId) {
+      console.warn("[analyze-feedback-fix] No user_id resolved, using company_id owner fallback");
+      // Fallback: pick any profile in the company
+      const { data: fallbackProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("user_id")
+        .eq("company_id", company_id)
+        .limit(1)
+        .single();
+      resolvedUserId = fallbackProfile?.user_id;
+    }
+
     await supabaseAdmin.from("vizzy_memory").insert({
       category: savedCategory,
       content: savedContent,
+      user_id: resolvedUserId,
+      company_id,
       metadata: {
         ...baseMeta,
         applied: false,

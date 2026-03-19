@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -349,17 +350,15 @@ function ClarificationCard({
     if (!answer.trim()) return;
     setSending(true);
     try {
-      const { error } = await supabase.functions.invoke("analyze-feedback-fix", {
-        body: {
-          title: item.title,
-          description: item.metadata.source_description || "",
-          screenshot_url: item.metadata.screenshot_url || undefined,
-          page_path: item.metadata.page_path || undefined,
-          clarification_answer: answer.trim(),
-          original_memory_id: item.id,
-        },
+      await invokeEdgeFunction("analyze-feedback-fix", {
+        title: item.title,
+        description: item.metadata.source_description || "",
+        screenshot_url: item.metadata.screenshot_url || undefined,
+        page_path: item.metadata.page_path || undefined,
+        clarification_answer: answer.trim(),
+        original_memory_id: item.id,
+        company_id: item.metadata.company_id || undefined,
       });
-      if (error) throw error;
       toast({ title: "✅ Answer submitted", description: "Re-analyzing with your input..." });
       setAnswer("");
       onResolved();
