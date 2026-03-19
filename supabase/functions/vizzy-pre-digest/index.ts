@@ -92,20 +92,31 @@ Convert all the raw data into a pre-analyzed, ready-to-speak format. Vizzy shoul
 
 Structure it as:
 1. [FACTS] block — copy verbatim from raw data
-2. TODAY'S PULSE — 3-4 sentence executive summary of the day's state
-3. NOTABLE CHANGES — what's different from previous benchmarks (up/down trends, new patterns)
-4. PER-PERSON INTELLIGENCE — for EACH employee with ANY activity today:
+2. MOTIVATIONAL OPENER — a warm, genuine good morning message with something uplifting (a quote, encouragement based on yesterday's wins, or a personal observation). Make it feel human, not corporate.
+3. TODAY'S PULSE — 3-4 sentence executive summary of the day's state
+4. NOTABLE CHANGES — what's different from previous benchmarks (up/down trends, new patterns)
+5. EMAIL TRIAGE — categorize inbox emails as:
+   - 🔴 URGENT (needs reply today)
+   - 🟡 NEEDS REPLY (can wait but should respond)
+   - 🟢 FYI (no action needed)
+   Include sender, subject, and one-line summary for each.
+6. PER-PERSON INTELLIGENCE — for EACH employee with ANY activity today:
    - Name, hours clocked, active time, utilization %
    - Calls: count, duration, missed, call note summaries (what they actually discussed)
    - Emails: sent/received count
    - Work orders, AI sessions, notable actions
    - YOUR ASSESSMENT: one sentence rating their day (productive/light/concerning)
    - COACHING NOTE: if applicable, one specific improvement suggestion
-5. FINANCIAL HEALTH — key numbers + any concerning trends vs benchmarks
-6. PRODUCTION STATUS — bottlenecks, progress, machine utilization
-7. SALES PIPELINE — hot leads, stalled opportunities, call quality observations
-8. RED FLAGS — anything that needs CEO attention, ranked by severity
-9. OPPORTUNITIES — things going well that could be leveraged
+7. FINANCIAL HEALTH — key numbers + any concerning trends vs benchmarks
+8. PRODUCTION STATUS — bottlenecks, progress, machine utilization
+9. SALES PIPELINE — hot leads, stalled opportunities, call quality observations
+10. RED FLAGS — anything that needs CEO attention, ranked by severity
+11. OPPORTUNITIES — things going well that could be leveraged
+12. MORNING SCHEDULE PROPOSAL — a time-blocked daily plan for the CEO based on priorities:
+   - 8:00 AM — Review [specific item]
+   - 9:00 AM — Follow up on [overdue invoice / hot lead]
+   - etc.
+   Base this on: overdue invoices, hot leads needing action, deliveries to track, production issues, emails requiring replies.
 
 CRITICAL RULES:
 - Preserve ALL specific numbers, names, amounts — Vizzy needs these for voice answers

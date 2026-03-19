@@ -144,7 +144,7 @@ export async function buildFullVizzyContext(
       : Promise.resolve({ data: null }),
     supabase
       .from("communications")
-      .select("subject, from_address, to_address, body_preview, received_at, ai_urgency")
+      .select("id, subject, from_address, to_address, body_preview, received_at, ai_urgency, gmail_thread_id")
       .eq("direction", "inbound")
       .order("received_at", { ascending: false })
       .limit(30),
