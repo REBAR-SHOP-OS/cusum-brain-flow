@@ -1,31 +1,21 @@
 
 
-# بهبود دقت شنیداری، سرعت ترجمه، و حذف کامل خروجی در سکوت
-
-## مشکلات فعلی (از اسکرین‌شات)
-
-1. **"(speaking in foreign language)..."** — Scribe هنگام سکوت یا صدای نامشخص این متن را تولید می‌کند
-2. سرعت ترجمه می‌تواند بهتر شود
+# تغییر مدل ترجمه به GPT + بهبود prompt دقت ترجمه
 
 ## تغییرات
 
-### 1. `src/hooks/useAzinVoiceRelay.ts` — فیلتر قوی‌تر + سرعت
+### 1. `supabase/functions/translate-message/index.ts` — تغییر به GPT
 
-**فیلتر سکوت/نویز:**
-- بلاک کردن متن‌هایی که با پرانتز شروع می‌شوند: `(speaking in foreign language)`, `(music)`, `(laughter)` — اینها annotation های Scribe هستند، نه گفتار واقعی
-- بلاک کردن متن‌هایی که فقط نقطه‌گذاری هستند (مثل `...`)
-- حفظ فیلتر ۳ کلمه / ۸ کاراکتر برای جلوگیری از نویز کوتاه
+- تغییر `provider: "gemini"` به `provider: "gpt"` و `model: "gpt-4o"` (سریع‌ترین مدل OpenAI با دقت بالا)
+- بازنویسی system prompt دقیقاً مطابق دستور کاربر:
+  - فقط ترجمه برگردان، هیچ توضیحی نده
+  - اعداد، مبالغ، تاریخ‌ها، اسامی و اصطلاحات فنی را دقیق حفظ کن
+  - لحن را حفظ کن
+  - اگر ورودی ناقص است، فقط همان بخش را ترجمه کن
+  - اگر ورودی ترکیبی فارسی و انگلیسی بود، هر بخش را به زبان مقابل ترجمه کن
+  - هرگز مثل دستیار رفتار نکن — فقط مترجم باش
+  - فقط در صورت درخواست "explain" یا "meaning" توضیح بده
 
-**حذف partial text نویزی:**
-- اگر partial text حاوی `(speaking` یا `(music` باشد، نمایش ندهد
-
-### 2. `supabase/functions/translate-message/index.ts` — مدل سریع‌تر
-
-- تغییر مدل از `gemini-3-flash-preview` به `gemini-2.5-flash` — پایدارتر و سریع‌تر
-- کاهش temperature از 0.0 به 0.0 (همان — حداکثر دقت)
-- اضافه کردن `maxTokens: 500` برای پاسخ سریع‌تر
-
-### فایل‌ها
-- `src/hooks/useAzinVoiceRelay.ts`
-- `supabase/functions/translate-message/index.ts`
+### 2. فایل‌ها
+- `supabase/functions/translate-message/index.ts` — provider + prompt
 
