@@ -1423,14 +1423,30 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
         }).eq("user_id", tokenRow.user_id);
       }
 
+      // Auto-detect SMS sender number
+      let smsFrom = "";
+      try {
+        const pnResp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/phone-number`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (pnResp.ok) {
+          const pnData = await pnResp.json();
+          const records = pnData.records || [];
+          const smsNum = records.find((r: any) => r.features?.includes("SmsSender"));
+          const directNum = records.find((r: any) => r.usageType === "DirectNumber" && r.features?.includes("CallerId"));
+          smsFrom = smsNum?.phoneNumber || directNum?.phoneNumber || records[0]?.phoneNumber || "";
+        }
+      } catch (e) { console.error("Failed to fetch SMS sender:", e); }
+      if (!smsFrom) throw new Error("No SMS-capable phone number found.");
+
       const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/sms`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ to: [{ phoneNumber: args.to }], text: args.text }),
+        body: JSON.stringify({ from: { phoneNumber: smsFrom }, to: [{ phoneNumber: args.to }], text: args.text }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(`SMS failed: ${JSON.stringify(data)}`);
-      return { success: true, message: `SMS sent to ${args.to}`, messageId: data.id };
+      return { success: true, message: `SMS sent to ${args.to} from ${smsFrom}`, messageId: data.id };
     }
 
     case "rc_send_fax": {
