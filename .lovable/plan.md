@@ -1,66 +1,31 @@
 
 
-# Fix Vizzy Voice Integration with Gmail & RingCentral
+# Fix Vizzy Greeting + RingCentral Stale Banner
 
-## Problem Summary
+## Step 1 — Time-aware greeting
 
-Two root causes prevent Vizzy from working properly:
+**File: `src/hooks/useVizzyVoiceEngine.ts`**
 
-**Issue 1 — Vizzy's responses are silently dropped (PRIMARY)**
-The `isSelfTalk()` filter in `useVoiceEngine.ts` (lines 81-88) contains a language-mismatch rule designed for the Azin *translator*. It blocks any agent response that's in the *same* language as the user. Since Vizzy is a conversational assistant who should reply in the same language, nearly **all** of her responses are filtered out before rendering. This is why the screenshot shows only "YOU" bubbles.
+Replace line 177's hardcoded "Good morning!" with a dynamic time-of-day instruction:
 
-Additionally, the self-talk pattern list (lines 48-62) is extremely aggressive — it blocks phrases like "sure", "got it", "I can", "I will", "let me", which are all legitimate Vizzy responses.
+- In `buildInstructions()` (line 305), compute `hour = new Date().getHours()` → morning/afternoon/evening
+- Inject a line like `"Current time of day: afternoon. Greet accordingly (Good afternoon, Good evening, etc.)"` into the prompt right before the data section
+- Change line 177 from `"Good morning!"` to `"a warm, personalized greeting appropriate for the time of day"` so the protocol itself is time-neutral
 
-**Issue 2 — RingCentral never writes to `integration_connections`**
-The `ringcentral-oauth` edge function saves tokens to `user_ringcentral_tokens` but **never creates a row** in `integration_connections`. Gmail does this (line 183-196 of google-oauth). Without this row, the Integrations page shows RingCentral as disconnected, and Vizzy's context builder can't detect the connection.
+## Step 2 — Smarter staleness check
 
-## Evidence
+**File: `src/pages/Integrations.tsx`**
 
-- `curl google-oauth check-status` → `{"status":"connected","email":"sattar@rebar.shop"}` ✓
-- `curl ringcentral-oauth check-status` → `{"status":"connected","email":"Sattar@rebar.shop"}` ✓
-- `integration_connections` table has Gmail rows but **zero RingCentral rows**
-- `user_ringcentral_tokens` has valid token (expires 2026-03-19 23:07)
-- Voice transcript shows all "YOU" messages, no "VIZZY" messages → filter is dropping them
+In `useStalenessCheck()`, after querying communications data (lines 28-42), also query `integration_connections` for each source:
 
-## Fix Plan
+```sql
+SELECT last_sync_at FROM integration_connections 
+WHERE user_id = ? AND integration_id IN ('gmail', 'ringcentral')
+```
 
-### Step 1 — Remove language-mismatch filter for non-translation use
+Then in the staleness loop (lines 53-65), add a condition: only push a stale item if **both** the last communication data AND `last_sync_at` are older than 12 hours. If `last_sync_at` is recent, the sync is healthy — skip the warning.
 
-**File: `src/hooks/useVoiceEngine.ts`**
-
-- Add `translationMode?: boolean` to `VoiceEngineConfig` (default `false`)
-- Pass `translationMode` into `isSelfTalk` calls
-- Only apply the language-mismatch check (lines 82-88) when `translationMode === true`
-- Keep echo detection and empty-text filters active for all modes
-
-### Step 2 — Reduce aggressive self-talk patterns for assistant mode
-
-**File: `src/hooks/useVoiceEngine.ts`**
-
-- Split patterns into two groups: `ALWAYS_FILTER` (empty, dots, single fillers) and `TRANSLATION_ONLY_FILTER` (conversational phrases like "sure", "I can", etc.)
-- Only apply `TRANSLATION_ONLY_FILTER` when `translationMode === true`
-- This allows Vizzy to say things like "Got it, let me check your emails" without being blocked
-
-### Step 3 — Write RingCentral status to `integration_connections`
-
-**File: `supabase/functions/ringcentral-oauth/index.ts`**
-
-- In the `handleOAuthCallback` function (after saving tokens, around line 385), add an upsert to `integration_connections` with `integration_id: "ringcentral"`, `status: "connected"`, same pattern as google-oauth
-- In the `check-status` action (around line 132), when returning "connected", also upsert the integration_connections row
-- In the `disconnect` action (around line 263), also delete the `integration_connections` row for ringcentral
-
-### Step 4 — Deploy updated edge function
-
-Deploy `ringcentral-oauth` so the fix takes effect immediately.
-
-## Files to Modify
-
-1. `src/hooks/useVoiceEngine.ts` — add `translationMode` flag, split filter patterns
-2. `supabase/functions/ringcentral-oauth/index.ts` — write/clean `integration_connections`
-
-## Expected Outcome
-
-- Vizzy's voice responses will appear in the transcript instead of being silently dropped
-- RingCentral will show as "Connected" on the Integrations page
-- Vizzy's context will correctly detect both Gmail and RingCentral as active integrations
+## Files Modified
+1. `src/hooks/useVizzyVoiceEngine.ts` — time-aware greeting
+2. `src/pages/Integrations.tsx` — check `last_sync_at` before showing stale banner
 
