@@ -1,24 +1,22 @@
 
 
-# سرعت و دقت بیشتر + حذف Hey Nila + فیلتر سکوت
+# ارتقا به آخرین مدل ChatGPT (GPT-5) برای حداکثر دقت
+
+## مشکل فعلی
+مدل فعلی `gpt-5-mini` است — سریع ولی دقت کمتر از مدل اصلی. در اسکرین‌شات هم متن بنگالی (`আমি...`) فیلتر نشده.
 
 ## تغییرات
 
-### 1. `supabase/functions/translate-message/index.ts` — مدل GPT-5-mini
-- تغییر provider از `gemini` به `gpt` و model به `gpt-5-mini` (سریع‌ترین مدل ChatGPT با دقت بالا)
-- اضافه کردن `maxTokens: 300` برای پاسخ سریع‌تر
+### 1. `supabase/functions/translate-message/index.ts`
+- تغییر model از `gpt-5-mini` به **`gpt-5`** — آخرین و دقیق‌ترین مدل ChatGPT
+- افزایش `maxTokens` به `500` برای ترجمه‌های کامل‌تر
+- بهبود prompt: تاکید بیشتر روی دقت و حفظ معنای دقیق
 
-### 2. `src/hooks/useAzinVoiceRelay.ts` — فیلتر سکوت قوی‌تر
-- بلاک کردن متن‌هایی که با `(` شروع می‌شوند — مثل `(speaking in foreign language)` که Scribe هنگام سکوت تولید می‌کند
-- بلاک کردن partial text حاوی annotation (نمایش ندادن)
-- افزایش `stability` به `0.65` و `similarity_boost` به `0.85` برای صدای واضح‌تر
-
-### 3. `src/pages/AzinInterpreter.tsx` — حذف کامل Hey Nila
-- حذف useEffect مربوط به wake-word detection (خطوط 49-61)
+### 2. `src/hooks/useAzinVoiceRelay.ts` — فیلتر نویز بهتر
+- فیلتر حداقل حروف معنادار (letter ratio) از 0.5 به 0.6 برای حذف بهتر نویز
+- اطمینان از اینکه متن‌های غیر فارسی/انگلیسی (مثل بنگالی در اسکرین‌شات) فیلتر می‌شوند
 
 ### فایل‌ها
-- `supabase/functions/translate-message/index.ts`
-- `src/hooks/useAzinVoiceRelay.ts`
-- `src/pages/AzinInterpreter.tsx`
-- `supabase/functions/elevenlabs-tts/index.ts` — stability/similarity بالاتر
+- `supabase/functions/translate-message/index.ts` — مدل GPT-5
+- `src/hooks/useAzinVoiceRelay.ts` — فیلتر دقیق‌تر
 
