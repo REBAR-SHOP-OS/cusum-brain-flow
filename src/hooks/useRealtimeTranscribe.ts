@@ -25,7 +25,6 @@ export function useRealtimeTranscribe() {
   const startTimeRef = useRef<number>(0);
   const contextRef = useRef<string[]>([]);
   const sourceLangRef = useRef<SourceLang>("auto");
-  const contextRef = useRef<string[]>([]);
 
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
