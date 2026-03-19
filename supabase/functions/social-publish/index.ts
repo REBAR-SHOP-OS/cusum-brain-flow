@@ -125,8 +125,17 @@ serve(async (req) => {
         );
       }
 
-      // HARD GATE: ALL publishes (manual or cron) require neel_approved = true
-      if (!existing?.neel_approved) {
+      // Look up publisher's email for canPublish bypass
+      const { data: publisher } = await supabaseAdmin
+        .from("profiles")
+        .select("email")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const publisherEmail = (publisher?.email || "").toLowerCase();
+      const canBypassApproval = ["radin@rebar.shop", "zahra@rebar.shop"].includes(publisherEmail);
+
+      // HARD GATE: require neel_approved unless user has publish bypass
+      if (!existing?.neel_approved && !canBypassApproval) {
         console.warn(`[social-publish] BLOCKED — post ${post_id} not approved by Neel/Sattar`);
         return new Response(
           JSON.stringify({ error: "This post requires approval from Neel or Sattar before publishing." }),
