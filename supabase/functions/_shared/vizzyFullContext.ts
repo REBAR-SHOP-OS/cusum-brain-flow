@@ -735,19 +735,28 @@ export async function buildFullVizzyContext(
   }
 
   // ═══ SYNC STALENESS DETECTION ═══
-  // Check most recent RC call — if older than 24hrs, flag it
-  const allRcDates = (rcCallsToday || []).map((c: any) => c.received_at).filter(Boolean).sort().reverse();
+  // Use the most recent RC call EVER (not just today) to determine sync health
+  const lastRcCallDate = rcLastCallEver?.[0]?.received_at
+    ? new Date(rcLastCallEver[0].received_at)
+    : null;
   let syncStalenessLine = "";
-  if (totalRcCalls === 0) {
-    // No calls today — check if there are ANY recent RC calls in last 7 days
-    // Since we only queried today, flag it as potentially stale
-    syncStalenessLine = "  ⚠️ SYNC STATUS: No RingCentral calls found today. Phone system sync may be down or no calls were made/received today. Ask the CEO to verify RC is connected.";
+
+  if (!lastRcCallDate) {
+    // No RC calls have EVER been recorded — sync may not be configured
+    syncStalenessLine = "  ⚠️ SYNC STATUS: No RingCentral calls found in the system. Phone sync may not be configured yet.";
   } else {
-    const mostRecent = allRcDates[0];
-    const hoursSinceLastCall = (Date.now() - new Date(mostRecent).getTime()) / 3600000;
-    if (hoursSinceLastCall > 8) {
-      syncStalenessLine = `  ⚠️ SYNC STATUS: Last RC call was ${Math.round(hoursSinceLastCall)} hours ago (${new Date(mostRecent).toLocaleString()}). Sync may be delayed.`;
+    const hoursSinceLastCall = (Date.now() - lastRcCallDate.getTime()) / 3600000;
+    const daysSinceLastCall = hoursSinceLastCall / 24;
+
+    if (daysSinceLastCall > 3) {
+      // More than 3 days with no calls at all — likely a real sync issue
+      syncStalenessLine = `  ⚠️ SYNC STATUS: Last RC call was ${Math.round(daysSinceLastCall)} days ago (${lastRcCallDate.toLocaleString()}). Phone sync may be down — check the RingCentral connection.`;
+    } else if (totalRcCalls === 0 && hoursSinceLastCall > 24) {
+      // No calls today but there were calls in the last 3 days — just a quiet day
+      syncStalenessLine = `  ℹ️ No RingCentral calls today. Last call was ${Math.round(hoursSinceLastCall)} hours ago (${lastRcCallDate.toLocaleString()}). Sync appears healthy — likely just a quiet day.`;
     }
+    // If totalRcCalls > 0 OR last call was within 24h, no warning needed
+  }
   }
 
   // Build structured facts block for anti-hallucination anchoring
