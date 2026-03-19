@@ -6,7 +6,7 @@ import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { detectRtl } from "@/utils/textDirection";
 import { primeMobileAudio } from "@/lib/audioPlayer";
-import jsPDF from "jspdf";
+const loadJsPDF = () => import("jspdf").then(m => m.default);
 import { addMarkdownToPdf } from "@/lib/pdfMarkdownRenderer";
 
 interface Props {
