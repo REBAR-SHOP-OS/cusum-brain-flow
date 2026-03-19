@@ -35,9 +35,46 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-scroll
+  // Auto-scroll + parse VIZZY-ACTION tags from transcripts
+  const processedActionsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+
+    // Parse VIZZY-ACTION tags from agent transcripts and auto-execute
+    for (const t of transcripts) {
+      if (t.role !== "agent" || processedActionsRef.current.has(t.id)) continue;
+      const actionMatch = t.text.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
+      if (!actionMatch) continue;
+      processedActionsRef.current.add(t.id);
+
+      try {
+        const actionData = JSON.parse(actionMatch[1]);
+        // Auto-execute via vizzy-erp-action
+        (async () => {
+          try {
+            const { data, error } = await supabase.functions.invoke("vizzy-erp-action", {
+              body: { action: actionData.type, params: actionData },
+            });
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+            
+            if (actionData.type === "create_task") {
+              toast.success(`Task created: "${actionData.title}"${actionData.assigned_to_name ? ` → ${actionData.assigned_to_name}` : ""}`);
+            } else if (actionData.type === "send_email") {
+              toast.success(`Email sent to ${actionData.to}`);
+            } else {
+              toast.success(data?.message || "Action executed");
+            }
+          } catch (err) {
+            console.error("Vizzy voice action failed:", err);
+            toast.error(`Action failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+          }
+        })();
+      } catch (e) {
+        console.warn("Failed to parse VIZZY-ACTION from voice transcript:", e);
+      }
+    }
   }, [transcripts]);
 
   // Connecting timer
