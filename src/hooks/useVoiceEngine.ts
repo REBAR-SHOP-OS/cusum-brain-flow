@@ -36,6 +36,8 @@ export interface VoiceEngineConfig {
   maxSessionDurationMs?: number;
   /** Temperature for model output (default: 0.8). Lower = more deterministic */
   temperature?: number;
+  /** Enable translation-mode filtering (language-mismatch + aggressive phrase blocking). Default: false */
+  translationMode?: boolean;
 }
 
 const OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime";
