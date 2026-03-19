@@ -89,7 +89,14 @@ async function _callAISingle(provider: AIProvider, model: string, opts: AIReques
     temperature: opts.temperature ?? 0.5,
   };
 
-  if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+  if (opts.maxTokens) {
+    // GPT-5 requires max_completion_tokens instead of max_tokens
+    if (model.startsWith("gpt-5")) {
+      body.max_completion_tokens = opts.maxTokens;
+    } else {
+      body.max_tokens = opts.maxTokens;
+    }
+  }
   if (opts.tools?.length) body.tools = opts.tools;
   if (opts.toolChoice) body.tool_choice = opts.toolChoice;
 
