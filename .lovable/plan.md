@@ -1,62 +1,28 @@
 
 
-# ریشه‌ای حل کردن مشکل ترجمه: جایگزینی OpenAI Realtime با پایپلاین دقیق
-
-## مشکل اصلی
-
-OpenAI Realtime یک مدل **مکالمه‌ای** است — حتی با سخت‌ترین prompt، باز هم جواب می‌دهد به جای ترجمه. فارسی اشتباه می‌نویسد چون خودش Farsi تولید می‌کند نه اینکه ترجمه کند. هیچ مقدار prompt engineering این مشکل را کاملاً حل نمی‌کند.
-
-## راه‌حل: تغییر معماری AzinInterpreterVoiceChat
-
-جایگزین کردن OpenAI Realtime با پایپلاین سه‌مرحله‌ای اثبات‌شده:
-
-```text
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  ElevenLabs  │───▶│   Gemini     │───▶│  ElevenLabs  │
-│  Scribe STT  │    │  Translation │    │     TTS      │
-│  (دقیق)      │    │  (دقیق)      │    │  (خوانش)     │
-└──────────────┘    └──────────────┘    └──────────────┘
-   صدا → متن          متن → ترجمه        ترجمه → صدا
-```
-
-**این همان پایپلاینی است که صفحه اصلی Interpreter از آن استفاده می‌کند و درست کار می‌کند.** فقط خروجی TTS اضافه می‌شود.
+# بهبود سرعت، صدای زنانه، و فیلتر نویز قوی‌تر
 
 ## تغییرات
 
-### 1. هوک جدید: `useAzinVoiceRelay.ts`
-- از `useRealtimeTranscribe` الگو می‌گیرد
-- ElevenLabs Scribe برای تشخیص گفتار (دقیق، بدون hallucination)
-- `translate-message` edge function برای ترجمه (Gemini — فارسی بسیار دقیق)
-- پس از ترجمه، فراخوانی `elevenlabs-tts` برای خواندن ترجمه با صدا
-- پخش صدای ترجمه به صورت خودکار
-- تشخیص خودکار زبان ورودی (فارسی/انگلیسی) بر اساس حروف RTL
+### 1. `src/hooks/useAzinVoiceRelay.ts` — صدای زنانه + سرعت + فیلتر قوی‌تر
 
-### 2. کامپوننت: `AzinInterpreterVoiceChat.tsx` — بازنویسی
-- حذف وابستگی به `useAzinVoiceInterpreter` (OpenAI Realtime)
-- استفاده از هوک جدید `useAzinVoiceRelay`
-- نمایش: Original (با فونت Vazirmatn برای فارسی) + Translation
-- RTL خودکار برای متن فارسی
-- نمایش وضعیت: "Listening...", "Translating...", "Speaking..."
+**صدا**: هر دو صدا زنانه شوند:
+- انگلیسی: **Sarah** (`EXAVITQu4vr4xnSDxMaL`) — multilingual v2
+- فارسی: **Sarah** (همان voice، multilingual v2 فارسی هم ساپورت می‌کند)
 
-### 3. بهبود TTS
-- برای ترجمه انگلیسی: صدای George (مرد انگلیسی)
-- برای ترجمه فارسی: voice مناسب از ElevenLabs multilingual v2
-- پخش non-blocking — نباید ترنسکریپشن بعدی را مسدود کند
+**سرعت**: پارامتر `speed: 1.1` به TTS request اضافه شود (10% سریع‌تر بدون خرابی کیفیت)
 
-### 4. حذف فایل‌های بلااستفاده
-- `useAzinVoiceInterpreter.ts` — دیگر استفاده نمی‌شود
+**فیلتر نویز قوی‌تر** برای جلوگیری از نوشتن متن الکی:
+- حداقل **3 کلمه** (به جای 2) و حداقل **8 کاراکتر** (به جای 5)
+- بلاک‌لیست کلمات تکراری و بی‌معنی (مثل "yeah yeah", "hmm", تکرار حروف)
+- تشخیص زبان‌های غیر فارسی/انگلیسی (مثل تامیل در اسکرین‌شات) و حذف آن‌ها — اگر متن حاوی حروف فارسی/عربی یا لاتین نباشد، نادیده گرفته شود
 
-## چرا این کار می‌کند
+### 2. `supabase/functions/elevenlabs-tts/index.ts` — مدل سریع‌تر
 
-| مشکل فعلی | راه‌حل |
-|---|---|
-| مدل از خودش حرف می‌زند | Scribe فقط گوش می‌دهد + Gemini فقط ترجمه می‌کند |
-| فارسی اشتباه نوشته می‌شود | Gemini فارسی بسیار دقیق‌تر می‌نویسد |
-| "Nothing" هنگام سکوت | Scribe هنگام سکوت چیزی تولید نمی‌کند |
-| خطا در شنیدن حرف | ElevenLabs Scribe v2 دقت بالاتری دارد |
+- تغییر مدل TTS از `eleven_multilingual_v2` به `eleven_turbo_v2_5` — لیتنسی کمتر، کیفیت خوب
+- `speed` پارامتر از کلاینت دریافت شود (پیش‌فرض 1.0)
 
-## فایل‌ها
-- **جدید**: `src/hooks/useAzinVoiceRelay.ts`
-- **ویرایش**: `src/components/azin/AzinInterpreterVoiceChat.tsx`
-- **حذف**: `src/hooks/useAzinVoiceInterpreter.ts`
+### فایل‌ها
+- `src/hooks/useAzinVoiceRelay.ts` — voice IDs، speed، noise filter
+- `supabase/functions/elevenlabs-tts/index.ts` — مدل turbo
 
