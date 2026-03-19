@@ -1,25 +1,31 @@
 
 
-# Fix: FloatingVizzyButton Layout and Avatar
+# Fix: Allow Zahra to Publish Without Approval Gate
 
-## Problems (from screenshot)
-1. Action buttons (mic, chat) overlap and look messy when expanded — positioned with absolute + translate causing visual collision
-2. Avatar image is too small/zoomed out — agent's face should fill the circle prominently
+## Problem
+The frontend correctly allows `zahra@rebar.shop` and `radin@rebar.shop` to click "Publish Now" (`canPublish`), but the **edge function** (`social-publish/index.ts`) has a hard gate at line 128-135 that blocks ALL users when `neel_approved = false`. This causes the "requires approval from Neel or Sattar" error.
 
-## Changes
+## Change
 
-### File: `src/components/vizzy/FloatingVizzyButton.tsx`
+### File: `supabase/functions/social-publish/index.ts` (lines 128-135)
 
-**1. Fix action button positioning** — Fan them out cleanly in an arc above the main button:
-- Voice (mic) button: position top-right (`x: -50, y: -50`) 
-- Chat button: position directly above (`x: 0, y: -70`)
-- Remove `left-1/2 -translate-x-1/2` which causes overlap; use `top-0 left-0` as base with motion x/y for precise placement
+Before the `neel_approved` check, look up the publishing user's email. If the user is `radin@rebar.shop` or `zahra@rebar.shop`, skip the approval gate (same logic as the frontend `canPublish`).
 
-**2. Zoom avatar image** — Add `scale(1.5)` transform and `objectPosition: "center 30%"` to crop and center the agent's face within the circle, making it prominent and recognizable.
+```typescript
+// Look up publisher's email for canPublish bypass
+const { data: publisher } = await supabaseAdmin
+  .from("profiles")
+  .select("email")
+  .eq("user_id", userId)
+  .maybeSingle();
+const publisherEmail = publisher?.email || "";
+const canBypassApproval = ["radin@rebar.shop", "zahra@rebar.shop"].includes(publisherEmail);
 
-### Summary of visual changes:
-- Mic button fans out to upper-left of avatar
-- Chat button fans out directly above avatar  
-- Agent face fills the circular button prominently
-- Clean spacing, no overlapping icons
+// HARD GATE: require neel_approved unless user has publish bypass
+if (!existing?.neel_approved && !canBypassApproval) {
+  // ... existing 403 response
+}
+```
+
+This aligns the server-side gate with the existing frontend permission, fixing the error for Zahra.
 
