@@ -1,61 +1,63 @@
 
 
-# Auto-Healing 24/7 Sync for Gmail and RingCentral
+# Wire Unit System Through the Full Pipeline
 
-## Overview
+## Problem
 
-Implement automated cron-based sync with self-healing token management so data flows 24/7 without manual intervention.
+When the user selects "Imperial (ft-in)" in the BarlistMappingPanel, the selection is not saved to the session's `unit_system` column. The line items table checks `activeSession?.unit_system === "imperial"` to decide whether to format values as ft-in, but that field stays as whatever the AI auto-detected (or null). So the bottom table shows raw decimal values (1321, 584.2) instead of formatted ft-in strings (110'-1", 48'-8").
+
+Additionally, `formatDimForDisplay` only supports "½" fractions — missing ⅛, ¼, ⅜, ⅝, ¾, ⅞.
 
 ## Changes
 
-### 1. Add cron sync mode to `gmail-sync` edge function
+### 1. Pass `lengthUnit` from BarlistMappingPanel to parent
 
-**File:** `supabase/functions/gmail-sync/index.ts`
+**File:** `src/components/office/BarlistMappingPanel.tsx`
 
-Add a `syncAllUsers()` function (matching the existing pattern in `ringcentral-sync`) that:
-- Activates when called with anon/service key (no user JWT) — same pattern as RC's line 429-446
-- Queries all rows from `user_gmail_tokens` via service role
-- For each user: refreshes token, syncs last 1 day of emails, upserts to `communications`
-- On `invalid_grant`: marks `integration_connections` status to `error` with message "Token expired — please reconnect" so the UI auto-shows a Reconnect button
-- Continues to next user on failure (no single user breaks the batch)
+- Extend `onConfirmMapping` callback signature to include `unitSystem: string` (the selected `lengthUnit`)
+- Call `onConfirmMapping(allMapped, lengthUnit)` on confirm
 
-### 2. Self-healing: auto-mark integration status on token failure
+### 2. Save unit_system to session on mapping confirm
 
-**Files:** `supabase/functions/gmail-sync/index.ts` and `supabase/functions/ringcentral-sync/index.ts`
+**File:** `src/components/office/AIExtractView.tsx`
 
-In both functions' cron mode, when a token refresh fails with `invalid_grant` or equivalent:
-- Upsert to `integration_connections` setting `status = 'error'` and `error_message = 'Token expired — please reconnect'`
-- The existing `ringcentral-sync` already deletes stale tokens but doesn't update `integration_connections` — add that
+- Update `handleMappingConfirmed` to accept `(mappedRows, unitSystem)` 
+- When `unitSystem` is "imperial" or "ft" or "in", update the session: `supabase.from("extract_sessions").update({ unit_system: unitSystem === "imperial" ? "imperial" : unitSystem === "ft" ? "imperial" : "metric" }).eq("id", activeSessionId)`
+- Also call `refreshSessions()` so `activeSession.unit_system` reflects the change
 
-### 3. Schedule pg_cron jobs (every 5 minutes)
+### 3. Fix `formatDimForDisplay` to support all ⅛ fractions
 
-**Via SQL insert (not migration — contains project-specific URLs/keys):**
+**File:** `src/components/office/AIExtractView.tsx`
 
-Two cron jobs:
-- `gmail-cron-sync`: calls `gmail-sync` every 5 minutes with anon key
-- `ringcentral-cron-sync`: calls `ringcentral-sync` every 5 minutes with anon key
+- Replace the simple "½" check with the full fraction map from `unitSystem.ts` (⅛, ¼, ⅜, ½, ⅝, ¾, ⅞)
+- Same fix in `src/components/office/TagsExportView.tsx` if it has the same function
 
-Both use the existing architecture: anon key triggers the function, function escalates internally via service role key.
+### 4. Also apply the same fix in TagsExportView
 
-### 4. Gmail Watch (Pub/Sub) auto-renewal
+**File:** `src/components/office/TagsExportView.tsx`
 
-**File:** `supabase/functions/gmail-sync/index.ts`
-
-Add handling for a `renewWatch` action in the cron path that calls `gmail.users.watch()` for each user with tokens. Schedule a daily cron job for this to keep push notifications alive (they expire every 7 days).
-
-### 5. Staleness alert banner on Integrations page
-
-**File:** `src/pages/Integrations.tsx`
-
-On mount, query `MAX(received_at)` from `communications` grouped by source. If any source has no data for 12+ hours, show a warning banner:
-```
-⚠️ Gmail sync appears stale — last data received 18 hours ago
-```
+- Update its `formatDim` function to use the same full-fraction logic
 
 ## Technical Details
 
-- RingCentral already has `syncAllUsers()` (line 257) — Gmail needs the same pattern
-- Both functions already have `verify_jwt = false` in config.toml
-- `integration_connections` table has `user_id`, `integration_id`, `status`, `error_message` columns with per-user RLS
-- Cron uses anon key per project memory (service_role not accessible in pg_cron context)
+```text
+Current flow:
+  BarlistMappingPanel (user picks "Imperial ft-in")
+    → converts values to mm ✓
+    → passes MappedRow[] to parent ✓  
+    → unit selection is LOST ✗   ← problem here
+
+Fixed flow:
+  BarlistMappingPanel (user picks "Imperial ft-in")
+    → converts values to mm ✓
+    → passes (MappedRow[], "imperial") to parent ✓
+    → parent saves unit_system="imperial" on session ✓
+    → line items table reads activeSession.unit_system ✓
+    → formatDimForDisplay converts to ft-in with proper fractions ✓
+```
+
+**Files to modify:**
+- `src/components/office/BarlistMappingPanel.tsx` — pass unit to callback
+- `src/components/office/AIExtractView.tsx` — save unit to session + fix fractions
+- `src/components/office/TagsExportView.tsx` — fix fractions
 
