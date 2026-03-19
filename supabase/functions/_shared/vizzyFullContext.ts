@@ -153,7 +153,7 @@ export async function buildFullVizzyContext(
       .limit(30),
     supabase
       .from("communications")
-      .select("from_address, to_address, direction, received_at, thread_id")
+      .select("from_address, to_address, direction, received_at, thread_id, user_id, subject, body_preview, source, metadata")
       .gte("received_at", today + "T00:00:00")
       .order("received_at", { ascending: false })
       .limit(500),
@@ -639,20 +639,48 @@ export async function buildFullVizzyContext(
   }
 
   // emailProfileMap already declared above (line ~478)
-  const emailsByEmployee: Record<string, { sent: number; received: number }> = {};
-  for (const e of (allEmailsToday || [])) {
+  const emailsByEmployee: Record<string, { sent: number; received: number; emails: Array<{ subject: string; preview: string; direction: string; time: string; from: string; to: string; source: string }> }> = {};
+
+  // Helper to resolve employee name from a communication row using user_id first, then email fallback
+  const resolveCommEmployee = (e: any): string => {
+    // Priority 1: user_id → profile name (most reliable)
+    if (e.user_id) {
+      const name = profileUserIdMap.get(e.user_id);
+      if (name && name !== "Unknown") return name;
+    }
+    // Priority 2: email address matching
     if (e.direction === "outbound") {
       const fromEmail = e.from_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
-      const name = emailProfileMap.get(fromEmail) || fromEmail;
-      if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0 };
-      emailsByEmployee[name].sent++;
+      return emailProfileMap.get(fromEmail) || fromEmail;
     } else {
       const toEmail = e.to_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
-      const name = emailProfileMap.get(toEmail) || toEmail;
-      if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0 };
+      return emailProfileMap.get(toEmail) || toEmail;
+    }
+  };
+
+  for (const e of (allEmailsToday || [])) {
+    const name = resolveCommEmployee(e);
+    if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0, emails: [] };
+
+    const timeStr = e.received_at ? new Date(e.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    const emailDetail = {
+      subject: e.subject || "(no subject)",
+      preview: (e.body_preview || "").replace(/\n/g, " ").slice(0, 200),
+      direction: e.direction || "inbound",
+      time: timeStr,
+      from: e.from_address || "unknown",
+      to: e.to_address || "unknown",
+      source: e.source || "unknown",
+    };
+
+    if (e.direction === "outbound") {
+      emailsByEmployee[name].sent++;
+    } else {
       emailsByEmployee[name].received++;
     }
+    emailsByEmployee[name].emails.push(emailDetail);
   }
+
   const totalOutbound = (allEmailsToday || []).filter((e: any) => e.direction === "outbound").length;
   const totalInbound = (allEmailsToday || []).filter((e: any) => e.direction === "inbound").length;
 
@@ -663,7 +691,14 @@ export async function buildFullVizzyContext(
 
   const emailByEmployeeLines = Object.entries(emailsByEmployee)
     .sort((a, b) => (b[1].sent + b[1].received) - (a[1].sent + a[1].received))
-    .map(([name, stats]) => `  • ${name}: ${stats.sent} sent, ${stats.received} received`)
+    .map(([name, stats]) => {
+      const summary = `  • ${name}: ${stats.sent} sent, ${stats.received} received`;
+      // Show top 5 most recent email subjects for this employee
+      const topEmails = stats.emails
+        .slice(0, 5)
+        .map(e => `      - [${e.direction.toUpperCase()}] ${e.time} "${e.subject}" ${e.direction === "inbound" ? "from " + e.from : "to " + e.to}${e.preview ? " — " + e.preview.slice(0, 120) : ""}`);
+      return summary + (topEmails.length > 0 ? "\n" + topEmails.join("\n") : "");
+    })
     .join("\n");
 
   // ═══ EMPLOYEE ACTIVITY EVENT COUNTS (per employee) ═══
@@ -1052,9 +1087,27 @@ function buildPerPersonReports(
       parts.push(`👣 1 action recorded`);
     }
 
-    // Emails
+    // Emails — with subject details and action items
     const em = emailsByEmployee[name];
-    if (em) parts.push(`📧 ${em.sent} sent, ${em.received} received`);
+    if (em) {
+      parts.push(`📧 ${em.sent} sent, ${em.received} received`);
+      // Show key emails for this employee (up to 8)
+      const keyEmails = em.emails.slice(0, 8);
+      for (const e of keyEmails) {
+        parts.push(`    [${e.direction.toUpperCase()} ${e.time}] "${e.subject}" ${e.direction === "inbound" ? "from " + e.from : "to " + e.to}`);
+        if (e.preview) parts.push(`      ${e.preview.slice(0, 150)}`);
+      }
+      // Flag unanswered inbound emails as pending tasks
+      const inboundEmails = em.emails.filter(e => e.direction === "inbound");
+      const outboundSubjects = new Set(em.emails.filter(e => e.direction === "outbound").map(e => e.subject.toLowerCase()));
+      const unanswered = inboundEmails.filter(e => !outboundSubjects.has("re: " + e.subject.toLowerCase()));
+      if (unanswered.length > 0) {
+        parts.push(`    ⚠️ ${unanswered.length} inbound email(s) may need a reply:`);
+        for (const u of unanswered.slice(0, 5)) {
+          parts.push(`      → "${u.subject}" from ${u.from} (${u.time})`);
+        }
+      }
+    }
 
     // Calls
     const calls = rcCallsByEmployee[name];
