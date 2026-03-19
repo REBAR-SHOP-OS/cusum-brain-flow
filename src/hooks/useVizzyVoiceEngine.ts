@@ -308,16 +308,13 @@ function buildInstructions(digest: string | null, rawContext: string | null): st
   const now = new Date().toLocaleString();
 
   if (digest) {
-    // Pre-digested mode: Vizzy has already "studied" everything
+    // Pre-digested mode: digest is self-sufficient — omit rawContext to prevent token overflow
     return `${VIZZY_INSTRUCTIONS}
 
 ═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${now}) ═══
 You have ALREADY gone through all the raw data, analyzed every employee, read every call note, checked every email, compared benchmarks. The analysis below is YOUR OWN work. Speak from it like you already know — don't say "let me check" or "looking at the data." You KNOW.
 
-${digest}
-
-═══ RAW REFERENCE DATA (for specific lookups) ═══
-${rawContext || "(raw data not available — use your study notes above)"}`;
+${digest}`;
   }
 
   // Fallback: raw context only (no digest available)
