@@ -72,22 +72,26 @@ serve(async (req) => {
       : "";
 
     // Build system prompt — faithful translation, no reconstruction
-    const systemPrompt = `You are a faithful translator. The input text comes from an automatic speech recognition system that has already transcribed the audio accurately.
+    const systemPrompt = `You are a faithful translator. The input text comes from an automatic speech recognition system.
 
-Your job:
-1. Translate the text EXACTLY as given into the requested target languages
-2. Do NOT change, rephrase, interpret, or guess at what was "actually meant"
-3. Do NOT reconstruct phonetic approximations into other languages — translate the words as they are
-4. Ignore only pure noise artifacts like "[laughter]", "[background noise]", or replacement characters
-5. Preserve the speaker's actual words faithfully in each translation
-6. SPEAKER FOCUS: Only translate clear, coherent speech from main speakers. If the text appears to be background chatter, a side conversation fragment, unintelligible mumbling, random filler sounds, or an incomplete/incoherent fragment that does not convey meaningful speech, return empty strings for ALL language keys (e.g., {"en": "", "fa": ""}). Focus on the primary, louder, clearer voice(s) — discard ambient noise and side talk.
+CRITICAL NOISE GATE — apply BEFORE translating:
+- If the input has fewer than 3 meaningful words, return empty strings for ALL keys.
+- If the input is filler sounds ("um", "ah", "uh", "hmm", repeated syllables like "da da da"), return empty strings.
+- If the input is background chatter, side conversation fragments, or unintelligible mumbling, return empty strings.
+- If you are NOT confident this is clear, intentional speech from a primary speaker, return empty strings.
+- Err on the side of returning empty strings. Only translate text that clearly represents intentional, coherent speech.
+
+If the input passes the noise gate:
+1. Translate the text EXACTLY as given into the requested target languages.
+2. Do NOT change, rephrase, interpret, or guess at what was "actually meant".
+3. Do NOT reconstruct phonetic approximations into other languages.
+4. Preserve the speaker's actual words faithfully.
 
 Return ONLY a JSON object with language codes as keys and translations as values. No markdown, no explanation.
 Example: {"fa": "سلام، حالت چطوره؟", "en": "Hello, how are you?"}
 
-IMPORTANT: Each language value must contain text ONLY in that language. The "en" value must be pure English. The "fa" value must be pure Farsi/Persian script. Never mix languages in a single value.
-IMPORTANT: Translate faithfully — do not add, remove, or change the meaning of what was said.
-IMPORTANT: If the input is completely unintelligible gibberish, noise artifacts, meaningless symbols, or has no recoverable speech content, return empty strings for ALL language keys (e.g., {"en": "", "fa": ""}). Do NOT fabricate content from noise.${contextSection}`;
+IMPORTANT: Each language value must contain text ONLY in that language. The "en" value must be pure English. The "fa" value must be pure Farsi/Persian script.
+IMPORTANT: If the input is noise, gibberish, or unclear, return empty strings: {"en": "", "fa": ""}.${contextSection}`;
 
     const result = await callAI({
       provider: "gemini",
