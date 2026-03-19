@@ -49,10 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // don't call getSession() which may resolve with null before
     // Supabase processes the hash tokens, causing a premature redirect.
     if (isOAuthCallback) {
-      // Clear stale tokens so they don't race with fresh OAuth tokens
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith("sb-"))
-        .forEach((k) => localStorage.removeItem(k));
       // Safety timeout: if onAuthStateChange doesn't fire within 5s, stop loading
       const timeout = setTimeout(() => {
         console.warn('OAuth callback timeout — no auth event received');
