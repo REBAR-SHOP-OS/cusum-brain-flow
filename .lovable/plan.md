@@ -1,34 +1,49 @@
 
 
-# Add Unit System Toggle at Top of Mapping Panel
+# Why Saurabh's Delete Doesn't Work
 
-## Problem
-The unit selector is buried inside the "Cut Length" mapping row as a tiny dropdown. Users miss it and dimensions get stored as raw decimals (584.2, 152.4) instead of being properly labeled/converted. The user wants **all four unit options visible at the top** as prominent toggle buttons.
+## Root Cause
 
-## Changes
+**RLS policy restriction.** All three delete policies (`barlists`, `projects`, `cut_plans`) require `has_role(auth.uid(), 'admin')`:
 
-### 1. `src/components/office/BarlistMappingPanel.tsx`
+```text
+DELETE on barlists  → requires admin role
+DELETE on projects  → requires admin role  
+DELETE on cut_plans → requires admin role
+```
 
-**Add prominent unit toggle bar at the top of the panel** (right after the header, before the mapping grid):
+Saurabh's roles: **workshop, office, sales** — he does NOT have `admin`.
 
-- Display 4 large toggle buttons in a row: **mm** · **Inches** · **Feet** · **Imperial (ft-in)**
-- Styled as a segmented control with the active option highlighted in primary color
-- Remove the buried "Source unit" dropdown from inside the Cut Length mapping row
+When he clicks delete, the Supabase query returns **zero affected rows** (RLS silently filters it out). The code doesn't check for `count === 0`, so it shows "Deleted" toast but nothing actually gets removed.
 
-**Apply unit conversion to dimensions too** — currently `buildDimensionsJson()` copies raw values without conversion. Fix it to:
-- Multiply dimension values by the same `lengthFactor` when source unit is not mm
-- Round to nearest integer for storage consistency
+## Fix
 
-**Add Imperial (ft-in) as a unit option**:
-- Add `{ value: "imperial", label: "Imperial (ft-in)", factor: 1 }` to LENGTH_UNITS
-- For imperial mode, parse values like `5'-8"` or decimal feet-inches and convert to mm
-- Since the XLSX data comes in as total inches (per memory), imperial factor = 25.4 (same as inches)
+### 1. Add `office` role to delete policies (or give Saurabh admin)
 
-### 2. Preview table updates
+**Option A — Expand RLS policies** to allow `office` role to delete (recommended if office users should manage production queue):
 
-- Show the selected unit label in the LENGTH column header (e.g., "LENGTH (in)" or "LENGTH (mm)")
-- Display dimension values in the preview using the source unit for readability
+```sql
+-- barlists
+DROP POLICY "Admin can delete barlists" ON barlists;
+CREATE POLICY "Admin or office can delete barlists" ON barlists
+  FOR DELETE TO authenticated
+  USING (company_id = get_user_company_id(auth.uid()) 
+    AND (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'office')));
 
-## Result
-Users see 4 big buttons at the top, pick their unit system once, and all lengths + dimensions convert correctly on confirm.
+-- Same pattern for projects and cut_plans
+```
+
+**Option B — Grant Saurabh admin role** (simpler but broader access):
+```sql
+INSERT INTO user_roles (user_id, role) VALUES ('1a618127-...', 'admin');
+```
+
+### 2. Fix silent failure in UI
+
+Update `handleDeleteBarlist`, `handleDeleteProject`, etc. to check if 0 rows were affected and show an appropriate error message ("Permission denied" instead of false success).
+
+### Summary
+- **Problem**: Delete RLS policies are admin-only; Saurabh has workshop/office/sales roles
+- **Result**: Delete silently fails — no error, no removal
+- **Fix**: Either expand delete policies to include `office` role, or grant Saurabh admin
 
