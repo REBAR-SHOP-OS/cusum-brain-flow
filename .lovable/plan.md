@@ -1,32 +1,111 @@
 
+## Issue identified
 
-# Fix: Vizzy Avatar Image Has Orbital Rings Baked In
+I inspected the interpreter flow and there are three concrete problems causing the “Listening…” state without useful output:
 
-## Root Cause
+1. `src/hooks/useAzinVoiceRelay.ts` drops short real phrases before translation:
+   - current filter rejects anything with fewer than 3 words or under 8 chars
+   - normal interpreter inputs like `سلام`, `مرسی`, `yes`, `no`, `okay` get discarded
 
-The orbital rings are **not in the code** — they're embedded in the `vizzy-avatar.png` image itself. The face is tiny in the center of a large dark image with teal circles around it. No amount of code changes will fix this; the image file needs to be replaced.
+2. `supabase/functions/translate-message/index.ts` strips valid one-word English translations:
+   - it currently requires at least 2 words for English output
+   - so `سلام → Hello` becomes empty, the client removes the transcript, and TTS never runs
 
-## Solution
+3. Audio playback is not primed from a user gesture:
+   - the voice overlay auto-starts after mount
+   - TTS audio is created and played asynchronously later
+   - on many browsers this gets blocked by autoplay rules
+   - the current code swallows `audio.play()` failures, so it looks like nothing happens
 
-### Step 1: Generate a clean Vizzy face-only avatar
+## What I will change
 
-Use the AI image generation API (Nano banana pro) to create a clean, circular-ready avatar of the Vizzy character — just the face/head on a transparent or dark background, no orbital rings or decorations. The character has glasses, reddish-brown hair, and a friendly expression.
+### 1) Fix the relay filtering
+File: `src/hooks/useAzinVoiceRelay.ts`
 
-### Step 2: Replace the asset
+- relax transcript filters to allow short but meaningful interpreter phrases
+- keep noise protection, but stop rejecting legitimate short EN/FA speech
+- preserve filtering for punctuation, annotations, obvious garbage, and foreign scripts
 
-Save the new clean image as `src/assets/vizzy-avatar.png`, replacing the current one.
+### 2) Fix translation post-validation
+File: `supabase/functions/translate-message/index.ts`
 
-### Step 3: Adjust FloatingVizzyButton styling
+- stop requiring 2 English words
+- allow valid one-word translations in both English and Farsi
+- replace the current word-count rule with a lighter sanity check so short real translations survive
 
-With a clean face image, remove the aggressive `scale(1.25)` and `objectPosition` hacks that were compensating for the rings. The image will naturally fill the 80px circle:
+### 3) Fix browser audio unlock
+Files:
+- `src/pages/AzinInterpreter.tsx`
+- `src/components/azin/AzinInterpreterVoiceChat.tsx`
+- `src/hooks/useAzinVoiceRelay.ts`
+- likely reuse `src/lib/audioPlayer.ts`
 
-```tsx
-<img
-  src={vizzyAvatar}
-  className="w-full h-full object-cover pointer-events-none"
-  draggable={false}
-/>
+Plan:
+- prime audio synchronously when the user taps the Nila avatar button
+- pass that primed playback capability into the voice chat flow
+- use the primed audio element / unlocked audio path for TTS playback
+- stop silently swallowing playback failures; surface them in logs and optionally toast once
+
+### 4) Improve runtime diagnostics
+File: `src/hooks/useAzinVoiceRelay.ts`
+
+- log whether failure is:
+  - no committed transcript
+  - empty translation returned
+  - TTS request failed
+  - audio playback blocked
+- this prevents another “looks connected but does nothing” situation
+
+## Expected result
+
+After these changes:
+
+- short phrases like `سلام`, `مرسی`, `بله`, `yes`, `no`, `okay` will translate instead of disappearing
+- the interpreter will actually produce translated text entries
+- TTS playback will work reliably on browser/mobile autoplay-restricted environments
+- if playback still fails, the error will be visible instead of silently ignored
+
+## Technical notes
+
+```text
+Current failing path:
+voice chat opens
+→ STT partial appears
+→ short phrase filtered OR translation emptied
+→ transcript removed
+→ no TTS
+OR
+→ TTS succeeds but browser blocks async audio playback
+→ play() error swallowed
+→ user hears nothing
 ```
 
-No other files need changes — `VizzyVoiceChat.tsx` and other consumers of the same import will also benefit automatically.
+```text
+Fix path:
+user taps Nila
+→ audio is primed during click
+→ STT commits short valid phrase
+→ translation preserves one-word outputs
+→ TTS plays through unlocked audio path
+```
 
+## Verification after implementation
+
+1. Test with short Farsi inputs:
+   - `سلام`
+   - `مرسی`
+   - `بله`
+
+2. Test with short English inputs:
+   - `hello`
+   - `thanks`
+   - `yes`
+
+3. Confirm all 3 layers work:
+   - partial transcript appears
+   - committed translation renders
+   - audio speaks the translated phrase
+
+4. Re-test on the overlay flow specifically, not just the split-screen mic mode
+
+5. During QA, dismiss the training modal first because it can block interaction while testing the interpreter page
