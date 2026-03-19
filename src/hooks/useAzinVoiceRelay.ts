@@ -110,6 +110,8 @@ export function useAzinVoiceRelay() {
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
     onPartialTranscript: (data) => {
+      // Filter out Scribe annotations from partial display
+      if (SCRIBE_ANNOTATION.test(data.text) || PUNCTUATION_ONLY.test(data.text)) return;
       setPartialText(data.text);
     },
     onCommittedTranscript: (data) => {
