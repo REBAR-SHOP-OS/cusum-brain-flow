@@ -639,20 +639,48 @@ export async function buildFullVizzyContext(
   }
 
   // emailProfileMap already declared above (line ~478)
-  const emailsByEmployee: Record<string, { sent: number; received: number }> = {};
-  for (const e of (allEmailsToday || [])) {
+  const emailsByEmployee: Record<string, { sent: number; received: number; emails: Array<{ subject: string; preview: string; direction: string; time: string; from: string; to: string; source: string }> }> = {};
+
+  // Helper to resolve employee name from a communication row using user_id first, then email fallback
+  const resolveCommEmployee = (e: any): string => {
+    // Priority 1: user_id → profile name (most reliable)
+    if (e.user_id) {
+      const name = profileUserIdMap.get(e.user_id);
+      if (name && name !== "Unknown") return name;
+    }
+    // Priority 2: email address matching
     if (e.direction === "outbound") {
       const fromEmail = e.from_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
-      const name = emailProfileMap.get(fromEmail) || fromEmail;
-      if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0 };
-      emailsByEmployee[name].sent++;
+      return emailProfileMap.get(fromEmail) || fromEmail;
     } else {
       const toEmail = e.to_address?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "";
-      const name = emailProfileMap.get(toEmail) || toEmail;
-      if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0 };
+      return emailProfileMap.get(toEmail) || toEmail;
+    }
+  };
+
+  for (const e of (allEmailsToday || [])) {
+    const name = resolveCommEmployee(e);
+    if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0, emails: [] };
+
+    const timeStr = e.received_at ? new Date(e.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    const emailDetail = {
+      subject: e.subject || "(no subject)",
+      preview: (e.body_preview || "").replace(/\n/g, " ").slice(0, 200),
+      direction: e.direction || "inbound",
+      time: timeStr,
+      from: e.from_address || "unknown",
+      to: e.to_address || "unknown",
+      source: e.source || "unknown",
+    };
+
+    if (e.direction === "outbound") {
+      emailsByEmployee[name].sent++;
+    } else {
       emailsByEmployee[name].received++;
     }
+    emailsByEmployee[name].emails.push(emailDetail);
   }
+
   const totalOutbound = (allEmailsToday || []).filter((e: any) => e.direction === "outbound").length;
   const totalInbound = (allEmailsToday || []).filter((e: any) => e.direction === "inbound").length;
 
