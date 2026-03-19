@@ -145,12 +145,17 @@ export function useCutPlans() {
       toast({ title: "Error deleting plan items", description: itemsErr.message, variant: "destructive" });
       return false;
     }
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("cut_plans")
       .delete()
-      .eq("id", planId);
+      .eq("id", planId)
+      .select();
     if (error) {
       toast({ title: "Error deleting plan", description: error.message, variant: "destructive" });
+      return false;
+    }
+    if (!data || data.length === 0) {
+      toast({ title: "Permission denied", description: "You don't have permission to delete this plan.", variant: "destructive" });
       return false;
     }
     toast({ title: "Plan deleted" });

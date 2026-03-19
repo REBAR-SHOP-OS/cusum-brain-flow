@@ -99,9 +99,13 @@ export function ProductionQueueView() {
     }
 
     // 4. Delete project (CASCADE handles project_events, project_milestones, project_tasks; work_orders SET NULL)
-    const { error } = await supabase.from("projects").delete().eq("id", projectId);
+    const { data: delData, error } = await supabase.from("projects").delete().eq("id", projectId).select();
     if (error) {
       toast({ title: "Error deleting project", description: error.message, variant: "destructive" });
+      return false;
+    }
+    if (!delData || delData.length === 0) {
+      toast({ title: "Permission denied", description: "Cannot delete project — insufficient permissions.", variant: "destructive" });
       return false;
     }
     toast({ title: "Project deleted" });
