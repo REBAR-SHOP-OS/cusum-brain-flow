@@ -65,6 +65,7 @@ export function useAzinVoiceRelay() {
   const speakTranslation = useCallback(async (text: string, lang: "en" | "fa", entryId: string) => {
     try {
       const voiceId = lang === "fa" ? VOICE_FARSI : VOICE_ENGLISH;
+      const speed = 1.1;
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
