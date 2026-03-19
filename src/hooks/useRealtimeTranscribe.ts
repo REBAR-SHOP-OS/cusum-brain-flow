@@ -118,8 +118,13 @@ export function useRealtimeTranscribe() {
         throw new Error(error?.message || "Failed to get scribe token");
       }
 
+      // Map source language to ISO 639-3 for Scribe accuracy
+      const langCodeMap: Record<string, string> = { en: "eng", fa: "fas" };
+      const languageCode = langCodeMap[sourceLangRef.current] || undefined;
+
       await scribe.connect({
         token: data.token,
+        languageCode,
         microphone: {
           echoCancellation: true,
           noiseSuppression: true,

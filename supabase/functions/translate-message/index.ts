@@ -89,7 +89,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
 
     const result = await callAI({
       provider: "gemini",
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       agentName: "system",
       messages: [
         {
@@ -98,10 +98,10 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
         },
         {
           role: "user",
-          content: `The source language is "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate into ${targetList}:\n\n${text}`,
+          content: `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`,
         },
       ],
-      temperature: 0.01,
+      temperature: 0.0,
     });
 
     const raw = result.content;
