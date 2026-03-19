@@ -1,51 +1,121 @@
+## Completed: Upgrade Wan 2.1 → Wan 2.6
 
+### Changes
+- **Edge function**: Updated `generate-video` to use `wan2.6-t2v` model with 1080P resolution, 2-15s per clip, prompt extension, and auto-generated audio
+- **UI**: Updated model label from "Alibaba Wan 2.1" to "Alibaba Wan 2.6", Balanced mode now uses Wan 2.6 as default provider
+- **Duration**: Balanced mode options updated to 5s, 10s, 15s, 30s, 60s (matching Wan 2.6 capabilities)
+- **Multi-scene**: Wan max clip duration increased from 8s to 15s, reducing scene count for long videos (30s = 2 clips, 60s = 4 clips)
 
-## Fix: Vizzy Deflects Instead of Answering From Its Own Data
+## Completed: Add All Wan 2.6 Capabilities
 
-### Problem
+### Changes
+1. **Image-to-Video (I2V)**
+   - Added `wan2.6-i2v` and `wan2.6-i2v-flash` models as new video options
+   - New `wanI2vGenerate()` edge function helper — sends `img_url` in input payload
+   - Reference image is uploaded to `social-media-assets` storage, public URL passed to DashScope
+   - UI enforces ref image upload when I2V model is selected
 
-The conversation shows Vizzy repeatedly refusing to answer questions it absolutely CAN answer. When the CEO asks "what did the team do today?", Vizzy says "check with your team management tools" — even though the snapshot contains:
+2. **Custom Audio Sync**
+   - Audio file upload button (MP3/WAV) appears when Wan T2V model is selected
+   - Audio uploaded to `social-media-assets` storage, URL passed as `audio_url` parameter
+   - Only available for T2V (not I2V, which doesn't support audio_url)
 
-- **TEAM PRESENCE & HOURS TODAY** — who clocked in, hours worked
-- **EMPLOYEE PERFORMANCE** — work orders, machine operators, agent usage, logged actions per employee
-- **EMAIL BIRD'S-EYE VIEW** — sent/received counts per employee
-- **RECENT ACTIVITY** — timestamped event log
+3. **Negative Prompts**
+   - Toggle "Negative" pill in prompt bar for Wan models
+   - Expandable text input for negative prompt (e.g., "blur, text, watermark")
+   - Passed as `negative_prompt` to DashScope API for both T2V and I2V
 
-Vizzy has ALL this data but its prompt doesn't forcefully enough mandate using it.
+4. **Multi-Scene Fix**
+   - Wan max clip duration corrected to 15s (was incorrectly set to 8s)
+   - Negative prompt and audio sync passed through to multi-scene generation
 
-### Root Cause
+## Completed: Fix Broken Logo + Mandatory Watermark + GCE Architecture
 
-The RULES section says "NEVER say you cannot access data" but doesn't cover the softer deflection pattern: "check with your team management tools." The model finds a loophole — it doesn't say "I can't access it", it redirects you elsewhere. The prompt also lacks explicit mapping of question types to data sections.
+### Changes
+1. **Brand-assets storage bucket** — Created `brand-assets` bucket with RLS for persistent logo uploads
+2. **Logo upload fix** — `ScriptInput.tsx` now uploads logos to Supabase storage instead of using temporary blob URLs
+3. **Mandatory watermark** — Removed `logoEnabled` toggle; logo watermark is always active when a logo URL exists
+4. **GCE video assembly** — New `gce-video-assembly` edge function orchestrates server-side FFmpeg assembly via preemptible GCE VMs (falls back to browser stitching when GCE credentials are not configured)
+5. **FinalPreview.tsx** — Logo toggle replaced with static badge showing watermark status
+6. **Export flow** — Tries server-side GCE assembly first, then falls back to browser-side stitching
 
-### Fix
+### GCE Setup Required
+To enable server-side video assembly:
+- Add `GOOGLE_CLOUD_PROJECT_ID` secret
+- Add `GOOGLE_CLOUD_SERVICE_KEY` secret (service account JSON with Compute Engine + Cloud Storage permissions)
+- Without these, browser-side assembly is used automatically
 
-**File: `src/hooks/useVizzyVoiceEngine.ts`**
+## Completed: Pipeline Unified Timeline & Data Quality Patch
 
-Add two new sections to `VIZZY_INSTRUCTIONS`:
+### Changes
 
-**1. Stronger anti-deflection rule** — Add to RULES section:
-```
-- NEVER redirect the user to "check with" another tool, platform, or person. YOU are the tool. Answer from the data below.
-- NEVER ask clarifying questions when the intent is obvious. If the CEO says "what happened today" — give them the full daily activity summary immediately.
-- When the user says "go ahead" or "tell me" — that means DELIVER THE INFORMATION NOW, don't ask more questions.
-```
+**Backend — Sync Fixes:**
+- `odoo-crm-sync`: Added `planned_revenue` to FIELDS, fixed priority mapping (`0→medium`, `1→low`, `2/3→high`), added `mapOdooPriority()` helper, applied priority on both INSERT and UPDATE paths, revenue fallback to `planned_revenue`
+- `odoo-chatter-sync`: Fixed file-to-message linkage to match both integer and string forms of attachment IDs for robust matching
+- `_shared/odoo-validation.ts`: Added "Lost"→"lost" and "Prospecting"→"prospecting" to STAGE_MAP
 
-**2. Question-to-data mapping** — New section:
-```
-═══ QUESTION → DATA MAPPING ═══
-Use this to know WHERE to look in the data below:
-- "What did the team do today?" → EMPLOYEE PERFORMANCE + TEAM PRESENCE + EMAIL BIRD'S-EYE VIEW
-- "How is production?" → PRODUCTION + Active Work Orders
-- "Any overdue invoices?" → FINANCIALS (Overdue Invoices section)
-- "Who's working?" → TEAM PRESENCE & HOURS TODAY
-- "How are sales?" → SALES PIPELINE + Hot Leads
-- "What emails came in?" → EMAIL INBOX + EMAIL BIRD'S-EYE VIEW
-- General "what's going on?" → Give a 30-second executive summary hitting all sections with notable data
-```
+**Frontend — Lead Detail:**
+- `LeadDetailDrawer.tsx`: Consolidated 4 tabs (chatter/activities/files/notes) into 2 tabs (Timeline/Details). Timeline shows OdooChatter unified feed. Details shows notes, description, activities, and files together.
 
-### Files to Modify
+**Frontend — Pipeline Board:**
+- `Pipeline.tsx`: Added stage group definitions (Sales, Estimation, Quotation, Operations, Terminal) with quick-filter chips. Default view hides Terminal stages to reduce board width. Each chip shows lead count.
 
-| File | Change |
-|------|--------|
-| `src/hooks/useVizzyVoiceEngine.ts` | Add anti-deflection rules and question-to-data mapping to VIZZY_INSTRUCTIONS |
+**Migration:**
+- Added index `idx_lead_files_odoo_id_unlinked` on `lead_files(odoo_id)` for faster file linkage repair
+- Added index `idx_lead_files_lead_source` on `lead_files(lead_id, source)` for sync queries
 
+### Known Risks
+- Priority re-mapping changes existing lead priorities on next sync (intentional)
+- File linkage fix uses both int/string ID matching — monitor results after next sync
+- Stage group filter is additive/safe — "Show all" restores full board
+
+### Follow-up
+- Run a full Odoo sync to apply priority and revenue fixes to existing data
+- Monitor file linkage stats in chatter sync response after deployment
+
+## Completed: Odoo Mirror Pipeline + Sales Department Patch
+
+### Assessment
+Sales Department workspace was already fully built (pages, routes, sidebar, tables, CRUD). No new work needed there.
+
+### Changes Implemented
+
+**1. On-Open Lead Refresh from Odoo** (`LeadDetailDrawer.tsx`)
+- When opening any Odoo-synced lead, fires parallel requests to `odoo-crm-sync` (single mode) and `odoo-chatter-sync` (single mode)
+- Refreshes lead fields (stage, revenue, probability) + chatter/activities/files
+- 30s cooldown per lead to prevent API rate limiting
+- Shows "Syncing…" indicator in header during refresh
+- Invalidates all lead-related query keys on completion
+
+**2. Single-Lead Mode in odoo-crm-sync** (`supabase/functions/odoo-crm-sync/index.ts`)
+- New `mode: "single"` + `odoo_id` parameter
+- Fetches exactly one lead from Odoo, updates local record (stage, fields, metadata, synced_at)
+- Logs stage change events if stage differs
+- Returns fast without touching other leads
+
+**3. Archive Reconciliation** (`supabase/functions/odoo-crm-sync/index.ts`)
+- In full sync mode: leads present locally but missing from Odoo are now archived (stage → "lost")
+- Logs reconciliation events with reason
+- Only archives non-terminal leads (skips already won/lost)
+
+**4. Timeline Date Separators** (`src/components/pipeline/OdooChatter.tsx`)
+- DateSeparator now shows "Today", "Yesterday", or "March 13, 2026" format
+- Improves timeline readability
+
+**5. Sync Freshness Indicator** (`LeadDetailDrawer.tsx`)
+- Footer shows "Synced X minutes ago" with color-coded status dot
+- Green: <5min, Yellow: <30min, Red: >30min
+
+### Files Changed
+- `src/components/pipeline/LeadDetailDrawer.tsx` — on-open refresh + sync indicator
+- `src/components/pipeline/OdooChatter.tsx` — date separator improvement
+- `supabase/functions/odoo-crm-sync/index.ts` — single-lead mode + archive reconciliation
+
+### No Changes Needed (Already Existed)
+- Sales Department sidebar, routes, pages, tables, hooks
+- Odoo chatter sync single mode (already existed)
+- OdooChatter unified timeline (already existed)
+
+### Risks
+- Odoo API rate limits if many leads opened rapidly (mitigated: 30s cooldown)
+- Single-lead query scans all odoo_sync leads to find by metadata (acceptable for <5000 leads)
