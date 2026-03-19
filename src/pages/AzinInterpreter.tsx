@@ -13,6 +13,8 @@ import azinAvatar from "@/assets/helpers/azin-helper.png";
 export default function AzinInterpreter() {
   const navigate = useNavigate();
   const [showVoiceChat, setShowVoiceChat] = useState(false);
+  const enBottomRef = useRef<HTMLDivElement>(null);
+  const faBottomRef = useRef<HTMLDivElement>(null);
   const {
     isConnected,
     isConnecting,
@@ -24,6 +26,12 @@ export default function AzinInterpreter() {
     disconnect,
     clearTranscripts,
   } = useRealtimeTranscribe();
+
+  // Auto-scroll both columns
+  useEffect(() => {
+    enBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    faBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [committedTranscripts, partialText]);
 
   const handleLangToggle = useCallback(async (lang: "en" | "fa") => {
     if (isConnected && sourceLang === lang) {
