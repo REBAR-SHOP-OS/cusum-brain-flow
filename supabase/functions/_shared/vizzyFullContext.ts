@@ -691,7 +691,14 @@ export async function buildFullVizzyContext(
 
   const emailByEmployeeLines = Object.entries(emailsByEmployee)
     .sort((a, b) => (b[1].sent + b[1].received) - (a[1].sent + a[1].received))
-    .map(([name, stats]) => `  • ${name}: ${stats.sent} sent, ${stats.received} received`)
+    .map(([name, stats]) => {
+      const summary = `  • ${name}: ${stats.sent} sent, ${stats.received} received`;
+      // Show top 5 most recent email subjects for this employee
+      const topEmails = stats.emails
+        .slice(0, 5)
+        .map(e => `      - [${e.direction.toUpperCase()}] ${e.time} "${e.subject}" ${e.direction === "inbound" ? "from " + e.from : "to " + e.to}${e.preview ? " — " + e.preview.slice(0, 120) : ""}`);
+      return summary + (topEmails.length > 0 ? "\n" + topEmails.join("\n") : "");
+    })
     .join("\n");
 
   // ═══ EMPLOYEE ACTIVITY EVENT COUNTS (per employee) ═══
