@@ -136,7 +136,7 @@ export function PostReviewPanel({
   const { publishPost, publishing } = usePublishPost();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const canPublish = user?.email === "radin@rebar.shop";
+  const canPublish = user?.email === "radin@rebar.shop" || user?.email === "zahra@rebar.shop";
   const [regenerating, setRegenerating] = useState(false);
   const [regeneratingCaption, setRegeneratingCaption] = useState(false);
   const [approvingNeel, setApprovingNeel] = useState(false);
