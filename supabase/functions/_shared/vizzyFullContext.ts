@@ -235,6 +235,13 @@ export async function buildFullVizzyContext(
         .order("received_at", { ascending: false })
         .limit(100);
     })(),
+    // Open human tasks (to avoid duplicates in autopilot)
+    supabase
+      .from("human_tasks")
+      .select("id, title, description, status, priority, assigned_to, category, created_at, snoozed_until")
+      .in("status", ["open", "snoozed"])
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   // Compute financials
