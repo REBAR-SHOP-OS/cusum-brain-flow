@@ -1961,8 +1961,16 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
       const enc = new TextEncoder();
+      let writerClosed = false;
+      const safeCloseWriter = () => {
+        if (writerClosed) return;
+        writerClosed = true;
+        try { writer.write(enc.encode("data: [DONE]\n\n")); } catch { /* ignore */ }
+        try { writer.close(); } catch { /* ignore */ }
+      };
 
       const sendSSE = (content: string) => {
+        if (writerClosed) return;
         writer.write(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`));
       };
 
