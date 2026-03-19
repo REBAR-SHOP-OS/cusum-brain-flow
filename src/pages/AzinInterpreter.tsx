@@ -106,7 +106,7 @@ export default function AzinInterpreter() {
             <span className="text-sm font-semibold text-foreground">English</span>
           </div>
           <ScrollArea className="flex-1 px-4 py-2">
-            <div className="space-y-3">
+            <div className="space-y-4">
               {committedTranscripts.map((t) => {
                 const isOriginal = t.sourceLang === "en";
                 const isFaSource = t.sourceLang === "fa";
