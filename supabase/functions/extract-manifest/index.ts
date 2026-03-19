@@ -24,7 +24,7 @@ function getMimeType(filename: string): string {
 /** Parse a dimension value that may be imperial (e.g. "0'-4\"", "3'-6\"") or numeric. Returns a number or null. */
 function parseDimension(val: any): number | null {
   if (val == null) return null;
-  if (typeof val === "number") return val;
+  if (typeof val === "number") return isNaN(val) ? null : val;
   if (typeof val !== "string") return null;
 
   const s = val.trim();
@@ -52,6 +52,13 @@ function parseDimension(val: any): number | null {
   // Plain number
   const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
   return isNaN(n) ? null : n;
+}
+
+/** Safe integer parse — rounds and guards against NaN */
+function safeInt(val: any, fallback: number = 0): number {
+  const parsed = parseDimension(val);
+  if (parsed == null || isNaN(parsed)) return fallback;
+  return Math.round(parsed);
 }
 
 serve(async (req) => {
@@ -394,10 +401,10 @@ Rules:
               item_number: String(item.item || idx + 1),
               grade: item.grade || null,
               mark: item.mark || null,
-              quantity: parseDimension(item.quantity) || 0,
+              quantity: safeInt(item.quantity, 0),
               bar_size: item.size || null,
               shape_type: item.type || null,
-              total_length_mm: parseDimension(item.total_length),
+              total_length_mm: safeInt(item.total_length, 0) || null,
               dim_a: parseDimension(item.A),
               dim_b: parseDimension(item.B),
               dim_c: parseDimension(item.C),
