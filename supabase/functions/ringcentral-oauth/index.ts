@@ -130,6 +130,16 @@ serve(async (req) => {
         .maybeSingle();
 
       if (tokenData) {
+        // Ensure integration_connections row exists
+        await supabaseAdmin.from("integration_connections").upsert({
+          user_id: userId,
+          integration_id: "ringcentral",
+          status: "connected",
+          last_checked_at: new Date().toISOString(),
+          error_message: null,
+          config: { rc_email: tokenData.rc_email },
+        }, { onConflict: "user_id,integration_id" });
+
         return new Response(
           JSON.stringify({ status: "connected", email: tokenData.rc_email }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -266,6 +276,13 @@ serve(async (req) => {
         .delete()
         .eq("user_id", userId);
 
+      // Also remove from integration_connections
+      await supabaseAdmin
+        .from("integration_connections")
+        .delete()
+        .eq("user_id", userId)
+        .eq("integration_id", "ringcentral");
+
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -383,6 +400,17 @@ async function handleOAuthCallback(url: URL): Promise<Response> {
       console.error("Failed to save RC token:", upsertError);
       return Response.redirect(`${APP_CALLBACK}?status=error&integration=ringcentral&message=${encodeURIComponent("Failed to save credentials")}`, 302);
     }
+
+    // Write to integration_connections so UI shows connected
+    await supabaseAdmin.from("integration_connections").upsert({
+      user_id: userId,
+      integration_id: "ringcentral",
+      status: "connected",
+      last_checked_at: new Date().toISOString(),
+      last_sync_at: new Date().toISOString(),
+      error_message: null,
+      config: { rc_email: rcEmail },
+    }, { onConflict: "user_id,integration_id" });
 
     return Response.redirect(`${APP_CALLBACK}?status=success&integration=ringcentral`, 302);
   } catch (error) {
