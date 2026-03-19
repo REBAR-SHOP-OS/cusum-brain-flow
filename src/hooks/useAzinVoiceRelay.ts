@@ -75,7 +75,7 @@ export function useAzinVoiceRelay() {
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ text, voiceId }),
+          body: JSON.stringify({ text, voiceId, speed }),
         }
       );
 
