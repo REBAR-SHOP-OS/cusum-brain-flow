@@ -30,10 +30,12 @@ const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as
 function formatDim(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
   if (unitSystem === "imperial") {
-    const totalInches = Math.round(val);
-    const feet = Math.floor(totalInches / 12);
-    const inches = totalInches % 12;
-    return `${feet}'-${inches}"`;
+    const whole = Math.floor(val);
+    const hasFrac = Math.abs(val - whole) >= 0.25;
+    const feet = Math.floor(whole / 12);
+    const inches = whole % 12;
+    const frac = hasFrac ? "½" : "";
+    return `${feet}'-${inches}${frac}"`;
   }
   return String(val);
 }

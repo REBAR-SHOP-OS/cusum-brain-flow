@@ -57,6 +57,20 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
+/** Format a dimension value (stored in total inches for imperial, mm for metric) for display */
+function formatDimForDisplay(val: number | null | undefined, unitSystem: string): string {
+  if (val == null || val === 0) return "";
+  if (unitSystem === "imperial") {
+    const whole = Math.floor(val);
+    const hasFrac = Math.abs(val - whole) >= 0.25;
+    const feet = Math.floor(whole / 12);
+    const inches = whole % 12;
+    const frac = hasFrac ? "½" : "";
+    return `${feet}'-${inches}${frac}"`;
+  }
+  return String(val);
+}
+
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
   const [showRetry, setShowRetry] = useState(false);
   useEffect(() => {
@@ -1857,7 +1871,7 @@ export function AIExtractView() {
                                   {row.bar_size_mapped || row.bar_size || "—"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm ?? "—"}</TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{activeSession?.unit_system === "imperial" && row.total_length_mm != null ? formatDimForDisplay(row.total_length_mm, "imperial") : (row.total_length_mm ?? "—")}</TableCell>
                               <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
                               <TableCell className="text-xs p-1.5">
                                 {survivorRow ? (
@@ -2031,7 +2045,7 @@ export function AIExtractView() {
                             <TableCell className="text-xs text-right font-mono p-1">
                               {edit ? (
                                 <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
-                              ) : (row.total_length_mm ?? "—")}
+                              ) : (activeSession?.unit_system === "imperial" && row.total_length_mm != null ? formatDimForDisplay(row.total_length_mm, "imperial") : (row.total_length_mm ?? "—"))}
                             </TableCell>
                             {dimCols.map((d) => {
                               const key = `dim_${d.toLowerCase()}`;
@@ -2040,7 +2054,7 @@ export function AIExtractView() {
                                   {edit ? (
                                     <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
                                   ) : (
-                                    (row as any)[key] != null ? String((row as any)[key]) : ""
+                                    (row as any)[key] != null ? formatDimForDisplay((row as any)[key], activeSession?.unit_system || "metric") : ""
                                   )}
                                 </TableCell>
                               );
