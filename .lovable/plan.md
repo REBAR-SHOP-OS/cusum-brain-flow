@@ -1,34 +1,17 @@
 
 
-## Fix: RingCentral "Access denied" Error
+## Fix: RingCentral Widget DNS Failure
 
-The code is correct. This is a RingCentral Developer Console configuration issue. There are two possible fixes depending on whether your new app is in Sandbox or Production.
+The screenshot shows `platform.devtest.ringcentral.com` returning `DNS_PROBE_FINISHED_NXDOMAIN` — the sandbox domain is no longer available. RingCentral has deprecated the separate sandbox domain. Your new app should use the production platform URL.
 
-### Option A — If the app is still in Sandbox (most likely)
+### Change
 
-Change `appServer` from the production URL to the sandbox URL:
+**File:** `src/hooks/useRingCentralWidget.ts`
 
-**File:** `src/hooks/useRingCentralWidget.ts` (line 102)
-
+Change `appServer` back to production:
 ```
-// Change FROM:
 appServer: "https://platform.ringcentral.com",
-
-// Change TO:
-appServer: "https://platform.devtest.ringcentral.com",
 ```
 
-This lets the widget authenticate against the sandbox environment where new apps are created by default.
-
-### Option B — If you want Production access
-
-No code change needed, but in the **RingCentral Developer Console** you must:
-1. Go to your app settings
-2. Ensure the app type is **"Browser-based"** (not Server/Web)
-3. Click **"Graduate"** to move the app from Sandbox to Production
-4. Wait for RingCentral approval (can take minutes to hours)
-
-### Recommendation
-
-Start with **Option A** (sandbox) to verify the widget works, then graduate to production later.
+This single line change fixes the DNS failure. If the app still shows "Access denied" after this, the app needs to be graduated to Production in the RingCentral Developer Console.
 
