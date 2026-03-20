@@ -95,19 +95,22 @@ export function TagsExportView() {
   // CSV export
   const handleExportCSV = () => {
     if (!sortedRows.length) return;
-    const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", "TOTAL LENGTH",
+    const us = (selectedSession as any)?.unit_system || "metric";
+    const lengthHeader = us === "imperial" ? "TOTAL LENGTH (ft-in)" : "TOTAL LENGTH (mm)";
+    const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", lengthHeader,
       ...DIM_COLS, "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD"];
     const csvRows = sortedRows.map((r) => {
       const size = r.bar_size_mapped || r.bar_size || "";
       const shapeType = r.shape_code_mapped || r.shape_type || "";
       const weight = getWeight(size, r.total_length_mm, r.quantity);
       const picture = shapeType ? (getShapeImageUrl(shapeType) || `TYPE-${shapeType}.PNG`) : "";
+      const formattedLength = r.total_length_mm ? formatDim(r.total_length_mm, us) : "";
       return [
         r.dwg || "", r.row_index, r.grade_mapped || r.grade || "", r.mark || "",
-        r.quantity || "", size, shapeType, r.total_length_mm || "",
+        r.quantity || "", size, shapeType, formattedLength,
         ...DIM_COLS.map((d) => {
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
-          return r[key] != null ? String(Math.round(Number(r[key]))) : "";
+          return r[key] != null ? formatDim(Number(r[key]), us) : "";
         }),
         weight, picture, r.customer || "", r.reference || "", r.address || "",
       ].join(",");
