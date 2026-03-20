@@ -1,15 +1,17 @@
 
-# ✅ COMPLETED: Sync ALL Company RingCentral Calls
+# ✅ COMPLETED: Switch rc_make_call from RingOut to WebRTC
 
 ## What changed
-- `supabase/functions/ringcentral-sync/index.ts` — CRON `syncAllUsers` now uses **account-level** RC API endpoints:
-  - `GET /account/~/call-log` — fetches ALL extensions' calls in one pass
-  - `GET /account/~/message-store` — fetches ALL extensions' SMS/voicemail/fax
-  - `GET /account/~/extension` — maps RC extensions to local user profiles by email
-- Each record is attributed to the correct employee via `extension.id → user_id` mapping
-- Pagination with 200ms rate-limit delay handles large volumes
-- Per-user sync path (UI-triggered) remains unchanged as fallback
-- `integration_connections` is updated for all users who had data
+- `supabase/functions/admin-chat/index.ts` — `rc_make_call` tool now returns a `browser_action: "webrtc_call"` response instead of executing server-side RingOut. The confirm_action path emits a `browser_action` SSE event.
+- `supabase/functions/vizzy-erp-action/index.ts` — `rc_make_call` case returns `browser_action` instead of calling `ringcentral-action`.
+- `src/hooks/useAdminChat.ts` — Added `BrowserActionHandler` type and `browser_action` SSE event parsing. Invokes callback when received.
+- `src/pages/LiveChat.tsx` — Connects `useRingCentralWidget().makeCall()` to the `browser_action` handler so calls are placed via WebRTC widget.
+
+## Why
+RingOut (two-leg callback) requires the RC app/device to answer first. The device wasn't picking up, so calls never connected. WebRTC places calls directly from the browser.
 
 ## Files updated
-- `supabase/functions/ringcentral-sync/index.ts`
+- `supabase/functions/admin-chat/index.ts`
+- `supabase/functions/vizzy-erp-action/index.ts`
+- `src/hooks/useAdminChat.ts`
+- `src/pages/LiveChat.tsx`
