@@ -93,18 +93,6 @@ export default defineConfig(({ mode }) => ({
             return "backend";
           }
 
-          if (id.includes("react") || id.includes("react-dom") || id.includes("react-router-dom")) {
-            return "react-vendor";
-          }
-
-          if (id.includes("@radix-ui") || id.includes("cmdk") || id.includes("vaul")) {
-            return "ui-vendor";
-          }
-
-          if (id.includes("framer-motion") || id.includes("recharts") || id.includes("embla-carousel-react")) {
-            return "visual-vendor";
-          }
-
           if (id.includes("ringcentral-web-phone")) {
             return "ringcentral";
           }
