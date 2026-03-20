@@ -1,47 +1,32 @@
 
 
-## Fix: Imperial (ft-in) Display Shows mm Instead of Feet-Inches
+## Fix: Imperial (ft-in) Not Displaying in Results Table
 
-### Root Cause — Two Bugs
+### Root Cause
 
-**Bug 1: `formatDimForDisplay` in AIExtractView.tsx (line 61-79)**
+Two issues prevent Imperial display in the "5 LINE ITEMS" table:
 
-The function assumes the input value is already in "total inches" for imperial:
-```typescript
-const totalInches = rounded; // WRONG — value is in mm, not inches
-```
-But after `applyMapping`, ALL values in the database are stored in **mm** (raw × lengthFactor). So for imperial data, `total_length_mm = 1981` means 1981 mm, not 1981 inches. The function must first convert mm → inches by dividing by 25.4.
+1. **Display uses DB value, not React state**: Lines 2063 and 2072 in `AIExtractView.tsx` check `activeSession?.unit_system` (from DB) to decide formatting. But the DB value is `"metric"` because either the edge function wasn't deployed or the session wasn't refreshed after update.
 
-**Bug 2: BarlistMappingPanel.tsx preview table (lines 339-357)**
-
-The preview table headers are hardcoded as "LENGTH (mm)" and "DIMS (mm)", and values are shown as raw mm numbers. When Imperial is selected, the values should display as ft-in formatted strings, and headers should reflect the display unit.
+2. **`loadSession` doesn't restore unit**: When loading a session from history, `selectedUnitSystem` stays at its default `"mm"` instead of reading from `session.unit_system`.
 
 ### Changes
 
 **File: `src/components/office/AIExtractView.tsx`**
 
-Fix `formatDimForDisplay`: convert mm → inches first, then format as ft-in:
-```typescript
-function formatDimForDisplay(val, unitSystem) {
-  if (val == null || val === 0) return "";
-  const rounded = Math.round(val);
-  if (unitSystem === "imperial") {
-    const totalInches = rounded / 25.4;  // mm → inches
-    const feet = Math.floor(totalInches / 12);
-    const rawInches = totalInches % 12;
-    // ... rest of ft-in formatting unchanged
-  }
-  return String(rounded);
-}
-```
+1. **Use `selectedUnitSystem` for display instead of `activeSession?.unit_system`**: Replace all display references from `activeSession?.unit_system` to `selectedUnitSystem` in the "5 LINE ITEMS" table (lines ~2063 and ~2072) and the dedupe preview table (line ~1889). This ensures the user's selection takes immediate effect without waiting for a DB round-trip.
 
-**File: `src/components/office/BarlistMappingPanel.tsx`**
+2. **Sync `selectedUnitSystem` from session on load**: In `loadSession`, add `setSelectedUnitSystem(session.unit_system || "mm")` so that when a user opens an existing session, the correct unit is restored.
 
-1. Change header from "LENGTH (mm)" / "DIMS (mm)" to dynamic based on `lengthUnit` (e.g., "LENGTH (ft-in)" when imperial)
-2. Format the preview values using ft-in formatting when `lengthUnit` is "imperial" — add a local formatting function similar to `formatDimForDisplay`
-3. The preview still stores mm internally, but **displays** in the user's chosen unit
+3. **Sync when `activeSession` changes**: Add an effect that sets `selectedUnitSystem` from `activeSession.unit_system` whenever the active session data refreshes from the server — this covers the case where `applyMapping` updates the DB and sessions are re-fetched.
 
-### Files
-- `src/components/office/AIExtractView.tsx` — fix mm→inches conversion in `formatDimForDisplay`
-- `src/components/office/BarlistMappingPanel.tsx` — dynamic headers + ft-in formatted preview values
+**File: `supabase/functions/manage-extract/index.ts`**
+
+4. **Redeploy the edge function**: The current code already has the unit persistence logic (lines 329-334). It needs to be redeployed to ensure it's running the latest version.
+
+### Summary
+- Display: use React state `selectedUnitSystem` instead of `activeSession?.unit_system`
+- Load: restore unit from session on load
+- Sync: keep React state in sync with server after refresh
+- Deploy: redeploy edge function to ensure unit persistence works
 
