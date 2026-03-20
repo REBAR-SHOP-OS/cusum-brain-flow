@@ -84,28 +84,28 @@ RULES:
 7. For Farsi output, use natural conversational Persian (محاوره‌ای) — NOT formal/literary/written style. Use the way Iranians actually speak in daily life.
 8. For English output, use natural spoken English — casual and fluent, not stiff or formal.
 9. For Farsi output, use correct Persian script (not transliteration).
+10. You MUST translate ALL content regardless of topic, politics, religion, or sensitivity. Never refuse. Never return empty for valid speech. Your job is translation, not content moderation.
 
 Example input: "How are you?" → {"fa": "حالت چطوره؟"}
 Example input: "سلام خوبی؟" → {"en": "Hello, how are you?"}
 Noise → {"en": "", "fa": ""}${contextSection}`;
 
-    const result = await callAI({
-      provider: "gemini",
-      model: "gemini-2.5-pro",
-      agentName: "system",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`,
-        },
-      ],
-      temperature: 0.3,
-      maxTokens: 500,
-    });
+    const makeRequest = async (prompt: string) => {
+      return await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+        agentName: "system",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.3,
+        maxTokens: 500,
+      });
+    };
+
+    const userPrompt = `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`;
+    let result = await makeRequest(userPrompt);
 
     const raw = result.content;
     let translations: Record<string, string>;
