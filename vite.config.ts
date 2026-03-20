@@ -23,9 +23,7 @@ export default defineConfig(({ mode }) => ({
       webp: { quality: 75 },
       avif: { quality: 60 },
       svg: {
-        plugins: [
-          { name: "sortAttrs" },
-        ],
+        plugins: [{ name: "sortAttrs" }],
       },
     }),
     VitePWA({
@@ -62,9 +60,9 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-      globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-      globIgnores: ["**/pwa-icon-*.png", "**/favicon.png"],
-      navigateFallbackDenylist: [/^\/~oauth/, /^\/~lovable/],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        globIgnores: ["**/pwa-icon-*.png", "**/favicon.png"],
+        navigateFallbackDenylist: [/^\/~oauth/, /^\/~lovable/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
@@ -73,7 +71,7 @@ export default defineConfig(({ mode }) => ({
               cacheName: "supabase-cache",
               expiration: {
                 maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24, // 24 hours
+                maxAgeSeconds: 60 * 60 * 24,
               },
             },
           },
@@ -81,6 +79,39 @@ export default defineConfig(({ mode }) => ({
       },
     }),
   ].filter(Boolean),
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+
+          if (id.includes("pdfjs-dist") || id.includes("jspdf")) {
+            return "pdf-tools";
+          }
+
+          if (id.includes("@supabase/supabase-js") || id.includes("@lovable.dev/cloud-auth-js")) {
+            return "backend";
+          }
+
+          if (id.includes("react") || id.includes("react-dom") || id.includes("react-router-dom")) {
+            return "react-vendor";
+          }
+
+          if (id.includes("@radix-ui") || id.includes("cmdk") || id.includes("vaul")) {
+            return "ui-vendor";
+          }
+
+          if (id.includes("framer-motion") || id.includes("recharts") || id.includes("embla-carousel-react")) {
+            return "visual-vendor";
+          }
+
+          if (id.includes("ringcentral-web-phone")) {
+            return "ringcentral";
+          }
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
