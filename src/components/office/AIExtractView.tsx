@@ -259,8 +259,10 @@ export function AIExtractView() {
 
   // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
-    if (!userSetUnitRef.current && activeSession?.unit_system) {
+    if (!userSetUnitRef.current && activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
       setSelectedUnitSystem(activeSession.unit_system);
+      // Once we've loaded the session's unit, lock it so realtime refreshes don't overwrite
+      userSetUnitRef.current = true;
     }
   }, [activeSession?.unit_system]);
 
@@ -694,7 +696,10 @@ export function AIExtractView() {
     setSiteAddress(session.site_address || "");
     setInvoiceNumber(session.invoice_number || "");
     setInvoiceDate(session.invoice_date || "");
-    setSelectedUnitSystem(session.unit_system || "mm");
+    const restoredUnit = session.unit_system || "mm";
+    setSelectedUnitSystem(restoredUnit);
+    // Lock restored unit so sync effect doesn't overwrite with stale value
+    userSetUnitRef.current = true;
     setShowHistory(false);
     setIsOptimizing(session.status === "optimizing" || session.status === "validated");
     if (session.status !== "optimizing" && session.status !== "validated") {
@@ -727,6 +732,8 @@ export function AIExtractView() {
     setPendingDedupeSessionId(null);
     setShowMergedRows(false);
     setMappingConfirmed(false);
+    setSelectedUnitSystem("mm");
+    userSetUnitRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
