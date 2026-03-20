@@ -532,12 +532,14 @@ export function AIExtractView() {
     setProcessing(true);
     setProcessingStep("Applying mapping...");
     try {
-      const result = await applyMapping(activeSessionId, selectedUnitSystem);
+      // Use the ref value — immune to sync effect overwrites
+      const unitToApply = confirmedUnitRef.current;
+      const result = await applyMapping(activeSessionId, unitToApply);
       // Safety net: force DB status to "mapped" with retry to ensure pipeline advances
       let retries = 0;
       let lastErr: any = null;
       while (retries < 3) {
-        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped", unit_system: selectedUnitSystem } as any).eq("id", activeSessionId);
+        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped", unit_system: unitToApply } as any).eq("id", activeSessionId);
         if (!updateErr) { lastErr = null; break; }
         lastErr = updateErr;
         console.warn(`[handleApplyMapping] status update attempt ${retries + 1} failed:`, updateErr.message);
@@ -547,6 +549,8 @@ export function AIExtractView() {
       if (lastErr) console.error(`[handleApplyMapping] Failed to set status=mapped after 3 retries:`, lastErr.message);
       await refreshRows();
       await refreshSessions();
+      // Force-set state from ref after refresh to prevent sync effect from reverting
+      setSelectedUnitSystem(unitToApply);
       toast({ title: "✅ Mapping Complete", description: `${result.mapped_count} rows mapped — ready for validation` });
     } catch (err: any) {
       toast({ title: "Mapping failed", description: err.message, variant: "destructive" });
