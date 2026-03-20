@@ -253,6 +253,13 @@ export function AIExtractView() {
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode) : -1;
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
+  // Sync selectedUnitSystem from activeSession when it changes (e.g. after applyMapping refreshes)
+  useEffect(() => {
+    if (activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
+      setSelectedUnitSystem(activeSession.unit_system);
+    }
+  }, [activeSession?.unit_system]);
+
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
   const mergedRows = useMemo(() => rows.filter(r => r.status === "merged"), [rows]);
