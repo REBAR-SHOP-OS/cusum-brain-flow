@@ -10,19 +10,7 @@ const corsHeaders = {
 const RC_SERVER = "https://platform.ringcentral.com";
 const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
 
-async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
-  const { data: tokenRow } = await supabaseAdmin
-    .from("user_ringcentral_tokens")
-    .select("access_token, refresh_token, token_expires_at")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!tokenRow?.refresh_token) return null;
-
-  if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) > new Date()) {
-    return tokenRow.access_token;
-  }
-
+async function refreshToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string, refreshTokenValue: string): Promise<string | null> {
   const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
   const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
 
@@ -34,7 +22,7 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: tokenRow.refresh_token,
+      refresh_token: refreshTokenValue,
     }),
   });
 
@@ -52,6 +40,23 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
   }).eq("user_id", userId);
 
   return tokens.access_token;
+}
+
+async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string, forceRefresh = false): Promise<string | null> {
+  const { data: tokenRow } = await supabaseAdmin
+    .from("user_ringcentral_tokens")
+    .select("access_token, refresh_token, token_expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!tokenRow?.refresh_token) return null;
+
+  // Return cached token if not expired and not forcing refresh
+  if (!forceRefresh && tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) > new Date()) {
+    return tokenRow.access_token;
+  }
+
+  return await refreshToken(supabaseAdmin, userId, tokenRow.refresh_token);
 }
 
 serve(async (req) => {
