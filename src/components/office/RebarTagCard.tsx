@@ -1,6 +1,37 @@
 const DIM_LEFT = ["A", "B", "C", "D", "E", "F"] as const;
 const DIM_RIGHT = ["G", "H", "J", "K", "O", "R"] as const;
 
+/** Format mm value to ft-in string */
+function formatMmToFtIn(mm: number): string {
+  const totalInches = mm / 25.4;
+  const feet = Math.floor(totalInches / 12);
+  const rawInches = totalInches % 12;
+  const eighths = Math.round(rawInches * 8);
+  const wholeInches = Math.floor(eighths / 8);
+  const remainderEighths = eighths % 8;
+  const fractionMap: Record<number, string> = {
+    0: "", 1: "⅛", 2: "¼", 3: "⅜", 4: "½", 5: "⅝", 6: "¾", 7: "⅞",
+  };
+  const frac = fractionMap[remainderEighths] || "";
+  if (feet === 0) return `${wholeInches}${frac}"`;
+  if (wholeInches === 0 && !frac) return `${feet}'-0"`;
+  return `${feet}'-${wholeInches}${frac}"`;
+}
+
+function formatVal(val: number | null, unitSystem: string): string {
+  if (val == null || val === 0) return "—";
+  const rounded = Math.round(val);
+  if (unitSystem === "imperial") return formatMmToFtIn(rounded);
+  return String(rounded);
+}
+
+function formatDimVal(val: number | null | undefined, unitSystem: string): string {
+  if (val == null || val === 0) return "";
+  const rounded = Math.round(val);
+  if (unitSystem === "imperial") return formatMmToFtIn(rounded);
+  return String(rounded);
+}
+
 interface RebarTagCardProps {
   mark: string;
   size: string;
@@ -16,12 +47,16 @@ interface RebarTagCardProps {
   address: string;
   dims: Record<string, number | null>;
   shapeImageUrl?: string | null;
+  unitSystem?: string;
 }
 
 export function RebarTagCard({
   mark, size, grade, qty, length, weight, shapeType,
   dwg, item, customer, reference, address, dims, shapeImageUrl,
+  unitSystem = "metric",
 }: RebarTagCardProps) {
+  const us = unitSystem;
+
   return (
     <div
       className="rebar-tag border-2 border-black bg-white text-black overflow-hidden font-mono flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
@@ -56,8 +91,10 @@ export function RebarTagCard({
           <div className="text-2xl font-black leading-tight">{qty ?? "—"}</div>
         </div>
         <div className="border-r-2 border-black px-2 py-2 text-center">
-          <div className="text-[9px] font-bold tracking-widest uppercase">Length</div>
-          <div className="text-2xl font-black leading-tight">{length ?? "—"}</div>
+          <div className="text-[9px] font-bold tracking-widest uppercase">
+            Length {us === "imperial" ? "(ft-in)" : "(mm)"}
+          </div>
+          <div className="text-2xl font-black leading-tight">{formatVal(length, us)}</div>
         </div>
         <div className="px-2 py-2 text-center">
           <div className="text-[9px] font-bold tracking-widest uppercase">Weight</div>
@@ -79,13 +116,13 @@ export function RebarTagCard({
           {DIM_LEFT.map((d) => (
             <div key={d} className="flex items-center gap-1 text-xs" style={{ gridColumn: 1 }}>
               <span className="font-bold w-3">{d}:</span>
-              <span className="font-black">{dims[d] || ""}</span>
+              <span className="font-black">{formatDimVal(dims[d], us)}</span>
             </div>
           ))}
           {DIM_RIGHT.map((d) => (
             <div key={d} className="flex items-center gap-1 text-xs" style={{ gridColumn: 2 }}>
               <span className="font-bold w-3">{d}:</span>
-              <span className="font-black">{dims[d] || ""}</span>
+              <span className="font-black">{formatDimVal(dims[d], us)}</span>
             </div>
           ))}
         </div>
