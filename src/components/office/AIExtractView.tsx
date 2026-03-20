@@ -193,6 +193,7 @@ export function AIExtractView() {
   const [dedupePreview, setDedupePreview] = useState<DuplicatePreviewItem[] | null>(null);
   const [pendingDedupeSessionId, setPendingDedupeSessionId] = useState<string | null>(null);
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
+  const [selectedUnitSystem, setSelectedUnitSystem] = useState<string>("mm");
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, loading: rowsLoading, hasFetched: rowsHasFetched, refresh: refreshRows } = useExtractRows(activeSessionId);
