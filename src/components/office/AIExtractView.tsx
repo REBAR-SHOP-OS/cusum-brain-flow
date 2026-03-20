@@ -490,18 +490,19 @@ export function AIExtractView() {
     }
   };
 
+  const [selectedUnitSystem, setSelectedUnitSystem] = useState<string>("mm");
+
   const handleMappingConfirmed = useCallback(async (mappedRows: MappedRow[], unitSystem?: string) => {
     setMappingConfirmed(true);
-    // Persist the exact unit value (mm/in/ft/imperial) on the session
-    if (activeSessionId && unitSystem) {
-      await supabase.from("extract_sessions").update({ unit_system: unitSystem } as any).eq("id", activeSessionId);
-      await refreshSessions();
+    // Store unit in React state — edge function will persist it server-side (bypasses RLS)
+    if (unitSystem) {
+      setSelectedUnitSystem(unitSystem);
     }
     toast({
       title: "Mapping confirmed",
       description: `${mappedRows.length} rows mapped to canonical fields (source unit: ${unitSystem || "mm"})`,
     });
-  }, [toast, activeSessionId, refreshSessions]);
+  }, [toast]);
 
   const handleApplyMapping = async () => {
     if (!activeSessionId) return;
