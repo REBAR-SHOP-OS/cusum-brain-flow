@@ -99,7 +99,7 @@ export function useRingCentralWidget(): UseRingCentralWidgetReturn {
         newAdapterUI: "1",
         enableAnalytics: "0",
         clientId,
-        appServer: "https://platform.ringcentral.com",
+        appServer: "https://platform.devtest.ringcentral.com",
         redirectUri: "https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/redirect.html",
       });
 
