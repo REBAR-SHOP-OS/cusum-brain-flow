@@ -26,12 +26,13 @@ const MASS_KG_PER_M: Record<string, number> = {
 
 const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
 
-/** Format a dimension value (stored in total inches for imperial, mm for metric) for display */
+/** Format a dimension value (always stored in mm in DB) for display.
+ *  For imperial: converts mm → inches first, then formats as ft-in. */
 function formatDim(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
   const rounded = Math.round(val);
   if (unitSystem === "imperial") {
-    const totalInches = rounded;
+    const totalInches = rounded / 25.4; // mm → inches
     const feet = Math.floor(totalInches / 12);
     const rawInches = totalInches % 12;
     const eighths = Math.round(rawInches * 8);
@@ -94,19 +95,22 @@ export function TagsExportView() {
   // CSV export
   const handleExportCSV = () => {
     if (!sortedRows.length) return;
-    const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", "TOTAL LENGTH",
+    const us = (selectedSession as any)?.unit_system || "metric";
+    const lengthHeader = us === "imperial" ? "TOTAL LENGTH (ft-in)" : "TOTAL LENGTH (mm)";
+    const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", lengthHeader,
       ...DIM_COLS, "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD"];
     const csvRows = sortedRows.map((r) => {
       const size = r.bar_size_mapped || r.bar_size || "";
       const shapeType = r.shape_code_mapped || r.shape_type || "";
       const weight = getWeight(size, r.total_length_mm, r.quantity);
       const picture = shapeType ? (getShapeImageUrl(shapeType) || `TYPE-${shapeType}.PNG`) : "";
+      const formattedLength = r.total_length_mm ? formatDim(r.total_length_mm, us) : "";
       return [
         r.dwg || "", r.row_index, r.grade_mapped || r.grade || "", r.mark || "",
-        r.quantity || "", size, shapeType, r.total_length_mm || "",
+        r.quantity || "", size, shapeType, formattedLength,
         ...DIM_COLS.map((d) => {
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
-          return r[key] != null ? String(Math.round(Number(r[key]))) : "";
+          return r[key] != null ? formatDim(Number(r[key]), us) : "";
         }),
         weight, picture, r.customer || "", r.reference || "", r.address || "",
       ].join(",");
@@ -346,7 +350,9 @@ export function TagsExportView() {
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Qty</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Size</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Type</th>
-                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Total Length</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">
+                    Total Length {((selectedSession as any)?.unit_system === "imperial") ? "(ft-in)" : "(mm)"}
+                  </th>
                   {DIM_COLS.map((c) => (
                     <th key={c} className="text-[10px] font-bold tracking-widest text-primary uppercase text-right px-3 py-2 whitespace-nowrap">{c}</th>
                   ))}
@@ -454,6 +460,7 @@ export function TagsExportView() {
                     address={row.address || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
+                    unitSystem={(selectedSession as any)?.unit_system || "metric"}
                   />
                 );
               })
