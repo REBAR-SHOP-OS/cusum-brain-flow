@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
 
+export type BrowserActionHandler = (action: string, data: Record<string, any>) => void;
+
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
