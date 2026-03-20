@@ -513,7 +513,7 @@ export function AIExtractView() {
     setProcessing(true);
     setProcessingStep("Applying mapping...");
     try {
-      const result = await applyMapping(activeSessionId);
+      const result = await applyMapping(activeSessionId, selectedUnitSystem);
       // Safety net: force DB status to "mapped" with retry to ensure pipeline advances
       let retries = 0;
       let lastErr: any = null;

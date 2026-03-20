@@ -316,7 +316,7 @@ function getLengthFactor(unitSystem: string): number {
 }
 
 // ─── Apply Mapping ──────────────────────────────────────────
-async function applyMapping(sb: any, sessionId: string) {
+async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
   // Get session — include unit_system
   const { data: session } = await sb
     .from("extract_sessions")
@@ -326,7 +326,14 @@ async function applyMapping(sb: any, sessionId: string) {
 
   if (!session) return jsonResponse({ error: "Session not found" }, 404);
 
-  const lengthFactor = getLengthFactor(session.unit_system || "mm");
+  // If unitSystem passed from client, persist it server-side (admin client bypasses RLS)
+  const effectiveUnit = unitSystem || session.unit_system || "mm";
+  if (unitSystem && unitSystem !== session.unit_system) {
+    await sb.from("extract_sessions").update({ unit_system: unitSystem }).eq("id", sessionId);
+    console.log(`[applyMapping] Updated session unit_system: ${session.unit_system} → ${unitSystem}`);
+  }
+
+  const lengthFactor = getLengthFactor(effectiveUnit);
 
   // Get company mappings
   const { data: mappings } = await sb
