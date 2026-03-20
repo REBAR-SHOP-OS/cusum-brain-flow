@@ -491,7 +491,6 @@ export function AIExtractView() {
     }
   };
 
-  const [selectedUnitSystem, setSelectedUnitSystem] = useState<string>("mm");
 
   const handleMappingConfirmed = useCallback(async (mappedRows: MappedRow[], unitSystem?: string) => {
     setMappingConfirmed(true);
