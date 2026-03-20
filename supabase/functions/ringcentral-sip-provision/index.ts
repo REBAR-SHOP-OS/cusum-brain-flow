@@ -10,19 +10,7 @@ const corsHeaders = {
 const RC_SERVER = "https://platform.ringcentral.com";
 const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
 
-async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
-  const { data: tokenRow } = await supabaseAdmin
-    .from("user_ringcentral_tokens")
-    .select("access_token, refresh_token, token_expires_at")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!tokenRow?.refresh_token) return null;
-
-  if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) > new Date()) {
-    return tokenRow.access_token;
-  }
-
+async function refreshToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string, refreshTokenValue: string): Promise<string | null> {
   const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
   const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
 
@@ -34,7 +22,7 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: tokenRow.refresh_token,
+      refresh_token: refreshTokenValue,
     }),
   });
 
@@ -52,6 +40,23 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
   }).eq("user_id", userId);
 
   return tokens.access_token;
+}
+
+async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string, forceRefresh = false): Promise<string | null> {
+  const { data: tokenRow } = await supabaseAdmin
+    .from("user_ringcentral_tokens")
+    .select("access_token, refresh_token, token_expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!tokenRow?.refresh_token) return null;
+
+  // Return cached token if not expired and not forcing refresh
+  if (!forceRefresh && tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) > new Date()) {
+    return tokenRow.access_token;
+  }
+
+  return await refreshToken(supabaseAdmin, userId, tokenRow.refresh_token);
 }
 
 serve(async (req) => {
@@ -101,27 +106,43 @@ serve(async (req) => {
       });
     }
 
-    const accessToken = await getAccessToken(supabaseAdmin, userId);
+    let accessToken = await getAccessToken(supabaseAdmin, userId);
     if (!accessToken) {
-      // Optional integration: return 200 so frontend can gracefully stay idle
       return new Response(JSON.stringify({ error: "RingCentral not connected", connected: false }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Call SIP provisioning endpoint
+    // Call SIP provisioning endpoint with automatic retry on token expiry
     console.log("Requesting SIP provision for user:", userId);
-    const sipResp = await fetch(`${RC_SERVER}/restapi/v1.0/client-info/sip-provision`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sipInfo: [{ transport: "WSS" }],
-      }),
-    });
+
+    const doSipProvision = async (token: string) => {
+      return await fetch(`${RC_SERVER}/restapi/v1.0/client-info/sip-provision`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sipInfo: [{ transport: "WSS" }] }),
+      });
+    };
+
+    let sipResp = await doSipProvision(accessToken);
+
+    // If 401, force-refresh the token and retry once
+    if (sipResp.status === 401) {
+      console.warn("SIP provision returned 401, forcing token refresh and retrying...");
+      await sipResp.text(); // consume body
+      accessToken = await getAccessToken(supabaseAdmin, userId, true);
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: "RingCentral token expired. Please reconnect.", connected: false }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      sipResp = await doSipProvision(accessToken);
+    }
 
     if (!sipResp.ok) {
       const errText = await sipResp.text();
