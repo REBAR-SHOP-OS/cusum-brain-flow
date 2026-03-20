@@ -259,8 +259,10 @@ export function AIExtractView() {
 
   // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
-    if (!userSetUnitRef.current && activeSession?.unit_system) {
+    if (!userSetUnitRef.current && activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
       setSelectedUnitSystem(activeSession.unit_system);
+      // Once we've loaded the session's unit, lock it so realtime refreshes don't overwrite
+      userSetUnitRef.current = true;
     }
   }, [activeSession?.unit_system]);
 
