@@ -254,9 +254,12 @@ export function AIExtractView() {
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode) : -1;
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
-  // Sync selectedUnitSystem from activeSession when it changes (e.g. after applyMapping refreshes)
+  // Ref to track if user explicitly set unit — prevents stale DB value from overwriting
+  const userSetUnitRef = useRef(false);
+
+  // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
-    if (activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
+    if (!userSetUnitRef.current && activeSession?.unit_system) {
       setSelectedUnitSystem(activeSession.unit_system);
     }
   }, [activeSession?.unit_system]);
