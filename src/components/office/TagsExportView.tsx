@@ -458,6 +458,7 @@ export function TagsExportView() {
                     address={row.address || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
+                    unitSystem={(selectedSession as any)?.unit_system || "metric"}
                   />
                 );
               })
