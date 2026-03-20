@@ -1,55 +1,47 @@
 
 
-## Fix: Dimension Values Not Rounded to Integers
+## Fix: Imperial (ft-in) Display Shows mm Instead of Feet-Inches
 
-### Root Cause
+### Root Cause — Two Bugs
 
-In `supabase/functions/extract-manifest/index.ts`:
-- `total_length_mm` uses `safeInt()` which calls `Math.round()` → stored as integers (1981, 3270)
-- `dim_a` through `dim_r` use `parseDimension()` which returns raw floats → stored with decimals (457.2, 3016.25, 1295.4, 3479.8)
+**Bug 1: `formatDimForDisplay` in AIExtractView.tsx (line 61-79)**
 
-This causes the "5 LINE ITEMS" results table and Tags & Export to display fractional mm values, which is incorrect for mm-based data.
+The function assumes the input value is already in "total inches" for imperial:
+```typescript
+const totalInches = rounded; // WRONG — value is in mm, not inches
+```
+But after `applyMapping`, ALL values in the database are stored in **mm** (raw × lengthFactor). So for imperial data, `total_length_mm = 1981` means 1981 mm, not 1981 inches. The function must first convert mm → inches by dividing by 25.4.
+
+**Bug 2: BarlistMappingPanel.tsx preview table (lines 339-357)**
+
+The preview table headers are hardcoded as "LENGTH (mm)" and "DIMS (mm)", and values are shown as raw mm numbers. When Imperial is selected, the values should display as ft-in formatted strings, and headers should reflect the display unit.
 
 ### Changes
 
-**1. `supabase/functions/extract-manifest/index.ts`** — Round all dimensions during extraction
+**File: `src/components/office/AIExtractView.tsx`**
 
-Change dimension storage from `parseDimension(item.X)` to `safeInt(item.X, null)` or add `Math.round()` so all dim values are stored as integers, matching `total_length_mm`.
-
-```
-dim_a: safeInt(item.A, null) || null,
-dim_b: safeInt(item.B, null) || null,
-// ... same for all dim columns
-```
-
-Modify `safeInt` to accept `null` as fallback (or create a `safeDim` helper that returns `null` instead of 0 for empty values).
-
-**2. `supabase/functions/manage-extract/index.ts`** — Already uses `Math.round()` in `applyMapping`, no change needed.
-
-**3. `src/components/office/AIExtractView.tsx`** — Round dimensions in the results table display
-
-In the "5 LINE ITEMS" table (line ~2070), wrap the raw dimension display with `Math.round()`:
-```
-(row as any)[key] != null ? formatDimForDisplay(Math.round((row as any)[key]), ...) : ""
+Fix `formatDimForDisplay`: convert mm → inches first, then format as ft-in:
+```typescript
+function formatDimForDisplay(val, unitSystem) {
+  if (val == null || val === 0) return "";
+  const rounded = Math.round(val);
+  if (unitSystem === "imperial") {
+    const totalInches = rounded / 25.4;  // mm → inches
+    const feet = Math.floor(totalInches / 12);
+    const rawInches = totalInches % 12;
+    // ... rest of ft-in formatting unchanged
+  }
+  return String(rounded);
+}
 ```
 
-Also round LENGTH display (line ~2061) for consistency.
+**File: `src/components/office/BarlistMappingPanel.tsx`**
 
-**4. `src/components/office/TagsExportView.tsx`** — Round dimensions in display and export
-
-- In the table display (line ~392), round dimension values before `formatDim()`
-- In CSV export (line ~108), round dimension values
-
-**5. Fix existing data** — Run a one-time data update to round all existing decimal dimension values in `extract_rows` to integers. This will use an INSERT tool (UPDATE query).
-
-### Summary
-- Extraction: round dims at source (extract-manifest)
-- Display: round dims at render (AIExtractView + TagsExportView)
-- Edge function: already rounds (manage-extract)
-- Data fix: round existing fractional values in DB
+1. Change header from "LENGTH (mm)" / "DIMS (mm)" to dynamic based on `lengthUnit` (e.g., "LENGTH (ft-in)" when imperial)
+2. Format the preview values using ft-in formatting when `lengthUnit` is "imperial" — add a local formatting function similar to `formatDimForDisplay`
+3. The preview still stores mm internally, but **displays** in the user's chosen unit
 
 ### Files
-- `supabase/functions/extract-manifest/index.ts` — round dims during extraction
-- `src/components/office/AIExtractView.tsx` — round dims in results table
-- `src/components/office/TagsExportView.tsx` — round dims in display + export
+- `src/components/office/AIExtractView.tsx` — fix mm→inches conversion in `formatDimForDisplay`
+- `src/components/office/BarlistMappingPanel.tsx` — dynamic headers + ft-in formatted preview values
 
