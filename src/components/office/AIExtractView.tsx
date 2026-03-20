@@ -256,6 +256,8 @@ export function AIExtractView() {
 
   // Ref to track if user explicitly set unit — prevents stale DB value from overwriting
   const userSetUnitRef = useRef(false);
+  // Ref to hold the confirmed unit value immune to state overwrites from sync effects
+  const confirmedUnitRef = useRef<string>("mm");
 
   // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
