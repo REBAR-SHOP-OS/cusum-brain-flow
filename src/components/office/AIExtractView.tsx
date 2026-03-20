@@ -256,6 +256,8 @@ export function AIExtractView() {
 
   // Ref to track if user explicitly set unit — prevents stale DB value from overwriting
   const userSetUnitRef = useRef(false);
+  // Ref to hold the confirmed unit value immune to state overwrites from sync effects
+  const confirmedUnitRef = useRef<string>("mm");
 
   // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
@@ -512,6 +514,7 @@ export function AIExtractView() {
     // Mark that user explicitly chose a unit — prevents DB sync from overwriting
     if (unitSystem) {
       userSetUnitRef.current = true;
+      confirmedUnitRef.current = unitSystem;
       setSelectedUnitSystem(unitSystem);
     }
     toast({
@@ -529,12 +532,14 @@ export function AIExtractView() {
     setProcessing(true);
     setProcessingStep("Applying mapping...");
     try {
-      const result = await applyMapping(activeSessionId, selectedUnitSystem);
+      // Use the ref value — immune to sync effect overwrites
+      const unitToApply = confirmedUnitRef.current;
+      const result = await applyMapping(activeSessionId, unitToApply);
       // Safety net: force DB status to "mapped" with retry to ensure pipeline advances
       let retries = 0;
       let lastErr: any = null;
       while (retries < 3) {
-        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped", unit_system: selectedUnitSystem } as any).eq("id", activeSessionId);
+        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped", unit_system: unitToApply } as any).eq("id", activeSessionId);
         if (!updateErr) { lastErr = null; break; }
         lastErr = updateErr;
         console.warn(`[handleApplyMapping] status update attempt ${retries + 1} failed:`, updateErr.message);
@@ -544,6 +549,8 @@ export function AIExtractView() {
       if (lastErr) console.error(`[handleApplyMapping] Failed to set status=mapped after 3 retries:`, lastErr.message);
       await refreshRows();
       await refreshSessions();
+      // Force-set state from ref after refresh to prevent sync effect from reverting
+      setSelectedUnitSystem(unitToApply);
       toast({ title: "✅ Mapping Complete", description: `${result.mapped_count} rows mapped — ready for validation` });
     } catch (err: any) {
       toast({ title: "Mapping failed", description: err.message, variant: "destructive" });
@@ -698,6 +705,7 @@ export function AIExtractView() {
     setInvoiceDate(session.invoice_date || "");
     const restoredUnit = session.unit_system || "mm";
     setSelectedUnitSystem(restoredUnit);
+    confirmedUnitRef.current = restoredUnit;
     // Lock restored unit so sync effect doesn't overwrite with stale value
     userSetUnitRef.current = true;
     setShowHistory(false);
