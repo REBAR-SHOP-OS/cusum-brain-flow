@@ -126,6 +126,7 @@ export function useRingCentralWidget(): UseRingCentralWidgetReturn {
       if (clientId) {
         params.set("clientId", clientId);
         params.set("appServer", "https://platform.ringcentral.com");
+        params.set("redirectUri", "https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/redirect.html");
       }
 
       script.src = `${baseUrl}?${params.toString()}`;
