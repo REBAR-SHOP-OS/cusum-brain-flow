@@ -45,7 +45,7 @@ export default function Signup() {
     setGoogleLoading(true);
     
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.origin + '/login',
     });
 
     if (result.error) {
