@@ -1,44 +1,49 @@
 
 
-## بررسی و بهبود سرعت و دقت ترجمه Nila
+## تغییرات: افزودن آپلود تصویر ابتدا/انتها + انتخاب مدت ویدیو
 
-### وضعیت فعلی
+### توضیح
 
-الان `translate-message` از مدل **`gemini-2.5-flash`** استفاده می‌کند (از طریق Google Gemini API مستقیم، نه Lovable AI Gateway). قبلا از `gemini-2.5-pro` استفاده می‌شد ولی بخاطر refusal (رد کردن محتوا) عوض شد.
+کاربر می‌خواهد در صفحه چت:
+1. **دو آیکون بزرگ** برای آپلود تصویر ابتدای ویدیو (Intro) و انتهای ویدیو (Outro)
+2. **انتخاب مدت زمان ویدیو** با گزینه‌های 15 ثانیه، 30 ثانیه، 1 دقیقه
 
-### مشکل
+### تغییرات
 
-- **دقت**: `gemini-2.5-flash` سریع‌تر ولی دقتش از Pro کمتره، مخصوصا برای فارسی محاوره‌ای
-- **سرعت**: هر بار یک HTTP round-trip کامل به Google API انجام می‌شه. temperature 0.3 هم باعث می‌شه مدل کمی بیشتر فکر کنه
+**فایل: `src/components/ad-director/ChatPromptBar.tsx`**
 
-### تغییرات پیشنهادی
+- اضافه کردن دو باکس بزرگ بالای textarea:
+  - **Intro Image** (سمت چپ) — آیکون بزرگ با قابلیت آپلود عکس
+  - **Outro Image** (سمت راست) — آیکون بزرگ با قابلیت آپلود عکس
+  - هر دو با پیش‌نمایش عکس آپلود شده و دکمه حذف
+- اضافه کردن pill buttons برای مدت زمان: `15s` | `30s` | `1min` کنار ratio pills
+- تغییر signature به `onSubmit: (prompt, ratio, images, introImage, outroImage, duration) => void`
 
-**1. ارتقای مدل به `gemini-2.5-pro` با حفظ anti-refusal prompt**
+**فایل: `src/components/ad-director/AdDirectorContent.tsx`**
 
-File: `supabase/functions/translate-message/index.ts`
+- دریافت `introImage`, `outroImage`, `duration` از ChatPromptBar
+- ارسال duration به pipeline تولید ویدیو
 
-- تغییر مدل از `gemini-2.5-flash` به `gemini-2.5-pro` برای بالاترین دقت ترجمه
-- prompt ضد-refusal که قبلا اضافه شده (rule 10) جلوی مشکل قبلی رو می‌گیره
-- کاهش `temperature` از `0.3` به `0.1` برای ترجمه دقیق‌تر و سریع‌تر (کمتر فکر کردن)
+### طرح UI
 
-**2. کاهش `maxTokens` از 500 به 300**
+```text
+┌──────────────────────────────────────┐
+│  ┌─────────┐          ┌─────────┐   │
+│  │  📷     │          │  📷     │   │
+│  │ Intro   │          │ Outro   │   │
+│  │ Image   │          │ Image   │   │
+│  └─────────┘          └─────────┘   │
+│                                      │
+│  ┌──────────────────────────────┐   │
+│  │ Describe your video idea...  │   │
+│  │                              │   │
+│  │ [📎] [16:9][9:16][1:1][4:3] │   │
+│  │ [15s][30s][1min]         [→] │   │
+│  └──────────────────────────────┘   │
+└──────────────────────────────────────┘
+```
 
-ترجمه‌های realtime معمولا کوتاه هستن. کمتر بودن maxTokens = پاسخ سریع‌تر.
-
-**3. حذف context section برای سرعت بیشتر (اختیاری)**
-
-Context بخش اضافه‌ای به prompt اضافه می‌کنه که latency رو بالا می‌بره. می‌تونیم محدودش کنیم به 1 segment بجای 3.
-
-### خلاصه تغییرات
-
-| پارامتر | قبل | بعد |
-|---------|------|------|
-| مدل | `gemini-2.5-flash` | `gemini-2.5-pro` |
-| Temperature | 0.3 | 0.1 |
-| maxTokens | 500 | 300 |
-| Context buffer | 3 segments | 1 segment |
-
-### فایل‌های تغییر
-
-- `supabase/functions/translate-message/index.ts` — مدل، temperature، maxTokens
+### فایل‌ها
+- `src/components/ad-director/ChatPromptBar.tsx` — UI جدید
+- `src/components/ad-director/AdDirectorContent.tsx` — دریافت پارامترهای جدید
 
