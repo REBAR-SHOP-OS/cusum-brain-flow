@@ -23,15 +23,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const isOAuthCallback = hashParams.has('access_token') || hashParams.has('refresh_token');
 
+    // If this is an OAuth callback, clear stale sb-* keys BEFORE Supabase
+    // processes the hash tokens. Stale tokens cause getUser() → bad_jwt →
+    // signOut which wipes the fresh OAuth tokens before they can be set.
+    if (isOAuthCallback) {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('sb-'))
+        .forEach(k => localStorage.removeItem(k));
+    }
+
+    // Track whether a real session has been established (prevents
+    // TOKEN_REFRESHED from clearing sessions during OAuth establishment)
+    let sessionEstablished = false;
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         // If token refresh failed, clear stale session to stop polling with bad JWT
+        // But guard against clearing during OAuth establishment window
         if (event === 'TOKEN_REFRESHED' && !session) {
-          supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-          setSession(null);
-          setUser(null);
-          setLoading(false);
+          if (!isOAuthCallback || sessionEstablished) {
+            supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+            setSession(null);
+            setUser(null);
+            setLoading(false);
+          }
           return;
         }
         // Skip INITIAL_SESSION for normal loads — let getSession+getUser
@@ -39,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // session from hash tokens is fresh and trustworthy.
         if (event === 'INITIAL_SESSION' && !isOAuthCallback) return;
 
+        if (session) sessionEstablished = true;
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
