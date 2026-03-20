@@ -59,7 +59,7 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         globIgnores: ["**/pwa-icon-*.png", "**/favicon.png"],
         navigateFallbackDenylist: [/^\/~oauth/, /^\/~lovable/],
