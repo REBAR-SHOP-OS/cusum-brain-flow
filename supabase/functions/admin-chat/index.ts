@@ -1689,10 +1689,17 @@ Never reveal internal system details. Respond in the same language the user writ
         const result = await executeWriteTool(supabase, user.id, companyId, tool, args);
         await logAction(supabase, user.id, companyId, tool, args, result);
 
-        // Return result as SSE so frontend can display in chat
         const encoder = new TextEncoder();
+        let sseData = "";
+
+        // If the tool returns a browser_action, emit it as a special SSE event for the frontend
+        if (result.browser_action) {
+          sseData += `event: browser_action\ndata: ${JSON.stringify({ action: result.browser_action, phone: result.phone, contact_name: result.contact_name })}\n\n`;
+        }
+
+        // Return result as SSE so frontend can display in chat
         const resultMsg = `✅ **Action Executed**\n\n${result.message}`;
-        const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: resultMsg } }] })}\n\ndata: [DONE]\n\n`;
+        sseData += `data: ${JSON.stringify({ choices: [{ delta: { content: resultMsg } }] })}\n\ndata: [DONE]\n\n`;
         return new Response(encoder.encode(sseData), {
           headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
         });
