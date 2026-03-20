@@ -4793,6 +4793,8 @@ export type Database = {
           merged_into_id: string | null
           original_quantity: number | null
           quantity: number | null
+          raw_dims_json: Json | null
+          raw_total_length_mm: number | null
           reference: string | null
           row_index: number
           session_id: string
@@ -4832,6 +4834,8 @@ export type Database = {
           merged_into_id?: string | null
           original_quantity?: number | null
           quantity?: number | null
+          raw_dims_json?: Json | null
+          raw_total_length_mm?: number | null
           reference?: string | null
           row_index?: number
           session_id: string
@@ -4871,6 +4875,8 @@ export type Database = {
           merged_into_id?: string | null
           original_quantity?: number | null
           quantity?: number | null
+          raw_dims_json?: Json | null
+          raw_total_length_mm?: number | null
           reference?: string | null
           row_index?: number
           session_id?: string

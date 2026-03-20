@@ -300,16 +300,33 @@ async function detectDuplicates(sb: any, sessionId: string, userId: string, dryR
   });
 }
 
+// ─── Unit Conversion Helpers ────────────────────────────────
+const DIM_COLUMNS = [
+  "dim_a", "dim_b", "dim_c", "dim_d", "dim_e", "dim_f",
+  "dim_g", "dim_h", "dim_j", "dim_k", "dim_o", "dim_r",
+];
+
+function getLengthFactor(unitSystem: string): number {
+  switch (unitSystem) {
+    case "in": return 25.4;
+    case "ft": return 304.8;
+    case "imperial": return 25.4; // imperial stores as inches
+    default: return 1; // mm or metric
+  }
+}
+
 // ─── Apply Mapping ──────────────────────────────────────────
 async function applyMapping(sb: any, sessionId: string) {
-  // Get session
+  // Get session — include unit_system
   const { data: session } = await sb
     .from("extract_sessions")
-    .select("id, company_id, status")
+    .select("id, company_id, status, unit_system")
     .eq("id", sessionId)
     .single();
 
   if (!session) return jsonResponse({ error: "Session not found" }, 404);
+
+  const lengthFactor = getLengthFactor(session.unit_system || "mm");
 
   // Get company mappings
   const { data: mappings } = await sb
@@ -337,6 +354,41 @@ async function applyMapping(sb: any, sessionId: string) {
 
   for (const row of rows) {
     const updates: Record<string, any> = { status: "mapped" };
+
+    // ── Store raw values on first mapping (or restore if re-mapping) ──
+    // If raw_total_length_mm is already set, this is a re-apply: restore originals first
+    const rawLength = row.raw_total_length_mm != null ? row.raw_total_length_mm : row.total_length_mm;
+    const rawDims: Record<string, any> = {};
+    if (row.raw_dims_json != null) {
+      // Restore from saved originals
+      Object.assign(rawDims, row.raw_dims_json);
+    } else {
+      // Save current values as originals
+      for (const col of DIM_COLUMNS) {
+        rawDims[col] = row[col];
+      }
+    }
+
+    // Save originals (idempotent — always write so re-apply works)
+    updates.raw_total_length_mm = rawLength;
+    updates.raw_dims_json = rawDims;
+
+    // ── Apply unit conversion to length ──
+    if (rawLength != null && lengthFactor !== 1) {
+      updates.total_length_mm = Math.round(Number(rawLength) * lengthFactor);
+    } else if (rawLength != null) {
+      updates.total_length_mm = rawLength; // mm → no conversion, but restore from raw
+    }
+
+    // ── Apply unit conversion to all dimensions ──
+    for (const col of DIM_COLUMNS) {
+      const rawVal = rawDims[col] ?? row[col];
+      if (rawVal != null && rawVal !== 0 && lengthFactor !== 1) {
+        updates[col] = Math.round(Number(rawVal) * lengthFactor);
+      } else if (rawVal != null) {
+        updates[col] = rawVal; // restore from raw
+      }
+    }
 
     // Map bar_size (supports both metric and imperial)
     const rawSize = (row.bar_size || "").trim();
@@ -422,6 +474,8 @@ async function applyMapping(sb: any, sessionId: string) {
     success: true,
     mapped_count: mappedCount,
     auto_mappings_created: autoMappings.length,
+    unit_system: session.unit_system || "mm",
+    length_factor: lengthFactor,
   });
 }
 
