@@ -72,7 +72,7 @@ export function AdDirectorContent() {
   }, [savedBrand, brandLoading]);
 
   // ─── Full Pipeline: prompt → analyze → generate → result ───
-  const handleSubmit = useCallback(async (prompt: string, ratio: string, images: File[]) => {
+  const handleSubmit = useCallback(async (prompt: string, ratio: string, images: File[], introImage: File | null, outroImage: File | null, duration: string) => {
     setUserPrompt(prompt);
     setUserRatio(ratio);
     setScript(prompt);

@@ -1,26 +1,45 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Paperclip, Send, ImageIcon, X } from "lucide-react";
+import { Paperclip, Send, X, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const RATIOS = ["16:9", "9:16", "1:1", "4:3"] as const;
+const DURATIONS = [
+  { label: "15s", value: "15" },
+  { label: "30s", value: "30" },
+  { label: "1min", value: "60" },
+] as const;
 
 interface ChatPromptBarProps {
-  onSubmit: (prompt: string, ratio: string, images: File[]) => void;
+  onSubmit: (
+    prompt: string,
+    ratio: string,
+    images: File[],
+    introImage: File | null,
+    outroImage: File | null,
+    duration: string
+  ) => void;
   disabled?: boolean;
 }
 
 export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   const [prompt, setPrompt] = useState("");
   const [ratio, setRatio] = useState<string>("16:9");
+  const [duration, setDuration] = useState<string>("15");
   const [images, setImages] = useState<File[]>([]);
+  const [introImage, setIntroImage] = useState<File | null>(null);
+  const [outroImage, setOutroImage] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const introRef = useRef<HTMLInputElement>(null);
+  const outroRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
-    onSubmit(prompt.trim(), ratio, images);
+    onSubmit(prompt.trim(), ratio, images, introImage, outroImage, duration);
     setPrompt("");
     setImages([]);
+    setIntroImage(null);
+    setOutroImage(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -41,11 +60,96 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
     setImages(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const handleIntroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) setIntroImage(e.target.files[0]);
+    e.target.value = "";
+  };
+
+  const handleOutroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) setOutroImage(e.target.files[0]);
+    e.target.value = "";
+  };
+
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-3">
-      {/* Image previews */}
+    <div className="w-full max-w-2xl mx-auto space-y-4">
+      {/* Intro / Outro upload boxes */}
+      <div className="flex gap-4 justify-center">
+        {/* Intro */}
+        <input ref={introRef} type="file" accept="image/*" hidden onChange={handleIntroChange} />
+        <button
+          onClick={() => introRef.current?.click()}
+          disabled={disabled}
+          className={cn(
+            "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
+            "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
+            introImage ? "border-primary/40 bg-primary/5" : "border-border/40 bg-muted/10",
+            "disabled:opacity-40 disabled:cursor-not-allowed"
+          )}
+        >
+          {introImage ? (
+            <>
+              <img
+                src={URL.createObjectURL(introImage)}
+                alt="Intro"
+                className="absolute inset-0 w-full h-full object-cover rounded-xl"
+              />
+              <div className="absolute inset-0 bg-background/40 rounded-xl" />
+              <button
+                onClick={(e) => { e.stopPropagation(); setIntroImage(null); }}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center z-10 hover:bg-destructive/20"
+              >
+                <X className="w-3 h-3" />
+              </button>
+              <span className="relative z-10 text-[10px] font-medium text-foreground">Intro</span>
+            </>
+          ) : (
+            <>
+              <ImagePlus className="w-7 h-7 text-muted-foreground/60" />
+              <span className="text-[10px] font-medium text-muted-foreground">Intro Image</span>
+            </>
+          )}
+        </button>
+
+        {/* Outro */}
+        <input ref={outroRef} type="file" accept="image/*" hidden onChange={handleOutroChange} />
+        <button
+          onClick={() => outroRef.current?.click()}
+          disabled={disabled}
+          className={cn(
+            "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
+            "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
+            outroImage ? "border-primary/40 bg-primary/5" : "border-border/40 bg-muted/10",
+            "disabled:opacity-40 disabled:cursor-not-allowed"
+          )}
+        >
+          {outroImage ? (
+            <>
+              <img
+                src={URL.createObjectURL(outroImage)}
+                alt="Outro"
+                className="absolute inset-0 w-full h-full object-cover rounded-xl"
+              />
+              <div className="absolute inset-0 bg-background/40 rounded-xl" />
+              <button
+                onClick={(e) => { e.stopPropagation(); setOutroImage(null); }}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center z-10 hover:bg-destructive/20"
+              >
+                <X className="w-3 h-3" />
+              </button>
+              <span className="relative z-10 text-[10px] font-medium text-foreground">Outro</span>
+            </>
+          ) : (
+            <>
+              <ImagePlus className="w-7 h-7 text-muted-foreground/60" />
+              <span className="text-[10px] font-medium text-muted-foreground">Outro Image</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Extra image previews */}
       {images.length > 0 && (
-        <div className="flex gap-2 flex-wrap px-1">
+        <div className="flex gap-2 flex-wrap px-1 justify-center">
           {images.map((img, i) => (
             <div key={i} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border/30 bg-muted/20">
               <img src={URL.createObjectURL(img)} alt="" className="w-full h-full object-cover" />
@@ -74,7 +178,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
 
         {/* Bottom bar */}
         <div className="flex items-center justify-between px-3 pb-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Upload */}
             <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={handleFileChange} />
             <button
@@ -101,6 +205,25 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                   )}
                 >
                   {r}
+                </button>
+              ))}
+            </div>
+
+            {/* Duration pills */}
+            <div className="flex gap-0.5 rounded-lg border border-border/20 p-0.5">
+              {DURATIONS.map((d) => (
+                <button
+                  key={d.value}
+                  onClick={() => setDuration(d.value)}
+                  disabled={disabled}
+                  className={cn(
+                    "px-2 py-1 rounded-md text-[10px] font-medium transition-all",
+                    duration === d.value
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {d.label}
                 </button>
               ))}
             </div>
