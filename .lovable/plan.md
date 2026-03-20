@@ -1,49 +1,20 @@
 
+## Plan: Clean Up ChatPromptBar Bottom Bar
 
-## تغییرات: افزودن آپلود تصویر ابتدا/انتها + انتخاب مدت ویدیو
+### Changes
 
-### توضیح
+**File: `src/components/ad-director/ChatPromptBar.tsx`**
 
-کاربر می‌خواهد در صفحه چت:
-1. **دو آیکون بزرگ** برای آپلود تصویر ابتدای ویدیو (Intro) و انتهای ویدیو (Outro)
-2. **انتخاب مدت زمان ویدیو** با گزینه‌های 15 ثانیه، 30 ثانیه، 1 دقیقه
-
-### تغییرات
-
-**فایل: `src/components/ad-director/ChatPromptBar.tsx`**
-
-- اضافه کردن دو باکس بزرگ بالای textarea:
-  - **Intro Image** (سمت چپ) — آیکون بزرگ با قابلیت آپلود عکس
-  - **Outro Image** (سمت راست) — آیکون بزرگ با قابلیت آپلود عکس
-  - هر دو با پیش‌نمایش عکس آپلود شده و دکمه حذف
-- اضافه کردن pill buttons برای مدت زمان: `15s` | `30s` | `1min` کنار ratio pills
-- تغییر signature به `onSubmit: (prompt, ratio, images, introImage, outroImage, duration) => void`
-
-**فایل: `src/components/ad-director/AdDirectorContent.tsx`**
-
-- دریافت `introImage`, `outroImage`, `duration` از ChatPromptBar
-- ارسال duration به pipeline تولید ویدیو
-
-### طرح UI
+1. **Remove the Paperclip (attach) button** and its associated hidden file input, `fileRef`, `handleFileChange`, `removeImage`, `images` state, and the extra image previews section
+2. **Group Ratio and Duration pills together** with labels, separated by a small divider, into a single clean row:
 
 ```text
-┌──────────────────────────────────────┐
-│  ┌─────────┐          ┌─────────┐   │
-│  │  📷     │          │  📷     │   │
-│  │ Intro   │          │ Outro   │   │
-│  │ Image   │          │ Image   │   │
-│  └─────────┘          └─────────┘   │
-│                                      │
-│  ┌──────────────────────────────┐   │
-│  │ Describe your video idea...  │   │
-│  │                              │   │
-│  │ [📎] [16:9][9:16][1:1][4:3] │   │
-│  │ [15s][30s][1min]         [→] │   │
-│  └──────────────────────────────┘   │
-└──────────────────────────────────────┘
+[Ratio: 16:9 | 9:16 | 1:1 | 4:3]  [Duration: 15s | 30s | 1min]  [→]
 ```
 
-### فایل‌ها
-- `src/components/ad-director/ChatPromptBar.tsx` — UI جدید
-- `src/components/ad-director/AdDirectorContent.tsx` — دریافت پارامترهای جدید
+Each group gets a small label ("Ratio" / "Duration") above or beside it for clarity. Remove the `images` parameter from `onSubmit` (pass empty array for backward compat).
 
+### Summary
+- Remove: Paperclip icon, file upload input, extra image previews, related state
+- Keep: Intro/Outro uploads (they serve the image upload purpose), ratio pills, duration pills, send button
+- Add: Small text labels on each pill group for better visual organization
