@@ -1,32 +1,29 @@
 
 
-## Fix: Imperial (ft-in) Not Displaying in Results Table
+## Fix: Show Detected Source Unit in Pipeline "Uploaded" Step
+
+### Problem
+
+The user wants the first pipeline chip ("Uploaded") to display the detected/selected source unit system so it's immediately visible at the top of the view. Currently the "Uploaded" label is static and gives no indication of the unit system being used.
 
 ### Root Cause
 
-Two issues prevent Imperial display in the "5 LINE ITEMS" table:
-
-1. **Display uses DB value, not React state**: Lines 2063 and 2072 in `AIExtractView.tsx` check `activeSession?.unit_system` (from DB) to decide formatting. But the DB value is `"metric"` because either the edge function wasn't deployed or the session wasn't refreshed after update.
-
-2. **`loadSession` doesn't restore unit**: When loading a session from history, `selectedUnitSystem` stays at its default `"mm"` instead of reading from `session.unit_system`.
+`PIPELINE_STEPS` is a static constant array (line 104-111). The "uploaded" step always renders as "Uploaded" with no dynamic content. The `selectedUnitSystem` / `activeSession.unit_system` value is never reflected in the pipeline header.
 
 ### Changes
 
 **File: `src/components/office/AIExtractView.tsx`**
 
-1. **Use `selectedUnitSystem` for display instead of `activeSession?.unit_system`**: Replace all display references from `activeSession?.unit_system` to `selectedUnitSystem` in the "5 LINE ITEMS" table (lines ~2063 and ~2072) and the dedupe preview table (line ~1889). This ensures the user's selection takes immediate effect without waiting for a DB round-trip.
+1. **Make the "Uploaded" step label dynamic**: In the pipeline rendering block (lines 987-1009), when `step.key === "uploaded"` and a unit system is set (either from `selectedUnitSystem` or `activeSession.unit_system`), append the unit label to the chip:
+   - `"mm"` → `"Uploaded · mm"`
+   - `"in"` → `"Uploaded · Inches"`
+   - `"ft"` → `"Uploaded · Feet"`
+   - `"imperial"` → `"Uploaded · ft-in"`
 
-2. **Sync `selectedUnitSystem` from session on load**: In `loadSession`, add `setSelectedUnitSystem(session.unit_system || "mm")` so that when a user opens an existing session, the correct unit is restored.
+2. **Implementation**: Add a unit label map constant and modify the `{step.label}` render in the pipeline to conditionally append the unit suffix when `step.key === "uploaded"` and a unit is known.
 
-3. **Sync when `activeSession` changes**: Add an effect that sets `selectedUnitSystem` from `activeSession.unit_system` whenever the active session data refreshes from the server — this covers the case where `applyMapping` updates the DB and sessions are re-fetched.
+This is a display-only change — no backend or data flow modifications needed.
 
-**File: `supabase/functions/manage-extract/index.ts`**
-
-4. **Redeploy the edge function**: The current code already has the unit persistence logic (lines 329-334). It needs to be redeployed to ensure it's running the latest version.
-
-### Summary
-- Display: use React state `selectedUnitSystem` instead of `activeSession?.unit_system`
-- Load: restore unit from session on load
-- Sync: keep React state in sync with server after refresh
-- Deploy: redeploy edge function to ensure unit persistence works
+### Files
+- `src/components/office/AIExtractView.tsx` — dynamic label for "Uploaded" pipeline chip
 
