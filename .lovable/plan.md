@@ -1,39 +1,34 @@
 
 
-## Plan: Use New RingCentral App Only for Widget (Calls), Keep Old App for Backend
+## Fix: RingCentral "Access denied" Error
 
-### Problem
-Currently the widget fetches its `clientId` from the `ringcentral-recording` edge function, which returns the old app's Client ID. You want the **new app** (`99KxuQlTa6aepPopPBwkd3`) used only for the Embeddable widget (making/receiving calls), while the **old app** continues to handle SIP provisioning, recordings, active calls, etc.
+The code is correct. This is a RingCentral Developer Console configuration issue. There are two possible fixes depending on whether your new app is in Sandbox or Production.
 
-### Changes
+### Option A — If the app is still in Sandbox (most likely)
 
-**1. Hardcode the new Client ID in the widget hook**
+Change `appServer` from the production URL to the sandbox URL:
 
-File: `src/hooks/useRingCentralWidget.ts`
+**File:** `src/hooks/useRingCentralWidget.ts` (line 102)
 
-Instead of fetching `clientId` from the backend edge function, hardcode the new app's Client ID directly for the widget. Remove the fetch call to `ringcentral-recording?action=client-id`. The widget will always use the new app credentials.
+```
+// Change FROM:
+appServer: "https://platform.ringcentral.com",
 
-```typescript
-// Remove the entire fetch block (lines 95-117)
-// Replace with:
-const clientId = "99KxuQlTa6aepPopPBwkd3";
+// Change TO:
+appServer: "https://platform.devtest.ringcentral.com",
 ```
 
-Also update the `redirectUri` to match the new app's registered redirect:
-```
-https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/redirect.html
-```
+This lets the widget authenticate against the sandbox environment where new apps are created by default.
 
-**2. No changes to edge functions**
+### Option B — If you want Production access
 
-The backend functions (`ringcentral-sip-provision`, `ringcentral-recording`, `ringcentral-active-calls`) continue using the old `RINGCENTRAL_CLIENT_ID` and `RINGCENTRAL_CLIENT_SECRET` secrets — no changes needed there.
+No code change needed, but in the **RingCentral Developer Console** you must:
+1. Go to your app settings
+2. Ensure the app type is **"Browser-based"** (not Server/Web)
+3. Click **"Graduate"** to move the app from Sandbox to Production
+4. Wait for RingCentral approval (can take minutes to hours)
 
-### Summary
+### Recommendation
 
-| Component | App Used |
-|-----------|----------|
-| Embeddable Widget (calls) | New app (`99Kxu...`) |
-| SIP Provision | Old app (from secrets) |
-| Recordings | Old app (from secrets) |
-| Active Calls | Old app (from secrets) |
+Start with **Option A** (sandbox) to verify the widget works, then graduate to production later.
 
