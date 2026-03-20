@@ -507,8 +507,9 @@ export function AIExtractView() {
 
   const handleMappingConfirmed = useCallback(async (mappedRows: MappedRow[], unitSystem?: string) => {
     setMappingConfirmed(true);
-    // Store unit in React state — edge function will persist it server-side (bypasses RLS)
+    // Mark that user explicitly chose a unit — prevents DB sync from overwriting
     if (unitSystem) {
+      userSetUnitRef.current = true;
       setSelectedUnitSystem(unitSystem);
     }
     toast({
