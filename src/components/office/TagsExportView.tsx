@@ -26,12 +26,13 @@ const MASS_KG_PER_M: Record<string, number> = {
 
 const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
 
-/** Format a dimension value (stored in total inches for imperial, mm for metric) for display */
+/** Format a dimension value (always stored in mm in DB) for display.
+ *  For imperial: converts mm → inches first, then formats as ft-in. */
 function formatDim(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
   const rounded = Math.round(val);
   if (unitSystem === "imperial") {
-    const totalInches = rounded;
+    const totalInches = rounded / 25.4; // mm → inches
     const feet = Math.floor(totalInches / 12);
     const rawInches = totalInches % 12;
     const eighths = Math.round(rawInches * 8);
