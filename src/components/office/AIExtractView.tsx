@@ -193,6 +193,7 @@ export function AIExtractView() {
   const [dedupePreview, setDedupePreview] = useState<DuplicatePreviewItem[] | null>(null);
   const [pendingDedupeSessionId, setPendingDedupeSessionId] = useState<string | null>(null);
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
+  const [selectedUnitSystem, setSelectedUnitSystem] = useState<string>("mm");
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, loading: rowsLoading, hasFetched: rowsHasFetched, refresh: refreshRows } = useExtractRows(activeSessionId);
@@ -490,18 +491,18 @@ export function AIExtractView() {
     }
   };
 
+
   const handleMappingConfirmed = useCallback(async (mappedRows: MappedRow[], unitSystem?: string) => {
     setMappingConfirmed(true);
-    // Persist the exact unit value (mm/in/ft/imperial) on the session
-    if (activeSessionId && unitSystem) {
-      await supabase.from("extract_sessions").update({ unit_system: unitSystem } as any).eq("id", activeSessionId);
-      await refreshSessions();
+    // Store unit in React state — edge function will persist it server-side (bypasses RLS)
+    if (unitSystem) {
+      setSelectedUnitSystem(unitSystem);
     }
     toast({
       title: "Mapping confirmed",
       description: `${mappedRows.length} rows mapped to canonical fields (source unit: ${unitSystem || "mm"})`,
     });
-  }, [toast, activeSessionId, refreshSessions]);
+  }, [toast]);
 
   const handleApplyMapping = async () => {
     if (!activeSessionId) return;
@@ -512,7 +513,7 @@ export function AIExtractView() {
     setProcessing(true);
     setProcessingStep("Applying mapping...");
     try {
-      const result = await applyMapping(activeSessionId);
+      const result = await applyMapping(activeSessionId, selectedUnitSystem);
       // Safety net: force DB status to "mapped" with retry to ensure pipeline advances
       let retries = 0;
       let lastErr: any = null;

@@ -252,9 +252,9 @@ export async function detectDuplicates(sessionId: string, dryRun: boolean = fals
   };
 }
 
-export async function applyMapping(sessionId: string) {
+export async function applyMapping(sessionId: string, unitSystem?: string) {
   const { data, error } = await supabase.functions.invoke("manage-extract", {
-    body: { action: "apply-mapping", sessionId },
+    body: { action: "apply-mapping", sessionId, unitSystem },
   });
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);
