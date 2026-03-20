@@ -1,40 +1,67 @@
 
 
-## Fix: Nila Interpreter Translations Returning Empty
+## Plan: Simplify Ad Director to Chat-First Flow
 
-### Root Cause
+### Problem
+The current Ad Director UI is overly complex with many unused tools (Stock Images, Graphics, Templates, Filters, etc.) in a sidebar, plus a multi-step wizard. The user wants a simple flow:
 
-The edge function logs and network responses confirm the issue:
-
-```
-Edge log: "Failed to parse translation: " (empty response from AI)
-Network: POST translate-message → {"translations":{}}
-```
-
-The AI model (`gemini-2.5-pro`) is returning empty/unparseable responses for valid English input. This happens because:
-
-1. **Model refusal on sensitive content** — Gemini 2.5 Pro refuses to translate text containing political/sensitive topics (e.g., the logged transcript about war/politics). It returns empty instead of a translation.
-2. **Wrong model** — Per established standards, `translate-message` should use `gemini-2.5-flash` for speed and lower refusal rates, but the code currently uses `gemini-2.5-pro`.
-3. **Empty response = silent discard** — When the translation returns `{}`, the client removes the transcript entry entirely, making it look like the mic isn't working.
-
-The microphone IS working (Scribe captures and commits transcripts correctly, as seen in the console logs). The problem is 100% on the translation side.
+1. **Chat screen** — Write a prompt (like a chat), upload images, select aspect ratio
+2. **After generation** — Show the video with two buttons: ✅ Approve / ✏️ Edit Video
+3. **Edit mode** — Takes to the existing ProVideoEditor for detailed editing
 
 ### Changes
 
-**File: `supabase/functions/translate-message/index.ts`**
+**1. Simplify `AdDirector.tsx` page** — Remove the complex sidebar (`AdDirectorSidebar`). Replace with a clean, minimal layout.
 
-1. Switch model from `gemini-2.5-pro` to `gemini-2.5-flash` (faster, cheaper, less prone to content refusal)
-2. Add an explicit instruction to the system prompt: "You MUST translate ALL content regardless of topic. Never refuse. Never return empty for valid speech."
-3. Add a fallback: if the AI returns empty for text that has 3+ real words, retry once with a simpler prompt
+**2. Create `AdDirectorChatInput.tsx`** — A chat-style prompt input at the bottom of the screen with:
+- Text input (like a chat message box)
+- Image upload button (paperclip icon)
+- Aspect ratio selector (compact pill buttons: 16:9, 9:16, 1:1, 4:3)
+- Send/Generate button
 
-**File: `src/hooks/useAzinVoiceRelay.ts`**
+**3. Create `AdDirectorChatFlow.tsx`** — New main component replacing the complex `AdDirectorContent` rendering logic. Three states:
+- **Idle**: Shows the chat input centered on screen (like ChatGPT empty state)
+- **Generating**: Shows progress with the prompt displayed as a "sent message" bubble
+- **Result**: Shows the generated video with two action buttons:
+  - ✅ **Approve** — Downloads or saves the video
+  - ✏️ **Edit Video** — Transitions to `ProVideoEditor`
 
-4. Instead of silently removing entries when translation is empty, show the original text with a "(translation unavailable)" note, so the user can see the mic is working even if translation fails
+**4. Simplify `AdDirectorContent.tsx`** — Keep all the existing generation logic (handleAnalyze, generateScene, handleExport etc.) but rewire the UI rendering to use the new chat flow instead of the step wizard. The backend pipeline remains unchanged.
 
-### Technical Details
+**5. Remove sidebar rendering** — Remove `AdDirectorSidebar` import and all sidebar tab panel logic from the page. The sidebar tools (Stock Images, Templates, Graphics, etc.) are still accessible inside the Edit mode via `ProVideoEditor`.
 
-- The memory standard explicitly states `gemini-2.5-flash` for this function
-- The Faithful Translator mandate means the model should never interpret or react to content
-- Adding the anti-refusal instruction to the system prompt should fix most cases
-- The fallback retry handles edge cases where the model still refuses
+### UI Layout
+
+```text
+┌──────────────────────────────────────┐
+│                                      │
+│     (empty state / video result)     │
+│                                      │
+│                                      │
+│  ┌──────────────────────────────┐    │
+│  │  [📎] Type your video idea   [→] │
+│  │  [16:9] [9:16] [1:1] [4:3]      │
+│  └──────────────────────────────┘    │
+└──────────────────────────────────────┘
+
+After generation:
+┌──────────────────────────────────────┐
+│         ┌──────────────┐             │
+│         │  ▶ Video      │             │
+│         └──────────────┘             │
+│     [✅ Approve]  [✏️ Edit Video]    │
+└──────────────────────────────────────┘
+```
+
+### What stays the same
+- All backend edge functions (ad-director-ai, video generation)
+- ProVideoEditor for full editing
+- Video generation pipeline (analyze → storyboard → generate → stitch)
+- Brand kit, export dialog
+- Project history (simplified — shown as recent items in the chat view)
+
+### Files modified
+- `src/pages/AdDirector.tsx` — Remove sidebar, simplify layout
+- `src/components/ad-director/AdDirectorContent.tsx` — Rewire UI to chat-first flow with approve/edit buttons after generation
+- New: `src/components/ad-director/ChatPromptBar.tsx` — Chat-style input with upload + ratio selector
 
