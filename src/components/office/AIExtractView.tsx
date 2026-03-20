@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
+// userSetUnitRef declared below — guards against stale DB overwriting user's unit selection
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -253,9 +254,12 @@ export function AIExtractView() {
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode) : -1;
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
-  // Sync selectedUnitSystem from activeSession when it changes (e.g. after applyMapping refreshes)
+  // Ref to track if user explicitly set unit — prevents stale DB value from overwriting
+  const userSetUnitRef = useRef(false);
+
+  // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
-    if (activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
+    if (!userSetUnitRef.current && activeSession?.unit_system) {
       setSelectedUnitSystem(activeSession.unit_system);
     }
   }, [activeSession?.unit_system]);
@@ -503,8 +507,9 @@ export function AIExtractView() {
 
   const handleMappingConfirmed = useCallback(async (mappedRows: MappedRow[], unitSystem?: string) => {
     setMappingConfirmed(true);
-    // Store unit in React state — edge function will persist it server-side (bypasses RLS)
+    // Mark that user explicitly chose a unit — prevents DB sync from overwriting
     if (unitSystem) {
+      userSetUnitRef.current = true;
       setSelectedUnitSystem(unitSystem);
     }
     toast({
@@ -527,7 +532,7 @@ export function AIExtractView() {
       let retries = 0;
       let lastErr: any = null;
       while (retries < 3) {
-        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped" } as any).eq("id", activeSessionId);
+        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped", unit_system: selectedUnitSystem } as any).eq("id", activeSessionId);
         if (!updateErr) { lastErr = null; break; }
         lastErr = updateErr;
         console.warn(`[handleApplyMapping] status update attempt ${retries + 1} failed:`, updateErr.message);
