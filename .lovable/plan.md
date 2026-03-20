@@ -1,29 +1,44 @@
 
 
-## Fix: Show Detected Source Unit in Pipeline "Uploaded" Step
+## Fix: Enforce ft-in Display Across All Extract Views
 
 ### Problem
 
-The user wants the first pipeline chip ("Uploaded") to display the detected/selected source unit system so it's immediately visible at the top of the view. Currently the "Uploaded" label is static and gives no indication of the unit system being used.
+When "Imperial (ft-in)" is selected, multiple views still show raw mm numbers instead of formatted ft-in strings. Three root causes:
 
-### Root Cause
+1. **TagsExportView.tsx `formatDim`** (line 34): treats stored mm as inches directly (`const totalInches = rounded`) — must divide by 25.4 first since all DB values are stored in mm after `applyMapping`.
 
-`PIPELINE_STEPS` is a static constant array (line 104-111). The "uploaded" step always renders as "Uploaded" with no dynamic content. The `selectedUnitSystem` / `activeSession.unit_system` value is never reflected in the pipeline header.
+2. **TagsExportView.tsx CSV export** (lines 106-109): exports raw mm numbers, never formats as ft-in.
+
+3. **RebarTagCard.tsx** (line 60): displays raw `length` number with no unit formatting at all. Dims are also shown as raw numbers.
+
+4. **AIExtractView.tsx results table headers**: "LENGTH" and dim column headers don't indicate the active unit (mm vs ft-in).
 
 ### Changes
 
+**File: `src/components/office/TagsExportView.tsx`**
+
+1. Fix `formatDim` (line 34): change `const totalInches = rounded;` to `const totalInches = rounded / 25.4;` — same fix as AIExtractView
+2. Table display (lines 383-398): already uses `formatDim` with session unit — will work after fix #1
+3. CSV export (lines 95-121): when `unit_system === "imperial"`, format `total_length_mm` and dim values using `formatDim` instead of raw numbers
+
+**File: `src/components/office/RebarTagCard.tsx`**
+
+4. Accept optional `unitSystem` prop
+5. Format `length` display (line 60) using ft-in when imperial
+6. Format dim values in the dims grid using ft-in when imperial
+7. Add a small local `formatMmToFtIn` helper (same logic as other views)
+
+**File: `src/components/office/TagsExportView.tsx` — Card view**
+
+8. Pass `unitSystem` from `selectedSession.unit_system` to `RebarTagCard`
+
 **File: `src/components/office/AIExtractView.tsx`**
 
-1. **Make the "Uploaded" step label dynamic**: In the pipeline rendering block (lines 987-1009), when `step.key === "uploaded"` and a unit system is set (either from `selectedUnitSystem` or `activeSession.unit_system`), append the unit label to the chip:
-   - `"mm"` → `"Uploaded · mm"`
-   - `"in"` → `"Uploaded · Inches"`
-   - `"ft"` → `"Uploaded · Feet"`
-   - `"imperial"` → `"Uploaded · ft-in"`
-
-2. **Implementation**: Add a unit label map constant and modify the `{step.label}` render in the pipeline to conditionally append the unit suffix when `step.key === "uploaded"` and a unit is known.
-
-This is a display-only change — no backend or data flow modifications needed.
+9. Make LENGTH and dim column headers dynamic: show "LENGTH (ft-in)" or "LENGTH (mm)" based on `selectedUnitSystem`
 
 ### Files
-- `src/components/office/AIExtractView.tsx` — dynamic label for "Uploaded" pipeline chip
+- `src/components/office/TagsExportView.tsx` — fix `formatDim` mm→in conversion, imperial CSV export
+- `src/components/office/RebarTagCard.tsx` — add unitSystem prop, format length + dims
+- `src/components/office/AIExtractView.tsx` — dynamic table headers
 
