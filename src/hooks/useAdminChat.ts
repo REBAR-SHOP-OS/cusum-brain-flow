@@ -56,6 +56,7 @@ export function useAdminChat(currentPage?: string, onBrowserAction?: BrowserActi
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const browserActionRef = useRef(onBrowserAction);
+  browserActionRef.current = onBrowserAction;
 
   useEffect(() => {
     try {
