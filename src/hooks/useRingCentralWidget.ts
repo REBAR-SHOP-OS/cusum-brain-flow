@@ -92,42 +92,17 @@ export function useRingCentralWidget(): UseRingCentralWidgetReturn {
     if (scriptRef.current) return;
 
     async function loadWidget() {
-      let clientId: string | null = null;
-
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          const projectUrl = import.meta.env.VITE_SUPABASE_URL;
-          const resp = await fetch(
-            `${projectUrl}/functions/v1/ringcentral-recording?action=client-id`,
-            {
-              headers: {
-                Authorization: `Bearer ${session.access_token}`,
-                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              },
-            }
-          );
-          if (resp.ok) {
-            const data = await resp.json();
-            clientId = data.clientId;
-          }
-        }
-      } catch {
-        // Fallback to demo mode
-      }
+      const clientId = "99KxuQlTa6aepPopPBwkd3";
 
       const script = document.createElement("script");
       const baseUrl = "https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/adapter.js";
       const params = new URLSearchParams({
         newAdapterUI: "1",
         enableAnalytics: "0",
+        clientId,
+        appServer: "https://platform.ringcentral.com",
+        redirectUri: "https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/redirect.html",
       });
-
-      if (clientId) {
-        params.set("clientId", clientId);
-        params.set("appServer", "https://platform.ringcentral.com");
-        params.set("redirectUri", "https://ringcentral.github.io/ringcentral-embeddable/redirect.html");
-      }
 
       script.src = `${baseUrl}?${params.toString()}`;
       script.async = true;
