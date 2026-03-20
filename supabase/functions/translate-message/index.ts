@@ -107,19 +107,34 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
     const userPrompt = `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`;
     let result = await makeRequest(userPrompt);
 
-    const raw = result.content;
+    const parseTranslation = (raw: string): Record<string, string> => {
+      const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      for (const key of Object.keys(parsed)) {
+        parsed[key] = (parsed[key] || "").trim();
+      }
+      return parsed;
+    };
+
     let translations: Record<string, string>;
     try {
-      const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      translations = JSON.parse(cleaned);
-      // Post-parse validation: strip empty/whitespace-only translations
-      for (const key of Object.keys(translations)) {
-        const val = (translations[key] || "").trim();
-        translations[key] = val;
-      }
+      translations = parseTranslation(result.content);
     } catch {
-      console.error("Failed to parse translation:", raw);
+      console.error("Failed to parse translation:", result.content);
       translations = {};
+    }
+
+    // Retry fallback: if all translations are empty and input has 3+ real words, retry once
+    const wordCount = text.split(/\s+/).filter((w: string) => w.length > 0).length;
+    const allEmpty = langsToTranslate.every((l: string) => !translations[l]);
+    if (allEmpty && wordCount >= 3) {
+      console.log("Retry: empty translation for valid input, retrying with simpler prompt");
+      try {
+        const retryResult = await makeRequest(`Translate this to ${targetList}. Output JSON only:\n${text}`);
+        translations = parseTranslation(retryResult.content);
+      } catch {
+        console.error("Retry also failed");
+      }
     }
 
     return new Response(
