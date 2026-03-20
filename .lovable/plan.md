@@ -1,44 +1,61 @@
 
 
-## Fix: Enforce ft-in Display Across All Extract Views
+## Fix: Imperial Selection Gets Overwritten by Stale DB Value
 
-### Problem
+### Root Cause
 
-When "Imperial (ft-in)" is selected, multiple views still show raw mm numbers instead of formatted ft-in strings. Three root causes:
+The pipeline chip shows "Uploaded · metric" even after user selects "Imperial (ft-in)". Here's why:
 
-1. **TagsExportView.tsx `formatDim`** (line 34): treats stored mm as inches directly (`const totalInches = rounded`) — must divide by 25.4 first since all DB values are stored in mm after `applyMapping`.
+1. User selects "Imperial (ft-in)" → `setSelectedUnitSystem("imperial")` ✓
+2. User clicks "Apply Mapping" → calls edge function with `unitSystem: "imperial"` ✓
+3. Edge function should persist `unit_system = "imperial"` to DB, but appears the deployed version may not have this code yet
+4. After apply, `refreshSessions()` is called → `activeSession` updates
+5. **Bug**: The sync effect (line 257-261) runs and overwrites `selectedUnitSystem` back to `"mm"` because the DB still has `unit_system: "metric"`
 
-2. **TagsExportView.tsx CSV export** (lines 106-109): exports raw mm numbers, never formats as ft-in.
+```typescript
+// This effect is the culprit — it overwrites user's selection with stale DB value
+useEffect(() => {
+  if (activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
+    setSelectedUnitSystem(activeSession.unit_system);
+  }
+}, [activeSession?.unit_system]);
+```
 
-3. **RebarTagCard.tsx** (line 60): displays raw `length` number with no unit formatting at all. Dims are also shown as raw numbers.
-
-4. **AIExtractView.tsx results table headers**: "LENGTH" and dim column headers don't indicate the active unit (mm vs ft-in).
-
-### Changes
-
-**File: `src/components/office/TagsExportView.tsx`**
-
-1. Fix `formatDim` (line 34): change `const totalInches = rounded;` to `const totalInches = rounded / 25.4;` — same fix as AIExtractView
-2. Table display (lines 383-398): already uses `formatDim` with session unit — will work after fix #1
-3. CSV export (lines 95-121): when `unit_system === "imperial"`, format `total_length_mm` and dim values using `formatDim` instead of raw numbers
-
-**File: `src/components/office/RebarTagCard.tsx`**
-
-4. Accept optional `unitSystem` prop
-5. Format `length` display (line 60) using ft-in when imperial
-6. Format dim values in the dims grid using ft-in when imperial
-7. Add a small local `formatMmToFtIn` helper (same logic as other views)
-
-**File: `src/components/office/TagsExportView.tsx` — Card view**
-
-8. Pass `unitSystem` from `selectedSession.unit_system` to `RebarTagCard`
+### Fix — Two Changes
 
 **File: `src/components/office/AIExtractView.tsx`**
 
-9. Make LENGTH and dim column headers dynamic: show "LENGTH (ft-in)" or "LENGTH (mm)" based on `selectedUnitSystem`
+1. **Make the sync effect one-directional**: Only sync from DB → state on initial load (when no user selection has been made), not after user explicitly sets a unit. Add a `userSetUnit` ref flag:
+
+```typescript
+const userSetUnitRef = useRef(false);
+
+// In handleMappingConfirmed:
+userSetUnitRef.current = true;
+setSelectedUnitSystem(unitSystem);
+
+// Fix the sync effect — don't overwrite explicit user selection
+useEffect(() => {
+  if (!userSetUnitRef.current && activeSession?.unit_system) {
+    setSelectedUnitSystem(activeSession.unit_system);
+  }
+}, [activeSession?.unit_system]);
+```
+
+2. **Also persist unit_system client-side as fallback**: In `handleApplyMapping`, after the edge function call succeeds, also update the session via client Supabase (belt-and-suspenders):
+
+```typescript
+// After applyMapping succeeds:
+await supabase.from("extract_sessions")
+  .update({ unit_system: selectedUnitSystem } as any)
+  .eq("id", activeSessionId);
+```
+
+**File: `supabase/functions/manage-extract/index.ts`**
+
+3. **Redeploy edge function**: The code already has the unit persistence logic (lines 329-334). It just needs redeployment. Also fix line 484 to return `effectiveUnit` instead of `session.unit_system` (which is the old value before update).
 
 ### Files
-- `src/components/office/TagsExportView.tsx` — fix `formatDim` mm→in conversion, imperial CSV export
-- `src/components/office/RebarTagCard.tsx` — add unitSystem prop, format length + dims
-- `src/components/office/AIExtractView.tsx` — dynamic table headers
+- `src/components/office/AIExtractView.tsx` — prevent sync effect from overwriting user selection + client-side fallback persist
+- `supabase/functions/manage-extract/index.ts` — fix response to return `effectiveUnit`, redeploy
 
