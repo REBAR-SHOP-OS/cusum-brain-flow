@@ -532,7 +532,7 @@ export function AIExtractView() {
       let retries = 0;
       let lastErr: any = null;
       while (retries < 3) {
-        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped" } as any).eq("id", activeSessionId);
+        const { error: updateErr } = await supabase.from("extract_sessions").update({ status: "mapped", unit_system: selectedUnitSystem } as any).eq("id", activeSessionId);
         if (!updateErr) { lastErr = null; break; }
         lastErr = updateErr;
         console.warn(`[handleApplyMapping] status update attempt ${retries + 1} failed:`, updateErr.message);
