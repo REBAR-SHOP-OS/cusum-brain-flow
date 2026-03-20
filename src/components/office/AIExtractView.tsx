@@ -999,7 +999,11 @@ export function AIExtractView() {
                     }`}
                   >
                     <StepIcon className="w-3.5 h-3.5" />
-                    {step.label}
+                    {step.key === "uploaded" && selectedUnitSystem && selectedUnitSystem !== "mm"
+                      ? `Uploaded · ${({ in: "Inches", ft: "Feet", imperial: "ft-in" } as Record<string, string>)[selectedUnitSystem] || selectedUnitSystem}`
+                      : step.key === "uploaded" && selectedUnitSystem === "mm"
+                        ? "Uploaded · mm"
+                        : step.label}
                   </div>
                   {idx < PIPELINE_STEPS.length - 1 && (
                     <ArrowRight className={`w-3.5 h-3.5 ${isFuture ? "text-muted-foreground/30" : "text-primary/50"}`} />
