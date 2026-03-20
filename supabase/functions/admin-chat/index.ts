@@ -1375,57 +1375,15 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
     }
     // ─── RingCentral Write Tools ───
     case "rc_make_call": {
-      const { data: allTokens } = await supabase
-        .from("user_ringcentral_tokens")
-        .select("access_token, token_expires_at, refresh_token, user_id")
-        .order("token_expires_at", { ascending: false })
-        .limit(1);
-      if (!allTokens?.length) throw new Error("No RingCentral connection found");
-      const tokenRow = allTokens[0];
-      let accessToken = tokenRow.access_token;
-      if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) <= new Date()) {
-        const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
-        const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
-        const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}` },
-          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
-        });
-        if (!resp.ok) throw new Error("Token refresh failed");
-        const tokens = await resp.json();
-        accessToken = tokens.access_token;
-        await supabase.from("user_ringcentral_tokens").update({
-          access_token: tokens.access_token, refresh_token: tokens.refresh_token || tokenRow.refresh_token,
-          token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
-        }).eq("user_id", tokenRow.user_id);
-      }
-
-      // Auto-detect caller ID if not provided
-      let fromNumber = args.from;
-      if (!fromNumber) {
-        try {
-          const pnResp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/phone-number`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (pnResp.ok) {
-            const pnData = await pnResp.json();
-            const records = pnData.records || [];
-            const directNum = records.find((r: any) => r.usageType === "DirectNumber" && r.features?.includes("CallerId"));
-            fromNumber = directNum?.phoneNumber || records[0]?.phoneNumber || "";
-          }
-        } catch (e) { console.error("Failed to fetch caller ID:", e); }
-      }
-      if (!fromNumber) throw new Error("No caller ID available. Please connect a RingCentral phone number.");
-
-      const body: any = { to: { phoneNumber: args.to }, from: { phoneNumber: fromNumber }, playPrompt: true };
-      const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/ring-out`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(`RingOut failed: ${JSON.stringify(data)}`);
-      return { success: true, message: `Call initiated to ${args.to} from ${fromNumber}`, ringout_id: data.id, status: data.status?.callStatus };
+      // Return a browser_action so the frontend places the call via WebRTC widget
+      // instead of server-side RingOut (which requires the RC app/device to answer first)
+      return {
+        success: true,
+        message: `Placing WebRTC call to ${args.to}${args.contact_name ? ` (${args.contact_name})` : ""}...`,
+        browser_action: "webrtc_call",
+        phone: args.to,
+        contact_name: args.contact_name || "",
+      };
     }
 
     case "rc_send_sms": {
