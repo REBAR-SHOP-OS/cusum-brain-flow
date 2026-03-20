@@ -732,6 +732,8 @@ export function AIExtractView() {
     setPendingDedupeSessionId(null);
     setShowMergedRows(false);
     setMappingConfirmed(false);
+    setSelectedUnitSystem("mm");
+    userSetUnitRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
