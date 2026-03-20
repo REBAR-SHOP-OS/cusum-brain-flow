@@ -61,6 +61,13 @@ function safeInt(val: any, fallback: number = 0): number {
   return Math.round(parsed);
 }
 
+/** Safe dimension parse — rounds to integer, returns null for empty/invalid */
+function safeDim(val: any): number | null {
+  const parsed = parseDimension(val);
+  if (parsed == null || isNaN(parsed)) return null;
+  return Math.round(parsed);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -420,18 +427,18 @@ Rules:
               bar_size: item.size || null,
               shape_type: item.type || null,
               total_length_mm: safeInt(item.total_length, 0) || null,
-              dim_a: parseDimension(item.A),
-              dim_b: parseDimension(item.B),
-              dim_c: parseDimension(item.C),
-              dim_d: parseDimension(item.D),
-              dim_e: parseDimension(item.E),
-              dim_f: parseDimension(item.F),
-              dim_g: parseDimension(item.G),
-              dim_h: parseDimension(item.H),
-              dim_j: parseDimension(item.J),
-              dim_k: parseDimension(item.K),
-              dim_o: parseDimension(item.O),
-              dim_r: parseDimension(item.R),
+              dim_a: safeDim(item.A),
+              dim_b: safeDim(item.B),
+              dim_c: safeDim(item.C),
+              dim_d: safeDim(item.D),
+              dim_e: safeDim(item.E),
+              dim_f: safeDim(item.F),
+              dim_g: safeDim(item.G),
+              dim_h: safeDim(item.H),
+              dim_j: safeDim(item.J),
+              dim_k: safeDim(item.K),
+              dim_o: safeDim(item.O),
+              dim_r: safeDim(item.R),
               weight_kg: parseDimension(item.weight),
               customer: item.customer || null,
               reference: item.ref || null,

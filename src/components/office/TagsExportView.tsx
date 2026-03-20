@@ -29,8 +29,9 @@ const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as
 /** Format a dimension value (stored in total inches for imperial, mm for metric) for display */
 function formatDim(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
+  const rounded = Math.round(val);
   if (unitSystem === "imperial") {
-    const totalInches = val;
+    const totalInches = rounded;
     const feet = Math.floor(totalInches / 12);
     const rawInches = totalInches % 12;
     const eighths = Math.round(rawInches * 8);
@@ -44,7 +45,7 @@ function formatDim(val: number | null | undefined, unitSystem: string): string {
     if (wholeInches === 0 && !frac) return `${feet}'-0"`;
     return `${feet}'-${wholeInches}${frac}"`;
   }
-  return String(val);
+  return String(rounded);
 }
 
 /** Unit suffix label */
@@ -105,7 +106,7 @@ export function TagsExportView() {
         r.quantity || "", size, shapeType, r.total_length_mm || "",
         ...DIM_COLS.map((d) => {
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
-          return r[key] != null ? String(r[key]) : "";
+          return r[key] != null ? String(Math.round(Number(r[key]))) : "";
         }),
         weight, picture, r.customer || "", r.reference || "", r.address || "",
       ].join(",");

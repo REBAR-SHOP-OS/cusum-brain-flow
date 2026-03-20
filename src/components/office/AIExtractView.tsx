@@ -60,8 +60,9 @@ type ManifestType = "delivery" | "pickup";
 /** Format a dimension value (stored in total inches for imperial, mm for metric) for display */
 function formatDimForDisplay(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
+  const rounded = Math.round(val);
   if (unitSystem === "imperial") {
-    const totalInches = val;
+    const totalInches = rounded;
     const feet = Math.floor(totalInches / 12);
     const rawInches = totalInches % 12;
     const eighths = Math.round(rawInches * 8);
@@ -75,7 +76,7 @@ function formatDimForDisplay(val: number | null | undefined, unitSystem: string)
     if (wholeInches === 0 && !frac) return `${feet}'-0"`;
     return `${feet}'-${wholeInches}${frac}"`;
   }
-  return String(val);
+  return String(rounded);
 }
 
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
