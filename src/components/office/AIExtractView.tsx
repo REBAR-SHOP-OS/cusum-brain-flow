@@ -57,12 +57,13 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
-/** Format a dimension value (stored in total inches for imperial, mm for metric) for display */
+/** Format a dimension value (always stored in mm in DB) for display.
+ *  For imperial: converts mm → inches first, then formats as ft-in. */
 function formatDimForDisplay(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
   const rounded = Math.round(val);
   if (unitSystem === "imperial") {
-    const totalInches = rounded;
+    const totalInches = rounded / 25.4; // mm → inches
     const feet = Math.floor(totalInches / 12);
     const rawInches = totalInches % 12;
     const eighths = Math.round(rawInches * 8);
