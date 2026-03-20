@@ -124,12 +124,20 @@ export function useAdminChat(currentPage?: string, onBrowserAction?: BrowserActi
           const parsed = JSON.parse(jsonStr);
 
           if (currentEventType === "pending_action") {
-            // This is a pending write action needing confirmation
             setPendingAction({
               tool: parsed.tool,
               args: parsed.args,
               description: parsed.description || `Execute ${parsed.tool}`,
             });
+            currentEventType = "";
+            continue;
+          }
+
+          if (currentEventType === "browser_action") {
+            // Execute browser-side action (e.g. WebRTC call via widget)
+            if (browserActionRef.current) {
+              browserActionRef.current(parsed.action, parsed);
+            }
             currentEventType = "";
             continue;
           }
