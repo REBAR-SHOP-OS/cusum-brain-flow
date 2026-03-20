@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
 
+export type BrowserActionHandler = (action: string, data: Record<string, any>) => void;
+
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
@@ -37,7 +39,7 @@ const TOOL_LABELS: Record<string, string> = {
   wp_create_post: "Create WordPress Post",
 };
 
-export function useAdminChat(currentPage?: string) {
+export function useAdminChat(currentPage?: string, onBrowserAction?: BrowserActionHandler) {
   const storageKey = useMemo(() => `admin-chat-${currentPage || "default"}`, [currentPage]);
 
   const [messages, setMessages] = useState<AdminChatEntry[]>(() => {
@@ -53,6 +55,8 @@ export function useAdminChat(currentPage?: string) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const browserActionRef = useRef(onBrowserAction);
+  browserActionRef.current = onBrowserAction;
 
   useEffect(() => {
     try {
@@ -120,12 +124,20 @@ export function useAdminChat(currentPage?: string) {
           const parsed = JSON.parse(jsonStr);
 
           if (currentEventType === "pending_action") {
-            // This is a pending write action needing confirmation
             setPendingAction({
               tool: parsed.tool,
               args: parsed.args,
               description: parsed.description || `Execute ${parsed.tool}`,
             });
+            currentEventType = "";
+            continue;
+          }
+
+          if (currentEventType === "browser_action") {
+            // Execute browser-side action (e.g. WebRTC call via widget)
+            if (browserActionRef.current) {
+              browserActionRef.current(parsed.action, parsed);
+            }
             currentEventType = "";
             continue;
           }

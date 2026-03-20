@@ -627,15 +627,14 @@ Deno.serve(async (req) => {
       case "rc_make_call": {
         const { phone, contact_name } = params;
         if (!phone) throw new Error("phone is required");
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-action`, {
-          method: "POST",
-          headers: { Authorization: authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "ringcentral_call", phone, contact_name }),
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error || "Call initiation failed");
-        result = { success: true, message: `Call initiated to ${contact_name || phone}`, data };
+        // Return browser_action so the frontend places the call via WebRTC widget
+        result = {
+          success: true,
+          message: `Placing WebRTC call to ${contact_name || phone}...`,
+          browser_action: "webrtc_call",
+          phone,
+          contact_name: contact_name || "",
+        };
         break;
       }
 

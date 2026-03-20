@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
+import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router-dom";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle, Mic } from "lucide-react";
@@ -46,7 +47,16 @@ export default function LiveChat() {
 
   const [input, setInput] = useState("");
   const [showVoiceChat, setShowVoiceChat] = useState(false);
-  const chat = useAdminChat();
+  const { makeCall: widgetMakeCall } = useRingCentralWidget();
+
+  const handleBrowserAction = useCallback((action: string, data: Record<string, any>) => {
+    if (action === "webrtc_call" && data.phone) {
+      console.log("WebRTC call triggered via browser_action:", data.phone);
+      widgetMakeCall(data.phone);
+    }
+  }, [widgetMakeCall]);
+
+  const chat = useAdminChat(undefined, handleBrowserAction);
   const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream } = chat;
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
