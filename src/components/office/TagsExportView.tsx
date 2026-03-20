@@ -106,7 +106,7 @@ export function TagsExportView() {
         r.quantity || "", size, shapeType, r.total_length_mm || "",
         ...DIM_COLS.map((d) => {
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
-          return r[key] != null ? String(r[key]) : "";
+          return r[key] != null ? String(Math.round(Number(r[key]))) : "";
         }),
         weight, picture, r.customer || "", r.reference || "", r.address || "",
       ].join(",");
