@@ -1894,7 +1894,7 @@ export function AIExtractView() {
                                   {row.bar_size_mapped || row.bar_size || "—"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs font-mono p-1.5">{activeSession?.unit_system === "imperial" && row.total_length_mm != null ? formatDimForDisplay(row.total_length_mm, "imperial") : (row.total_length_mm ?? "—")}</TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{selectedUnitSystem === "imperial" && row.total_length_mm != null ? formatDimForDisplay(row.total_length_mm, "imperial") : (row.total_length_mm ?? "—")}</TableCell>
                               <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
                               <TableCell className="text-xs p-1.5">
                                 {survivorRow ? (
