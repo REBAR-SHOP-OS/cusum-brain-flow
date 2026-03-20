@@ -514,6 +514,7 @@ export function AIExtractView() {
     // Mark that user explicitly chose a unit — prevents DB sync from overwriting
     if (unitSystem) {
       userSetUnitRef.current = true;
+      confirmedUnitRef.current = unitSystem;
       setSelectedUnitSystem(unitSystem);
     }
     toast({
