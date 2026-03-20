@@ -80,25 +80,7 @@ export default defineConfig(({ mode }) => ({
     }),
   ].filter(Boolean),
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return;
-
-          if (id.includes("pdfjs-dist") || id.includes("jspdf")) {
-            return "pdf-tools";
-          }
-
-          if (id.includes("@supabase/supabase-js") || id.includes("@lovable.dev/cloud-auth-js")) {
-            return "backend";
-          }
-
-          if (id.includes("ringcentral-web-phone")) {
-            return "ringcentral";
-          }
-        },
-      },
-    },
+    chunkSizeWarningLimit: 8000,
   },
   resolve: {
     alias: {
