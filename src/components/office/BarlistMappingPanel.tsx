@@ -336,9 +336,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                       <TableHead className="text-[10px] font-bold tracking-wider">MARK</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider">SIZE</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider">SHAPE</TableHead>
-                      <TableHead className="text-[10px] font-bold tracking-wider text-right">LENGTH (mm)</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider text-right">LENGTH ({unitLabel})</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider text-right">QTY</TableHead>
-                      <TableHead className="text-[10px] font-bold tracking-wider">DIMS (mm)</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider">DIMS ({unitLabel})</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
