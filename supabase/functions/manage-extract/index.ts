@@ -146,7 +146,7 @@ serve(async (req) => {
 
     switch (action) {
       case "apply-mapping":
-        return await applyMapping(sb, sessionId);
+        return await applyMapping(sb, sessionId, params.unitSystem);
 
       case "validate":
         return await validateExtract(sb, sessionId);
