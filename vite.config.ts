@@ -23,9 +23,7 @@ export default defineConfig(({ mode }) => ({
       webp: { quality: 75 },
       avif: { quality: 60 },
       svg: {
-        plugins: [
-          { name: "sortAttrs" },
-        ],
+        plugins: [{ name: "sortAttrs" }],
       },
     }),
     VitePWA({
@@ -61,10 +59,10 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-      globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-      globIgnores: ["**/pwa-icon-*.png", "**/favicon.png"],
-      navigateFallbackDenylist: [/^\/~oauth/, /^\/~lovable/],
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        globIgnores: ["**/pwa-icon-*.png", "**/favicon.png"],
+        navigateFallbackDenylist: [/^\/~oauth/, /^\/~lovable/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
@@ -73,7 +71,7 @@ export default defineConfig(({ mode }) => ({
               cacheName: "supabase-cache",
               expiration: {
                 maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24, // 24 hours
+                maxAgeSeconds: 60 * 60 * 24,
               },
             },
           },
@@ -81,6 +79,9 @@ export default defineConfig(({ mode }) => ({
       },
     }),
   ].filter(Boolean),
+  build: {
+    chunkSizeWarningLimit: 8000,
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
