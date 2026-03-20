@@ -161,7 +161,10 @@ export function useAzinVoiceRelay() {
           const translation = res?.translations?.[targetLang]?.trim();
           if (!translation) {
             console.warn("[relay] empty translation returned for:", trimmed);
-            setTranscripts((prev) => prev.filter((t) => t.id !== entryId));
+            // Show original with fallback note instead of silently removing
+            setTranscripts((prev) =>
+              prev.map((t) => t.id === entryId ? { ...t, translation: targetLang === "fa" ? "(ترجمه موجود نیست)" : "(translation unavailable)", isTranslating: false } : t)
+            );
             return;
           }
 

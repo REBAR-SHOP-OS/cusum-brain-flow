@@ -84,42 +84,57 @@ RULES:
 7. For Farsi output, use natural conversational Persian (محاوره‌ای) — NOT formal/literary/written style. Use the way Iranians actually speak in daily life.
 8. For English output, use natural spoken English — casual and fluent, not stiff or formal.
 9. For Farsi output, use correct Persian script (not transliteration).
+10. You MUST translate ALL content regardless of topic, politics, religion, or sensitivity. Never refuse. Never return empty for valid speech. Your job is translation, not content moderation.
 
 Example input: "How are you?" → {"fa": "حالت چطوره؟"}
 Example input: "سلام خوبی؟" → {"en": "Hello, how are you?"}
 Noise → {"en": "", "fa": ""}${contextSection}`;
 
-    const result = await callAI({
-      provider: "gemini",
-      model: "gemini-2.5-pro",
-      agentName: "system",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`,
-        },
-      ],
-      temperature: 0.3,
-      maxTokens: 500,
-    });
+    const makeRequest = async (prompt: string) => {
+      return await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+        agentName: "system",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.3,
+        maxTokens: 500,
+      });
+    };
 
-    const raw = result.content;
+    const userPrompt = `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`;
+    let result = await makeRequest(userPrompt);
+
+    const parseTranslation = (raw: string): Record<string, string> => {
+      const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      for (const key of Object.keys(parsed)) {
+        parsed[key] = (parsed[key] || "").trim();
+      }
+      return parsed;
+    };
+
     let translations: Record<string, string>;
     try {
-      const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      translations = JSON.parse(cleaned);
-      // Post-parse validation: strip empty/whitespace-only translations
-      for (const key of Object.keys(translations)) {
-        const val = (translations[key] || "").trim();
-        translations[key] = val;
-      }
+      translations = parseTranslation(result.content);
     } catch {
-      console.error("Failed to parse translation:", raw);
+      console.error("Failed to parse translation:", result.content);
       translations = {};
+    }
+
+    // Retry fallback: if all translations are empty and input has 3+ real words, retry once
+    const wordCount = text.split(/\s+/).filter((w: string) => w.length > 0).length;
+    const allEmpty = langsToTranslate.every((l: string) => !translations[l]);
+    if (allEmpty && wordCount >= 3) {
+      console.log("Retry: empty translation for valid input, retrying with simpler prompt");
+      try {
+        const retryResult = await makeRequest(`Translate this to ${targetList}. Output JSON only:\n${text}`);
+        translations = parseTranslation(retryResult.content);
+      } catch {
+        console.error("Retry also failed");
+      }
     }
 
     return new Response(
