@@ -37,7 +37,7 @@ const TOOL_LABELS: Record<string, string> = {
   wp_create_post: "Create WordPress Post",
 };
 
-export function useAdminChat(currentPage?: string) {
+export function useAdminChat(currentPage?: string, onBrowserAction?: BrowserActionHandler) {
   const storageKey = useMemo(() => `admin-chat-${currentPage || "default"}`, [currentPage]);
 
   const [messages, setMessages] = useState<AdminChatEntry[]>(() => {
