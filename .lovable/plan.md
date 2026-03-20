@@ -1,36 +1,39 @@
 
 
-## Diagnosis: "Login failed due to internal errors"
+## Plan: Use New RingCentral App Only for Widget (Calls), Keep Old App for Backend
 
-The previous OAU-109 (redirect URI mismatch) error is resolved — the widget now shows a different error. "Login failed due to internal errors" from the RingCentral Embeddable widget typically indicates one of these issues:
+### Problem
+Currently the widget fetches its `clientId` from the `ringcentral-recording` edge function, which returns the old app's Client ID. You want the **new app** (`99KxuQlTa6aepPopPBwkd3`) used only for the Embeddable widget (making/receiving calls), while the **old app** continues to handle SIP provisioning, recordings, active calls, etc.
 
-1. **The RingCentral app in the Developer Console is still in "Sandbox" mode** — it must be set to Production to use `platform.ringcentral.com`
-2. **The `redirectUri` doesn't match what's registered** — the GitHub-hosted redirect page (`https://ringcentral.github.io/ringcentral-embeddable/redirect.html`) must be in the app's OAuth Redirect URI list
-3. **App Server mismatch** — Sandbox apps must use `https://platform.devtest.ringcentral.com`, not `https://platform.ringcentral.com`
+### Changes
 
-### Required Action (no code change needed)
+**1. Hardcode the new Client ID in the widget hook**
 
-The code is correct. This is a **RingCentral Developer Console configuration issue**. You need to verify:
+File: `src/hooks/useRingCentralWidget.ts`
 
-1. **App environment**: If your RingCentral app is a **Sandbox** app, change `appServer` to `https://platform.devtest.ringcentral.com`. If it's a **Production** app, the current `platform.ringcentral.com` is correct.
+Instead of fetching `clientId` from the backend edge function, hardcode the new app's Client ID directly for the widget. Remove the fetch call to `ringcentral-recording?action=client-id`. The widget will always use the new app credentials.
 
-2. **Redirect URI registered**: Ensure `https://ringcentral.github.io/ringcentral-embeddable/redirect.html` is added to the OAuth Redirect URI list in your RingCentral app settings.
-
-3. **App status**: The app must be graduated to Production if using the production server.
-
-### Code Change (only if Sandbox)
-
-If your RingCentral app is in Sandbox mode, we need to switch `appServer`:
-
-**File: `src/hooks/useRingCentralWidget.ts` line 128**
 ```typescript
-// Change from:
-params.set("appServer", "https://platform.ringcentral.com");
-// To:
-params.set("appServer", "https://platform.devtest.ringcentral.com");
+// Remove the entire fetch block (lines 95-117)
+// Replace with:
+const clientId = "99KxuQlTa6aepPopPBwkd3";
 ```
 
-### Recommendation
+Also update the `redirectUri` to match the new app's registered redirect:
+```
+https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/redirect.html
+```
 
-Check your RingCentral Developer Console to confirm whether the app is Sandbox or Production, then I'll update the code accordingly.
+**2. No changes to edge functions**
+
+The backend functions (`ringcentral-sip-provision`, `ringcentral-recording`, `ringcentral-active-calls`) continue using the old `RINGCENTRAL_CLIENT_ID` and `RINGCENTRAL_CLIENT_SECRET` secrets — no changes needed there.
+
+### Summary
+
+| Component | App Used |
+|-----------|----------|
+| Embeddable Widget (calls) | New app (`99Kxu...`) |
+| SIP Provision | Old app (from secrets) |
+| Recordings | Old app (from secrets) |
+| Active Calls | Old app (from secrets) |
 
