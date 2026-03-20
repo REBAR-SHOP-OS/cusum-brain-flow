@@ -61,6 +61,13 @@ function safeInt(val: any, fallback: number = 0): number {
   return Math.round(parsed);
 }
 
+/** Safe dimension parse — rounds to integer, returns null for empty/invalid */
+function safeDim(val: any): number | null {
+  const parsed = parseDimension(val);
+  if (parsed == null || isNaN(parsed)) return null;
+  return Math.round(parsed);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
