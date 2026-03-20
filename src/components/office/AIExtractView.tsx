@@ -689,6 +689,7 @@ export function AIExtractView() {
     setSiteAddress(session.site_address || "");
     setInvoiceNumber(session.invoice_number || "");
     setInvoiceDate(session.invoice_date || "");
+    setSelectedUnitSystem(session.unit_system || "mm");
     setShowHistory(false);
     setIsOptimizing(session.status === "optimizing" || session.status === "validated");
     if (session.status !== "optimizing" && session.status !== "validated") {
