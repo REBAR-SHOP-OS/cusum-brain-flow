@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { lovable } from "@/integrations/lovable";
@@ -19,6 +19,15 @@ export default function Login() {
   const { user, loading: authLoading, signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Clear stale auth tokens on mount to prevent bad_jwt loops
+  useEffect(() => {
+    if (!user && !authLoading) {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("sb-"))
+        .forEach((k) => localStorage.removeItem(k));
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
