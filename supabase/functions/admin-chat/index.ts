@@ -643,6 +643,24 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Deep Business Scan Tool ───
+  {
+    type: "function",
+    function: {
+      name: "deep_business_scan",
+      description: "Comprehensive cross-domain intelligence scan across emails, pipeline, calls, activity, production, financials, deliveries, and agent usage. Use when the user asks to 'deep scan', 'learn everything', 'audit the business', or wants a multi-day overview of all operations.",
+      parameters: {
+        type: "object",
+        properties: {
+          date_from: { type: "string", description: "Start date YYYY-MM-DD. Defaults to 7 days ago." },
+          date_to: { type: "string", description: "End date YYYY-MM-DD. Defaults to today." },
+          focus: { type: "string", enum: ["all", "emails", "pipeline", "production", "financials", "calls", "activity"], description: "Focus area. Default: all" },
+          employee_name: { type: "string", description: "Optional: filter everything to a specific employee by name" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 const RC_SERVER = "https://platform.ringcentral.com";
@@ -1223,6 +1241,238 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
           summary: { total, inbound: totalInbound, outbound: totalOutbound, missed: totalMissed, avgDurationSeconds: avgDuration },
           byEmployee,
         });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    // ─── Deep Business Scan ───
+    case "deep_business_scan": {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const dateTo = args.date_to || today;
+        const dateFrom = args.date_from || new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+        const focus = args.focus || "all";
+        const scanAll = focus === "all";
+
+        // Resolve employee if specified
+        let employeeUserIds: string[] | null = null;
+        let employeeEmails: string[] | null = null;
+        let employeeName = args.employee_name || null;
+        if (employeeName) {
+          const { data: matchedProfiles } = await supabase
+            .from("profiles")
+            .select("user_id, full_name, email")
+            .ilike("full_name", `%${employeeName}%`);
+          if (matchedProfiles?.length) {
+            employeeUserIds = matchedProfiles.map((p: any) => p.user_id).filter(Boolean);
+            employeeEmails = matchedProfiles.map((p: any) => p.email).filter(Boolean);
+            employeeName = matchedProfiles[0].full_name;
+          } else {
+            return JSON.stringify({ error: `No employee found matching "${args.employee_name}"` });
+          }
+        }
+
+        const result: Record<string, unknown> = { period: { from: dateFrom, to: dateTo }, focus, employee: employeeName };
+
+        // Build parallel queries based on focus
+        const queries: Promise<void>[] = [];
+
+        // 1. EMAILS
+        if (scanAll || focus === "emails") {
+          queries.push((async () => {
+            let q = supabase
+              .from("communications")
+              .select("subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, ai_category, thread_id, source")
+              .gte("received_at", dateFrom + "T00:00:00")
+              .lte("received_at", dateTo + "T23:59:59")
+              .order("received_at", { ascending: false })
+              .limit(200);
+            const { data } = await q;
+            let emails = data || [];
+            // Filter by employee email if specified
+            if (employeeEmails?.length) {
+              emails = emails.filter((e: any) =>
+                employeeEmails!.some((em) =>
+                  e.from_address?.toLowerCase().includes(em.toLowerCase()) ||
+                  e.to_address?.toLowerCase().includes(em.toLowerCase())
+                )
+              );
+            }
+            // Separate calls vs emails
+            const emailItems = emails.filter((e: any) => e.source === "gmail");
+            const callItems = emails.filter((e: any) => e.source === "ringcentral");
+            
+            // Find unanswered inbound (inbound with no corresponding outbound to same address)
+            const inbound = emailItems.filter((e: any) => e.direction === "inbound");
+            const outboundAddresses = new Set(emailItems.filter((e: any) => e.direction === "outbound").map((e: any) => e.to_address?.toLowerCase()));
+            const unanswered = inbound.filter((e: any) => !outboundAddresses.has(e.from_address?.toLowerCase()));
+
+            result.emails = {
+              total: emailItems.length,
+              sent: emailItems.filter((e: any) => e.direction === "outbound").length,
+              received: inbound.length,
+              unanswered: unanswered.length,
+              unansweredItems: unanswered.slice(0, 10).map((e: any) => ({
+                subject: e.subject, from: e.from_address, time: e.received_at, urgency: e.ai_urgency,
+                preview: e.body_preview?.slice(0, 300),
+              })),
+              recentItems: emailItems.slice(0, 20).map((e: any) => ({
+                subject: e.subject, from: e.from_address, to: e.to_address,
+                direction: e.direction, time: e.received_at, urgency: e.ai_urgency, category: e.ai_category,
+                preview: e.body_preview?.slice(0, 300),
+              })),
+            };
+            if (scanAll || focus === "calls") {
+              result.calls = { total: callItems.length, items: callItems.slice(0, 20).map((c: any) => ({
+                from: c.from_address, to: c.to_address, direction: c.direction, time: c.received_at,
+              })) };
+            }
+          })());
+        }
+
+        // 2. PIPELINE
+        if (scanAll || focus === "pipeline") {
+          queries.push((async () => {
+            const { data: leads } = await supabase
+              .from("leads")
+              .select("id, title, stage, expected_value, computed_score, priority, created_at, updated_at, contact_name, contact_email")
+              .in("stage", ["new", "contacted", "qualified", "proposal", "negotiation"])
+              .order("computed_score", { ascending: false })
+              .limit(100);
+            const allLeads = leads || [];
+            const hotLeads = allLeads.filter((l: any) => (l.computed_score || 0) >= 70);
+            const totalValue = allLeads.reduce((s: number, l: any) => s + (l.expected_value || 0), 0);
+            result.pipeline = {
+              activeLeads: allLeads.length,
+              hotLeads: hotLeads.length,
+              totalPipelineValue: Math.round(totalValue * 100) / 100,
+              topLeads: allLeads.slice(0, 15).map((l: any) => ({
+                title: l.title, stage: l.stage, value: l.expected_value, score: l.computed_score,
+                contact: l.contact_name, updated: l.updated_at,
+              })),
+            };
+          })());
+        }
+
+        // 3. ACTIVITY
+        if (scanAll || focus === "activity") {
+          queries.push((async () => {
+            let q = supabase
+              .from("activity_events")
+              .select("event_type, entity_type, description, actor_id, created_at, source")
+              .gte("created_at", dateFrom + "T00:00:00")
+              .lte("created_at", dateTo + "T23:59:59")
+              .order("created_at", { ascending: false })
+              .limit(200);
+            if (employeeUserIds?.length) q = q.in("actor_id", employeeUserIds);
+            const { data } = await q;
+            const events = data || [];
+            // Get actor names
+            const actorIds = [...new Set(events.map((e: any) => e.actor_id).filter(Boolean))];
+            let nameMap = new Map<string, string>();
+            if (actorIds.length > 0) {
+              const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", actorIds);
+              nameMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name]));
+            }
+            // Summarize by employee
+            const byEmployee: Record<string, number> = {};
+            const byType: Record<string, number> = {};
+            for (const e of events) {
+              const name = nameMap.get(e.actor_id) || "System";
+              byEmployee[name] = (byEmployee[name] || 0) + 1;
+              byType[e.event_type] = (byType[e.event_type] || 0) + 1;
+            }
+            result.activity = {
+              totalEvents: events.length,
+              byEmployee,
+              byEventType: byType,
+              recentEvents: events.slice(0, 20).map((e: any) => ({
+                type: e.event_type, entity: e.entity_type, description: e.description,
+                actor: nameMap.get(e.actor_id) || "System", time: e.created_at,
+              })),
+            };
+          })());
+        }
+
+        // 4. PRODUCTION
+        if (scanAll || focus === "production") {
+          queries.push((async () => {
+            const [{ data: cutItems }, { data: workOrders }] = await Promise.all([
+              supabase.from("cut_plan_items")
+                .select("id, phase, completed_pieces, total_pieces, bar_code")
+                .in("phase", ["queued", "cutting", "bending", "cut_done"])
+                .limit(500),
+              supabase.from("work_orders")
+                .select("id, status, created_at, updated_at")
+                .gte("created_at", dateFrom + "T00:00:00")
+                .limit(100),
+            ]);
+            const items = cutItems || [];
+            const totalPieces = items.reduce((s: number, i: any) => s + (i.total_pieces || 0), 0);
+            const completedPieces = items.reduce((s: number, i: any) => s + (i.completed_pieces || 0), 0);
+            const byPhase: Record<string, number> = {};
+            for (const i of items) byPhase[i.phase] = (byPhase[i.phase] || 0) + 1;
+            result.production = {
+              activeItems: items.length,
+              totalPieces, completedPieces,
+              progressPercent: totalPieces > 0 ? Math.round((completedPieces / totalPieces) * 100) : 0,
+              byPhase,
+              workOrders: (workOrders || []).length,
+            };
+          })());
+        }
+
+        // 5. FINANCIALS
+        if (scanAll || focus === "financials") {
+          queries.push((async () => {
+            const [{ data: arData }, { data: apData }] = await Promise.all([
+              supabase.from("accounting_mirror").select("balance, data").eq("entity_type", "Invoice").gt("balance", 0).limit(200),
+              supabase.from("accounting_mirror").select("balance, data").eq("entity_type", "Vendor").gt("balance", 0).limit(200),
+            ]);
+            const totalAR = (arData || []).reduce((s: number, r: any) => s + (r.balance || 0), 0);
+            const overdueAR = (arData || []).filter((r: any) => r.data?.DueDate && r.data.DueDate < today);
+            const totalOverdueAR = overdueAR.reduce((s: number, r: any) => s + (r.balance || 0), 0);
+            const totalAP = (apData || []).reduce((s: number, r: any) => s + (r.balance || 0), 0);
+            result.financials = {
+              totalAR: Math.round(totalAR * 100) / 100,
+              overdueAR: Math.round(totalOverdueAR * 100) / 100,
+              overdueInvoiceCount: overdueAR.length,
+              totalAP: Math.round(totalAP * 100) / 100,
+            };
+          })());
+        }
+
+        // 6. DELIVERIES
+        if (scanAll) {
+          queries.push((async () => {
+            const { data: deliveries } = await supabase
+              .from("deliveries")
+              .select("id, status, scheduled_date, delivery_number")
+              .gte("scheduled_date", dateFrom)
+              .lte("scheduled_date", dateTo)
+              .limit(100);
+            const all = deliveries || [];
+            const byStatus: Record<string, number> = {};
+            for (const d of all) byStatus[d.status] = (byStatus[d.status] || 0) + 1;
+            result.deliveries = { total: all.length, byStatus };
+          })());
+        }
+
+        // 7. AGENT USAGE
+        if (scanAll) {
+          queries.push((async () => {
+            const { data: sessions } = await supabase
+              .from("chat_sessions")
+              .select("agent_name, user_id, created_at, title")
+              .gte("created_at", dateFrom + "T00:00:00")
+              .limit(200);
+            const agentUsage: Record<string, number> = {};
+            for (const s of (sessions || [])) agentUsage[s.agent_name] = (agentUsage[s.agent_name] || 0) + 1;
+            result.agentUsage = { totalSessions: (sessions || []).length, byAgent: agentUsage };
+          })());
+        }
+
+        await Promise.all(queries);
+        return JSON.stringify(result);
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
