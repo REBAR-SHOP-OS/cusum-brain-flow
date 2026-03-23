@@ -1,64 +1,94 @@
 
 
-## Fix: Straight Bar Dimensions Appearing in Column A Instead of B
+## Wave 4 — Safe Wiring & Admin Tooling
 
-### Root Cause
+### Summary
 
-**Location**: `supabase/functions/manage-extract/index.ts`, `applyMapping()` function (lines 362-456).
+Wire the existing scaffolding into real consumers. All changes remain additive and rollback-safe.
 
-**Problem**: The mapping/normalization layer has **no shape-aware dimension logic**. The AI extraction prompt tells Gemini to extract dimension values exactly as they appear in the source document. When a source document has a straight bar's length in column A (common in many bar schedules), the AI correctly maps it to `dim_a`. But per rebar industry convention, straight bars (no shape code = STR) should have their straight length in dimension `B`, not `A`.
+---
 
-**Bug type**: Normalization bug — not parser, not renderer, not conversion.
+### Task 1 — Wire FeatureFlagAdmin into AdminPanel
 
-The renderer (`AIExtractView.tsx` lines 2105-2116) faithfully displays whatever is in `dim_a`, `dim_b`, etc. The parser (`extract-manifest`) faithfully extracts what the AI returns. The missing piece is a normalization rule in `applyMapping()` that enforces the business rule for straight bars.
+The `FeatureFlagAdmin` component exists but is not mounted anywhere.
 
-### Smallest Safe Patch
+**File**: `src/pages/AdminPanel.tsx`
+- Add a new tab "Feature Flags" with icon `Flag`
+- Add `TabsContent` rendering `<FeatureFlagAdmin />`
+- Import `FeatureFlagAdmin` and `Flag` icon
+- No behavior change to existing tabs
 
-**File**: `supabase/functions/manage-extract/index.ts`
+**Category**: Safe additive
 
-**Change**: In the `applyMapping()` function, after unit conversion is applied to all dimensions (after line ~398), add a straight-bar normalization block:
+---
 
-```
-For each row where shape_type is null/empty AND shape_code_mapped is null/empty (i.e., STR):
-  - If dim_a has a value AND dim_b is null/empty:
-    - Move dim_a value → dim_b
-    - Clear dim_a
-  - If dim_a has a value AND dim_b also has a value:
-    - Leave both as-is (source explicitly provided both)
-```
+### Task 2 — Wire roleService into AdminPanel user list
 
-This runs **after** unit conversion, so values are already in mm. It only affects rows that are genuinely straight bars (no shape code). It preserves any explicit B values from the source.
+The AdminPanel currently fetches profiles with raw Supabase queries. Replace the role-fetching portion with `roleService.listCompanyUsersWithRoles` to validate the service wrapper in a real consumer.
 
-### What Remains Unchanged
+**File**: `src/pages/AdminPanel.tsx`
+- Use `listCompanyUsersWithRoles` alongside existing profile data to display roles
+- Keep existing profile CRUD untouched — only add role display from the wrapper
+- Fallback gracefully if service returns `ok: false`
 
-- AI extraction prompt (no change)
-- Renderer in AIExtractView.tsx (no change)
-- Unit conversion logic (no change)
-- Non-straight bar rows (untouched — the block only fires when shape is empty/null)
-- Database schema (no change)
-- All other edge functions (no change)
-- Existing mapped sessions — already-approved data is not retroactively changed; only future `applyMapping` calls apply the rule
+**Category**: Safe additive (adds role badges, does not change existing employee cards)
 
-### Regression Risk
+---
 
-**Low**. The normalization only fires for rows with no shape type and only moves `dim_a → dim_b` when B is empty. Bent bars always have a shape type/code so they are excluded. If a source document explicitly provides both A and B for a straight bar, both are preserved.
+### Task 3 — Migrate 3 more edge functions to handleRequest
 
-### Validation
+Candidates (all low-risk, no core write paths):
 
-After patch:
-- STR rows with length in A (and no B) → length moves to B
-- STR rows with explicit A and B → both preserved
-- Type 17 rows with A/B/C → completely unchanged (shape_type is "17")
-- Type 2 rows with A/B → completely unchanged
-- mm/in toggle still works (normalization runs after conversion)
+| # | Function | Domain | Why safe |
+|---|---|---|---|
+| 1 | `quote-expiry-watchdog` | Quotes | Cron-style, reads + updates expired quotes only |
+| 2 | `kiosk-lookup` | Auth | Read-only PIN lookup, no company scope needed |
+| 3 | `manage-inventory` | Manufacturing | Action-based handler, company-scoped |
 
-### Rollback
+For each:
+- Replace manual auth boilerplate with `handleRequest` + `rawResponse: true`
+- Preserve exact response shapes
+- Update `edgeFunctionInventory.ts` entries
 
-Revert the single block addition in `manage-extract/index.ts`. Already-mapped sessions are unaffected unless re-mapped.
+**Category**: Safe import replacement
 
-### Files Changed
+---
 
-| File | Change | Category |
+### Task 4 — Enable structured logging in migrated functions
+
+Update the 8 functions now using `handleRequest` to use `createLogger` from `structuredLog.ts` via the `ctx.log` object already provided by the wrapper.
+
+No behavior change — just structured JSON output instead of `console.log`.
+
+Update rollout registry: set `use_structured_logging` phase to `"canary"`.
+
+**Category**: Safe additive (logging only)
+
+---
+
+### Task 5 — Update inventory and registry
+
+- Mark 3 newly migrated functions in `edgeFunctionInventory.ts`
+- Update `rolloutRegistry.ts` notes to reflect current adoption count
+- Total wrapper adoption after this wave: 11 functions
+
+---
+
+### Files Summary
+
+| File | Action | Rollback |
 |---|---|---|
-| `supabase/functions/manage-extract/index.ts` | Add ~15-line straight-bar dim normalization block in `applyMapping()` | Safe additive |
+| `src/pages/AdminPanel.tsx` | Add Feature Flags tab + role badges | Remove tab/import |
+| `supabase/functions/quote-expiry-watchdog/index.ts` | handleRequest migration | Revert file |
+| `supabase/functions/kiosk-lookup/index.ts` | handleRequest migration | Revert file |
+| `supabase/functions/manage-inventory/index.ts` | handleRequest migration | Revert file |
+| `src/lib/edgeFunctionInventory.ts` | Update 3 entries | Revert file |
+| `src/lib/rolloutRegistry.ts` | Update notes + phase | Revert file |
+
+### What MUST NOT Be Touched
+- Route structure
+- Database schema
+- Auth session flow
+- Core write paths (orders, deliveries, quotes creation)
+- Existing admin panel tabs
 
