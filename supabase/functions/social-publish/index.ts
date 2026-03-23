@@ -397,6 +397,10 @@ async function publishToInstagram(
       containerBody.media_type = "REELS";
       containerBody.video_url = imageUrl;
       containerBody.caption = caption;
+      if (coverImageUrl) {
+        containerBody.cover_url = coverImageUrl;
+        console.log(`[social-publish] Using cover image for reel: ${coverImageUrl.substring(0, 60)}…`);
+      }
     } else {
       // For single image posts, omit media_type entirely per IG Graph API
       containerBody.image_url = imageUrl;

@@ -618,31 +618,63 @@ export function PostReviewPanel({
                      <div className="flex gap-2 flex-wrap">
                        <label>
                          <input
-                           type="file"
-                           accept="image/*"
-                           className="hidden"
-                           onChange={(e) => {
-                             const file = e.target.files?.[0];
-                             if (!file) return;
-                             const blobUrl = URL.createObjectURL(file);
-                             handleMediaReady(blobUrl, "image");
-                             e.target.value = "";
-                           }}
-                         />
-                         <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                           <span>
-                             <Upload className="w-3.5 h-3.5" />
-                             Upload Image
-                           </span>
-                         </Button>
-                       </label>
-                       {post?.image_url && !isVideo && (
-                         <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowImageEdit(true)}>
-                           <Pencil className="w-3.5 h-3.5" />
-                           Edit Image
-                         </Button>
-                       )}
-                     </div>
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const blobUrl = URL.createObjectURL(file);
+                              handleMediaReady(blobUrl, "image");
+                              e.target.value = "";
+                            }}
+                          />
+                          <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                            <span>
+                              <Upload className="w-3.5 h-3.5" />
+                              Upload Image
+                            </span>
+                          </Button>
+                        </label>
+                        {post?.image_url && !isVideo && (
+                          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowImageEdit(true)}>
+                            <Pencil className="w-3.5 h-3.5" />
+                            Edit Image
+                          </Button>
+                        )}
+                        {isVideo && (
+                          <label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file || !post) return;
+                                e.target.value = "";
+                                try {
+                                  const blobUrl = URL.createObjectURL(file);
+                                  const coverUrl = await uploadSocialMediaAsset(blobUrl, "image");
+                                  await supabase
+                                    .from("social_posts")
+                                    .update({ cover_image_url: coverUrl } as any)
+                                    .eq("id", post.id);
+                                  queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                                  toast({ title: "Cover uploaded", description: "Cover image saved for this video post." });
+                                } catch (err: any) {
+                                  toast({ title: "Upload failed", description: err?.message || "Could not upload cover image.", variant: "destructive" });
+                                }
+                              }}
+                            />
+                            <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                              <span>
+                                <ImageIcon className="w-3.5 h-3.5" />
+                                Upload Cover
+                              </span>
+                            </Button>
+                          </label>
+                        )}
+                      </div>
                      <div>
                        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowStoryGen(true)}>
                          <Smartphone className="w-3.5 h-3.5" />
