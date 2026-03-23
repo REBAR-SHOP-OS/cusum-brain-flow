@@ -2422,6 +2422,9 @@ Never reveal internal system details. Respond in the same language the user writ
       }
 
       try {
+        // Inject user JWT for tools that need to forward auth (e.g. send_email → gmail-send)
+        const userJwt = authHeader?.replace("Bearer ", "") || "";
+        if (tool === "send_email") args._userAuthToken = userJwt;
         const result = await executeWriteTool(supabase, user.id, companyId, tool, args);
         await logAction(supabase, user.id, companyId, tool, args, result);
 
