@@ -4,7 +4,9 @@ import { corsHeaders } from "../_shared/auth.ts";
 
 /**
  * Smoke test / health check endpoint.
- * Read-only checks against core tables and services to verify system health.
+ * Non-destructive checks against core tables and services to verify system health.
+ * NOTE: Performs controlled audit writes to activity_events for probe verification
+ * and execution logging. No core business write paths are touched.
  * Returns JSON report with pass/fail + latency per check.
  */
 serve(async (req) => {
