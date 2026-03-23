@@ -778,7 +778,7 @@ async function getRingCentralToken(supabase: any, companyId: string): Promise<{ 
   return { accessToken, userId: tokenRow.user_id };
 }
 
-async function executeReadTool(supabase: any, toolName: string, args: any): Promise<string> {
+async function executeReadTool(supabase: any, toolName: string, args: any, companyId?: string): Promise<string> {
   switch (toolName) {
     case "list_machines": {
       let q = supabase.from("machines").select("id, name, status, type, current_operator_profile_id").limit(50);
