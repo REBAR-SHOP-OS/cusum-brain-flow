@@ -59,7 +59,6 @@ export function LiveTranscript({
                       <span className="text-sm text-foreground cursor-help">
                         {t.englishText || t.translatedText || ""}
                       </span>
-                      </span>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs">
                       <p className="text-xs font-mono text-muted-foreground">Raw: {t.text}</p>
