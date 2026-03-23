@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import {
   Shield, Plus, Pencil, Trash2, DollarSign, Users, Building2, Loader2,
-  Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch, BarChart3,
+  Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch, BarChart3, Flag,
 } from "lucide-react";
 import { LiveMonitorView } from "@/components/office/LiveMonitorView";
 import { CEODashboardView } from "@/components/office/CEODashboardView";
