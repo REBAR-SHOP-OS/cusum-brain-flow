@@ -98,13 +98,26 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
     }
   }
 
+  // Phase 3: Circuit breaker — skip to fallback if provider is tripped
+  if (isEnabled("ENABLE_CIRCUIT_BREAKER") && isBreakerOpen(provider) && opts.fallback) {
+    console.warn(`[circuit-breaker] Provider "${provider}" is open, using fallback "${opts.fallback.provider}"`);
+    _logExecution(requestId, provider, model, "circuit-breaker-skip", undefined, opts, 0, "breaker-open").catch(() => {});
+    const fallbackStart = performance.now();
+    const result = await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+    if (isEnabled("ENABLE_CIRCUIT_BREAKER")) recordSuccess(opts.fallback.provider);
+    _logExecution(requestId, opts.fallback.provider, opts.fallback.model, "fallback", result.raw?.usage, opts, Math.round(performance.now() - fallbackStart), "breaker-fallback").catch(() => {});
+    return result;
+  }
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const result = await _callAISingle(provider, model, opts);
+      if (isEnabled("ENABLE_CIRCUIT_BREAKER")) recordSuccess(provider);
       // Shadow telemetry — fire-and-forget, flag-gated
       _logExecution(requestId, provider, model, "success", result.raw?.usage, opts, Math.round(performance.now() - callStart), attempt === 0 ? "primary" : `retry-${attempt}`).catch(() => {});
       return result;
     } catch (e) {
+      if (isEnabled("ENABLE_CIRCUIT_BREAKER")) recordFailure(provider);
       if (e instanceof AIError) {
         if ((e.status === 503 || e.status === 504) && attempt < maxRetries) {
           const delay = 1000 * Math.pow(2, attempt);
@@ -117,6 +130,7 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
           _logExecution(requestId, provider, model, "error", undefined, opts, Math.round(performance.now() - callStart), `error-${e.status}`, e.message, e.status).catch(() => {});
           const fallbackStart = performance.now();
           const result = await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+          if (isEnabled("ENABLE_CIRCUIT_BREAKER")) recordSuccess(opts.fallback.provider);
           _logExecution(requestId, opts.fallback.provider, opts.fallback.model, "fallback", result.raw?.usage, opts, Math.round(performance.now() - fallbackStart), "fallback").catch(() => {});
           return result;
         }
