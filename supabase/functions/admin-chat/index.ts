@@ -2674,7 +2674,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
             wp_inspect_page: "page content",
             get_employee_activity: "employee activity", get_employee_emails: "employee emails",
             rc_get_active_calls: "active calls", rc_get_team_presence: "team presence", rc_get_call_analytics: "call analytics",
-            investigate_entity: "investigating entity", deep_business_scan: "scanning business",
+            investigate_entity: "investigating entity", deep_business_scan: "scanning business", auto_diagnose_fix: "diagnosing issue",
           };
           const checking = toolNames.map((n: string) => progressLabels[n]).filter(Boolean);
           if (checking.length > 0) {
