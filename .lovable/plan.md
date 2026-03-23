@@ -1,136 +1,104 @@
 
 
-## Wave 2 Correction Pass — Harden Existing Scaffolding
+## Fix Wave 2 Audit Issues — 5 Targeted Corrections
 
-### Current Gaps Found
+### Issue 1: Tenant Scoping on By-ID Reads
 
-1. **Smoke tests** — Already have shape checks but missing: audit helper execution test, auth response shape validation (user object fields), and `dedupe_key` presence check on activity_events
-2. **Audit helper** — Missing: `requestId`/correlation ID, `status` (success/fail), timestamp override. Only has basic fields
-3. **Read wrappers** — Work but lack standardized `ServiceResult<T>` return shape and consistent error codes
-4. **Rollout registry** — Missing: `status` ("active"/"disabled"), `notes` field
-5. **Function inventory** — Missing: `purpose`, `hasAuditLogging`, `migrationPriority` fields
+**Problem**: `getOrderById`, `getProductionTaskById`, `getDeliveryById` fetch by `id` alone — no `company_id` filter. A caller could read another tenant's record.
 
----
+**Fix**: Add `companyId` as required parameter to all three functions.
 
-### TASK 1 — Harden Smoke Tests
-
-**File: `supabase/functions/smoke-tests/index.ts`** (edit)
-
-Add 2 new checks after existing Wave 2 checks:
-
-| Check | Logic |
-|---|---|
-| `auth_user_shape` | Verify sampled user object has `id`, `email`, `created_at` fields |
-| `audit_write_safe` | Insert a test audit row with `entity_type: "smoke-test-probe"`, then immediately delete it by ID. Confirms audit pipeline works end-to-end. If delete fails, still passes (row is harmless). |
-
-Also tighten existing `quote_response_shape` to check `total_amount` field exists alongside current 4 fields.
-
----
-
-### TASK 2 — Upgrade Audit Helper
-
-**File: `supabase/functions/_shared/auditLog.ts`** (edit)
-
-Expand `AuditEntry` interface to include:
-- `requestId?: string` — correlation ID for tracing
-- `status?: "success" | "failure"` — outcome of the audited action
-- `timestamp?: string` — optional override (defaults to DB `now()`)
-
-Update `writeAuditLog` to include these in the metadata payload:
+**`src/lib/serviceLayer/orderService.ts`**
 ```typescript
-metadata: {
-  audit_action: entry.action,
-  request_id: entry.requestId ?? null,
-  status: entry.status ?? "success",
-  before: entry.before ?? null,
-  after: entry.after ?? null,
-  ...(entry.metadata ?? {}),
+export async function getOrderById(orderId: string, companyId: string): Promise<ServiceResult<any>> {
+  // .eq("id", orderId).eq("company_id", companyId)
 }
 ```
 
-No new table. Uses existing `activity_events.metadata` JSONB field.
+Same pattern for `productionService.ts` and `deliveryService.ts`.
+
+Nothing calls these yet, so the signature change is safe.
 
 ---
 
-### TASK 3 — Standardize Read Wrappers
+### Issue 2: Schema Validation — Confirmed Correct
 
-**Files: all 4 service files** (edit)
+After checking `types.ts` and 90+ usages across the codebase:
+- `quotations` — real table, used everywhere (not "quotes")
+- `deliveries` — real table, 94 matches across 10 files
+- `work_orders` — real table, 60 matches across 9 files
+- `orders` — real table
 
-Add a shared `ServiceResult<T>` type to each (or a shared types file):
+**No table name corrections needed.** All wrappers point to correct tables.
 
+---
+
+### Issue 3: Profile/User Mapping Bug in roleService
+
+**Problem**: `listCompanyUsersWithRoles` does:
 ```typescript
-export interface ServiceResult<T> {
-  ok: boolean;
-  data: T;
-  error?: string;
-}
+.select("id, full_name, email, company_id, user_roles!inner(role)")
+.eq("company_id", companyId)
+```
+Then maps `userId: p.id` (profile UUID).
+
+But `user_roles.user_id` references `auth.users.id`, NOT `profiles.id`. The join `user_roles!inner(role)` tries to match on a FK relationship that doesn't exist between `profiles.id` and `user_roles.user_id`.
+
+**Fix**: The join won't work via `!inner` because there's no FK between profiles and user_roles. Instead, use a two-step approach:
+1. Fetch profiles for the company
+2. Fetch roles for those user_ids
+3. Merge client-side
+
+Also fix `userId` to return `p.user_id` (auth user ID) instead of `p.id` (profile ID), since that's what `user_roles` links to.
+
+---
+
+### Issue 4: Smoke Test Comment Truthfulness
+
+**Problem**: Top-level JSDoc says "Read-only checks" but the function inserts into `activity_events` twice (audit probe + execution log).
+
+**Fix**: Update the JSDoc comment to:
+```typescript
+/**
+ * Smoke test / health check endpoint.
+ * Non-destructive checks against core tables and services to verify system health.
+ * NOTE: Performs controlled audit writes to activity_events for probe verification
+ * and execution logging. No core business write paths are touched.
+ */
 ```
 
-Refactor each function to return `ServiceResult` instead of throwing:
-- `listOrders` → `{ ok: true, data: { orders, total } }` or `{ ok: false, data: { orders: [], total: 0 }, error: "..." }`
-- Same pattern for all 4 services
+---
 
-This makes them safe to call without try/catch, and aligns with the `requestHandler` response shape.
+### Issue 5: Audit Probe Safety
 
-**Also add**: A shared file `src/lib/serviceLayer/types.ts` for the `ServiceResult` type so all services import from one place.
+**Problem**: Probe rows lack clear metadata distinguishing them from real audit entries.
+
+**Fix**: Add explicit metadata to both the probe insert and the execution log insert:
+```typescript
+// Probe insert:
+metadata: { smoke_test: true, probe: true, purpose: "audit_pipeline_verification" }
+
+// Execution log:
+metadata: { smoke_test: true, purpose: "execution_log", checks: [...] }
+```
+
+Also add `source: "smoke-tests"` consistently (already present but confirm on both inserts).
 
 ---
 
-### TASK 4 — Strengthen Rollout Registry
+### Files Changed
 
-**File: `src/lib/rolloutRegistry.ts`** (edit)
-
-Add to `RolloutEntry` interface:
-- `status: "active" | "disabled" | "deprecated"` — current flag state
-- `notes?: string` — free-text for migration context
-
-Update all 4 existing entries to include `status: "disabled"` and relevant notes.
-
----
-
-### TASK 5 — Improve Function Inventory
-
-**File: `src/lib/edgeFunctionInventory.ts`** (edit)
-
-Add to `EdgeFunctionEntry` interface:
-- `purpose: string` — one-line description
-- `hasAuditLogging: boolean`
-- `migrationPriority: "p0" | "p1" | "p2" | "p3"` — p0 = migrate first, p3 = last
-
-Update all ~40 entries with these 3 new fields.
-
----
-
-### Files Summary
-
-| File | Action | Rollback |
+| File | Change | Rollback |
 |---|---|---|
-| `supabase/functions/smoke-tests/index.ts` | Edit — add 2 checks, tighten shapes | Revert to current |
-| `supabase/functions/_shared/auditLog.ts` | Edit — add requestId, status, timestamp | Revert to current |
-| `src/lib/serviceLayer/types.ts` | New — shared ServiceResult type | Delete |
-| `src/lib/serviceLayer/orderService.ts` | Edit — return ServiceResult | Revert to current |
-| `src/lib/serviceLayer/productionService.ts` | Edit — return ServiceResult | Revert to current |
-| `src/lib/serviceLayer/deliveryService.ts` | Edit — return ServiceResult | Revert to current |
-| `src/lib/serviceLayer/roleService.ts` | Edit — return ServiceResult | Revert to current |
-| `src/lib/rolloutRegistry.ts` | Edit — add status + notes fields | Revert to current |
-| `src/lib/edgeFunctionInventory.ts` | Edit — add purpose, audit, priority | Revert to current |
+| `src/lib/serviceLayer/orderService.ts` | Add `companyId` param to `getOrderById` | Revert file |
+| `src/lib/serviceLayer/productionService.ts` | Add `companyId` param to `getProductionTaskById` | Revert file |
+| `src/lib/serviceLayer/deliveryService.ts` | Add `companyId` param to `getDeliveryById` | Revert file |
+| `src/lib/serviceLayer/roleService.ts` | Fix join logic, return `user_id` not `id` | Revert file |
+| `supabase/functions/smoke-tests/index.ts` | Fix comments, add metadata to probes | Revert file |
 
-### What MUST NOT Be Touched
-1. Any existing edge function except smoke-tests
-2. Any database table or column
-3. Write paths in any service
-4. Auth behavior or RoleGuard
-5. Any route or component
-
-### Assumptions
-- `activity_events` accepts inserts with `entity_type: "smoke-test-probe"` (confirmed from schema)
-- No consumers currently import the service layer files (confirmed: purely additive)
-- Changing return types from throw-based to `ServiceResult` is safe because nothing calls these yet
-
-### What Remains Weak After This Pass
-- No service wrappers are wired into actual components yet (Wave 3 territory)
-- No write-path wrappers exist
-- Feature flags table exists but no admin UI to toggle them
-- Audit helper is prepared but only integrated in smoke-tests
-- `requestHandler` wrapper is not adopted by any production function yet
+### Confirmed
+- Table names `quotations`, `deliveries`, `work_orders`, `orders` are all correct
+- All by-ID wrappers will require `companyId` after fix
+- No write paths touched (smoke test writes are controlled audit probes only)
+- No existing consumers break (nothing imports these service files yet)
 
