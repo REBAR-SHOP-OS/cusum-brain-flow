@@ -4,7 +4,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 
 /**
  * Smoke test / health check endpoint.
- * Read-only checks against core tables to verify system health.
+ * Read-only checks against core tables and services to verify system health.
  * Returns JSON report with pass/fail + latency per check.
  */
 serve(async (req) => {
@@ -25,6 +25,8 @@ serve(async (req) => {
       results.push({ check: name, status: "fail", ms: Date.now() - start, detail: err.message });
     }
   }
+
+  // --- Wave 1 checks ---
 
   await runCheck("db_connectivity", async () => {
     const { count, error } = await admin.from("profiles").select("*", { count: "exact", head: true });
@@ -55,6 +57,68 @@ serve(async (req) => {
     if (error) throw error;
     return `${count} flags`;
   });
+
+  // --- Wave 2 checks ---
+
+  await runCheck("auth_service_available", async () => {
+    const { data, error } = await admin.auth.admin.listUsers({ perPage: 1 });
+    if (error) throw error;
+    return `auth service ok, ${data.users.length} user(s) sampled`;
+  });
+
+  await runCheck("quote_response_shape", async () => {
+    const { data, error } = await admin.from("quotations").select("id, company_id, status, created_at").limit(1).maybeSingle();
+    if (error) throw error;
+    if (!data) return "no quotations to validate shape";
+    const requiredKeys = ["id", "company_id", "status", "created_at"];
+    const missing = requiredKeys.filter((k) => !(k in data));
+    if (missing.length > 0) throw new Error(`Missing keys: ${missing.join(", ")}`);
+    return "shape valid: id, company_id, status, created_at";
+  });
+
+  await runCheck("order_response_shape", async () => {
+    const { data, error } = await admin.from("orders").select("id, company_id, status").limit(1).maybeSingle();
+    if (error) throw error;
+    if (!data) return "no orders to validate shape";
+    const requiredKeys = ["id", "company_id", "status"];
+    const missing = requiredKeys.filter((k) => !(k in data));
+    if (missing.length > 0) throw new Error(`Missing keys: ${missing.join(", ")}`);
+    return "shape valid: id, company_id, status";
+  });
+
+  await runCheck("feature_flag_fetch", async () => {
+    const { data, error } = await admin.from("feature_flags").select("flag_key, enabled").limit(5);
+    if (error) throw error;
+    if (!data || !Array.isArray(data)) throw new Error("Expected array response");
+    if (data.length > 0 && !("flag_key" in data[0])) throw new Error("Missing flag_key field");
+    return `${data.length} flag(s) fetched, shape valid`;
+  });
+
+  await runCheck("role_lookup", async () => {
+    const { data, error } = await admin.from("user_roles").select("id, user_id, role").limit(1).maybeSingle();
+    if (error) throw error;
+    if (!data) return "no roles to validate";
+    if (!("role" in data)) throw new Error("Missing role field");
+    return `role lookup ok, sample role: ${data.role}`;
+  });
+
+  // --- Audit: log smoke test execution ---
+  try {
+    const { data: firstCompany } = await admin.from("companies").select("id").limit(1).maybeSingle();
+    if (firstCompany?.id) {
+      await admin.from("activity_events").insert({
+        company_id: firstCompany.id,
+        entity_type: "system",
+        entity_id: "smoke-tests",
+        event_type: "audit",
+        description: `Smoke test run: ${results.filter(r => r.status === "pass").length}/${results.length} passed`,
+        source: "smoke-tests",
+        metadata: { checks: results.map(r => ({ check: r.check, status: r.status, ms: r.ms })) },
+      });
+    }
+  } catch (_auditErr) {
+    // Best-effort — never fail the response for audit logging
+  }
 
   const allPassed = results.every((r) => r.status === "pass");
 
