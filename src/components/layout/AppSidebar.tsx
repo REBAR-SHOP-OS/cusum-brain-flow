@@ -158,7 +158,7 @@ export function AppSidebar() {
         { name: "Team Hub", href: "/team-hub", icon: MessageSquare, tourId: "nav-team-hub" },
         { name: "Business Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
         { name: "Live Monitor", href: "/live-monitor", icon: Monitor, roles: ["admin", "office", "sales"], lockReason: "Requires Admin, Office or Sales role", tourId: "nav-live-monitor" },
-        { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop"], lockReason: "Requires Super Admin", tourId: "nav-ceo" },
+        { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: [...ACCESS_POLICIES.ceoPortalAccess], lockReason: "Requires Super Admin", tourId: "nav-ceo" },
         { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-support" },
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], lockReason: "Requires Sales or Office role", tourId: "nav-pipeline" },
         { name: "Lead Scoring", href: "/lead-scoring", icon: Zap, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Admin role", tourId: "nav-lead-scoring" },
