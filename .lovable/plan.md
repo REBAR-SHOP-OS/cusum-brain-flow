@@ -1,72 +1,31 @@
 
 
-## Fix: Login Flow — Simplified & Robust Auth
-
-### Problem
-
-Users authenticate with Google successfully (auth logs confirm), but end up back on the login page. The `AuthProvider` has an over-engineered session validation flow with multiple race conditions.
+## Fix: Slow & Inaccurate Translation in Realtime Transcribe
 
 ### Root Cause
 
-The `auth.tsx` has a complex flow that fights itself:
+**Wrong model**: `translate-message` edge function uses `gemini-2.5-pro` (line 96) — the slowest, most expensive model. Per project standards, it should use `gemini-2.5-flash` which is 3-5x faster with comparable translation quality.
 
-1. **`INITIAL_SESSION` is skipped** (line 56) for non-OAuth loads, forcing reliance on manual `getSession()` + `getUser()` validation
-2. **The Lovable OAuth flow goes through `/~oauth`**, NOT URL hash tokens — so `isOAuthCallback` is always `false` when the user lands on `/login` after Google auth
-3. This means the stale-token purge (lines 29-33) **never fires** for Lovable OAuth
-4. The manual `getUser()` call (line 94) can fail with `bad_jwt` for stale tokens, triggering `signOut` that clears the newly-established session
-5. `TOKEN_REFRESHED` handler can also race and clear state
+Additionally, the retry logic (lines 128-138) doubles latency when translations return empty, and the `invokeEdgeFunction` wrapper adds overhead with session checks on every call.
 
-### Fix — Simplify AuthProvider
+### Changes
 
-Replace the current complex flow with a straightforward approach:
+**File: `supabase/functions/translate-message/index.ts`**
 
-**File: `src/lib/auth.tsx`**
+1. **Switch model from `gemini-2.5-pro` to `gemini-2.5-flash`** — dramatically reduces latency while maintaining translation accuracy
+2. **Simplify retry logic** — remove the second full AI call on empty results; instead, return the raw text as fallback to avoid doubling response time
+3. **Streamline the prompt** — reduce token count in system prompt for faster processing
 
-1. **Use `onAuthStateChange` as the sole session source** — stop skipping `INITIAL_SESSION`. This is Supabase's built-in mechanism and handles all cases including OAuth returns via `/~oauth`.
+**File: `src/hooks/useRealtimeTranscribe.ts`**
 
-2. **Remove manual `getSession()` + `getUser()` validation** — this double-validation is where the race conditions live. Supabase's `onAuthStateChange` already validates and refreshes tokens internally.
+4. **Reduce timeout** — the `invokeEdgeFunction` default 30s timeout is too generous; set to 10s for translation calls so failures surface faster
+5. **On translation failure, show raw text instead of discarding** — currently errors silently remove entries (line 108), leaving users with "translating..." forever. Show the original text with a marker instead.
 
-3. **Keep `TOKEN_REFRESHED` guard but simplify** — only clear on confirmed token refresh failure, don't race against session establishment.
-
-4. **Move stale-token cleanup to Login page** — clear `sb-*` keys when the Login page mounts (before any auth check). This guarantees fresh state regardless of how the user arrived.
-
-Simplified `AuthProvider`:
-```typescript
-useEffect(() => {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    (event, session) => {
-      // Let all events through — INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    }
-  );
-  return () => subscription.unsubscribe();
-}, []);
-```
-
-**File: `src/pages/Login.tsx`**
-
-5. **Clear stale `sb-*` keys on mount** — add a one-time cleanup when Login renders, preventing stale tokens from interfering with any subsequent auth flow:
-```typescript
-useEffect(() => {
-  // If not already authenticated, clear any stale auth tokens
-  if (!user && !authLoading) {
-    Object.keys(localStorage)
-      .filter(k => k.startsWith('sb-'))
-      .forEach(k => localStorage.removeItem(k));
-  }
-}, []);
-```
-
-### Why This Fixes It
-
-- `INITIAL_SESSION` fires immediately with whatever session Supabase has — if `/~oauth` set valid tokens, the session will be valid
-- No more `getUser()` call that can race and trigger signOut
-- Stale tokens are cleaned up on the Login page itself, before user tries to authenticate
-- The flow is simple: arrive at `/login` → clean slate → Google OAuth → `/~oauth` sets session → redirect to `/login` → `INITIAL_SESSION` fires with valid session → `user` set → `<Navigate to="/home" />`
+### Summary
+- Primary fix: `gemini-2.5-pro` → `gemini-2.5-flash` (3-5x speed improvement)
+- Secondary: remove expensive retry, reduce timeout, show fallback text on failure
 
 ### Files
-- `src/lib/auth.tsx` — simplify to use `onAuthStateChange` only
-- `src/pages/Login.tsx` — add stale token cleanup on mount
+- `supabase/functions/translate-message/index.ts` — faster model + simplified retry
+- `src/hooks/useRealtimeTranscribe.ts` — shorter timeout + graceful fallback
 
