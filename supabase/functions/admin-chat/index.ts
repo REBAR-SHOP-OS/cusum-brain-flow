@@ -2484,6 +2484,10 @@ RINGCENTRAL TELEPHONY:
 - Send faxes (rc_send_fax)
 - Check active/live calls in real-time (rc_get_active_calls)
 - View team presence/DND/availability status (rc_get_team_presence)
+
+EMAIL:
+- Send emails directly via send_email tool — NEVER say "I can't send emails"
+- When the CEO says "send", "send it", "email them" — use send_email immediately
 - Pull call analytics with per-employee breakdowns (rc_get_call_analytics)
 
 PERSONAL:
