@@ -1,175 +1,136 @@
 
 
-## Wave 2 — Control, Visibility & Read-Side Structure
+## Wave 2 Correction Pass — Harden Existing Scaffolding
 
-All changes are additive. No existing files modified except extending `smoke-tests/index.ts`.
+### Current Gaps Found
+
+1. **Smoke tests** — Already have shape checks but missing: audit helper execution test, auth response shape validation (user object fields), and `dedupe_key` presence check on activity_events
+2. **Audit helper** — Missing: `requestId`/correlation ID, `status` (success/fail), timestamp override. Only has basic fields
+3. **Read wrappers** — Work but lack standardized `ServiceResult<T>` return shape and consistent error codes
+4. **Rollout registry** — Missing: `status` ("active"/"disabled"), `notes` field
+5. **Function inventory** — Missing: `purpose`, `hasAuditLogging`, `migrationPriority` fields
 
 ---
 
-### TASK 1 — Upgrade Smoke Tests
+### TASK 1 — Harden Smoke Tests
 
-**File: `supabase/functions/smoke-tests/index.ts`** (edit existing)
+**File: `supabase/functions/smoke-tests/index.ts`** (edit)
 
-Add 5 new read-only checks to the existing smoke test function:
+Add 2 new checks after existing Wave 2 checks:
 
-| Check | What it does |
+| Check | Logic |
 |---|---|
-| `auth_service_available` | Verify `supabase.auth.admin.listUsers({ perPage: 1 })` responds without error |
-| `quote_response_shape` | Fetch 1 quotation, assert it has `id`, `company_id`, `status`, `created_at` |
-| `order_response_shape` | Fetch 1 order, assert it has `id`, `company_id`, `status` |
-| `feature_flag_fetch` | Fetch from `feature_flags`, verify array response with `flag_key` field |
-| `role_lookup` | Query `user_roles` with `.limit(1)`, verify it returns without error and has `role` field |
+| `auth_user_shape` | Verify sampled user object has `id`, `email`, `created_at` fields |
+| `audit_write_safe` | Insert a test audit row with `entity_type: "smoke-test-probe"`, then immediately delete it by ID. Confirms audit pipeline works end-to-end. If delete fails, still passes (row is harmless). |
 
-All use service client, all are `SELECT` only, zero mutations.
-
-**Safety**: Extends existing endpoint. No new function folder. Rollback = revert to current file.
+Also tighten existing `quote_response_shape` to check `total_amount` field exists alongside current 4 fields.
 
 ---
 
-### TASK 2 — Rollout Governance Config
+### TASK 2 — Upgrade Audit Helper
 
-**File: `src/lib/rolloutRegistry.ts`** (new)
+**File: `supabase/functions/_shared/auditLog.ts`** (edit)
 
-A typed, machine-readable registry of all feature flags and their rollout metadata:
+Expand `AuditEntry` interface to include:
+- `requestId?: string` — correlation ID for tracing
+- `status?: "success" | "failure"` — outcome of the audited action
+- `timestamp?: string` — optional override (defaults to DB `now()`)
 
+Update `writeAuditLog` to include these in the metadata payload:
 ```typescript
-export interface RolloutEntry {
-  flagKey: string;
-  owner: string;
-  domain: string;
-  targetRoles: string[];
-  targetUserIds: string[];
-  phase: "off" | "canary" | "percentage" | "ga";
-  rollbackSteps: string;
-  dependencies: string[];
-}
-
-export const rolloutRegistry: RolloutEntry[] = [
-  { flagKey: "use_new_request_handler", owner: "platform", domain: "infra", ... },
-  { flagKey: "use_new_quote_engine", owner: "sales", domain: "quotes", ... },
-  { flagKey: "use_new_pipeline_ui", owner: "sales", domain: "crm", ... },
-  { flagKey: "use_structured_logging", owner: "platform", domain: "infra", ... },
-];
-```
-
-No UI. Just a typed config file that can be imported by admin tools later.
-
-**Safety**: New file, nothing imports it yet. Rollback = delete file.
-
----
-
-### TASK 3 — Safe Domain Read Wrappers
-
-Four new files in `src/lib/serviceLayer/`:
-
-**`orderService.ts`** — Read-only order queries
-- `listOrders(companyId, options?)` — paginated, filterable by status
-- `getOrderById(orderId)` — single order fetch
-
-**`productionService.ts`** — Read-only production queries
-- `listProductionTasks(companyId, options?)` — paginated
-- `getProductionTaskById(taskId)`
-
-**`deliveryService.ts`** — Read-only delivery queries  
-- `listDeliveries(companyId, options?)` — paginated
-- `getDeliveryById(deliveryId)`
-
-**`roleService.ts`** — Read-only role/capability queries
-- `getUserRoles(userId)` — returns roles array
-- `hasUserRole(userId, role)` — boolean check
-- `listCompanyUsersWithRoles(companyId)` — joins profiles + user_roles
-
-All follow the same pattern as `quoteService.ts`: `(supabase as any).from(table).select(...)`, throw on error, return typed results.
-
-**Safety**: All new files. No existing code calls them. Read-only queries only. Rollback = delete files.
-
----
-
-### TASK 4 — Critical Function Inventory
-
-**File: `src/lib/edgeFunctionInventory.ts`** (new)
-
-Machine-readable JSON-like TypeScript array categorizing ~40 critical edge functions:
-
-```typescript
-export interface EdgeFunctionEntry {
-  name: string;
-  domain: "auth" | "quotes" | "orders" | "manufacturing" | "delivery" | "accounting" | "comms" | "ai" | "admin";
-  risk: "critical" | "high" | "medium" | "low";
-  usesSharedWrapper: boolean;
-  hasFeatureFlag: boolean;
-  hasSmokeCoverage: boolean;
-  notes?: string;
+metadata: {
+  audit_action: entry.action,
+  request_id: entry.requestId ?? null,
+  status: entry.status ?? "success",
+  before: entry.before ?? null,
+  after: entry.after ?? null,
+  ...(entry.metadata ?? {}),
 }
 ```
 
-Covers key functions like:
-- **auth**: `google-oauth`, `kiosk-lookup`, `kiosk-punch`
-- **quotes**: `quote-engine`, `ai-generate-quotation`, `quote-expiry-watchdog`
-- **orders**: `convert-quote-to-order`, `odoo-sync-order-lines`
-- **manufacturing**: `manage-machine`, `log-machine-run`, `manage-bend`, `manage-extract`, `manage-inventory`
-- **delivery**: `smart-dispatch`, `validate-clearance-photo`
-- **accounting**: `qb-sync-engine`, `qb-audit`, `qb-webhook`, `payroll-engine`
-- **comms**: `gmail-sync`, `gmail-send`, `ringcentral-sync`, `ringcentral-webhook`
-
-**Safety**: New file, pure data. Rollback = delete file.
+No new table. Uses existing `activity_events.metadata` JSONB field.
 
 ---
 
-### TASK 5 — Safe Audit Helpers
+### TASK 3 — Standardize Read Wrappers
 
-**File: `supabase/functions/_shared/auditLog.ts`** (new)
+**Files: all 4 service files** (edit)
+
+Add a shared `ServiceResult<T>` type to each (or a shared types file):
 
 ```typescript
-export interface AuditEntry {
-  action: string;        // e.g. "role_change", "order_delete", "config_update"
-  actorId: string;
-  targetEntity: string;
-  targetId: string;
-  companyId: string;
-  before?: Record<string, unknown>;
-  after?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+export interface ServiceResult<T> {
+  ok: boolean;
+  data: T;
+  error?: string;
 }
-
-export async function writeAuditLog(client, entry: AuditEntry): Promise<void>
-// Best-effort insert into activity_events with event_type = "audit"
-// Uses existing activity_events table — no new table needed
-// Never throws — logs errors to structured logger
 ```
 
-**One example integration**: Add audit logging to `smoke-tests/index.ts` — log when smoke tests are run (who ran them, results summary). This is zero-risk since smoke tests are already non-critical.
+Refactor each function to return `ServiceResult` instead of throwing:
+- `listOrders` → `{ ok: true, data: { orders, total } }` or `{ ok: false, data: { orders: [], total: 0 }, error: "..." }`
+- Same pattern for all 4 services
 
-**Safety**: New shared file. One tiny addition to smoke-tests. Rollback = delete file + revert smoke-tests.
+This makes them safe to call without try/catch, and aligns with the `requestHandler` response shape.
+
+**Also add**: A shared file `src/lib/serviceLayer/types.ts` for the `ServiceResult` type so all services import from one place.
+
+---
+
+### TASK 4 — Strengthen Rollout Registry
+
+**File: `src/lib/rolloutRegistry.ts`** (edit)
+
+Add to `RolloutEntry` interface:
+- `status: "active" | "disabled" | "deprecated"` — current flag state
+- `notes?: string` — free-text for migration context
+
+Update all 4 existing entries to include `status: "disabled"` and relevant notes.
+
+---
+
+### TASK 5 — Improve Function Inventory
+
+**File: `src/lib/edgeFunctionInventory.ts`** (edit)
+
+Add to `EdgeFunctionEntry` interface:
+- `purpose: string` — one-line description
+- `hasAuditLogging: boolean`
+- `migrationPriority: "p0" | "p1" | "p2" | "p3"` — p0 = migrate first, p3 = last
+
+Update all ~40 entries with these 3 new fields.
 
 ---
 
 ### Files Summary
 
-| File | Action | Safe? | Rollback |
-|---|---|---|---|
-| `supabase/functions/smoke-tests/index.ts` | Edit — add 5 checks + audit | Yes — extends existing, read-only | Revert to current |
-| `src/lib/rolloutRegistry.ts` | New | Yes — nothing imports it | Delete |
-| `src/lib/serviceLayer/orderService.ts` | New | Yes — read-only wrapper | Delete |
-| `src/lib/serviceLayer/productionService.ts` | New | Yes — read-only wrapper | Delete |
-| `src/lib/serviceLayer/deliveryService.ts` | New | Yes — read-only wrapper | Delete |
-| `src/lib/serviceLayer/roleService.ts` | New | Yes — read-only wrapper | Delete |
-| `src/lib/edgeFunctionInventory.ts` | New | Yes — pure data | Delete |
-| `supabase/functions/_shared/auditLog.ts` | New | Yes — helper only | Delete |
+| File | Action | Rollback |
+|---|---|---|
+| `supabase/functions/smoke-tests/index.ts` | Edit — add 2 checks, tighten shapes | Revert to current |
+| `supabase/functions/_shared/auditLog.ts` | Edit — add requestId, status, timestamp | Revert to current |
+| `src/lib/serviceLayer/types.ts` | New — shared ServiceResult type | Delete |
+| `src/lib/serviceLayer/orderService.ts` | Edit — return ServiceResult | Revert to current |
+| `src/lib/serviceLayer/productionService.ts` | Edit — return ServiceResult | Revert to current |
+| `src/lib/serviceLayer/deliveryService.ts` | Edit — return ServiceResult | Revert to current |
+| `src/lib/serviceLayer/roleService.ts` | Edit — return ServiceResult | Revert to current |
+| `src/lib/rolloutRegistry.ts` | Edit — add status + notes fields | Revert to current |
+| `src/lib/edgeFunctionInventory.ts` | Edit — add purpose, audit, priority | Revert to current |
 
 ### What MUST NOT Be Touched
-
-1. Any existing edge function (except smoke-tests)
+1. Any existing edge function except smoke-tests
 2. Any database table or column
-3. `_shared/auth.ts` signature
-4. Any route or component
-5. Write-path logic in any service
+3. Write paths in any service
+4. Auth behavior or RoleGuard
+5. Any route or component
 
-### Next Recommended Migration Order (after Wave 2)
+### Assumptions
+- `activity_events` accepts inserts with `entity_type: "smoke-test-probe"` (confirmed from schema)
+- No consumers currently import the service layer files (confirmed: purely additive)
+- Changing return types from throw-based to `ServiceResult` is safe because nothing calls these yet
 
-1. Wire `orderService` into one order-list component (read path only)
-2. Wire `roleService` into admin panel role display
-3. Migrate `build-learning-pairs` to `requestHandler` (lowest risk function)
-4. Enable `use_structured_logging` flag for one domain
-5. Add write wrappers for quotes (Phase 4 territory)
+### What Remains Weak After This Pass
+- No service wrappers are wired into actual components yet (Wave 3 territory)
+- No write-path wrappers exist
+- Feature flags table exists but no admin UI to toggle them
+- Audit helper is prepared but only integrated in smoke-tests
+- `requestHandler` wrapper is not adopted by any production function yet
 
