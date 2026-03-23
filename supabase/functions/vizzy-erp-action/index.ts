@@ -696,6 +696,159 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ─── Email Reading Tools ───
+
+      case "read_employee_emails": {
+        const { employee_name_or_email, limit: emailLimit, date: emailDate } = params;
+        if (!employee_name_or_email) throw new Error("employee_name_or_email is required");
+
+        const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        const companyId = prof?.company_id;
+
+        // Resolve employee name/email to their email address
+        const { data: allProfiles } = await supabaseAdmin
+          .from("profiles")
+          .select("id, full_name, email, user_id")
+          .eq("company_id", companyId)
+          .not("full_name", "is", null);
+
+        const searchTerm = employee_name_or_email.toLowerCase().trim();
+        const matchedProfile = (allProfiles || []).find((p: any) => {
+          const fn = (p.full_name || "").toLowerCase();
+          const em = (p.email || "").toLowerCase();
+          return fn === searchTerm
+            || fn.includes(searchTerm)
+            || searchTerm.includes(fn.split(" ")[0])
+            || fn.split(" ")[0] === searchTerm.split(" ")[0]
+            || em === searchTerm
+            || em.startsWith(searchTerm.split("@")[0]);
+        });
+
+        if (!matchedProfile) {
+          result = { success: false, error: `No employee found matching "${employee_name_or_email}"` };
+          break;
+        }
+
+        const employeeEmail = (matchedProfile as any).email;
+        const employeeName = (matchedProfile as any).full_name;
+
+        // Build date filter
+        let dateFilter: string;
+        if (emailDate) {
+          dateFilter = new Date(emailDate).toISOString().slice(0, 10);
+        } else {
+          dateFilter = new Date().toISOString().slice(0, 10);
+        }
+        const dayStart = `${dateFilter}T00:00:00.000Z`;
+        const dayEnd = `${dateFilter}T23:59:59.999Z`;
+
+        // Query communications for this employee (both sent and received)
+        const { data: emails, error: emailErr } = await supabaseAdmin
+          .from("communications")
+          .select("id, subject, body_preview, from_address, to_address, direction, received_at, thread_id, source, ai_category, ai_action_required")
+          .eq("company_id", companyId)
+          .gte("received_at", dayStart)
+          .lte("received_at", dayEnd)
+          .or(`from_address.ilike.%${employeeEmail}%,to_address.ilike.%${employeeEmail}%`)
+          .order("received_at", { ascending: false })
+          .limit(emailLimit || 50);
+
+        if (emailErr) throw emailErr;
+
+        result = {
+          success: true,
+          employee: employeeName,
+          email: employeeEmail,
+          date: dateFilter,
+          total: (emails || []).length,
+          sent: (emails || []).filter((e: any) => e.direction === "outbound").length,
+          received: (emails || []).filter((e: any) => e.direction === "inbound").length,
+          emails: (emails || []).map((e: any) => ({
+            id: e.id,
+            subject: e.subject || "(no subject)",
+            body_preview: (e.body_preview || "").slice(0, 800),
+            from: e.from_address,
+            to: e.to_address,
+            direction: e.direction,
+            time: e.received_at,
+            thread_id: e.thread_id,
+            source: e.source,
+            category: e.ai_category,
+            action_required: e.ai_action_required,
+          })),
+        };
+        break;
+      }
+
+      case "read_email_thread": {
+        const { thread_id: threadId, communication_id: commId } = params;
+        if (!threadId && !commId) throw new Error("thread_id or communication_id is required");
+
+        const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        const companyId = prof?.company_id;
+
+        let query = supabaseAdmin
+          .from("communications")
+          .select("id, subject, body_preview, from_address, to_address, direction, received_at, thread_id, gmail_message_id, source")
+          .eq("company_id", companyId)
+          .order("received_at", { ascending: true })
+          .limit(30);
+
+        if (threadId) {
+          query = query.eq("thread_id", threadId);
+        } else {
+          query = query.eq("id", commId);
+        }
+
+        const { data: threadEmails, error: threadErr } = await query;
+        if (threadErr) throw threadErr;
+
+        // If we have gmail_message_id, try to fetch full body via Gmail API
+        const enrichedEmails = [];
+        for (const email of (threadEmails || [])) {
+          const emailData: any = {
+            id: email.id,
+            subject: email.subject || "(no subject)",
+            body_preview: (email.body_preview || "").slice(0, 2000),
+            from: email.from_address,
+            to: email.to_address,
+            direction: email.direction,
+            time: email.received_at,
+            source: email.source,
+          };
+
+          // Try to get full body from Gmail if available
+          if (email.gmail_message_id && email.source === "gmail") {
+            try {
+              const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+              const gmailResp = await fetch(`${supabaseUrl}/functions/v1/gmail-sync`, {
+                method: "POST",
+                headers: { Authorization: authHeader, "Content-Type": "application/json" },
+                body: JSON.stringify({ messageId: email.gmail_message_id, fetchFull: true }),
+              });
+              if (gmailResp.ok) {
+                const gmailData = await gmailResp.json();
+                if (gmailData?.messages?.[0]?.body) {
+                  emailData.full_body = gmailData.messages[0].body;
+                }
+              }
+            } catch {
+              // Silent fail — body_preview is still available
+            }
+          }
+
+          enrichedEmails.push(emailData);
+        }
+
+        result = {
+          success: true,
+          thread_id: threadId || null,
+          total_messages: enrichedEmails.length,
+          messages: enrichedEmails,
+        };
+        break;
+      }
+
       case "rc_get_team_presence": {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const resp = await fetch(`${supabaseUrl}/functions/v1/ringcentral-presence`, {
