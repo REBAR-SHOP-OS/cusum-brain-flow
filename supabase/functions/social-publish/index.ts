@@ -85,6 +85,7 @@ serve(async (req) => {
       );
     }
     const { platform, message: rawMessage, image_url, post_id, page_name, force_publish, content_type } = parsed.data;
+    console.log(`[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`);
 
     // Strip Persian translation block — server-side safety net
     let message = rawMessage;
