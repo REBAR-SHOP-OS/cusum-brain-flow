@@ -96,6 +96,11 @@ export async function handleRequest(
 
     log.done("Success", { companyId });
 
+    // If rawResponse is enabled and handler returned a Response, use it directly
+    if (options.rawResponse && result instanceof Response) {
+      return result;
+    }
+
     return new Response(
       JSON.stringify({ ok: true, data: result }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
