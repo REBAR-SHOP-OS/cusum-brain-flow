@@ -176,6 +176,10 @@ export default function AdminPanel() {
             <FileSearch className="w-3.5 h-3.5" />
             Audit Trail
           </TabsTrigger>
+          <TabsTrigger value="feature-flags" className="gap-1.5 text-xs">
+            <Flag className="w-3.5 h-3.5" />
+            Feature Flags
+          </TabsTrigger>
           <TabsTrigger value="ceo-portal" className="gap-1.5 text-xs">
             <BarChart3 className="w-3.5 h-3.5" />
             CEO Portal
