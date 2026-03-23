@@ -1,43 +1,43 @@
 
 
-## Add "Repost" Button to PostReviewPanel
+## Add Missing LLM Models to AVAILABLE_MODELS
 
-### What the user wants
+### What's Missing
 
-A "Repost" button next to "Auto Generate Story" (line 695-698 area) that lets the user clone the current post's content and image to a new date — reusing the same visual on a different day.
+The `AVAILABLE_MODELS` array in `src/types/adDirector.ts` is missing two models that are available on the Lovable AI gateway:
 
-### Implementation
+| Model | Status |
+|---|---|
+| `google/gemini-2.5-flash-lite` | ✅ Already listed |
+| `google/gemini-2.5-flash` | ✅ Already listed |
+| `google/gemini-2.5-pro` | ✅ Already listed |
+| `google/gemini-3-flash-preview` | ✅ Already listed |
+| `google/gemini-3.1-pro-preview` | ✅ Already listed |
+| `google/gemini-3-pro-image-preview` | ✅ Already listed |
+| `google/gemini-3.1-flash-image-preview` | ✅ Already listed |
+| `openai/gpt-5` | ✅ Already listed |
+| `openai/gpt-5-mini` | ✅ Already listed |
+| `openai/gpt-5-nano` | ✅ Already listed |
+| `openai/gpt-5.2` | ✅ Already listed |
+| **`google/gemini-2.5-flash-image`** | ❌ Missing — image generation model |
 
-**File**: `src/components/social/PostReviewPanel.tsx`
+### Patch (1 file)
 
-1. Add a "Repost" button after the "Auto Generate Story" button (line 699)
-2. On click, open a date+time picker popover (reuse the same Calendar + hour/minute pattern from `SchedulePopover`)
-3. On confirm, clone the post into a new `social_posts` row with:
-   - Same `title`, `content`, `image_url`, `cover_image_url`, `hashtags`, `platform`, `page_name`, `content_type`, `user_id`
-   - New `scheduled_date` from the picker
-   - `status: "scheduled"`, `qa_status: "needs_review"`, `neel_approved: false`
-4. Show toast on success: "Post reposted to {date}"
-5. Import `Copy` icon from lucide-react for the button
+**File**: `src/types/adDirector.ts` — Add the missing model to `AVAILABLE_MODELS`:
 
-### UI
-
-```text
-[ Auto Generate Story ]  [ 📋 Repost ]
+```typescript
+{ id: "google/gemini-2.5-flash-image", label: "Gemini 2.5 Flash Image", category: "vision" },
 ```
 
-Clicking "Repost" opens an inline popover with:
-- Calendar date picker
-- Hour + minute selects
-- "Confirm Repost" button
+This adds it to the AI Engine dropdown in AdvancedModelSettings automatically (no other file changes needed).
+
+### Note on Image Generation Models
+
+`gemini-2.5-flash-image`, `gemini-3-pro-image-preview`, and `gemini-3.1-flash-image-preview` are **image generation** models. They're listed for completeness but are primarily useful for the Ad Director's visual asset generation, not standard text LLM tasks.
 
 ### Files Changed
 
 | File | Change | Category |
 |---|---|---|
-| `src/components/social/PostReviewPanel.tsx` | Add Repost button + date popover + clone logic | Safe additive |
-
-### What is NOT changed
-- No schema changes (uses existing columns)
-- No edge function changes
-- Original post is untouched — pure clone operation
+| `src/types/adDirector.ts` | Add 1 missing model entry | Safe additive |
 
