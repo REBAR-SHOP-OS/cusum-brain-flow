@@ -229,6 +229,53 @@ async function _logUsage(
   });
 }
 
+async function _logExecution(
+  requestId: string,
+  provider: AIProvider,
+  model: string,
+  status: string,
+  usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined,
+  opts: AIRequestOptions,
+  latencyMs: number,
+  executionPath: string,
+  errorMessage?: string,
+  httpStatus?: number,
+) {
+  // Feature-flag gated — default OFF
+  const raw = Deno.env.get("ENABLE_AI_OBSERVABILITY");
+  if (!raw || !["true", "1", "yes", "on"].includes(raw.trim().toLowerCase())) return;
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) return;
+
+  await fetch(`${url}/rest/v1/ai_execution_log`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      request_id: requestId,
+      provider,
+      model,
+      agent_name: opts.agentName || null,
+      company_id: opts.companyId || null,
+      user_id: opts.userId || null,
+      status,
+      http_status: httpStatus || null,
+      latency_ms: latencyMs,
+      prompt_tokens: usage?.prompt_tokens || 0,
+      completion_tokens: usage?.completion_tokens || 0,
+      total_tokens: usage?.total_tokens || 0,
+      execution_path: executionPath,
+      error_message: errorMessage || null,
+    }),
+  });
+}
+
 export class AIError extends Error {
   status: number;
   constructor(message: string, status: number) {

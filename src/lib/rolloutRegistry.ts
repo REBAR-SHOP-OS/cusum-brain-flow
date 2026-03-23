@@ -75,4 +75,18 @@ export const rolloutRegistry: RolloutEntry[] = [
     createdAt: "2026-03-23",
     notes: "All handleRequest-adopted functions use ctx.log (structuredLog). 10 functions active.",
   },
+  {
+    flagKey: "enable_ai_observability",
+    owner: "platform",
+    domain: "infra",
+    description: "Shadow telemetry for AI calls — logs request_id, latency, status, execution_path to ai_execution_log",
+    targetRoles: [],
+    targetUserIds: [],
+    phase: "off",
+    status: "active",
+    rollbackSteps: "Set ENABLE_AI_OBSERVABILITY=false or remove env var. No data migration needed.",
+    dependencies: [],
+    createdAt: "2026-03-23",
+    notes: "Phase 1 of AI architecture migration. Fire-and-forget, zero behavior change. Enable for super admins first.",
+  },
 ];
