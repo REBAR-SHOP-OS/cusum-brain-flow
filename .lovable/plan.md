@@ -1,60 +1,72 @@
 
 
-## Fix: Ensure Story Content Type is Reliably Published as Story
+## Fix: Auto-Publish Unapproved Posts After Midnight Deadline
 
-### Analysis Summary
+### Problem
 
-After thorough code audit, the entire publish pipeline for Instagram stories is **structurally correct**:
-- Frontend passes `content_type: localContentType` to `usePublishPost`
-- `usePublishPost` sends `content_type` to the edge function
-- Edge function parses it, passes to `publishToInstagram`
-- `publishToInstagram` sets `media_type: "STORIES"` when `contentType === "story"`
+The cron publisher (`social-cron-publish`) only publishes posts where `neel_approved = true`. If Neel forgets to approve a scheduled post, it stays stuck forever. The business rule is: **if a post's scheduled date has passed midnight and Neel hasn't approved it, auto-publish it anyway**.
 
-The most likely cause of the reported issue is a **timing/state problem**: the `content_type` was either not yet saved or was "post" when the publish was triggered, and was changed to "story" afterward.
+### Root Cause
 
-### Root Cause: No Pre-Publish Content Type Sync
+Two gates block unapproved posts:
+1. `social-cron-publish/index.ts` line 72: `.eq("neel_approved", true)` — skips unapproved posts entirely
+2. `social-publish/index.ts` line 139: hard gate that returns 403 if `!neel_approved`
 
-When the user clicks "Publish Now", the code uses `localContentType` from React state. However:
-1. There is no explicit `await` to ensure the DB `content_type` matches before the edge function call
-2. If `content_type` was changed and the DB update failed silently, the post could be published correctly (via local state) but the DB would still show `content_type: "post"`
-3. More critically: if the page refreshed or the review panel was reopened before publishing, `localContentType` reinitializes from `post.content_type` (DB value), which might still be "post"
+Both need a deadline-based bypass.
 
 ### Fix (2 files, minimal)
 
-**Patch 1: `src/components/social/PostReviewPanel.tsx`**
+**Patch 1: `supabase/functions/social-cron-publish/index.ts`**
 
-Add a defensive `content_type` sync to DB **before** the publish call in the "Publish Now" button handler (~line 969). Before building combos, ensure the DB has the correct content_type:
+After the existing query for approved posts (line 68-75), add a second query for **overdue unapproved posts**:
 
 ```typescript
-// Defensive: sync content_type to DB before publish
-await supabase
+// Auto-publish overdue unapproved posts (deadline: midnight of scheduled day)
+const midnightCutoff = new Date();
+midnightCutoff.setUTCHours(0, 0, 0, 0); // start of today UTC
+
+const { data: overduePosts } = await supabase
   .from("social_posts")
-  .update({ content_type: localContentType })
-  .eq("id", post.id);
+  .select("*")
+  .eq("status", "scheduled")
+  .eq("neel_approved", false)
+  .lt("scheduled_date", midnightCutoff.toISOString())  // scheduled before today
+  .order("scheduled_date", { ascending: true })
+  .limit(20);
 ```
 
-This is a single extra update that ensures DB and UI state are synchronized before the publish edge function fires.
+If overdue posts are found:
+- Auto-set `neel_approved = true` on each (so it passes the publish gate)
+- Merge them into the `duePosts` array for normal publishing
+- Log clearly: `[social-cron-publish] Auto-approving overdue post {id} — Neel deadline passed`
+
+Also update the second query (line 103-110) to include the same pattern.
 
 **Patch 2: `supabase/functions/social-publish/index.ts`**
 
-Add a log line after parsing to show exactly what `content_type` was received:
+No change needed — the cron function sets `neel_approved = true` before publishing, so the hard gate in `social-publish` is not hit. Manual publish still requires approval (correct behavior).
 
-```typescript
-console.log(`[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`);
+### Logic Summary
+
+```text
+Cron runs → finds scheduled posts where:
+  1. neel_approved = true AND scheduled_date <= now  (existing)
+  2. neel_approved = false AND scheduled_date < midnight today  (NEW)
+     → auto-approve these, then publish normally
 ```
-
-This enables debugging future cases.
 
 ### Files Changed
 
 | File | Change | Category | Rollback |
 |---|---|---|---|
-| `src/components/social/PostReviewPanel.tsx` | Add pre-publish `content_type` DB sync | Safe additive | Remove the 3 lines |
-| `supabase/functions/social-publish/index.ts` | Add diagnostic log line | Safe additive | Remove the log line |
+| `supabase/functions/social-cron-publish/index.ts` | Add overdue unapproved post query + auto-approve | Safe additive | Remove the new query block |
 
 ### What Remains Unchanged
-- Instagram STORIES API call logic (already correct)
-- Caption stripping for stories (already correct)
-- All other publish paths
+- Manual publish still requires Neel approval (hard gate in `social-publish`)
+- Same-day scheduled posts still wait for approval until midnight
+- All existing approved-post publishing logic untouched
 - No route, schema, or UI changes
+
+### Regression Risk
+Low — only adds a new query path in the cron function. Existing approved-post flow is completely untouched.
 
