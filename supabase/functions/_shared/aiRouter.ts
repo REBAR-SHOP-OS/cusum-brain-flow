@@ -89,6 +89,11 @@ async function _callAISingle(provider: AIProvider, model: string, opts: AIReques
     temperature: opts.temperature ?? 0.5,
   };
 
+  // GPT-5 only supports temperature=1.0
+  if (model.startsWith("gpt-5")) {
+    body.temperature = 1;
+  }
+
   if (opts.maxTokens) {
     // GPT-5 requires max_completion_tokens instead of max_tokens
     if (model.startsWith("gpt-5")) {
@@ -139,7 +144,18 @@ async function _callAIStreamSingle(provider: AIProvider, model: string, opts: AI
     stream: true,
   };
 
-  if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+  // GPT-5 only supports temperature=1.0
+  if (model.startsWith("gpt-5")) {
+    body.temperature = 1;
+  }
+
+  if (opts.maxTokens) {
+    if (model.startsWith("gpt-5")) {
+      body.max_completion_tokens = opts.maxTokens;
+    } else {
+      body.max_tokens = opts.maxTokens;
+    }
+  }
   if (opts.tools?.length) body.tools = opts.tools;
   if (opts.toolChoice) body.tool_choice = opts.toolChoice;
 
