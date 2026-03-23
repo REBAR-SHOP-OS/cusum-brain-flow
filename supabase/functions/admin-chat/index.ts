@@ -1060,9 +1060,10 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
         from: e.from_address,
         to: e.to_address,
         direction: e.direction,
-        preview: e.body_preview?.slice(0, 100),
+        preview: e.body_preview?.slice(0, 500),
         urgency: e.ai_urgency,
         time: e.received_at,
+        thread_id: e.thread_id,
       }))});
     }
 
@@ -1306,19 +1307,46 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
             const outboundAddresses = new Set(emailItems.filter((e: any) => e.direction === "outbound").map((e: any) => e.to_address?.toLowerCase()));
             const unanswered = inbound.filter((e: any) => !outboundAddresses.has(e.from_address?.toLowerCase()));
 
+            // Thread grouping
+            const threadMap: Record<string, { subject: string; participants: Set<string>; count: number; latest: string; firstDirection: string; lastDirection: string; messages: any[] }> = {};
+            for (const e of emailItems) {
+              const tid = e.thread_id || e.subject || "unknown";
+              if (!threadMap[tid]) {
+                threadMap[tid] = { subject: e.subject, participants: new Set(), count: 0, latest: e.received_at, firstDirection: e.direction, lastDirection: e.direction, messages: [] };
+              }
+              const t = threadMap[tid];
+              t.count++;
+              if (e.from_address) t.participants.add(e.from_address.toLowerCase());
+              if (e.to_address) t.participants.add(e.to_address.toLowerCase());
+              if (e.received_at > t.latest) { t.latest = e.received_at; t.lastDirection = e.direction; }
+              t.messages.push(e);
+            }
+            const threads = Object.entries(threadMap).map(([tid, t]) => ({
+              threadId: tid,
+              subject: t.subject,
+              participants: [...t.participants],
+              messageCount: t.count,
+              latestTime: t.latest,
+              lastDirection: t.lastDirection,
+              needsReply: t.lastDirection === "inbound",
+            })).sort((a, b) => b.latestTime.localeCompare(a.latestTime));
+
             result.emails = {
               total: emailItems.length,
               sent: emailItems.filter((e: any) => e.direction === "outbound").length,
               received: inbound.length,
               unanswered: unanswered.length,
-              unansweredItems: unanswered.slice(0, 10).map((e: any) => ({
+              threadCount: threads.length,
+              threadsNeedingReply: threads.filter(t => t.needsReply).length,
+              threads: threads.slice(0, 30),
+              unansweredItems: unanswered.slice(0, 25).map((e: any) => ({
                 subject: e.subject, from: e.from_address, time: e.received_at, urgency: e.ai_urgency,
-                preview: e.body_preview?.slice(0, 300),
+                preview: e.body_preview?.slice(0, 800), thread_id: e.thread_id,
               })),
-              recentItems: emailItems.slice(0, 20).map((e: any) => ({
+              recentItems: emailItems.slice(0, 50).map((e: any) => ({
                 subject: e.subject, from: e.from_address, to: e.to_address,
                 direction: e.direction, time: e.received_at, urgency: e.ai_urgency, category: e.ai_category,
-                preview: e.body_preview?.slice(0, 300),
+                preview: e.body_preview?.slice(0, 800), thread_id: e.thread_id,
               })),
             };
             if (scanAll || focus === "calls") {
@@ -1471,7 +1499,60 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
           })());
         }
 
+        // 8. ORDERS
+        if (scanAll) {
+          queries.push((async () => {
+            const { data: orders } = await supabase
+              .from("orders")
+              .select("id, status, total_amount, created_at, customer_id")
+              .gte("created_at", dateFrom + "T00:00:00")
+              .lte("created_at", dateTo + "T23:59:59")
+              .limit(200);
+            const allOrders = orders || [];
+            const totalRevenue = allOrders.reduce((s: number, o: any) => s + (o.total_amount || 0), 0);
+            const byStatus: Record<string, number> = {};
+            for (const o of allOrders) byStatus[o.status || "unknown"] = (byStatus[o.status || "unknown"] || 0) + 1;
+            result.orders = { total: allOrders.length, totalRevenue: Math.round(totalRevenue * 100) / 100, byStatus };
+          })());
+        }
+
         await Promise.all(queries);
+
+        // Cross-reference emails with leads (post-processing)
+        if (scanAll && result.emails && result.pipeline) {
+          const pipeline = result.pipeline as any;
+          const emails = result.emails as any;
+          const leadEmails = new Map<string, { title: string; stage: string }>();
+          for (const l of (pipeline.topLeads || [])) {
+            if (l.contactEmail) leadEmails.set(l.contactEmail.toLowerCase(), { title: l.title, stage: l.stage });
+          }
+          // Fetch all lead contact emails for cross-ref
+          const { data: allLeadContacts } = await supabase
+            .from("leads")
+            .select("contact_email, title, stage")
+            .not("contact_email", "is", null)
+            .in("stage", ["new", "contacted", "qualified", "proposal", "negotiation"])
+            .limit(500);
+          for (const l of (allLeadContacts || [])) {
+            if (l.contact_email) leadEmails.set(l.contact_email.toLowerCase(), { title: l.title, stage: l.stage });
+          }
+          // Enrich recent emails with lead info
+          if (emails.recentItems) {
+            for (const e of emails.recentItems) {
+              const fromLead = leadEmails.get(e.from?.toLowerCase());
+              const toLead = leadEmails.get(e.to?.toLowerCase());
+              if (fromLead) e.relatedLead = fromLead;
+              else if (toLead) e.relatedLead = toLead;
+            }
+          }
+          if (emails.unansweredItems) {
+            for (const e of emails.unansweredItems) {
+              const fromLead = leadEmails.get(e.from?.toLowerCase());
+              if (fromLead) e.relatedLead = fromLead;
+            }
+          }
+        }
+
         return JSON.stringify(result);
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
