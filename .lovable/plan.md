@@ -1,58 +1,50 @@
 
-## Fix: Unit Toggle Does Not Update Line Items Table
+Root cause is now clear: the unit UI is still split across two different states.
 
-### Actual issue
-The top unit toggle changes the mapping preview, but the lower “Line Items” table still shows mm values unless the selected unit is exactly `imperial`. So `in` and `ft` do not affect the table at all, and the UI becomes inconsistent.
+1. `BarlistMappingPanel` keeps its own local `lengthUnit`
+2. `AIExtractView` line items table renders from parent `selectedUnitSystem`
+3. The parent only gets updated on `onConfirmMapping(...)`, not when the user clicks the top unit buttons
 
-### Root cause
-There are two different unit-display implementations:
+So today the top toggle can update the preview inside the mapping panel, while the line-items table continues rendering with the older parent value. That is why it still looks “the same”.
 
-1. `BarlistMappingPanel.tsx` supports all 4 source units: `mm`, `in`, `ft`, `imperial`
-2. `AIExtractView.tsx` line-items table only checks:
-   - `selectedUnitSystem === "imperial"` → format as ft-in
-   - otherwise → show raw mm
+Implementation plan
 
-That means `in` and `ft` are ignored in the results table even when selected at the top.
+1. Make the unit state single-source-of-truth in `AIExtractView`
+- Keep one shared unit state there
+- Pass it into `BarlistMappingPanel` as controlled props:
+  - `unitSystem`
+  - `onUnitSystemChange`
+- Remove the panel’s local `lengthUnit` state
 
-### Files to update
+2. Update the top toggle to drive the parent immediately
+- In `BarlistMappingPanel`, clicking `mm / in / ft / imperial` should call the parent setter directly
+- Also update `confirmedUnitRef.current` at the same time so apply/save uses the same latest unit
+- Keep the preview table using that shared value so preview and line items always stay synchronized
 
-**1) `src/components/office/AIExtractView.tsx`**
-- Replace the current binary display logic (`imperial` vs `mm`) with full 4-mode formatting:
-  - `mm` → show stored mm
-  - `in` → show inches
-  - `ft` → show feet
-  - `imperial` → show ft-in
-- Apply this consistently to:
-  - merged rows table
+3. Prevent stale session data from overriding the user’s live choice
+- In `AIExtractView`, tighten the session-sync logic so `activeSession.unit_system` only hydrates initial state when a session loads
+- After the user changes the unit manually, do not let refresh/load effects silently switch it back to the stored DB value
+
+4. Add the same visible unit control above the line-items section
+- Put a compact shared unit switch near the results table header/top area
+- Wire it to the exact same parent state
+- This makes unit switching available even after mapping is already completed
+
+5. Keep all displays tied to the same formatter
+- Continue using `formatLengthByMode(...)` and `lengthUnitLabelByMode(...)`
+- Apply the shared unit state consistently to:
+  - mapping preview
+  - merged rows
   - line items table
-  - length column header
-  - dimension columns A–R
-- Keep edit inputs stored in mm internally; only change display formatting in read mode
+  - length header
+  - dimensions A, B, C, D, E, F, G, H, J, K, O, R
 
-**2) `src/components/office/BarlistMappingPanel.tsx`**
-- Keep the existing source-unit toggle behavior
-- Align preview labels/headers with the same formatting rules used below so both sections behave identically
-
-**3) `src/lib/unitSystem.ts`**
-- Extend the shared formatting utilities so they support all units used in the extraction flow, not just metric vs imperial
-- Centralize conversion/formatting helpers here so both the preview panel and line-items table use one source of truth
-
-### Implementation approach
-- Introduce a shared formatter like:
-  - `formatLengthByMode(mm, "mm" | "in" | "ft" | "imperial")`
-  - `lengthUnitLabelByMode(...)`
-- Refactor `AIExtractView` to stop hardcoding `selectedUnitSystem === "imperial"`
-- Refactor the mapping preview to use the same helper instead of its own separate formatter
-
-### Result
-After this fix:
-- Top toggle and line items table will stay in sync
-- Selecting `Inches` shows inches everywhere
-- Selecting `Feet` shows feet everywhere
-- Selecting `Imperial (ft-in)` shows ft-in everywhere
-- Internal stored values remain mm, so data integrity is preserved
-
-### Files
+Files to update
 - `src/components/office/AIExtractView.tsx`
 - `src/components/office/BarlistMappingPanel.tsx`
-- `src/lib/unitSystem.ts`
+
+Expected result
+- Clicking the top unit buttons changes both preview and line items immediately
+- Reopening or refreshing the session does not wrongly force the table back to `mm`
+- The user can also change units directly from the line-items area
+- All views stay perfectly in sync for `mm`, `in`, `ft`, and `imperial`
