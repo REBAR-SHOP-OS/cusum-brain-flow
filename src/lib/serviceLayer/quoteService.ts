@@ -13,7 +13,7 @@ export interface QuoteListOptions {
 }
 
 export async function listQuotes(options: QuoteListOptions) {
-  let query = supabase
+  let query = (supabase as any)
     .from("quotations")
     .select("*", { count: "exact" })
     .eq("company_id", options.companyId)
@@ -35,7 +35,7 @@ export async function listQuotes(options: QuoteListOptions) {
 }
 
 export async function getQuoteById(quoteId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("quotations")
     .select("*")
     .eq("id", quoteId)
@@ -46,7 +46,7 @@ export async function getQuoteById(quoteId: string) {
 }
 
 export async function updateQuoteStatus(quoteId: string, status: string) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("quotations")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", quoteId)
