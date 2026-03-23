@@ -55,11 +55,46 @@ function getProviderConfig(provider: AIProvider): { url: string; apiKey: string 
 }
 
 export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
-  const provider = opts.provider || "gpt";
-  const model = opts.model || "gpt-4o";
+  let provider = opts.provider || "gpt";
+  let model = opts.model || "gpt-4o";
   const maxRetries = 3;
   const requestId = crypto.randomUUID().slice(0, 12);
   const callStart = performance.now();
+
+  // Phase 2: Policy-driven routing (shadow + canary)
+  if (isEnabled("ENABLE_POLICY_ROUTER_SHADOW") || isEnabled("USE_POLICY_ROUTER")) {
+    try {
+      const policyResult = await resolvePolicy(
+        opts.agentName || "",
+        typeof opts.messages?.[opts.messages.length - 1]?.content === "string"
+          ? (opts.messages[opts.messages.length - 1].content as string)
+          : "",
+        false,
+      );
+      const isMismatch = policyResult.provider !== provider || policyResult.model !== model;
+
+      // Shadow logging — log what policy would choose vs actual
+      if (isEnabled("ENABLE_POLICY_ROUTER_SHADOW")) {
+        _logExecution(
+          requestId, policyResult.provider, policyResult.model,
+          isMismatch ? "shadow-mismatch" : "shadow-match",
+          undefined, opts, 0,
+          `shadow:${policyResult.source}:${policyResult.reason}`,
+          isMismatch ? `actual=${provider}/${model} recommended=${policyResult.provider}/${policyResult.model}` : undefined,
+        ).catch(() => {});
+      }
+
+      // Canary activation — actually use policy result
+      if (isEnabled("USE_POLICY_ROUTER") && policyResult.source === "policy") {
+        provider = policyResult.provider;
+        model = policyResult.model;
+        if (policyResult.maxTokens) opts.maxTokens = opts.maxTokens || policyResult.maxTokens;
+        if (policyResult.temperature !== undefined) opts.temperature = opts.temperature ?? policyResult.temperature;
+      }
+    } catch {
+      // Policy resolution failed — continue with original provider/model
+    }
+  }
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
