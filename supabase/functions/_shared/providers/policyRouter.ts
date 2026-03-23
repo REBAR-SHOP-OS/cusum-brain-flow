@@ -133,9 +133,17 @@ export async function resolvePolicy(
   historyLength = 0,
 ): Promise<PolicyResult> {
   try {
-    const policies = await fetchPolicies();
+    const [policies, healthyProviders] = await Promise.all([
+      fetchPolicies(),
+      fetchHealthyProviders(),
+    ]);
 
     for (const policy of policies) {
+      // Skip unhealthy providers if health data is available
+      if (healthyProviders.size > 0 && !healthyProviders.has(policy.provider)) {
+        continue;
+      }
+
       if (matchesPolicy(policy, agent, message, hasAttachments)) {
         return {
           provider: policy.provider as AIProvider,
