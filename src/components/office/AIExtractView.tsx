@@ -1686,6 +1686,12 @@ export function AIExtractView() {
               sessionId={activeSession.id}
               onConfirmMapping={handleMappingConfirmed}
               disabled={processing}
+              unitSystem={selectedUnitSystem as any}
+              onUnitSystemChange={(unit) => {
+                userSetUnitRef.current = true;
+                confirmedUnitRef.current = unit;
+                setSelectedUnitSystem(unit);
+              }}
             />
           ) : (
             <Card className="border-yellow-500/30 bg-yellow-500/5">
@@ -1975,6 +1981,27 @@ export function AIExtractView() {
                     {activeRows.length} Line Items{mergedRows.length > 0 ? ` (${mergedRows.length} merged)` : ""}
                   </span>
                   <div className="flex items-center gap-2">
+                    {/* Unit toggle */}
+                    <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border">
+                      {(["mm", "in", "ft", "imperial"] as const).map(u => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => {
+                            userSetUnitRef.current = true;
+                            confirmedUnitRef.current = u;
+                            setSelectedUnitSystem(u);
+                          }}
+                          className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${
+                            selectedUnitSystem === u
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground hover:bg-background/60"
+                          }`}
+                        >
+                          {u === "imperial" ? "ft-in" : u}
+                        </button>
+                      ))}
+                    </div>
                     {!isEditing ? (
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={startEditing}>
                         <Pencil className="w-3 h-3" /> Edit Rows
