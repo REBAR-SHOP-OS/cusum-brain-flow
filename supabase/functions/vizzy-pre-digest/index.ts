@@ -104,8 +104,21 @@ YOUR JOB: Take the raw ERP data and previous benchmarks, and produce TWO outputs
 ═══ OUTPUT 1: DIGESTED INTELLIGENCE (for the voice session) ═══
 Convert all the raw data into a pre-analyzed, ready-to-speak format. Vizzy should be able to answer ANY question by reading this — no searching needed.
 
+CRITICAL TIME RULES:
+- Clearly separate TODAY's data from HISTORICAL data
+- For each employee, check if they have ANY activity TODAY (clock-in, calls, emails, page views, AI sessions)
+- If an employee has ZERO activity today, list them in the ABSENT EMPLOYEES section
+- NEVER mix previous days' call notes or activity with today's report
+
 Structure it as:
-1. [FACTS] block — copy verbatim from raw data
+
+═══ TODAY ONLY (do NOT mix with previous days) ═══
+
+0. ABSENT EMPLOYEES — List every employee with ZERO activity today:
+   Format: "❌ ABSENT: [Name] — No clock-in, no calls, no emails, no system activity today. DO NOT report any activity for this person today."
+   This section is CRITICAL for voice mode to avoid fabricating activity for absent staff.
+
+1. [FACTS] block — copy verbatim from raw data (TODAY ONLY)
 2. MOTIVATIONAL OPENER — a warm, genuine good morning message with something uplifting (a quote, encouragement based on yesterday's wins, or a personal observation). Make it feel human, not corporate.
 3. TODAY'S PULSE — 3-4 sentence executive summary of the day's state
 4. NOTABLE CHANGES — what's different from previous benchmarks (up/down trends, new patterns)
