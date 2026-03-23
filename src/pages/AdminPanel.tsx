@@ -357,6 +357,14 @@ export default function AdminPanel() {
           <FieldAuditTrailView />
         </ScrollArea>
       </TabsContent>
+
+      <TabsContent value="feature-flags" className="flex-1 mt-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-6 max-w-5xl mx-auto">
+            <FeatureFlagAdmin />
+          </div>
+        </ScrollArea>
+      </TabsContent>
     </Tabs>
   );
 }
