@@ -72,6 +72,10 @@ export function AdDirectorContent() {
   }, [savedBrand, brandLoading]);
 
   // ─── Full Pipeline: prompt → analyze → generate → result ───
+  // Keep a ref to always have the latest clips (avoids stale closure in export)
+  const clipsRef = useRef<ClipOutput[]>([]);
+  useEffect(() => { clipsRef.current = clips; }, [clips]);
+
   const handleSubmit = useCallback(async (prompt: string, ratio: string, images: File[], introImage: File | null, outroImage: File | null, duration: string) => {
     setUserPrompt(prompt);
     setUserRatio(ratio);
@@ -371,7 +375,8 @@ export function AdDirectorContent() {
       // Wait for clips state to settle
       await new Promise(r => setTimeout(r, 500));
       
-      const completedClips = clips.filter(c => c.status === "completed" && c.videoUrl);
+      const latestClips = clipsRef.current;
+      const completedClips = latestClips.filter(c => c.status === "completed" && c.videoUrl);
       if (completedClips.length === 0) {
         console.warn("No completed clips for export");
         return;
@@ -379,7 +384,7 @@ export function AdDirectorContent() {
 
       const orderedClips = useSb
         .map(scene => {
-          const clip = clips.find(c => c.sceneId === scene.id);
+          const clip = latestClips.find(c => c.sceneId === scene.id);
           const segment = useSegs.find(s => s.id === scene.segmentId);
           const targetDur = segment ? segment.endTime - segment.startTime : 5;
           return clip?.status === "completed" && clip.videoUrl
@@ -415,20 +420,21 @@ export function AdDirectorContent() {
     } finally {
       setExporting(false);
     }
-  }, [clips, storyboard, segments, brand, musicTrackUrl]);
+  }, [storyboard, segments, brand, musicTrackUrl]);
 
   // ─── Export (user-triggered from editor) ──────────────
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
-      const completedClips = clips.filter(c => c.status === "completed" && c.videoUrl);
+      const latestClips = clipsRef.current;
+      const completedClips = latestClips.filter(c => c.status === "completed" && c.videoUrl);
       if (completedClips.length === 0) throw new Error("No clips to export");
 
       toast({ title: "Assembling ad..." });
 
       const orderedClips = storyboard
         .map(scene => {
-          const clip = clips.find(c => c.sceneId === scene.id);
+          const clip = latestClips.find(c => c.sceneId === scene.id);
           const segment = segments.find(s => s.id === scene.segmentId);
           const targetDur = segment ? segment.endTime - segment.startTime : 5;
           return clip?.status === "completed" && clip.videoUrl
