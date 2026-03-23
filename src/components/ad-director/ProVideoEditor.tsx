@@ -92,10 +92,6 @@ export function ProVideoEditor({
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
-  const [fadeIn, setFadeIn] = useState(0);
-  const [fadeOut, setFadeOut] = useState(0);
-  const [speed, setSpeed] = useState(1);
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
