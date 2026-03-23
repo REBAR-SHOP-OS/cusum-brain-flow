@@ -84,7 +84,7 @@ export default function ConnectionsAudit() {
 
   // Load integration_connections from DB
   const loadDbConnections = useCallback(async () => {
-    const { data } = await supabase.from("integration_connections").select("integration_id, last_sync_at, error_message, status");
+    const { data } = await supabase.from("integration_connections").select("integration_id, last_sync_at, error_message, status").limit(200);
     if (data) {
       const map: typeof dbConnections = {};
       data.forEach((c) => {
