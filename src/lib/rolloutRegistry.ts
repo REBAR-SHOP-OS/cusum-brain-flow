@@ -11,9 +11,11 @@ export interface RolloutEntry {
   targetRoles: string[];
   targetUserIds: string[];
   phase: "off" | "canary" | "percentage" | "ga";
+  status: "active" | "disabled" | "deprecated";
   rollbackSteps: string;
   dependencies: string[];
   createdAt: string;
+  notes?: string;
 }
 
 export const rolloutRegistry: RolloutEntry[] = [
@@ -25,9 +27,11 @@ export const rolloutRegistry: RolloutEntry[] = [
     targetRoles: [],
     targetUserIds: [],
     phase: "off",
+    status: "disabled",
     rollbackSteps: "Revert edge function to direct auth/company pattern. No DB changes needed.",
     dependencies: [],
     createdAt: "2026-03-23",
+    notes: "Wave 1 scaffolding complete. First adoption candidate: build-learning-pairs.",
   },
   {
     flagKey: "use_new_quote_engine",
@@ -37,9 +41,11 @@ export const rolloutRegistry: RolloutEntry[] = [
     targetRoles: ["admin", "sales"],
     targetUserIds: [],
     phase: "off",
+    status: "disabled",
     rollbackSteps: "Revert quote components to direct supabase queries. No data migration needed.",
     dependencies: ["use_new_request_handler"],
     createdAt: "2026-03-23",
+    notes: "Depends on requestHandler adoption. Read wrapper exists, write wrapper not yet.",
   },
   {
     flagKey: "use_new_pipeline_ui",
@@ -49,9 +55,11 @@ export const rolloutRegistry: RolloutEntry[] = [
     targetRoles: ["admin", "sales"],
     targetUserIds: [],
     phase: "off",
+    status: "disabled",
     rollbackSteps: "Toggle flag off. Old pipeline components remain in place.",
     dependencies: [],
     createdAt: "2026-03-23",
+    notes: "UI-only change. No backend dependency.",
   },
   {
     flagKey: "use_structured_logging",
@@ -61,8 +69,10 @@ export const rolloutRegistry: RolloutEntry[] = [
     targetRoles: [],
     targetUserIds: [],
     phase: "off",
+    status: "disabled",
     rollbackSteps: "Toggle flag off. Functions fall back to console.log.",
     dependencies: [],
     createdAt: "2026-03-23",
+    notes: "structuredLog.ts helper ready. No functions adopted yet.",
   },
 ];

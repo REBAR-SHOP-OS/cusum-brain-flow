@@ -66,14 +66,25 @@ serve(async (req) => {
     return `auth service ok, ${data.users.length} user(s) sampled`;
   });
 
+  await runCheck("auth_user_shape", async () => {
+    const { data, error } = await admin.auth.admin.listUsers({ perPage: 1 });
+    if (error) throw error;
+    if (!data.users || data.users.length === 0) return "no users to validate shape";
+    const user = data.users[0];
+    const requiredKeys = ["id", "email", "created_at"];
+    const missing = requiredKeys.filter((k) => !(k in user));
+    if (missing.length > 0) throw new Error(`Missing user fields: ${missing.join(", ")}`);
+    return `user shape valid: id=${user.id?.substring(0, 8)}…`;
+  });
+
   await runCheck("quote_response_shape", async () => {
-    const { data, error } = await admin.from("quotations").select("id, company_id, status, created_at").limit(1).maybeSingle();
+    const { data, error } = await admin.from("quotations").select("id, company_id, status, created_at, total_amount").limit(1).maybeSingle();
     if (error) throw error;
     if (!data) return "no quotations to validate shape";
-    const requiredKeys = ["id", "company_id", "status", "created_at"];
+    const requiredKeys = ["id", "company_id", "status", "created_at", "total_amount"];
     const missing = requiredKeys.filter((k) => !(k in data));
     if (missing.length > 0) throw new Error(`Missing keys: ${missing.join(", ")}`);
-    return "shape valid: id, company_id, status, created_at";
+    return "shape valid: id, company_id, status, created_at, total_amount";
   });
 
   await runCheck("order_response_shape", async () => {
@@ -100,6 +111,26 @@ serve(async (req) => {
     if (!data) return "no roles to validate";
     if (!("role" in data)) throw new Error("Missing role field");
     return `role lookup ok, sample role: ${data.role}`;
+  });
+
+  await runCheck("audit_write_safe", async () => {
+    // Insert a harmless probe row, then immediately delete it
+    const { data: firstCompany } = await admin.from("companies").select("id").limit(1).maybeSingle();
+    if (!firstCompany?.id) return "skipped — no company for probe";
+    const probeId = crypto.randomUUID();
+    const { error: insertErr } = await admin.from("activity_events").insert({
+      id: probeId,
+      company_id: firstCompany.id,
+      entity_type: "smoke-test-probe",
+      entity_id: "probe",
+      event_type: "audit",
+      description: "Smoke test audit probe — safe to delete",
+      source: "smoke-tests",
+    });
+    if (insertErr) throw new Error(`Audit insert failed: ${insertErr.message}`);
+    // Best-effort cleanup
+    await admin.from("activity_events").delete().eq("id", probeId);
+    return "audit write + cleanup ok";
   });
 
   // --- Audit: log smoke test execution ---
