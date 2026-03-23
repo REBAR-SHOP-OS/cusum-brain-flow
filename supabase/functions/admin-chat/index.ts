@@ -30,6 +30,7 @@ const WRITE_TOOLS = new Set([
   "rc_make_call",
   "rc_send_sms",
   "rc_send_fax",
+  "send_email",
 ]);
 
 const JARVIS_TOOLS = [
