@@ -1,60 +1,84 @@
 
 
-## Enhance Deep Business Scan — Full Email Intelligence + Project Correlation
+## Add `investigate_entity` Tool + Enhanced Intelligence Protocol
 
-### Problem
+### What This Does
 
-The current `deep_business_scan` tool has three limitations that prevent Vizzy from truly "understanding" the business:
+Adds a powerful cross-domain search tool that lets Vizzy investigate any project, customer, person, or keyword across ALL business data — emails, pipeline, orders, calls, production, financials, deliveries, and QuickBooks records. Also enhances Vizzy's system prompt to proactively plan next day and always use real tools before answering.
 
-1. **Email previews truncated to 300 chars** — not enough to understand content
-2. **No thread grouping** — emails about the same project/topic aren't correlated
-3. **No cross-domain linking** — emails aren't connected to their related leads, orders, or customers
-4. **`get_employee_emails` only shows 100 chars** — even less useful
+### File: `supabase/functions/admin-chat/index.ts`
 
-### Enhancements (1 file)
+---
 
-**File**: `supabase/functions/admin-chat/index.ts`
+### Change 1: Tool Definition (after line 663, before closing `]`)
 
-#### Fix 1: Increase email preview lengths
+New `investigate_entity` tool in `JARVIS_TOOLS`:
+- `query` (required) — keyword to search (e.g. "Construction Point", "Neel", "BMO")
+- `date_from` / `date_to` (optional)
+- `include` (optional array: customers, leads, orders, emails, activity, deliveries, production, financials, calls)
 
-- In `deep_business_scan` handler: increase `body_preview` slice from 300 → 800 chars for both `unansweredItems` and `recentItems`
-- In `get_employee_emails` handler (line 1063): increase from 100 → 500 chars
-- Return more emails: increase `recentItems` from 20 → 50, `unansweredItems` from 10 → 25
+### Change 2: Handler (before `default:` at line 1560)
 
-#### Fix 2: Group emails by thread
+Two-pass search:
 
-In the emails section of `deep_business_scan`, after collecting emails, group by `thread_id` to show conversation threads:
-- Group emails sharing the same `thread_id`
-- For each thread: show subject, participants, message count, latest message time, direction flow (who replied to whom)
-- This lets Vizzy see "this thread has 5 messages between us and XYZ Company, last reply was from them 2 days ago — unanswered"
+**Pass 1 — Parallel identity resolution:**
+- `customers` → ilike name/company_name
+- `leads` → ilike title/contact_name/description  
+- `communications` → ilike subject/body_preview/from_address/to_address (limit 100, 800-char previews)
+- `activity_events` → ilike description (limit 100)
+- `deliveries` → ilike delivery_number/notes
+- `cut_plans` → ilike name
+- `accounting_mirror` → search data JSONB for customer/vendor name match
+- RingCentral calls → filter from communications where source=ringcentral and addresses match query
 
-#### Fix 3: Cross-reference emails with leads/customers
+**Pass 2 — Cross-reference:**
+- Use matched customer IDs to pull their orders
+- Use matched lead contact emails to pull additional communications
+- Group communications by `thread_id` for conversation view
+- Pull QuickBooks invoices/bills from `accounting_mirror` matching customer names
+- Return unified report with counts + details per domain
 
-After collecting emails and pipeline data (when `focus === "all"`):
-- Match email addresses from communications against `contact_email` in leads
-- Flag emails that are from/to active lead contacts
-- Add `relatedLead` field to email items showing the lead title + stage
+### Change 3: System Prompt Enhancement (after line 2145)
 
-#### Fix 4: Add `orders` to the scan
+Add to capabilities and tool usage rules:
 
-Currently missing — add an orders query when `scanAll`:
-- Query `orders` table for the date range
-- Show order count, total revenue, status breakdown
-- Cross-reference customer emails with order contacts
+```text
+DEEP INVESTIGATION:
+- investigate_entity: Search ANY project, customer, or keyword across ALL data
+- deep_business_scan: Broad multi-day business audit across all domains
+- ALWAYS use investigate_entity when asked about a specific project/customer/person
+- ALWAYS use deep_business_scan when asked for broad business overview
 
-### Technical Detail
+NEXT DAY PLANNING:
+- When greeting CEO or at end of day, proactively plan tomorrow
+- Use deep_business_scan to identify: pending deliveries, overdue invoices, hot leads, scheduled production
+- Present as prioritized action list
 
-All changes are within the existing `case "deep_business_scan"` handler. The thread grouping is a post-processing step on the already-fetched email data. The cross-referencing uses leads data already fetched by the pipeline query. No new DB queries beyond the orders query.
+INTEGRATION AWARENESS:
+- Use ALL available tools to gather real data — NEVER fabricate
+- If a tool returns empty/error, say so explicitly — NEVER hallucinate content
+- Call investigate_entity or deep_business_scan BEFORE answering questions about projects or operations
+```
+
+Add `investigate_entity` and `deep_business_scan` to the tool usage rules list (line 2140-2141).
+
+### Change 4: Progress Labels (line 2291)
+
+Add:
+- `investigate_entity: "investigating entity"`
+- `deep_business_scan: "scanning business"`
+
+---
 
 ### Files Changed
 
 | File | Change | Category |
 |---|---|---|
-| `supabase/functions/admin-chat/index.ts` | Enhance deep scan: longer previews, thread grouping, cross-references, orders | Safe edit (same handler) |
+| `supabase/functions/admin-chat/index.ts` | Tool def + handler + prompt + progress labels | Safe additive |
 
-### What is NOT changed
-- Tool parameters unchanged
+### What is NOT Changed
+- `deep_business_scan` handler unchanged
 - No schema changes
 - No new edge functions
-- Other tools unaffected
+- Existing tools unaffected
 
