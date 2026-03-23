@@ -128,11 +128,12 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             results.tasks++;
           } else if (actionData.type === "batch_create_tasks") {
             results.tasks += data?.created_count || actionData.tasks?.length || 0;
+          } else if (actionData.type === "create_notifications") {
+            results.tasks += actionData.items?.length || 1;
           } else if (actionData.type === "send_email") {
             results.emails++;
-          } else if (actionData.type === "generate_agent_fix") {
-            // Agent fix generates a Lovable command — handled via transcript display
-            results.other++;
+          } else if (actionData.type === "rc_send_sms") {
+            results.emails++;
           } else {
             results.other++;
           }
