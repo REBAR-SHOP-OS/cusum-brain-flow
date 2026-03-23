@@ -58,28 +58,7 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
-/** Format a dimension value (always stored in mm in DB) for display.
- *  For imperial: converts mm → inches first, then formats as ft-in. */
-function formatDimForDisplay(val: number | null | undefined, unitSystem: string): string {
-  if (val == null || val === 0) return "";
-  const rounded = Math.round(val);
-  if (unitSystem === "imperial") {
-    const totalInches = rounded / 25.4; // mm → inches
-    const feet = Math.floor(totalInches / 12);
-    const rawInches = totalInches % 12;
-    const eighths = Math.round(rawInches * 8);
-    const wholeInches = Math.floor(eighths / 8);
-    const remainderEighths = eighths % 8;
-    const fractionMap: Record<number, string> = {
-      0: "", 1: "⅛", 2: "¼", 3: "⅜", 4: "½", 5: "⅝", 6: "¾", 7: "⅞",
-    };
-    const frac = fractionMap[remainderEighths] || "";
-    if (feet === 0) return `${wholeInches}${frac}"`;
-    if (wholeInches === 0 && !frac) return `${feet}'-0"`;
-    return `${feet}'-${wholeInches}${frac}"`;
-  }
-  return String(rounded);
-}
+import { formatLengthByMode, lengthUnitLabelByMode, type LengthDisplayMode } from "@/lib/unitSystem";
 
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
   const [showRetry, setShowRetry] = useState(false);
