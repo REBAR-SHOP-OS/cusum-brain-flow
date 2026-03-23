@@ -54,16 +54,20 @@ export function LiveTranscript({
                 {t.isTranslating ? (
                   <span className="text-xs text-muted-foreground italic animate-pulse">translating…</span>
                 ) : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-sm text-foreground cursor-help">
-                        {t.englishText || t.translatedText || ""}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs">
-                      <p className="text-xs font-mono text-muted-foreground">Raw: {t.text}</p>
-                    </TooltipContent>
-                  </Tooltip>
+                  t.englishText ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-sm text-foreground cursor-help">
+                          {t.englishText}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-xs font-mono text-muted-foreground">Raw: {t.text}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )
                 )}
               </div>
             </div>
