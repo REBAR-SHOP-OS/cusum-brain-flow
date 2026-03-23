@@ -76,7 +76,7 @@ serve(async (req) => {
   const serviceClient = createClient(supabaseUrl, serviceKey);
 
   // ---------- Admin check ----------
-  // user_roles is linked by profile.id, not auth user id
+  // user_roles.user_id maps to auth.users.id (NOT profiles.id)
   const { data: profileRow } = await serviceClient
     .from("profiles")
     .select("id")
