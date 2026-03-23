@@ -2961,6 +2961,8 @@ function buildActionDescription(tool: string, args: any): string {
       return `Send SMS to ${args.to}: "${(args.text || "").slice(0, 50)}${(args.text || "").length > 50 ? "..." : ""}"`;
     case "rc_send_fax":
       return `Send fax to ${args.to}${args.cover_page_text ? ` — "${args.cover_page_text.slice(0, 40)}"` : ""}`;
+    case "send_email":
+      return `Send email to ${args.to}: "${(args.subject || "").slice(0, 50)}${(args.subject || "").length > 50 ? "..." : ""}"`;
     default:
       return `Execute ${tool}`;
   }
