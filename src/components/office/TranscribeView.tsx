@@ -148,9 +148,6 @@ export function TranscribeView() {
   const [sourceLang, setSourceLang] = useState("auto");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(CONVERSATION_SPEAKERS[0].name);
   const [translationLang, setTranslationLang] = useState("fa");
-  const [translationMap, setTranslationMap] = useState<Record<string, string>>({});
-  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
-  const translatedForLangRef = useRef<string>("fa");
   const [formality, setFormality] = useState("neutral");
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
