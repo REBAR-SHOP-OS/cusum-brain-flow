@@ -30,6 +30,7 @@ const WRITE_TOOLS = new Set([
   "rc_make_call",
   "rc_send_sms",
   "rc_send_fax",
+  "send_email",
 ]);
 
 const JARVIS_TOOLS = [
@@ -639,6 +640,26 @@ const JARVIS_TOOLS = [
           cover_page_text: { type: "string", description: "Cover page text for the fax" },
         },
         required: ["to"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ─── Email Send Tool ───
+  {
+    type: "function",
+    function: {
+      name: "send_email",
+      description: "Send an email via Gmail on behalf of the CEO. Use when the CEO says 'send', 'email them', or 'send that email'. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Recipient email address" },
+          subject: { type: "string", description: "Email subject line" },
+          body: { type: "string", description: "Email body (HTML supported)" },
+          threadId: { type: "string", description: "Optional Gmail thread ID to reply in an existing thread" },
+          replyToMessageId: { type: "string", description: "Optional Gmail message ID to set In-Reply-To header" },
+        },
+        required: ["to", "subject", "body"],
         additionalProperties: false,
       },
     },
@@ -2173,6 +2194,29 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       return { success: true, message: `Fax sent to ${args.to}`, faxId: data.id, status: data.messageStatus };
     }
 
+    // ─── Email Send ───
+    case "send_email": {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const resp = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: args.to,
+          subject: args.subject,
+          body: args.body,
+          threadId: args.threadId,
+          replyToMessageId: args.replyToMessageId,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`Email send failed: ${data?.error || JSON.stringify(data)}`);
+      return { success: true, message: `Email sent to ${args.to}`, messageId: data.messageId || data.id, threadId: data.threadId };
+    }
+
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
   }
@@ -2440,6 +2484,10 @@ RINGCENTRAL TELEPHONY:
 - Send faxes (rc_send_fax)
 - Check active/live calls in real-time (rc_get_active_calls)
 - View team presence/DND/availability status (rc_get_team_presence)
+
+EMAIL:
+- Send emails directly via send_email tool — NEVER say "I can't send emails"
+- When the CEO says "send", "send it", "email them" — use send_email immediately
 - Pull call analytics with per-employee breakdowns (rc_get_call_analytics)
 
 PERSONAL:
@@ -2498,7 +2546,7 @@ Every recommendation must include: data sources used, reasoning logic, risk asse
 
 ═══ TOOL USAGE RULES ═══
 - You have READ tools (list_machines, list_deliveries, list_orders, list_leads, get_stock_levels, rc_get_active_calls, rc_get_team_presence, rc_get_call_analytics, deep_business_scan, investigate_entity) that execute immediately and return structured JSON.
-- You have WRITE tools (update_machine_status, update_delivery_status, update_lead_status, update_cut_plan_status, create_event, rc_make_call, rc_send_sms, rc_send_fax) that require user confirmation before executing.
+- You have WRITE tools (update_machine_status, update_delivery_status, update_lead_status, update_cut_plan_status, create_event, rc_make_call, rc_send_sms, rc_send_fax, send_email) that require user confirmation before executing.
 - ALWAYS use read tools to retrieve current entity IDs before performing write operations. Never assume or hallucinate entity IDs.
 - For write operations: call the write tool directly. Do NOT ask for confirmation in text — the system handles confirmation automatically via UI.
 - If an entity is ambiguous (e.g. "that machine"), ask for clarification BEFORE calling a tool.
@@ -2917,6 +2965,8 @@ function buildActionDescription(tool: string, args: any): string {
       return `Send SMS to ${args.to}: "${(args.text || "").slice(0, 50)}${(args.text || "").length > 50 ? "..." : ""}"`;
     case "rc_send_fax":
       return `Send fax to ${args.to}${args.cover_page_text ? ` — "${args.cover_page_text.slice(0, 40)}"` : ""}`;
+    case "send_email":
+      return `Send email to ${args.to}: "${(args.subject || "").slice(0, 50)}${(args.subject || "").length > 50 ? "..." : ""}"`;
     default:
       return `Execute ${tool}`;
   }
