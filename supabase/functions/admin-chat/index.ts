@@ -778,7 +778,7 @@ async function getRingCentralToken(supabase: any, companyId: string): Promise<{ 
   return { accessToken, userId: tokenRow.user_id };
 }
 
-async function executeReadTool(supabase: any, toolName: string, args: any): Promise<string> {
+async function executeReadTool(supabase: any, toolName: string, args: any, companyId?: string): Promise<string> {
   switch (toolName) {
     case "list_machines": {
       let q = supabase.from("machines").select("id, name, status, type, current_operator_profile_id").limit(50);
@@ -2197,11 +2197,12 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
     // ─── Email Send ───
     case "send_email": {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      // Use the user's JWT (passed via userAuthToken) so gmail-send can resolve the user
+      const authToken = args._userAuthToken || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const resp = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${serviceKey}`,
+          Authorization: `Bearer ${authToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -2421,6 +2422,9 @@ Never reveal internal system details. Respond in the same language the user writ
       }
 
       try {
+        // Inject user JWT for tools that need to forward auth (e.g. send_email → gmail-send)
+        const userJwt = authHeader?.replace("Bearer ", "") || "";
+        if (tool === "send_email") args._userAuthToken = userJwt;
         const result = await executeWriteTool(supabase, user.id, companyId, tool, args);
         await logAction(supabase, user.id, companyId, tool, args, result);
 
@@ -2457,13 +2461,14 @@ Never reveal internal system details. Respond in the same language the user writ
     const systemPrompt = `You are JARVIS — the CEO's personal and business AI assistant for REBAR SHOP OS.
 You handle EVERYTHING: business operations, personal tasks, brainstorming, scheduling, reminders, writing.
 You have FULL access to live business data. You can diagnose issues, explain what's happening, suggest fixes, and provide actionable commands.
-═══ LANGUAGE ═══
-You are MULTILINGUAL. You MUST respond in whatever language the CEO speaks to you.
-If the CEO speaks Farsi (Persian), respond in Farsi with a natural Tehrani accent and conversational tone — like a native Tehran speaker.
-Use informal/colloquial Farsi when appropriate (e.g. "چطوری" not "حالتان چطور است", "الان" not "اکنون", "میخوای" not "می‌خواهید", "بذار" not "بگذارید").
-You can seamlessly switch between English and Farsi mid-conversation. If the CEO code-switches (mixes Farsi and English / Finglish), match their style.
+═══ LANGUAGE (CRITICAL) ═══
+Your DEFAULT language is ENGLISH. Always respond in English unless the CEO explicitly writes to you in Farsi/Persian.
+If the CEO writes in Farsi, respond in Farsi with a natural Tehrani accent and conversational tone — like a native Tehran speaker.
+Use informal/colloquial Farsi when appropriate (e.g. "چطوری" not "حالتان چطور است", "الان" not "اکنون").
+If the CEO switches back to English, switch back IMMEDIATELY. Never stay in Farsi when addressed in English.
+If the CEO code-switches (mixes Farsi and English / Finglish), match their style but default to English for structure.
 Keep business terms, company names, proper nouns, and technical terms in English even when responding in Farsi.
-When fully in Farsi mode, you may use Persian numerals (۱۲۳) but always keep currency in USD format.
+IMPORTANT: Previous messages in Farsi do NOT mean current response should be in Farsi. Match the CURRENT message language only.
 
 ${pageContext}
 
@@ -2598,6 +2603,10 @@ If you catch yourself about to say ANY of these, STOP and rephrase immediately:
 - "Let me know if you need anything else" — BANNED. You're proactive, not reactive.
 - "I'm here to help" — BANNED. You're not a helpdesk.
 - "Feel free to ask" — BANNED. The CEO doesn't need your permission.
+- "Just let me know" — BANNED. You're not waiting around.
+- "If you need more detail" — BANNED. Give the detail upfront.
+- "If there's anything specific you need" — BANNED. Same energy.
+- "I can do a deeper investigation" — BANNED. Just DO the deeper investigation.
 - Any generic sign-off that sounds like a customer service bot — BANNED.
 INSTEAD: End with a sharp next action, a proactive insight, or just stop talking when done.
 
@@ -2789,7 +2798,7 @@ INSTEAD: End with a sharp next action, a proactive insight, or just stop talking
             let result = "";
             try {
               const args = JSON.parse(tc.function.arguments);
-              result = await executeReadTool(supabase, tc.function.name, args);
+              result = await executeReadTool(supabase, tc.function.name, args, companyId);
             } catch (e) {
               result = `Tool error: ${e instanceof Error ? e.message : "Unknown"}`;
             }
