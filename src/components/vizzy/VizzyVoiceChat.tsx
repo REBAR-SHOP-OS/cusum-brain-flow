@@ -153,7 +153,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
       // Build summary toast
       const parts: string[] = [];
       if (results.tasks > 0) parts.push(`${results.tasks} task${results.tasks > 1 ? "s" : ""} created`);
-      if (results.emails > 0) parts.push(`${results.emails} email${results.emails > 1 ? "s" : ""} sent`);
+      if (results.emails > 0) parts.push(`${results.emails} message${results.emails > 1 ? "s" : ""} sent`);
+      if (results.calls > 0) parts.push(`${results.calls} call${results.calls > 1 ? "s" : ""} placed`);
       if (results.other > 0) parts.push(`${results.other} action${results.other > 1 ? "s" : ""} executed`);
       
       if (parts.length > 0) {
