@@ -196,7 +196,10 @@ export function PostReviewPanel({
       });
   }, [post?.id, localPlatforms]);
 
-  // Sync local state when post changes (navigation, refresh, or platform/content_type update)
+   // Reset video player view when post changes
+  useEffect(() => { setShowVideoPlayer(false); }, [post?.id]);
+
+   // Sync local state when post changes (navigation, refresh, or platform/content_type update)
   useEffect(() => {
     if (!post) return;
     setLocalPlatforms([post.platform]);
