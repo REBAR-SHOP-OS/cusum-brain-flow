@@ -1,94 +1,48 @@
 
 
-## Wave 4 — Safe Wiring & Admin Tooling
+## AI Health Check — Plan
 
-### Summary
+### Secrets Status (Verified from Prod)
 
-Wire the existing scaffolding into real consumers. All changes remain additive and rollback-safe.
+| Secret | Present |
+|---|---|
+| `GPT_API_KEY` | **true** |
+| `GEMINI_API_KEY` | **true** |
+| `LOVABLE_API_KEY` | **true** |
+| `OPENAI_API_KEY` | **false** (not needed — `aiRouter.ts` uses `GPT_API_KEY`) |
 
----
+Note: There is also a `GEMENI_API_KEY` (typo) present — harmless, unused.
 
-### Task 1 — Wire FeatureFlagAdmin into AdminPanel
+### Task 1 — Create `ai-health` Function
 
-The `FeatureFlagAdmin` component exists but is not mounted anywhere.
+**File**: `supabase/functions/ai-health/index.ts` (new)
 
-**File**: `src/pages/AdminPanel.tsx`
-- Add a new tab "Feature Flags" with icon `Flag`
-- Add `TabsContent` rendering `<FeatureFlagAdmin />`
-- Import `FeatureFlagAdmin` and `Flag` icon
-- No behavior change to existing tabs
+- Auth-gated via `requireAuth` + super admin email check (from `_shared/accessPolicies.ts`)
+- Checks:
+  - `env_present`: `{ gpt: bool, gemini: bool, lovable: bool }` — checks `Deno.env.get()` truthiness
+  - `openai_ping`: HEAD request to `https://api.openai.com/v1/models` with `GPT_API_KEY` bearer → returns HTTP status + latency
+  - `gemini_ping`: HEAD request to Gemini endpoint with key → returns HTTP status + latency
+  - `lovable_ping`: POST to `https://ai.gateway.lovable.dev/v1/chat/completions` with minimal payload → returns HTTP status + latency
+- No DB writes. No secrets logged.
+- Returns JSON with status codes and latencies only.
 
-**Category**: Safe additive
+### Task 2 — Redeploy AI Functions
 
----
+After creating `ai-health`, deploy it. No other functions need manual redeployment — Lovable auto-deploys all functions on each code change, and secrets are already present in prod.
 
-### Task 2 — Wire roleService into AdminPanel user list
+### Task 3 — Test
 
-The AdminPanel currently fetches profiles with raw Supabase queries. Replace the role-fetching portion with `roleService.listCompanyUsersWithRoles` to validate the service wrapper in a real consumer.
+Call `ai-health` via `supabase--curl_edge_functions` to get a live result.
 
-**File**: `src/pages/AdminPanel.tsx`
-- Use `listCompanyUsersWithRoles` alongside existing profile data to display roles
-- Keep existing profile CRUD untouched — only add role display from the wrapper
-- Fallback gracefully if service returns `ok: false`
-
-**Category**: Safe additive (adds role badges, does not change existing employee cards)
-
----
-
-### Task 3 — Migrate 3 more edge functions to handleRequest
-
-Candidates (all low-risk, no core write paths):
-
-| # | Function | Domain | Why safe |
-|---|---|---|---|
-| 1 | `quote-expiry-watchdog` | Quotes | Cron-style, reads + updates expired quotes only |
-| 2 | `kiosk-lookup` | Auth | Read-only PIN lookup, no company scope needed |
-| 3 | `manage-inventory` | Manufacturing | Action-based handler, company-scoped |
-
-For each:
-- Replace manual auth boilerplate with `handleRequest` + `rawResponse: true`
-- Preserve exact response shapes
-- Update `edgeFunctionInventory.ts` entries
-
-**Category**: Safe import replacement
-
----
-
-### Task 4 — Enable structured logging in migrated functions
-
-Update the 8 functions now using `handleRequest` to use `createLogger` from `structuredLog.ts` via the `ctx.log` object already provided by the wrapper.
-
-No behavior change — just structured JSON output instead of `console.log`.
-
-Update rollout registry: set `use_structured_logging` phase to `"canary"`.
-
-**Category**: Safe additive (logging only)
-
----
-
-### Task 5 — Update inventory and registry
-
-- Mark 3 newly migrated functions in `edgeFunctionInventory.ts`
-- Update `rolloutRegistry.ts` notes to reflect current adoption count
-- Total wrapper adoption after this wave: 11 functions
-
----
-
-### Files Summary
+### Files
 
 | File | Action | Rollback |
 |---|---|---|
-| `src/pages/AdminPanel.tsx` | Add Feature Flags tab + role badges | Remove tab/import |
-| `supabase/functions/quote-expiry-watchdog/index.ts` | handleRequest migration | Revert file |
-| `supabase/functions/kiosk-lookup/index.ts` | handleRequest migration | Revert file |
-| `supabase/functions/manage-inventory/index.ts` | handleRequest migration | Revert file |
-| `src/lib/edgeFunctionInventory.ts` | Update 3 entries | Revert file |
-| `src/lib/rolloutRegistry.ts` | Update notes + phase | Revert file |
+| `supabase/functions/ai-health/index.ts` | New | Delete file |
 
-### What MUST NOT Be Touched
-- Route structure
-- Database schema
-- Auth session flow
-- Core write paths (orders, deliveries, quotes creation)
-- Existing admin panel tabs
+### What is NOT touched
+- No business logic
+- No database schema
+- No existing edge functions
+- No aiRouter changes
 
