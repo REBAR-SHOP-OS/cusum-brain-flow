@@ -665,7 +665,7 @@ export async function buildFullVizzyContext(
     const timeStr = e.received_at ? new Date(e.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
     const emailDetail = {
       subject: e.subject || "(no subject)",
-      preview: (e.body_preview || "").replace(/\n/g, " ").slice(0, 200),
+      preview: (e.body_preview || "").replace(/\n/g, " ").slice(0, 500),
       direction: e.direction || "inbound",
       time: timeStr,
       from: e.from_address || "unknown",
