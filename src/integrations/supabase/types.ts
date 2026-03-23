@@ -13003,6 +13003,7 @@ export type Database = {
           comments: number | null
           content: string
           content_type: string | null
+          cover_image_url: string | null
           created_at: string
           declined_by: string | null
           hashtags: string[] | null
@@ -13029,6 +13030,7 @@ export type Database = {
           comments?: number | null
           content?: string
           content_type?: string | null
+          cover_image_url?: string | null
           created_at?: string
           declined_by?: string | null
           hashtags?: string[] | null
@@ -13055,6 +13057,7 @@ export type Database = {
           comments?: number | null
           content?: string
           content_type?: string | null
+          cover_image_url?: string | null
           created_at?: string
           declined_by?: string | null
           hashtags?: string[] | null
