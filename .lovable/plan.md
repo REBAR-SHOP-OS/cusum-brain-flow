@@ -1,37 +1,58 @@
 
+## Fix: Unit Toggle Does Not Update Line Items Table
 
-## Fix: Preview Login Loop — Stale Token Cleanup Races with Session
+### Actual issue
+The top unit toggle changes the mapping preview, but the lower “Line Items” table still shows mm values unless the selected unit is exactly `imperial`. So `in` and `ft` do not affect the table at all, and the UI becomes inconsistent.
 
-### Root Cause
+### Root cause
+There are two different unit-display implementations:
 
-**Line 24-29 in `Login.tsx`** clears ALL `sb-*` localStorage keys as soon as `!user && !authLoading` is true. After OAuth redirect:
+1. `BarlistMappingPanel.tsx` supports all 4 source units: `mm`, `in`, `ft`, `imperial`
+2. `AIExtractView.tsx` line-items table only checks:
+   - `selectedUnitSystem === "imperial"` → format as ft-in
+   - otherwise → show raw mm
 
-1. `onAuthStateChange` fires `INITIAL_SESSION` — if session isn't ready yet, `user=null`, `loading=false`
-2. The cleanup effect runs immediately → wipes `sb-*` tokens from localStorage
-3. The REAL session event arrives moments later but tokens are already gone → `bad_jwt`
-4. User stays on login page
+That means `in` and `ft` are ignored in the results table even when selected at the top.
 
-This is confirmed by auth logs showing `bad_jwt` / `missing sub claim` errors.
+### Files to update
 
-### Fix
+**1) `src/components/office/AIExtractView.tsx`**
+- Replace the current binary display logic (`imperial` vs `mm`) with full 4-mode formatting:
+  - `mm` → show stored mm
+  - `in` → show inches
+  - `ft` → show feet
+  - `imperial` → show ft-in
+- Apply this consistently to:
+  - merged rows table
+  - line items table
+  - length column header
+  - dimension columns A–R
+- Keep edit inputs stored in mm internally; only change display formatting in read mode
 
-**File: `src/pages/Login.tsx`**
+**2) `src/components/office/BarlistMappingPanel.tsx`**
+- Keep the existing source-unit toggle behavior
+- Align preview labels/headers with the same formatting rules used below so both sections behave identically
 
-Remove the automatic `sb-*` cleanup on mount (lines 24-30). The manual "Clear session" button at the bottom already provides this functionality for genuinely stuck users. Automatic cleanup is the cause of the problem, not the solution.
+**3) `src/lib/unitSystem.ts`**
+- Extend the shared formatting utilities so they support all units used in the extraction flow, not just metric vs imperial
+- Centralize conversion/formatting helpers here so both the preview panel and line-items table use one source of truth
 
-```typescript
-// DELETE this entire useEffect block (lines 24-30):
-// useEffect(() => {
-//   if (!user && !authLoading) {
-//     Object.keys(localStorage)
-//       .filter((k) => k.startsWith("sb-"))
-//       .forEach((k) => localStorage.removeItem(k));
-//   }
-// }, []);
-```
+### Implementation approach
+- Introduce a shared formatter like:
+  - `formatLengthByMode(mm, "mm" | "in" | "ft" | "imperial")`
+  - `lengthUnitLabelByMode(...)`
+- Refactor `AIExtractView` to stop hardcoding `selectedUnitSystem === "imperial"`
+- Refactor the mapping preview to use the same helper instead of its own separate formatter
 
-That's it. One deletion. The manual "Clear session" button remains for edge cases.
+### Result
+After this fix:
+- Top toggle and line items table will stay in sync
+- Selecting `Inches` shows inches everywhere
+- Selecting `Feet` shows feet everywhere
+- Selecting `Imperial (ft-in)` shows ft-in everywhere
+- Internal stored values remain mm, so data integrity is preserved
 
 ### Files
-- `src/pages/Login.tsx` — remove auto-cleanup useEffect
-
+- `src/components/office/AIExtractView.tsx`
+- `src/components/office/BarlistMappingPanel.tsx`
+- `src/lib/unitSystem.ts`
