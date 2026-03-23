@@ -1,72 +1,64 @@
 
 
-## Fix: Auto-Publish Unapproved Posts After Midnight Deadline
+## Two Features: Video Badge on Calendar Cards + Cover Image Upload for Video Posts
+
+### What the user wants
+
+1. **Video icon on calendar cards** — any post with video content (`image_url` ending in `.mp4`) should show a small video icon badge on its calendar card
+2. **Cover image upload** — in the review panel, when a post has a video, add a button (in the area circled in red, next to "Upload Image") to upload a cover/thumbnail image for social media preview (Instagram feed shows a cover frame, not the video itself)
 
 ### Problem
 
-The cron publisher (`social-cron-publish`) only publishes posts where `neel_approved = true`. If Neel forgets to approve a scheduled post, it stays stuck forever. The business rule is: **if a post's scheduled date has passed midnight and Neel hasn't approved it, auto-publish it anyway**.
+- The DB `social_posts` table has no `cover_image_url` column — we need a migration to add it
+- Calendar cards currently show no indicator of video vs image content
+- The review panel has no cover image upload flow
 
-### Root Cause
+---
 
-Two gates block unapproved posts:
-1. `social-cron-publish/index.ts` line 72: `.eq("neel_approved", true)` — skips unapproved posts entirely
-2. `social-publish/index.ts` line 139: hard gate that returns 403 if `!neel_approved`
+### Patch 1: Add `cover_image_url` column to `social_posts`
 
-Both need a deadline-based bypass.
+**Migration**: `ALTER TABLE social_posts ADD COLUMN cover_image_url text;`
 
-### Fix (2 files, minimal)
+- Nullable, no default needed
+- No RLS change — existing policies cover all columns
+- No breaking change — column is optional
 
-**Patch 1: `supabase/functions/social-cron-publish/index.ts`**
+### Patch 2: Video badge on calendar cards
 
-After the existing query for approved posts (line 68-75), add a second query for **overdue unapproved posts**:
+**File**: `src/components/social/SocialCalendar.tsx`
 
-```typescript
-// Auto-publish overdue unapproved posts (deadline: midnight of scheduled day)
-const midnightCutoff = new Date();
-midnightCutoff.setUTCHours(0, 0, 0, 0); // start of today UTC
+- Import `Video` icon from lucide-react
+- After the platform icon row (line ~221), check if `firstPost.image_url?.endsWith(".mp4")`
+- If true, render a small `<Video className="w-3 h-3" />` badge next to the platform icon
+- Minimal — one conditional icon, no layout change
 
-const { data: overduePosts } = await supabase
-  .from("social_posts")
-  .select("*")
-  .eq("status", "scheduled")
-  .eq("neel_approved", false)
-  .lt("scheduled_date", midnightCutoff.toISOString())  // scheduled before today
-  .order("scheduled_date", { ascending: true })
-  .limit(20);
-```
+### Patch 3: Cover image upload button in PostReviewPanel
 
-If overdue posts are found:
-- Auto-set `neel_approved = true` on each (so it passes the publish gate)
-- Merge them into the `duePosts` array for normal publishing
-- Log clearly: `[social-cron-publish] Auto-approving overdue post {id} — Neel deadline passed`
+**File**: `src/components/social/PostReviewPanel.tsx`
 
-Also update the second query (line 103-110) to include the same pattern.
+- When `isVideo` is true, show a new "Upload Cover" button in the media actions area (next to "Upload Image")
+- On file select, upload via `uploadSocialMediaAsset(blobUrl, "image")` then save to `cover_image_url` on the post
+- If `cover_image_url` exists, show a small thumbnail preview above/below the video player
+- The cover image is for Instagram feed display (thumbnail frame)
 
-**Patch 2: `supabase/functions/social-publish/index.ts`**
+### Patch 4: Pass cover_image_url to social-publish
 
-No change needed — the cron function sets `neel_approved = true` before publishing, so the hard gate in `social-publish` is not hit. Manual publish still requires approval (correct behavior).
+**File**: `supabase/functions/social-publish/index.ts`
 
-### Logic Summary
+- When publishing a video post with `cover_image_url`, pass it as the `cover_url` parameter to the Instagram API (Graph API supports this)
+- This is additive — if no cover_image_url, behavior is unchanged
 
-```text
-Cron runs → finds scheduled posts where:
-  1. neel_approved = true AND scheduled_date <= now  (existing)
-  2. neel_approved = false AND scheduled_date < midnight today  (NEW)
-     → auto-approve these, then publish normally
-```
+---
 
 ### Files Changed
 
-| File | Change | Category | Rollback |
-|---|---|---|---|
-| `supabase/functions/social-cron-publish/index.ts` | Add overdue unapproved post query + auto-approve | Safe additive | Remove the new query block |
-
-### What Remains Unchanged
-- Manual publish still requires Neel approval (hard gate in `social-publish`)
-- Same-day scheduled posts still wait for approval until midnight
-- All existing approved-post publishing logic untouched
-- No route, schema, or UI changes
+| File | Change | Category |
+|---|---|---|
+| Migration | Add `cover_image_url text` to `social_posts` | Schema additive |
+| `src/components/social/SocialCalendar.tsx` | Video badge icon on cards | Safe additive |
+| `src/components/social/PostReviewPanel.tsx` | Cover image upload button + preview | Safe additive |
+| `supabase/functions/social-publish/index.ts` | Pass cover_url for video posts | Safe additive |
 
 ### Regression Risk
-Low — only adds a new query path in the cron function. Existing approved-post flow is completely untouched.
+Low — all changes are additive. Existing image posts unaffected. Video posts gain optional cover image. Calendar cards gain a small icon.
 
