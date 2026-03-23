@@ -37,7 +37,7 @@ export const edgeFunctionInventory: EdgeFunctionEntry[] = [
   { name: "log-machine-run", domain: "manufacturing", risk: "high", purpose: "Record machine run metrics and production output", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
   { name: "manage-bend", domain: "manufacturing", risk: "high", purpose: "Manage rebar bending batches and operations", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
   { name: "manage-extract", domain: "manufacturing", risk: "high", purpose: "Manage barlist extraction sessions and OCR processing", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
-  { name: "manage-inventory", domain: "manufacturing", risk: "high", purpose: "Track raw material and finished goods inventory", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
+  { name: "manage-inventory", domain: "manufacturing", risk: "high", purpose: "Track raw material and finished goods inventory", usesSharedWrapper: true, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p1", notes: "Migrated to handleRequest in Wave 4" },
   { name: "shape-vision", domain: "manufacturing", risk: "medium", purpose: "AI shape recognition from rebar drawings", usesSharedWrapper: true, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "Migrated to handleRequest in Wave 3" },
 
   // --- Delivery ---
