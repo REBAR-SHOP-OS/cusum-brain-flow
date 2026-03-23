@@ -65,7 +65,7 @@ export function useRealtimeTranscribe() {
           targetLangs,
           context: contextWindow || undefined,
         },
-        { timeout: 10000 },
+        { timeoutMs: 10000 },
       )
         .then((res) => {
           const translatedEn = res?.translations?.en;
