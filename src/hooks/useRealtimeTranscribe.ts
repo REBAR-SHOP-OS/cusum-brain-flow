@@ -12,6 +12,8 @@ interface CommittedTranscript {
   timestamp: number;
   translatedText?: string;
   originalCleanText?: string;
+  englishText?: string;
+  farsiText?: string;
   isTranslating?: boolean;
   sourceLang: SourceLang;
 }
