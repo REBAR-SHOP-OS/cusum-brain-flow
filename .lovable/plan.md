@@ -1,41 +1,47 @@
 
 
-## Fix: Video Preview Shows "Not Available" — Stale Closure in Export
+## Simplify Pro Video Editor — Remove Non-Functional Features
 
-### Root Cause
+### Problem
+The editor has 13 sidebar tabs and many UI elements, but most are non-functional placeholders showing "Coming soon" toasts. This creates a confusing, cluttered interface.
 
-**`handleExportInternal` reads `clips` from a stale React closure.**
+### What Gets Removed
 
-The flow in `handleSubmit`:
-1. Line 206: `setClips(initialClips)` — sets clips to idle
-2. Lines 251-282: `setClips(prev => ...)` — updates clips to "completed" with videoUrls during generation loop
-3. Line 290: `await handleExportInternal(...)` — tries to read completed clips
+| Tab/Feature | Reason |
+|---|---|
+| **Record** | All 3 options show "Coming soon" |
+| **Templates** | All 8 items show "Coming soon" |
+| **Graphics** | All 7 items show "Coming soon" |
+| **Stock Video** | Copies URL to clipboard, doesn't insert into video |
+| **Stock Images** | Same — clipboard only, no integration |
+| **Settings** | Presets (Overlay, Transition, Subtitle, Sticker, Text) don't affect output |
+| **Transitions** (sidebar tab) | Selection stored in state but never applied to export |
+| **Effects panel** (right panel) | Fade in/out sliders don't affect export; speed only affects playback |
 
-**But** `handleExportInternal` (line 366) is a `useCallback` that captures `clips` from its closure (line 374). When `handleSubmit` was created, `clips` was the *old* value. Even though `setClips` updates happen during the loop, the `clips` variable inside `handleExportInternal`'s closure still points to the initial empty/idle array.
+### What Stays (6 functional tabs)
 
-Result: `completedClips.length === 0` at line 374 → returns early → `finalVideoUrl` stays `null` → "Video preview not available".
+| Tab | Function |
+|---|---|
+| **My Media** | Scene list, regenerate, replace clips |
+| **Text** | Add text overlays to scenes |
+| **Music** | Select background music |
+| **Script** | Edit voiceover text per scene |
+| **Brand Kit** | Logo position, delete, replace |
+| **Card Editor** | Intro/outro card design |
 
-### Fix
+### UI Changes
 
-**File: `src/components/ad-director/AdDirectorContent.tsx`**
+**File: `src/components/ad-director/ProVideoEditor.tsx`**
 
-1. **Add a `clipsRef`** that always holds the latest clips value:
-```typescript
-const clipsRef = useRef<ClipOutput[]>([]);
-// Sync ref on every clips update
-useEffect(() => { clipsRef.current = clips; }, [clips]);
-```
+1. **Reduce TABS array** from 13 to 6 — remove record, stock-video, stock-images, templates, graphics, transitions, settings
+2. **Remove right panel** (EffectsPanel) — fade/speed controls don't work. Remove `rightPanelOpen` state and the entire right panel div
+3. **Remove unused imports** — RecordTab, StockVideoTab, StockImagesTab, TemplatesTab, GraphicsTab, TransitionsTab, SettingsTab, EffectsPanel
+4. **Remove unused state** — `editorSettings`, `transitionDuration`, `fadeIn`, `fadeOut`, `speed` (speed applied to video playback only, minor loss)
+5. **Clean up tab content rendering** — remove all conditional renders for removed tabs
+6. **Keep all functional logic** — AI command bar, timeline, voiceover generation, overlays, playback controls, undo/redo
 
-2. **In `handleExportInternal`**: Read from `clipsRef.current` instead of `clips`:
-```typescript
-const completedClips = clipsRef.current.filter(c => c.status === "completed" && c.videoUrl);
-```
-And similarly for the `orderedClips` mapping that filters by `clip?.status === "completed"`.
-
-3. **In `handleExport`** (user-triggered, line 421): Same fix — use `clipsRef.current`.
-
-This ensures the export function always reads the latest clips regardless of React's closure timing.
+Result: A clean 6-tab editor with only working features, reducing cognitive load significantly.
 
 ### Files
-- `src/components/ad-director/AdDirectorContent.tsx` — add `clipsRef`, use it in both export functions
+- `src/components/ad-director/ProVideoEditor.tsx` — remove 7 tabs, right panel, unused state/imports
 
