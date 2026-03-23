@@ -311,6 +311,97 @@ Deno.serve(async (req) => {
 
     let created = 0, updated = 0, skipped = 0, errors = 0;
 
+    // ═══ BATCH OPTIMIZATION: Pre-load customers & contacts in bulk ═══
+
+    // 1. Load ALL customers for this company into memory
+    const customerMap = new Map<string, string>(); // name_lower → id
+    let custFrom = 0;
+    while (true) {
+      const { data: custBatch } = await serviceClient
+        .from("customers")
+        .select("id, name")
+        .eq("company_id", companyId)
+        .range(custFrom, custFrom + 999);
+      if (!custBatch || custBatch.length === 0) break;
+      for (const c of custBatch) {
+        if (c.name) customerMap.set(c.name.toLowerCase(), c.id);
+      }
+      if (custBatch.length < 1000) break;
+      custFrom += 1000;
+    }
+    console.log(`Pre-loaded ${customerMap.size} customers into memory`);
+
+    // 2. Load ALL contacts for this company into memory
+    const contactByEmail = new Map<string, string>(); // "custId:email_lower" → contact_id
+    const contactByPhone = new Map<string, string>(); // "custId:phone" → contact_id
+    let contFrom = 0;
+    while (true) {
+      const { data: contBatch } = await serviceClient
+        .from("contacts")
+        .select("id, customer_id, email, phone")
+        .eq("company_id", companyId)
+        .range(contFrom, contFrom + 999);
+      if (!contBatch || contBatch.length === 0) break;
+      for (const c of contBatch) {
+        if (c.customer_id && c.email) contactByEmail.set(`${c.customer_id}:${c.email.toLowerCase()}`, c.id);
+        if (c.customer_id && c.phone) contactByPhone.set(`${c.customer_id}:${c.phone}`, c.id);
+      }
+      if (contBatch.length < 1000) break;
+      contFrom += 1000;
+    }
+    console.log(`Pre-loaded ${contactByEmail.size + contactByPhone.size} contact mappings`);
+
+    // ═══ FIRST PASS: Identify new customers needed ═══
+    const newCustomerNames = new Set<string>();
+    for (const ol of leads) {
+      const customerName = String(ol.partner_name || ol.contact_name || "Unknown");
+      if (!customerMap.has(customerName.toLowerCase())) {
+        newCustomerNames.add(customerName);
+      }
+    }
+
+    // 3. Batch-insert new customers (100 at a time)
+    if (newCustomerNames.size > 0) {
+      const newCustArr = Array.from(newCustomerNames);
+      console.log(`Batch-inserting ${newCustArr.length} new customers`);
+      for (let i = 0; i < newCustArr.length; i += 100) {
+        const batch = newCustArr.slice(i, i + 100).map(name => ({
+          name,
+          company_id: companyId,
+          company_name: name,
+        }));
+        const { data: inserted } = await serviceClient
+          .from("customers")
+          .upsert(batch, { onConflict: "name,company_id", ignoreDuplicates: true })
+          .select("id, name");
+        if (inserted) {
+          for (const c of inserted) {
+            if (c.name) customerMap.set(c.name.toLowerCase(), c.id);
+          }
+        }
+        // Re-fetch any that were duplicates (upsert with ignoreDuplicates won't return them)
+        const missingNames = batch.filter(b => !customerMap.has(b.name.toLowerCase()));
+        if (missingNames.length > 0) {
+          for (const mn of missingNames) {
+            const { data: existing } = await serviceClient
+              .from("customers")
+              .select("id")
+              .ilike("name", mn.name)
+              .eq("company_id", companyId)
+              .limit(1)
+              .single();
+            if (existing) customerMap.set(mn.name.toLowerCase(), existing.id);
+          }
+        }
+      }
+    }
+
+    // ═══ SECOND PASS: Build all lead payloads + collect new contacts ═══
+    const leadUpdates: Array<{ id: string; payload: Record<string, unknown> }> = [];
+    const leadInserts: Array<Record<string, unknown>> = [];
+    const leadEvents: Array<{ lead_id: string; event_type: string; payload: Record<string, unknown> }> = [];
+    const newContacts: Array<{ customer_id: string; company_id: string; first_name: string; last_name: string | null; email: string | null; phone: string | null; _odoo_id: string }> = [];
+
     for (const ol of leads) {
       try {
         const odooId = String(ol.id);
@@ -350,55 +441,49 @@ Deno.serve(async (req) => {
           validation_warnings: leadWarnings.length,
         };
 
-        // Map Odoo date_deadline to expected_close_date for activity color bar
         const dateDeadline = ol.date_deadline || null;
-
         const existingId = existingEntry?.id;
-
-        // Normalize probability: won=100, lost=0, others=Odoo ML value
         const normalizedProb = erpStage === "won" ? 100 : erpStage === "lost" || erpStage === "loss" ? 0 : Math.round(Number(ol.probability) || 0);
 
-        // Resolve customer for contact linkage enforcement
-        const customerName = ol.partner_name || ol.contact_name || "Unknown";
-        let customerId: string | null = null;
+        // Resolve customer from pre-loaded map
+        const customerName = String(ol.partner_name || ol.contact_name || "Unknown");
+        const customerId = customerMap.get(customerName.toLowerCase()) || null;
 
-        // Always resolve customer for active stages
-        if (ACTIVE_STAGES.has(erpStage)) {
-          const { data: existingCust } = await serviceClient
-            .from("customers")
-            .select("id")
-            .ilike("name", customerName)
-            .eq("company_id", companyId)
-            .limit(1)
-            .single();
-
-          if (existingCust) {
-            customerId = existingCust.id;
-          } else {
-            const { data: newCust } = await serviceClient
-              .from("customers")
-              .insert({ name: customerName, company_id: companyId, company_name: ol.partner_name || null })
-              .select("id")
-              .single();
-            customerId = newCust?.id || null;
+        // Resolve contact from pre-loaded map
+        let contactId: string | null = null;
+        if (customerId) {
+          if (ol.email_from) {
+            contactId = contactByEmail.get(`${customerId}:${String(ol.email_from).toLowerCase()}`) || null;
           }
-
-          if (!customerId) {
-            console.warn(`⚠️ Customer resolution failed for odoo_id ${odooId}: "${customerName}" — inserting lead with null customer_id`);
+          if (!contactId && ol.phone) {
+            contactId = contactByPhone.get(`${customerId}:${String(ol.phone)}`) || null;
+          }
+          // Queue new contact creation if not found
+          if (!contactId && (ol.email_from || ol.phone)) {
+            const contactName = String(ol.contact_name || ol.partner_name || "Unknown");
+            const nameParts = contactName.trim().split(/\s+/);
+            newContacts.push({
+              customer_id: customerId,
+              company_id: companyId,
+              first_name: nameParts[0] || "Unknown",
+              last_name: nameParts.slice(1).join(" ") || null,
+              email: ol.email_from ? String(ol.email_from) : null,
+              phone: ol.phone ? String(ol.phone) : null,
+              _odoo_id: odooId,
+            });
           }
         }
 
+        const lastTouchedAt = odooUpdatedAt && odooUpdatedAt > now ? odooUpdatedAt : now;
+
         if (existingId) {
-          // Track lead_id for validation log
           leadIdByOdooId.set(odooId, existingId);
 
-          // Detect stage change for timeline parity
+          // Detect stage change
           if (previousStage && previousStage !== erpStage) {
-            await insertLeadEvent(serviceClient, existingId, "stage_changed", {
-              from: previousStage,
-              to: erpStage,
-              odoo_stage: stageName,
-            });
+            leadEvents.push({ lead_id: existingId, event_type: "stage_changed", payload: {
+              from: previousStage, to: erpStage, odoo_stage: stageName,
+            }});
           }
 
           // Detect value change
@@ -406,51 +491,11 @@ Deno.serve(async (req) => {
           const prevRevenue = Number(prevMeta.odoo_revenue) || 0;
           const newRevenue = Number(ol.expected_revenue) || 0;
           if (prevRevenue !== newRevenue) {
-            await insertLeadEvent(serviceClient, existingId, "value_changed", {
-              from: prevRevenue,
-              to: newRevenue,
-            });
+            leadEvents.push({ lead_id: existingId, event_type: "value_changed", payload: {
+              from: prevRevenue, to: newRevenue,
+            }});
           }
 
-          // ── Contact linking ──
-          let contactId: string | null = null;
-          if (customerId && (ol.email_from || ol.phone)) {
-            // Try email match first, then phone
-            if (ol.email_from) {
-              const { data: byEmail } = await serviceClient
-                .from("contacts").select("id")
-                .eq("customer_id", customerId).ilike("email", String(ol.email_from))
-                .limit(1).single();
-              if (byEmail) contactId = byEmail.id;
-            }
-            if (!contactId && ol.phone) {
-              const { data: byPhone } = await serviceClient
-                .from("contacts").select("id")
-                .eq("customer_id", customerId).eq("phone", String(ol.phone))
-                .limit(1).single();
-              if (byPhone) contactId = byPhone.id;
-            }
-            // Create contact if not found
-            if (!contactId) {
-              const contactName = String(ol.contact_name || ol.partner_name || "Unknown");
-              const nameParts = contactName.trim().split(/\s+/);
-              const firstName = nameParts[0] || "Unknown";
-              const lastName = nameParts.slice(1).join(" ") || null;
-              const { data: newContact } = await serviceClient
-                .from("contacts").insert({
-                  customer_id: customerId,
-                  company_id: companyId,
-                  first_name: firstName,
-                  last_name: lastName,
-                  email: ol.email_from ? String(ol.email_from) : null,
-                  phone: ol.phone ? String(ol.phone) : null,
-                }).select("id").single();
-              contactId = newContact?.id || null;
-            }
-          }
-
-          // Update existing lead
-          const lastTouchedAt = odooUpdatedAt && odooUpdatedAt > now ? odooUpdatedAt : now;
           const updatePayload: Record<string, unknown> = {
             title: ol.name || "Untitled",
             stage: erpStage,
@@ -465,7 +510,6 @@ Deno.serve(async (req) => {
             last_touched_at: lastTouchedAt,
           };
 
-          // Enforce contact + customer linkage on update
           if (customerId && ACTIVE_STAGES.has(erpStage)) {
             updatePayload.customer_id = customerId;
           }
@@ -473,135 +517,150 @@ Deno.serve(async (req) => {
             updatePayload.contact_id = contactId;
           }
 
-          const { error } = await serviceClient
-            .from("leads")
-            .update(updatePayload)
-            .eq("id", existingId);
-
-          if (error) { console.error(`Update error for odoo_id ${odooId}:`, error); errors++; }
-          else updated++;
+          leadUpdates.push({ id: existingId, payload: updatePayload });
         } else {
-          // For won/lost stages, still try to resolve customer but don't block
-          if (!customerId) {
-            const { data: existingCust } = await serviceClient
-              .from("customers")
-              .select("id")
-              .ilike("name", customerName)
-              .eq("company_id", companyId)
-              .limit(1)
-              .single();
-
-            if (existingCust) {
-              customerId = existingCust.id;
-            } else {
-              const { data: newCust } = await serviceClient
-                .from("customers")
-                .insert({ name: customerName, company_id: companyId, company_name: ol.partner_name || null })
-                .select("id")
-                .single();
-              customerId = newCust?.id || null;
-            }
-          }
-
-          // ── Contact linking for new leads ──
-          let newContactId: string | null = null;
-          if (customerId && (ol.email_from || ol.phone)) {
-            if (ol.email_from) {
-              const { data: byEmail } = await serviceClient
-                .from("contacts").select("id")
-                .eq("customer_id", customerId).ilike("email", String(ol.email_from))
-                .limit(1).single();
-              if (byEmail) newContactId = byEmail.id;
-            }
-            if (!newContactId && ol.phone) {
-              const { data: byPhone } = await serviceClient
-                .from("contacts").select("id")
-                .eq("customer_id", customerId).eq("phone", String(ol.phone))
-                .limit(1).single();
-              if (byPhone) newContactId = byPhone.id;
-            }
-            if (!newContactId) {
-              const contactName = String(ol.contact_name || ol.partner_name || "Unknown");
-              const nameParts = contactName.trim().split(/\s+/);
-              const firstName = nameParts[0] || "Unknown";
-              const lastName = nameParts.slice(1).join(" ") || null;
-              const { data: newContact } = await serviceClient
-                .from("contacts").insert({
-                  customer_id: customerId,
-                  company_id: companyId,
-                  first_name: firstName,
-                  last_name: lastName,
-                  email: ol.email_from ? String(ol.email_from) : null,
-                  phone: ol.phone ? String(ol.phone) : null,
-                }).select("id").single();
-              newContactId = newContact?.id || null;
-            }
-          }
-
-          const lastTouchedAtInsert = odooUpdatedAt || now;
-          const insertPayload = {
-              title: ol.name || "Untitled",
-              stage: erpStage,
-              probability: normalizedProb,
-              expected_value: Number(ol.expected_revenue) || 0,
-              expected_close_date: dateDeadline,
-              source: "odoo_sync",
-              customer_id: customerId,
-              contact_id: newContactId,
-              company_id: companyId,
-              metadata,
-              priority: mapOdooPriority(ol.priority),
-              odoo_created_at: odooCreatedAt,
-              odoo_updated_at: odooUpdatedAt,
-              last_touched_at: lastTouchedAtInsert,
+          const insertPayload: Record<string, unknown> = {
+            title: ol.name || "Untitled",
+            stage: erpStage,
+            probability: normalizedProb,
+            expected_value: Number(ol.expected_revenue) || 0,
+            expected_close_date: dateDeadline,
+            source: "odoo_sync",
+            customer_id: customerId,
+            contact_id: contactId,
+            company_id: companyId,
+            metadata,
+            priority: mapOdooPriority(ol.priority),
+            odoo_created_at: odooCreatedAt,
+            odoo_updated_at: odooUpdatedAt,
+            last_touched_at: lastTouchedAt,
+            _odoo_id: odooId, // temp marker for post-insert event linking
           };
-
-          const { data: newLead, error } = await serviceClient
-            .from("leads")
-            .insert(insertPayload)
-            .select("id")
-            .single();
-
-          if (error) {
-            // Unique index violation (23505) — race condition, treat as update
-            if (error.code === "23505" && error.message?.includes("odoo_id")) {
-              console.warn(`Duplicate caught by unique index for odoo_id ${odooId}, updating instead`);
-              const { data: existingRow } = await serviceClient
-                .from("leads").select("id").eq("source", "odoo_sync")
-                .filter("metadata->>odoo_id", "eq", odooId).limit(1).single();
-              if (existingRow) {
-                await serviceClient.from("leads").update({
-                  ...insertPayload, updated_at: new Date().toISOString(),
-                }).eq("id", existingRow.id);
-                leadIdByOdooId.set(odooId, existingRow.id);
-                updated++;
-              } else { errors++; }
-            } else {
-              console.error(`Insert error for odoo_id ${odooId}:`, error); errors++;
-            }
-          } else {
-            created++;
-            if (newLead) {
-              leadIdByOdooId.set(odooId, newLead.id);
-              await insertLeadEvent(serviceClient, newLead.id, "stage_changed", {
-                from: null,
-                to: erpStage,
-                odoo_stage: stageName,
-              });
-              if (customerId) {
-                await insertLeadEvent(serviceClient, newLead.id, "contact_linked", {
-                  customer_name: customerName,
-                  customer_id: customerId,
-                });
-              }
-            }
-          }
+          leadInserts.push(insertPayload);
         }
       } catch (e) {
-        console.error("Lead processing error:", e);
+        console.error("Lead prep error:", e);
         errors++;
       }
     }
+
+    // ═══ BATCH: Insert new contacts (100 at a time) ═══
+    if (newContacts.length > 0) {
+      console.log(`Batch-inserting ${newContacts.length} new contacts`);
+      for (let i = 0; i < newContacts.length; i += 100) {
+        const batch = newContacts.slice(i, i + 100);
+        // Strip _odoo_id before inserting
+        const insertBatch = batch.map(({ _odoo_id, ...rest }) => rest);
+        const { data: inserted } = await serviceClient
+          .from("contacts")
+          .insert(insertBatch)
+          .select("id, customer_id, email, phone");
+        if (inserted) {
+          for (const c of inserted) {
+            if (c.customer_id && c.email) contactByEmail.set(`${c.customer_id}:${c.email.toLowerCase()}`, c.id);
+            if (c.customer_id && c.phone) contactByPhone.set(`${c.customer_id}:${c.phone}`, c.id);
+          }
+          // Update lead payloads with newly created contact IDs
+          for (const b of batch) {
+            const match = inserted.find((ins: any) =>
+              (b.email && ins.email?.toLowerCase() === b.email.toLowerCase() && ins.customer_id === b.customer_id) ||
+              (b.phone && ins.phone === b.phone && ins.customer_id === b.customer_id)
+            );
+            if (match) {
+              // Update corresponding lead update or insert payload
+              const lu = leadUpdates.find(u => {
+                const meta = u.payload.metadata as Record<string, unknown>;
+                return meta?.odoo_id === b._odoo_id;
+              });
+              if (lu) lu.payload.contact_id = match.id;
+              const li = leadInserts.find(ins => (ins as any)._odoo_id === b._odoo_id);
+              if (li) li.contact_id = match.id;
+            }
+          }
+        }
+      }
+    }
+
+    // ═══ BATCH: Update existing leads (50 at a time) ═══
+    console.log(`Batch-updating ${leadUpdates.length} existing leads`);
+    for (let i = 0; i < leadUpdates.length; i += 50) {
+      const batch = leadUpdates.slice(i, i + 50);
+      const results = await Promise.all(
+        batch.map(({ id, payload }) =>
+          serviceClient.from("leads").update(payload).eq("id", id)
+        )
+      );
+      for (const r of results) {
+        if (r.error) { console.error("Batch update error:", r.error); errors++; }
+        else updated++;
+      }
+    }
+
+    // ═══ BATCH: Insert new leads (50 at a time) ═══
+    console.log(`Batch-inserting ${leadInserts.length} new leads`);
+    for (let i = 0; i < leadInserts.length; i += 50) {
+      const batch = leadInserts.slice(i, i + 50);
+      // Strip temp _odoo_id marker and save mapping
+      const odooIds = batch.map(b => (b as any)._odoo_id as string);
+      const cleanBatch = batch.map(({ _odoo_id, ...rest }) => rest);
+
+      const { data: inserted, error: batchErr } = await serviceClient
+        .from("leads")
+        .insert(cleanBatch)
+        .select("id, metadata");
+
+      if (batchErr) {
+        console.error("Batch insert error:", batchErr);
+        // Fallback: insert one-by-one for this batch
+        for (let j = 0; j < cleanBatch.length; j++) {
+          const { data: single, error: singleErr } = await serviceClient
+            .from("leads").insert(cleanBatch[j]).select("id").single();
+          if (singleErr) {
+            if (singleErr.code === "23505") {
+              console.warn(`Duplicate caught for odoo_id ${odooIds[j]}, skipping`);
+              skipped++;
+            } else {
+              console.error(`Insert error for odoo_id ${odooIds[j]}:`, singleErr);
+              errors++;
+            }
+          } else if (single) {
+            created++;
+            leadIdByOdooId.set(odooIds[j], single.id);
+            leadEvents.push({ lead_id: single.id, event_type: "stage_changed", payload: {
+              from: null, to: cleanBatch[j].stage, odoo_stage: (cleanBatch[j].metadata as any)?.odoo_stage,
+            }});
+          }
+        }
+      } else if (inserted) {
+        created += inserted.length;
+        for (const ins of inserted) {
+          const meta = ins.metadata as Record<string, unknown>;
+          const oid = String(meta?.odoo_id || "");
+          if (oid) {
+            leadIdByOdooId.set(oid, ins.id);
+            leadEvents.push({ lead_id: ins.id, event_type: "stage_changed", payload: {
+              from: null, to: (meta as any)?.odoo_stage ? STAGE_MAP[(meta as any).odoo_stage] || "new" : "new",
+              odoo_stage: (meta as any)?.odoo_stage,
+            }});
+          }
+        }
+      }
+    }
+
+    // ═══ BATCH: Insert lead events (100 at a time via upsert) ═══
+    console.log(`Batch-inserting ${leadEvents.length} lead events`);
+    for (let i = 0; i < leadEvents.length; i += 100) {
+      const batch = leadEvents.slice(i, i + 100).map(e => ({
+        lead_id: e.lead_id,
+        event_type: e.event_type,
+        payload: e.payload,
+        source_system: "odoo_sync",
+        dedupe_key: `${e.lead_id}:${e.event_type}:${JSON.stringify(e.payload)}`.slice(0, 500),
+      }));
+      await serviceClient.from("lead_events").upsert(batch, { onConflict: "dedupe_key" });
+    }
+
+    console.log(`Processing complete: created=${created} updated=${updated} skipped=${skipped} errors=${errors}`);
 
     // === Reconciliation: check stale ERP leads not in this fetch ===
     const fetchedOdooIds = new Set(leads.map((ol: Record<string, unknown>) => String(ol.id)));
