@@ -114,7 +114,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
 
     // Execute all actions and show summary toast
     (async () => {
-      const results = { tasks: 0, emails: 0, other: 0, errors: 0 };
+      const results = { tasks: 0, emails: 0, calls: 0, other: 0, errors: 0 };
 
       for (const { actionData } of pendingActions) {
         try {
@@ -134,6 +134,13 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             results.emails++;
           } else if (actionData.type === "rc_send_sms") {
             results.emails++;
+          } else if (actionData.type === "rc_make_call") {
+            if (data?.browser_action === "webrtc_call" && data?.phone) {
+              window.dispatchEvent(new CustomEvent("rc-webrtc-call", { detail: { phone: data.phone } }));
+            }
+            results.calls++;
+          } else if (actionData.type === "rc_send_fax") {
+            results.calls++;
           } else {
             results.other++;
           }
