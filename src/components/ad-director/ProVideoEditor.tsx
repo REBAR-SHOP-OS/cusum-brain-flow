@@ -26,22 +26,15 @@ import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 
-type EditorTab = "media" | "record" | "text" | "music" | "stock-video" | "stock-images" | "templates" | "graphics" | "transitions" | "brand-kit" | "script" | "settings" | "card-editor";
+type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor";
 
 const TABS: { id: EditorTab; label: string; icon: React.ReactNode }[] = [
   { id: "media", label: "My Media", icon: <FolderOpen className="w-4 h-4" /> },
-  { id: "record", label: "Record", icon: <Video className="w-4 h-4" /> },
   { id: "text", label: "Text", icon: <Type className="w-4 h-4" /> },
   { id: "music", label: "Music", icon: <Music className="w-4 h-4" /> },
-  { id: "stock-video", label: "Stock Video", icon: <Film className="w-4 h-4" /> },
-  { id: "stock-images", label: "Stock Images", icon: <ImagePlus className="w-4 h-4" /> },
-  { id: "templates", label: "Templates", icon: <LayoutTemplate className="w-4 h-4" /> },
-  { id: "graphics", label: "Graphics", icon: <Shapes className="w-4 h-4" /> },
-  { id: "transitions", label: "Transitions", icon: <ArrowRightLeft className="w-4 h-4" /> },
-  { id: "brand-kit", label: "Brand Kit", icon: <Palette className="w-4 h-4" /> },
   { id: "script", label: "Script", icon: <FileText className="w-4 h-4" /> },
+  { id: "brand-kit", label: "Brand Kit", icon: <Palette className="w-4 h-4" /> },
   { id: "card-editor", label: "Card Editor", icon: <SquarePen className="w-4 h-4" /> },
-  { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
 ];
 
 interface ProVideoEditorProps {
