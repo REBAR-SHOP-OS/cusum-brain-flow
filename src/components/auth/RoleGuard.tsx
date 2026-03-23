@@ -110,8 +110,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
   }
 
   // Accounting: email-only access (overrides all roles including admin)
-  const ACCOUNTING_EMAILS = ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"];
-  if (location.pathname.startsWith("/accounting") && !ACCOUNTING_EMAILS.includes(email.toLowerCase())) {
+  if (location.pathname.startsWith("/accounting") && !ACCESS_POLICIES.accountingAccess.includes(email.toLowerCase())) {
     return <Navigate to="/home" replace />;
   }
 
