@@ -301,6 +301,7 @@ export type Database = {
           completion_tokens: number | null
           created_at: string
           error_message: string | null
+          estimated_cost_usd: number | null
           execution_path: string | null
           http_status: number | null
           id: string
@@ -319,6 +320,7 @@ export type Database = {
           completion_tokens?: number | null
           created_at?: string
           error_message?: string | null
+          estimated_cost_usd?: number | null
           execution_path?: string | null
           http_status?: number | null
           id?: string
@@ -337,6 +339,7 @@ export type Database = {
           completion_tokens?: number | null
           created_at?: string
           error_message?: string | null
+          estimated_cost_usd?: number | null
           execution_path?: string | null
           http_status?: number | null
           id?: string
@@ -7282,11 +7285,38 @@ export type Database = {
           },
         ]
       }
+      llm_company_budget: {
+        Row: {
+          alert_threshold_pct: number | null
+          company_id: string
+          created_at: string | null
+          id: string
+          monthly_budget_usd: number | null
+        }
+        Insert: {
+          alert_threshold_pct?: number | null
+          company_id: string
+          created_at?: string | null
+          id?: string
+          monthly_budget_usd?: number | null
+        }
+        Update: {
+          alert_threshold_pct?: number | null
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          monthly_budget_usd?: number | null
+        }
+        Relationships: []
+      }
       llm_provider_configs: {
         Row: {
           display_name: string
           id: string
           is_enabled: boolean | null
+          is_healthy: boolean | null
+          last_health_check: string | null
+          last_latency_ms: number | null
           max_rpm: number | null
           notes: string | null
           priority: number | null
@@ -7297,6 +7327,9 @@ export type Database = {
           display_name: string
           id?: string
           is_enabled?: boolean | null
+          is_healthy?: boolean | null
+          last_health_check?: string | null
+          last_latency_ms?: number | null
           max_rpm?: number | null
           notes?: string | null
           priority?: number | null
@@ -7307,9 +7340,39 @@ export type Database = {
           display_name?: string
           id?: string
           is_enabled?: boolean | null
+          is_healthy?: boolean | null
+          last_health_check?: string | null
+          last_latency_ms?: number | null
           max_rpm?: number | null
           notes?: string | null
           priority?: number | null
+          provider?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      llm_provider_pricing: {
+        Row: {
+          completion_cost_per_1m: number
+          id: string
+          model: string
+          prompt_cost_per_1m: number
+          provider: string
+          updated_at: string | null
+        }
+        Insert: {
+          completion_cost_per_1m: number
+          id?: string
+          model: string
+          prompt_cost_per_1m: number
+          provider: string
+          updated_at?: string | null
+        }
+        Update: {
+          completion_cost_per_1m?: number
+          id?: string
+          model?: string
+          prompt_cost_per_1m?: number
           provider?: string
           updated_at?: string | null
         }

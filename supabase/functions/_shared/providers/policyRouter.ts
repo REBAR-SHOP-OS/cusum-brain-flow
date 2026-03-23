@@ -32,6 +32,43 @@ export interface PolicyResult {
   source: "policy" | "fallback";
 }
 
+const HEALTH_CACHE_KEY = "llm_provider_health";
+const HEALTH_CACHE_TTL = 30_000; // 30 seconds
+
+interface ProviderHealth {
+  provider: string;
+  is_healthy: boolean;
+}
+
+async function fetchHealthyProviders(): Promise<Set<string>> {
+  const cached = cacheGet<Set<string>>(HEALTH_CACHE_KEY);
+  if (cached) return cached;
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) return new Set(); // empty = don't filter
+
+  try {
+    const resp = await fetch(
+      `${url}/rest/v1/llm_provider_configs?select=provider,is_healthy`,
+      {
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    if (!resp.ok) return new Set();
+    const data = (await resp.json()) as ProviderHealth[];
+    const healthy = new Set(data.filter((p) => p.is_healthy !== false).map((p) => p.provider));
+    cacheSet(HEALTH_CACHE_KEY, healthy, HEALTH_CACHE_TTL);
+    return healthy;
+  } catch {
+    return new Set();
+  }
+}
+
 async function fetchPolicies(): Promise<RoutingPolicy[]> {
   const cached = cacheGet<RoutingPolicy[]>(CACHE_KEY);
   if (cached) return cached;
@@ -96,9 +133,17 @@ export async function resolvePolicy(
   historyLength = 0,
 ): Promise<PolicyResult> {
   try {
-    const policies = await fetchPolicies();
+    const [policies, healthyProviders] = await Promise.all([
+      fetchPolicies(),
+      fetchHealthyProviders(),
+    ]);
 
     for (const policy of policies) {
+      // Skip unhealthy providers if health data is available
+      if (healthyProviders.size > 0 && !healthyProviders.has(policy.provider)) {
+        continue;
+      }
+
       if (matchesPolicy(policy, agent, message, hasAttachments)) {
         return {
           provider: policy.provider as AIProvider,

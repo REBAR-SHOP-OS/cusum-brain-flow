@@ -5,6 +5,8 @@
 
 import { isEnabled } from "./featureFlags.ts";
 import { resolvePolicy } from "./providers/policyRouter.ts";
+import { isBreakerOpen, recordSuccess, recordFailure } from "./providers/circuitBreaker.ts";
+import { cacheGet, cacheSet } from "./cache.ts";
 
 export type AIProvider = "gpt" | "gemini";
 
@@ -96,13 +98,26 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
     }
   }
 
+  // Phase 3: Circuit breaker — skip to fallback if provider is tripped
+  if (isEnabled("ENABLE_CIRCUIT_BREAKER") && isBreakerOpen(provider) && opts.fallback) {
+    console.warn(`[circuit-breaker] Provider "${provider}" is open, using fallback "${opts.fallback.provider}"`);
+    _logExecution(requestId, provider, model, "circuit-breaker-skip", undefined, opts, 0, "breaker-open").catch(() => {});
+    const fallbackStart = performance.now();
+    const result = await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+    if (isEnabled("ENABLE_CIRCUIT_BREAKER")) recordSuccess(opts.fallback.provider);
+    _logExecution(requestId, opts.fallback.provider, opts.fallback.model, "fallback", result.raw?.usage, opts, Math.round(performance.now() - fallbackStart), "breaker-fallback").catch(() => {});
+    return result;
+  }
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const result = await _callAISingle(provider, model, opts);
+      if (isEnabled("ENABLE_CIRCUIT_BREAKER")) recordSuccess(provider);
       // Shadow telemetry — fire-and-forget, flag-gated
       _logExecution(requestId, provider, model, "success", result.raw?.usage, opts, Math.round(performance.now() - callStart), attempt === 0 ? "primary" : `retry-${attempt}`).catch(() => {});
       return result;
     } catch (e) {
+      if (isEnabled("ENABLE_CIRCUIT_BREAKER")) recordFailure(provider);
       if (e instanceof AIError) {
         if ((e.status === 503 || e.status === 504) && attempt < maxRetries) {
           const delay = 1000 * Math.pow(2, attempt);
@@ -115,6 +130,7 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
           _logExecution(requestId, provider, model, "error", undefined, opts, Math.round(performance.now() - callStart), `error-${e.status}`, e.message, e.status).catch(() => {});
           const fallbackStart = performance.now();
           const result = await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+          if (isEnabled("ENABLE_CIRCUIT_BREAKER")) recordSuccess(opts.fallback.provider);
           _logExecution(requestId, opts.fallback.provider, opts.fallback.model, "fallback", result.raw?.usage, opts, Math.round(performance.now() - fallbackStart), "fallback").catch(() => {});
           return result;
         }
@@ -267,6 +283,89 @@ async function _logUsage(
   });
 }
 
+const PRICING_CACHE_KEY = "llm_pricing";
+const PRICING_CACHE_TTL = 300_000; // 5 minutes
+
+interface PricingEntry {
+  provider: string;
+  model: string;
+  prompt_cost_per_1m: number;
+  completion_cost_per_1m: number;
+}
+
+async function _estimateCost(
+  provider: string,
+  model: string,
+  usage: { prompt_tokens?: number; completion_tokens?: number } | undefined,
+): Promise<number | null> {
+  if (!usage || !isEnabled("ENABLE_COST_TRACKING")) return null;
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) return null;
+
+  let pricing = cacheGet<PricingEntry[]>(PRICING_CACHE_KEY);
+  if (!pricing) {
+    try {
+      const resp = await fetch(`${url}/rest/v1/llm_provider_pricing?select=provider,model,prompt_cost_per_1m,completion_cost_per_1m`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+      });
+      if (resp.ok) {
+        pricing = await resp.json();
+        cacheSet(PRICING_CACHE_KEY, pricing!, PRICING_CACHE_TTL);
+      }
+    } catch { /* ignore */ }
+  }
+  if (!pricing) return null;
+
+  const entry = pricing.find((p) => p.provider === provider && p.model === model);
+  if (!entry) return null;
+
+  const promptCost = ((usage.prompt_tokens || 0) / 1_000_000) * entry.prompt_cost_per_1m;
+  const completionCost = ((usage.completion_tokens || 0) / 1_000_000) * entry.completion_cost_per_1m;
+  return promptCost + completionCost;
+}
+
+async function _checkBudget(companyId: string | undefined): Promise<void> {
+  if (!companyId || !isEnabled("ENABLE_BUDGET_GUARDRAILS")) return;
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) return;
+
+  try {
+    // Get budget
+    const budgetResp = await fetch(
+      `${url}/rest/v1/llm_company_budget?company_id=eq.${companyId}&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" } },
+    );
+    if (!budgetResp.ok) return;
+    const budgets = await budgetResp.json();
+    if (!budgets?.length) return;
+
+    const budget = budgets[0];
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+
+    // Get current month spend
+    const spendResp = await fetch(
+      `${url}/rest/v1/ai_execution_log?company_id=eq.${companyId}&created_at=gte.${monthStart.toISOString()}&select=estimated_cost_usd`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" } },
+    );
+    if (!spendResp.ok) return;
+    const entries = await spendResp.json();
+    const totalSpend = entries.reduce((sum: number, e: any) => sum + (e.estimated_cost_usd || 0), 0);
+
+    const threshold = budget.monthly_budget_usd * (budget.alert_threshold_pct / 100);
+    if (totalSpend >= budget.monthly_budget_usd) {
+      console.warn(`[budget-guardrail] Company ${companyId} OVER BUDGET: $${totalSpend.toFixed(4)} / $${budget.monthly_budget_usd}`);
+    } else if (totalSpend >= threshold) {
+      console.warn(`[budget-guardrail] Company ${companyId} approaching budget: $${totalSpend.toFixed(4)} / $${budget.monthly_budget_usd} (${((totalSpend / budget.monthly_budget_usd) * 100).toFixed(1)}%)`);
+    }
+  } catch { /* soft guardrail — never block */ }
+}
+
 async function _logExecution(
   requestId: string,
   provider: AIProvider,
@@ -286,6 +385,9 @@ async function _logExecution(
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) return;
+
+  // Phase 3: Cost estimation (flag-gated inside)
+  const estimatedCost = await _estimateCost(provider, model, usage).catch(() => null);
 
   await fetch(`${url}/rest/v1/ai_execution_log`, {
     method: "POST",
@@ -310,8 +412,12 @@ async function _logExecution(
       total_tokens: usage?.total_tokens || 0,
       execution_path: executionPath,
       error_message: errorMessage || null,
+      estimated_cost_usd: estimatedCost,
     }),
   });
+
+  // Phase 3: Budget guardrail check (flag-gated inside, fire-and-forget)
+  _checkBudget(opts.companyId).catch(() => {});
 }
 
 export class AIError extends Error {

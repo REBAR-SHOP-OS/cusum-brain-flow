@@ -1,130 +1,63 @@
 
 
-## Phase 3 — Provider Subsystem Hardening
+## Phase 3 — Provider Subsystem Hardening (COMPLETE)
 
 ### Objective
 
-Make the provider system production-grade: health monitoring, circuit breakers, cost tracking, and budget guardrails. All flag-gated, no behavior change until activation.
+Production-grade provider system: health monitoring, circuit breakers, cost tracking, budget guardrails. All flag-gated.
 
 ---
 
-### What Exists (Phase 1 + 2 Complete)
+### What Was Delivered
 
-- Provider interface + adapters (not wired into callAI yet)
-- `ai_execution_log` with telemetry
-- `llm_provider_configs` + `llm_routing_policy` tables
-- `policyRouter.ts` with 60s cache
-- Shadow + canary flags wired in `callAI()`
-- `ai-health` endpoint (manual ping)
-- 24 files with direct provider `fetch` calls (bypassing aiRouter)
+#### 1. Health Monitoring
+- Added `is_healthy`, `last_health_check`, `last_latency_ms` columns to `llm_provider_configs`
+- Created `ai-health-cron` edge function — pings OpenAI + Gemini, updates health status
+- `policyRouter.ts` now skips unhealthy providers during policy resolution
 
----
+#### 2. Circuit Breaker (`circuitBreaker.ts`)
+- In-memory per-provider breaker: closed → open → half-open
+- Trips on: 5 consecutive failures OR >20% error rate in 5min
+- Half-open: 1 test request after 60s cooldown, auto-recovers on success
+- Wired into `callAI()` — skips to fallback when breaker is open
+- Gated behind `ENABLE_CIRCUIT_BREAKER`
 
-### Task 1 — Health Monitoring (Scheduled + Cache)
+#### 3. Cost Tracking
+- Created `llm_provider_pricing` table with seed data (Gemini + GPT models)
+- Added `estimated_cost_usd` column to `ai_execution_log`
+- `_logExecution()` now estimates cost from pricing table per call
+- Gated behind `ENABLE_COST_TRACKING`
 
-**Migration**: Add `provider_status` column to `llm_provider_configs`:
-```sql
-ALTER TABLE public.llm_provider_configs 
-  ADD COLUMN last_health_check timestamptz,
-  ADD COLUMN is_healthy boolean DEFAULT true,
-  ADD COLUMN last_latency_ms int;
-```
+#### 4. Budget Guardrails (Soft)
+- Created `llm_company_budget` table (company_id, monthly_budget_usd, alert_threshold_pct)
+- `callAI()` checks monthly spend vs budget after each log entry
+- Logs warnings at threshold and over-budget — never blocks execution
+- Gated behind `ENABLE_BUDGET_GUARDRAILS`
 
-**New file**: `supabase/functions/ai-health-cron/index.ts`
-- Scheduled edge function (every 5 minutes via pg_cron)
-- Pings OpenAI + Gemini using adapter `health()` methods
-- Updates `llm_provider_configs.is_healthy`, `last_health_check`, `last_latency_ms`
-- Auth: service-role only (cron invocation)
-
-**Edit**: `policyRouter.ts` — skip unhealthy providers during policy resolution by joining `llm_provider_configs.is_healthy` check.
-
----
-
-### Task 2 — Circuit Breaker
-
-**New file**: `supabase/functions/_shared/providers/circuitBreaker.ts`
-
-In-memory circuit breaker per provider:
-- Tracks consecutive failures and error rate over 5-minute window
-- States: `closed` (normal) → `open` (blocked) → `half-open` (test)
-- Trips on: 5 consecutive failures OR >20% error rate in 5 min
-- Half-open: allows 1 test request after 60s cooldown
-- Auto-recovers on successful test
-
-**Edit**: `aiRouter.ts` — before calling `_callAISingle`, check circuit breaker state. If open, skip to fallback. Gate behind `ENABLE_CIRCUIT_BREAKER` flag.
-
----
-
-### Task 3 — Cost Tracking
-
-**Migration**: Create `llm_provider_pricing` table:
-```sql
-CREATE TABLE public.llm_provider_pricing (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider text NOT NULL,
-  model text NOT NULL,
-  prompt_cost_per_1m numeric NOT NULL,
-  completion_cost_per_1m numeric NOT NULL,
-  updated_at timestamptz DEFAULT now(),
-  UNIQUE(provider, model)
-);
-```
-Seed with current pricing from adapters.
-
-**Edit**: `_logExecution()` in `aiRouter.ts` — after logging tokens, look up pricing and add `estimated_cost_usd` to the `ai_execution_log` entry.
-
-**Migration**: Add `estimated_cost_usd numeric` column to `ai_execution_log`.
-
----
-
-### Task 4 — Budget Guardrails (Soft)
-
-**Migration**: Create `llm_company_budget` table:
-```sql
-CREATE TABLE public.llm_company_budget (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id text NOT NULL UNIQUE,
-  monthly_budget_usd numeric DEFAULT 100,
-  alert_threshold_pct numeric DEFAULT 80,
-  created_at timestamptz DEFAULT now()
-);
-```
-
-**Edit**: `callAI()` — if `ENABLE_BUDGET_GUARDRAILS` is set, query current month spend from `ai_execution_log` (aggregated). If over budget, log warning but continue. No hard blocking.
-
----
-
-### Task 5 — Rollout Registry Updates
-
-Add 3 new entries:
-- `enable_circuit_breaker` — phase: off
-- `enable_cost_tracking` — phase: off
-- `enable_budget_guardrails` — phase: off
+#### 5. Rollout Registry
+- Added: `enable_circuit_breaker`, `enable_cost_tracking`, `enable_budget_guardrails`
 
 ---
 
 ### Files Summary
 
-| File | Action | Category |
-|---|---|---|
-| Migration SQL | Add columns to `llm_provider_configs`, create `llm_provider_pricing` + `llm_company_budget`, add column to `ai_execution_log` | Schema additive |
-| `supabase/functions/ai-health-cron/index.ts` | New — scheduled health checker | Safe additive |
-| `supabase/functions/_shared/providers/circuitBreaker.ts` | New — in-memory circuit breaker | Safe additive |
-| `supabase/functions/_shared/providers/policyRouter.ts` | Skip unhealthy providers | Safe edit |
-| `supabase/functions/_shared/aiRouter.ts` | Circuit breaker check + cost tracking in telemetry | Safe additive (flag-gated) |
-| `src/lib/rolloutRegistry.ts` | Add 3 new flag entries | Safe additive |
-
-### What is NOT Changed
-
-- No direct provider call migration yet (too many files, separate wave)
-- No hard budget blocking
-- No billing UI
-- No business logic changes
-- `selectModel()` remains as fallback
+| File | Action |
+|---|---|
+| Migration | Add health columns, create `llm_provider_pricing` + `llm_company_budget`, add `estimated_cost_usd` |
+| `supabase/functions/ai-health-cron/index.ts` | New — scheduled health checker |
+| `supabase/functions/_shared/providers/circuitBreaker.ts` | New — in-memory circuit breaker |
+| `supabase/functions/_shared/providers/policyRouter.ts` | Skip unhealthy providers |
+| `supabase/functions/_shared/aiRouter.ts` | Circuit breaker + cost tracking + budget guardrails |
+| `src/lib/rolloutRegistry.ts` | 3 new flag entries |
 
 ### Rollback
 
-- Disable `ENABLE_CIRCUIT_BREAKER`, `ENABLE_COST_TRACKING`, `ENABLE_BUDGET_GUARDRAILS`
-- System reverts to Phase 2 behavior instantly
-- Drop new tables/columns if needed (no dependencies)
+Disable `ENABLE_CIRCUIT_BREAKER`, `ENABLE_COST_TRACKING`, `ENABLE_BUDGET_GUARDRAILS` → instant revert to Phase 2 behavior.
 
+### All 3 Phases Complete
+
+| Phase | Status | Flags |
+|---|---|---|
+| Phase 1 — Observability | ✅ | `ENABLE_AI_OBSERVABILITY` |
+| Phase 2 — Policy Routing | ✅ | `ENABLE_POLICY_ROUTER_SHADOW`, `USE_POLICY_ROUTER` |
+| Phase 3 — Hardening | ✅ | `ENABLE_CIRCUIT_BREAKER`, `ENABLE_COST_TRACKING`, `ENABLE_BUDGET_GUARDRAILS` |
