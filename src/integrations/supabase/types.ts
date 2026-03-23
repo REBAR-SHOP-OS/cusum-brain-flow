@@ -5015,6 +5015,45 @@ export type Database = {
           },
         ]
       }
+      feature_flags: {
+        Row: {
+          allowed_emails: string[] | null
+          allowed_roles: string[] | null
+          allowed_user_ids: string[] | null
+          created_at: string | null
+          description: string | null
+          enabled: boolean | null
+          flag_key: string
+          id: string
+          metadata: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          allowed_emails?: string[] | null
+          allowed_roles?: string[] | null
+          allowed_user_ids?: string[] | null
+          created_at?: string | null
+          description?: string | null
+          enabled?: boolean | null
+          flag_key: string
+          id?: string
+          metadata?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          allowed_emails?: string[] | null
+          allowed_roles?: string[] | null
+          allowed_user_ids?: string[] | null
+          created_at?: string | null
+          description?: string | null
+          enabled?: boolean | null
+          flag_key?: string
+          id?: string
+          metadata?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       field_audit_trail: {
         Row: {
           changed_at: string
