@@ -358,7 +358,8 @@ async function publishToInstagram(
   accessToken: string,
   caption: string,
   imageUrl?: string,
-  contentType: string = "post"
+  contentType: string = "post",
+  coverImageUrl?: string
 ): Promise<{ id?: string; error?: string }> {
   try {
     if (!imageUrl) {
