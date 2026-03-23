@@ -1,47 +1,32 @@
 
 
-## Simplify Pro Video Editor — Remove Non-Functional Features
+## Add Character/Person Image Upload to Ad Director
 
-### Problem
-The editor has 13 sidebar tabs and many UI elements, but most are non-functional placeholders showing "Coming soon" toasts. This creates a confusing, cluttered interface.
+### What
+Add a third upload zone labeled "Character" (with a person icon) between Intro and Outro in the ChatPromptBar. This lets users upload a reference photo of a person who should appear in the generated video as a product spokesperson.
 
-### What Gets Removed
+### Changes
 
-| Tab/Feature | Reason |
-|---|---|
-| **Record** | All 3 options show "Coming soon" |
-| **Templates** | All 8 items show "Coming soon" |
-| **Graphics** | All 7 items show "Coming soon" |
-| **Stock Video** | Copies URL to clipboard, doesn't insert into video |
-| **Stock Images** | Same — clipboard only, no integration |
-| **Settings** | Presets (Overlay, Transition, Subtitle, Sticker, Text) don't affect output |
-| **Transitions** (sidebar tab) | Selection stored in state but never applied to export |
-| **Effects panel** (right panel) | Fade in/out sliders don't affect export; speed only affects playback |
+**File: `src/components/ad-director/ChatPromptBar.tsx`**
 
-### What Stays (6 functional tabs)
+1. Add `characterImage` state + `characterRef` for file input
+2. Add a third upload box between Intro and Outro with a `UserRound` icon and label "Character"
+3. Update `onSubmit` prop signature to include `characterImage: File | null`
+4. Pass `characterImage` in `handleSubmit` call
 
-| Tab | Function |
-|---|---|
-| **My Media** | Scene list, regenerate, replace clips |
-| **Text** | Add text overlays to scenes |
-| **Music** | Select background music |
-| **Script** | Edit voiceover text per scene |
-| **Brand Kit** | Logo position, delete, replace |
-| **Card Editor** | Intro/outro card design |
+**File: `src/components/ad-director/AdDirectorContent.tsx`**
 
-### UI Changes
+5. Update `handleSubmit` signature to accept `characterImage: File | null`
+6. If `characterImage` is provided, upload it to storage and include the URL in the `analyze-script` and `write-cinematic-prompt` edge function calls as `characterImageUrl` — this tells the AI to feature this person in the video scenes
+7. Add `characterImageUrl` to the `generate-clip` payload so the video generation model receives the person reference
 
-**File: `src/components/ad-director/ProVideoEditor.tsx`**
-
-1. **Reduce TABS array** from 13 to 6 — remove record, stock-video, stock-images, templates, graphics, transitions, settings
-2. **Remove right panel** (EffectsPanel) — fade/speed controls don't work. Remove `rightPanelOpen` state and the entire right panel div
-3. **Remove unused imports** — RecordTab, StockVideoTab, StockImagesTab, TemplatesTab, GraphicsTab, TransitionsTab, SettingsTab, EffectsPanel
-4. **Remove unused state** — `editorSettings`, `transitionDuration`, `fadeIn`, `fadeOut`, `speed` (speed applied to video playback only, minor loss)
-5. **Clean up tab content rendering** — remove all conditional renders for removed tabs
-6. **Keep all functional logic** — AI command bar, timeline, voiceover generation, overlays, playback controls, undo/redo
-
-Result: A clean 6-tab editor with only working features, reducing cognitive load significantly.
+### UI Layout
+```text
+[Intro Image]  [Character 👤]  [Outro Image]
+```
+The Character box uses the same dashed-border style as Intro/Outro but with a `UserRound` icon and slightly different accent color (purple tint) to distinguish it.
 
 ### Files
-- `src/components/ad-director/ProVideoEditor.tsx` — remove 7 tabs, right panel, unused state/imports
+- `src/components/ad-director/ChatPromptBar.tsx` — add character upload zone + pass to onSubmit
+- `src/components/ad-director/AdDirectorContent.tsx` — receive characterImage, upload to storage, include in AI pipeline calls
 
