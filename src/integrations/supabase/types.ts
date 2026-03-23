@@ -7282,6 +7282,84 @@ export type Database = {
           },
         ]
       }
+      llm_provider_configs: {
+        Row: {
+          display_name: string
+          id: string
+          is_enabled: boolean | null
+          max_rpm: number | null
+          notes: string | null
+          priority: number | null
+          provider: string
+          updated_at: string | null
+        }
+        Insert: {
+          display_name: string
+          id?: string
+          is_enabled?: boolean | null
+          max_rpm?: number | null
+          notes?: string | null
+          priority?: number | null
+          provider: string
+          updated_at?: string | null
+        }
+        Update: {
+          display_name?: string
+          id?: string
+          is_enabled?: boolean | null
+          max_rpm?: number | null
+          notes?: string | null
+          priority?: number | null
+          provider?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      llm_routing_policy: {
+        Row: {
+          agent_name: string | null
+          created_at: string | null
+          has_attachments: boolean | null
+          id: string
+          is_active: boolean | null
+          max_tokens: number | null
+          message_pattern: string | null
+          model: string
+          priority: number | null
+          provider: string
+          reason: string | null
+          temperature: number | null
+        }
+        Insert: {
+          agent_name?: string | null
+          created_at?: string | null
+          has_attachments?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          max_tokens?: number | null
+          message_pattern?: string | null
+          model: string
+          priority?: number | null
+          provider: string
+          reason?: string | null
+          temperature?: number | null
+        }
+        Update: {
+          agent_name?: string | null
+          created_at?: string | null
+          has_attachments?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          max_tokens?: number | null
+          message_pattern?: string | null
+          model?: string
+          priority?: number | null
+          provider?: string
+          reason?: string | null
+          temperature?: number | null
+        }
+        Relationships: []
+      }
       loading_checklist: {
         Row: {
           company_id: string
