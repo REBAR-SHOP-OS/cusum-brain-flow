@@ -237,6 +237,9 @@ export default function AgentWorkspace() {
   }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSendInternal = useCallback(async (content: string, slotOverride?: number, files?: UploadedFile[]) => {
+    // Guard: prevent double-enqueue if already loading
+    if (isLoading) return;
+
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -285,6 +288,8 @@ export default function AgentWorkspace() {
     const attachedFiles = files?.map(f => ({ name: f.name, url: f.url }));
 
     if (sessionId) {
+      // Unsubscribe previous listener to prevent duplicate message appends
+      backgroundAgentService.unsubscribe(sessionId);
       // Subscribe so we can handle special UI logic (vizzy-actions, pixel flow)
       backgroundAgentService.subscribe(sessionId, (response) => {
         // Track pixel sequential flow
@@ -398,7 +403,7 @@ export default function AgentWorkspace() {
         aiModel,
       );
     }
-  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate, aiModel, agentId, isSuperAdmin, imageStyles, selectedProducts, imageAspectRatio]);
+  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate, aiModel, agentId, isSuperAdmin, imageStyles, selectedProducts, imageAspectRatio, isLoading]);
 
   // Keep ref in sync
   useEffect(() => { sendRef.current = handleSendInternal; }, [handleSendInternal]);
