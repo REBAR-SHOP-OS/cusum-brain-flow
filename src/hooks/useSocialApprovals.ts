@@ -68,7 +68,7 @@ export function useSocialApprovals() {
       // Move post to scheduled (must set qa_status too for DB trigger)
       const { error: postError } = await supabase
         .from("social_posts")
-        .update({ status: "scheduled", qa_status: "approved" })
+        .update({ status: "scheduled", qa_status: "approved", neel_approved: true })
         .eq("id", postId);
       if (postError) throw postError;
     },
