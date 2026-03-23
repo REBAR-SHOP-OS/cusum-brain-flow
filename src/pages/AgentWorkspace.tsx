@@ -288,6 +288,8 @@ export default function AgentWorkspace() {
     const attachedFiles = files?.map(f => ({ name: f.name, url: f.url }));
 
     if (sessionId) {
+      // Unsubscribe previous listener to prevent duplicate message appends
+      backgroundAgentService.unsubscribe(sessionId);
       // Subscribe so we can handle special UI logic (vizzy-actions, pixel flow)
       backgroundAgentService.subscribe(sessionId, (response) => {
         // Track pixel sequential flow
