@@ -1,118 +1,105 @@
 
 
-## Phase 2 — Policy-Driven Routing (Shadow + Canary)
+## Phase 3 — Provider Subsystem Hardening
 
 ### Objective
 
-Replace hardcoded `selectModel()` logic with config-driven routing policies. Shadow mode first — log what the policy engine *would* choose vs what actually runs. No behavior change until canary activation.
+Make the provider system production-grade: health monitoring, circuit breakers, cost tracking, and budget guardrails. All flag-gated, no behavior change until activation.
 
 ---
 
-### What Exists (Phase 1 Complete)
+### What Exists (Phase 1 + 2 Complete)
 
-- `selectModel()` — hardcoded if/else routing by agent/message pattern
-- `_logExecution()` — flag-gated telemetry to `ai_execution_log`
-- Provider adapters (not wired yet)
-- `ENABLE_AI_OBSERVABILITY` flag
-
-### What Phase 2 Adds
+- Provider interface + adapters (not wired into callAI yet)
+- `ai_execution_log` with telemetry
+- `llm_provider_configs` + `llm_routing_policy` tables
+- `policyRouter.ts` with 60s cache
+- Shadow + canary flags wired in `callAI()`
+- `ai-health` endpoint (manual ping)
+- 24 files with direct provider `fetch` calls (bypassing aiRouter)
 
 ---
 
-### Task 1 — Routing Policy Tables (Migration)
+### Task 1 — Health Monitoring (Scheduled + Cache)
 
-Two new tables:
-
+**Migration**: Add `provider_status` column to `llm_provider_configs`:
 ```sql
--- Provider configs: which providers are available and their current status
-CREATE TABLE public.llm_provider_configs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider text NOT NULL UNIQUE,        -- 'gpt' | 'gemini'
-  display_name text NOT NULL,
-  is_enabled boolean DEFAULT true,
-  priority int DEFAULT 10,              -- lower = preferred
-  max_rpm int,                          -- rate limit hint
-  notes text,
-  updated_at timestamptz DEFAULT now()
-);
+ALTER TABLE public.llm_provider_configs 
+  ADD COLUMN last_health_check timestamptz,
+  ADD COLUMN is_healthy boolean DEFAULT true,
+  ADD COLUMN last_latency_ms int;
+```
 
--- Routing policies: map agent/pattern → provider/model
-CREATE TABLE public.llm_routing_policy (
+**New file**: `supabase/functions/ai-health-cron/index.ts`
+- Scheduled edge function (every 5 minutes via pg_cron)
+- Pings OpenAI + Gemini using adapter `health()` methods
+- Updates `llm_provider_configs.is_healthy`, `last_health_check`, `last_latency_ms`
+- Auth: service-role only (cron invocation)
+
+**Edit**: `policyRouter.ts` — skip unhealthy providers during policy resolution by joining `llm_provider_configs.is_healthy` check.
+
+---
+
+### Task 2 — Circuit Breaker
+
+**New file**: `supabase/functions/_shared/providers/circuitBreaker.ts`
+
+In-memory circuit breaker per provider:
+- Tracks consecutive failures and error rate over 5-minute window
+- States: `closed` (normal) → `open` (blocked) → `half-open` (test)
+- Trips on: 5 consecutive failures OR >20% error rate in 5 min
+- Half-open: allows 1 test request after 60s cooldown
+- Auto-recovers on successful test
+
+**Edit**: `aiRouter.ts` — before calling `_callAISingle`, check circuit breaker state. If open, skip to fallback. Gate behind `ENABLE_CIRCUIT_BREAKER` flag.
+
+---
+
+### Task 3 — Cost Tracking
+
+**Migration**: Create `llm_provider_pricing` table:
+```sql
+CREATE TABLE public.llm_provider_pricing (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  agent_name text,                      -- null = default/wildcard
-  message_pattern text,                 -- regex pattern or null
-  has_attachments boolean,              -- null = don't care
   provider text NOT NULL,
   model text NOT NULL,
-  max_tokens int DEFAULT 4000,
-  temperature numeric DEFAULT 0.5,
-  priority int DEFAULT 100,             -- lower = higher priority, first match wins
-  is_active boolean DEFAULT true,
-  reason text,
+  prompt_cost_per_1m numeric NOT NULL,
+  completion_cost_per_1m numeric NOT NULL,
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(provider, model)
+);
+```
+Seed with current pricing from adapters.
+
+**Edit**: `_logExecution()` in `aiRouter.ts` — after logging tokens, look up pricing and add `estimated_cost_usd` to the `ai_execution_log` entry.
+
+**Migration**: Add `estimated_cost_usd numeric` column to `ai_execution_log`.
+
+---
+
+### Task 4 — Budget Guardrails (Soft)
+
+**Migration**: Create `llm_company_budget` table:
+```sql
+CREATE TABLE public.llm_company_budget (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id text NOT NULL UNIQUE,
+  monthly_budget_usd numeric DEFAULT 100,
+  alert_threshold_pct numeric DEFAULT 80,
   created_at timestamptz DEFAULT now()
 );
 ```
 
-Seed with current `selectModel()` rules:
-- estimation+attachments → gemini-2.5-pro (priority 10)
-- briefing/daily/report pattern → gemini-2.5-pro (priority 20)
-- accounting/legal/empire/commander/data → gemini-2.5-pro (priority 30)
-- default wildcard → gemini-2.5-flash (priority 999)
-
-RLS: authenticated SELECT, service-role full access.
-
----
-
-### Task 2 — Policy Routing Engine (`_shared/providers/policyRouter.ts`)
-
-New file. Pure function:
-
-```typescript
-export async function resolvePolicy(agent, message, hasAttachments): Promise<{
-  provider, model, maxTokens, temperature, reason, source: "policy" | "fallback"
-}>
-```
-
-- Fetches `llm_routing_policy` (active, ordered by priority)
-- Matches first rule where agent/pattern/attachments match
-- Falls back to `selectModel()` if no match or fetch fails
-- Returns `source: "policy"` or `source: "fallback"`
-
-Cached in-memory for 60s to avoid per-call DB reads.
-
----
-
-### Task 3 — Shadow Comparison in `aiRouter.ts`
-
-In `callAI()`, after the existing `selectModel()` call (which callers use externally):
-
-- If `ENABLE_POLICY_ROUTER_SHADOW` is set:
-  - Call `resolvePolicy()` 
-  - Compare `recommended_provider/model` vs `actual_provider/model`
-  - Log mismatch to `ai_execution_log` with `execution_path: "shadow-mismatch"` or `"shadow-match"`
-  - **Do NOT override actual provider** — shadow only
-
-This reuses the existing `_logExecution` infrastructure from Phase 1.
-
----
-
-### Task 4 — Canary Flag (`use_policy_router`)
-
-A separate flag for actual activation (Phase 2 canary, not shadow):
-
-- When `USE_POLICY_ROUTER` is enabled: `callAI()` uses `resolvePolicy()` output instead of the caller-provided provider/model
-- When disabled: existing behavior unchanged
-- Initial rollout: super admins only → gradual percentage
-
-Not activated in this deployment — just wired. Activation requires validation of shadow data.
+**Edit**: `callAI()` — if `ENABLE_BUDGET_GUARDRAILS` is set, query current month spend from `ai_execution_log` (aggregated). If over budget, log warning but continue. No hard blocking.
 
 ---
 
 ### Task 5 — Rollout Registry Updates
 
-Add two entries:
-- `enable_policy_router_shadow` — phase: off
-- `use_policy_router` — phase: off
+Add 3 new entries:
+- `enable_circuit_breaker` — phase: off
+- `enable_cost_tracking` — phase: off
+- `enable_budget_guardrails` — phase: off
 
 ---
 
@@ -120,23 +107,24 @@ Add two entries:
 
 | File | Action | Category |
 |---|---|---|
-| Migration SQL | Create `llm_provider_configs` + `llm_routing_policy` + seed data | Schema additive |
-| `supabase/functions/_shared/providers/policyRouter.ts` | New — policy resolution engine | Safe additive |
-| `supabase/functions/_shared/aiRouter.ts` | Add shadow comparison block in `callAI()` (flag-gated) | Safe additive |
-| `src/lib/rolloutRegistry.ts` | Add 2 new flag entries | Safe additive |
+| Migration SQL | Add columns to `llm_provider_configs`, create `llm_provider_pricing` + `llm_company_budget`, add column to `ai_execution_log` | Schema additive |
+| `supabase/functions/ai-health-cron/index.ts` | New — scheduled health checker | Safe additive |
+| `supabase/functions/_shared/providers/circuitBreaker.ts` | New — in-memory circuit breaker | Safe additive |
+| `supabase/functions/_shared/providers/policyRouter.ts` | Skip unhealthy providers | Safe edit |
+| `supabase/functions/_shared/aiRouter.ts` | Circuit breaker check + cost tracking in telemetry | Safe additive (flag-gated) |
+| `src/lib/rolloutRegistry.ts` | Add 3 new flag entries | Safe additive |
 
 ### What is NOT Changed
 
-- `selectModel()` remains — it's the fallback and current behavior
-- No provider adapter wiring yet
-- No circuit breakers
-- No cost tracking
+- No direct provider call migration yet (too many files, separate wave)
+- No hard budget blocking
+- No billing UI
 - No business logic changes
-- No existing edge function changes
+- `selectModel()` remains as fallback
 
 ### Rollback
 
-- Disable `ENABLE_POLICY_ROUTER_SHADOW` and `USE_POLICY_ROUTER` env vars
-- System reverts to hardcoded `selectModel()` instantly
-- Drop tables if needed (no dependencies)
+- Disable `ENABLE_CIRCUIT_BREAKER`, `ENABLE_COST_TRACKING`, `ENABLE_BUDGET_GUARDRAILS`
+- System reverts to Phase 2 behavior instantly
+- Drop new tables/columns if needed (no dependencies)
 
