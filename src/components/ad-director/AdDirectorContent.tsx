@@ -420,20 +420,21 @@ export function AdDirectorContent() {
     } finally {
       setExporting(false);
     }
-  }, [clips, storyboard, segments, brand, musicTrackUrl]);
+  }, [storyboard, segments, brand, musicTrackUrl]);
 
   // ─── Export (user-triggered from editor) ──────────────
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
-      const completedClips = clips.filter(c => c.status === "completed" && c.videoUrl);
+      const latestClips = clipsRef.current;
+      const completedClips = latestClips.filter(c => c.status === "completed" && c.videoUrl);
       if (completedClips.length === 0) throw new Error("No clips to export");
 
       toast({ title: "Assembling ad..." });
 
       const orderedClips = storyboard
         .map(scene => {
-          const clip = clips.find(c => c.sceneId === scene.id);
+          const clip = latestClips.find(c => c.sceneId === scene.id);
           const segment = segments.find(s => s.id === scene.segmentId);
           const targetDur = segment ? segment.endTime - segment.startTime : 5;
           return clip?.status === "completed" && clip.videoUrl
