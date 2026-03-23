@@ -1,92 +1,62 @@
 
 
-## Equalize Voice & Text Vizzy Capabilities
+## Fix: Vizzy Must Always Verify Before Speaking About Employees
 
-### Current Gap
+### Problem
 
-Text Vizzy (via `admin-chat`) has **30+ native function-calling tools**. Voice Vizzy uses `[VIZZY-ACTION]` tags — but only **7 action types** are documented in its instructions and handled by the frontend. Voice is missing:
+When asked about Ben's activity, Vizzy first said "no activity" (relying on the context snapshot), then reversed after being pushed. The CEO's rule: **refresh all data before answering — no more mistakes like this.**
 
-- **Intelligence**: `deep_business_scan`, `investigate_entity`, `auto_diagnose_fix`
-- **Memory**: `save_memory`, `delete_memory`
-- **Notifications**: `create_notifications`
-- **Quotations**: `draft_quotation`
-- **ERP Updates**: `update_machine_status`, `update_delivery_status`, `update_lead_status`, `update_cut_plan_status`
-- **Events**: `create_event`, `log_fix_request`
-- **RC Read**: `rc_create_meeting`, `rc_get_active_calls`, `rc_get_team_presence`, `rc_get_call_analytics`
-- **WordPress**: All WP tools
-- **QuickBooks**: `quickbooks_query`
+The root cause: Text Vizzy has `investigate_entity` but doesn't always call it before answering employee questions. It sometimes answers from the pre-built context snapshot (which may not include granular per-employee data), then only investigates when challenged.
 
-### Why Voice Can't Just Get "All Tools"
+### Fix: 2 Changes
 
-Voice uses OpenAI Realtime API (`gpt-4o-mini-realtime-preview`) which does **NOT support native function calling**. It can only output text — so we use `[VIZZY-ACTION]` tags that the frontend intercepts and routes to `vizzy-erp-action`. The good news: `vizzy-erp-action` already handles ALL these actions server-side. We just need to:
+#### 1. Mandatory Employee Investigation Rule (Text Vizzy)
 
-1. Tell voice Vizzy about them (instructions)
-2. Make the frontend execute them (it already does — the handler is generic)
+**File**: `supabase/functions/admin-chat/index.ts` (~line 2508, DEEP INVESTIGATION PROTOCOL section)
 
-### Plan
-
-#### Change 1: Add all missing action types to voice instructions
-**File**: `src/hooks/useVizzyVoiceEngine.ts`
-
-Add these action types to the `VIZZY_INSTRUCTIONS` prompt (alongside existing RC/email/task actions):
+Add a hard rule:
 
 ```text
-═══ FULL ERP ACTION SUITE ═══
-You can execute ANY of these via [VIZZY-ACTION] tags:
-
-INTELLIGENCE:
-- [VIZZY-ACTION]{"type":"deep_business_scan","date_from":"2026-03-16","date_to":"2026-03-23","focus":"all"}[/VIZZY-ACTION]
-- [VIZZY-ACTION]{"type":"investigate_entity","query":"customer name or project"}[/VIZZY-ACTION]
-
-NOTIFICATIONS & REMINDERS:
-- [VIZZY-ACTION]{"type":"create_notifications","items":[{"title":"...","description":"...","type":"todo","priority":"high","assigned_to_name":"Neel"}]}[/VIZZY-ACTION]
-
-QUOTATIONS:
-- [VIZZY-ACTION]{"type":"draft_quotation","customer_name":"...","items":[{"description":"...","quantity":1,"unit_price":100}]}[/VIZZY-ACTION]
-
-ERP STATUS UPDATES:
-- [VIZZY-ACTION]{"type":"update_lead_status","id":"uuid","status":"qualified"}[/VIZZY-ACTION]
-- [VIZZY-ACTION]{"type":"update_delivery_status","id":"uuid","status":"in-transit"}[/VIZZY-ACTION]
-- [VIZZY-ACTION]{"type":"update_machine_status","id":"uuid","status":"running"}[/VIZZY-ACTION]
-- [VIZZY-ACTION]{"type":"update_cut_plan_status","id":"uuid","status":"completed"}[/VIZZY-ACTION]
-
-EVENTS & BUG REPORTS:
-- [VIZZY-ACTION]{"type":"create_event","entity_type":"...","event_type":"...","description":"..."}[/VIZZY-ACTION]
-- [VIZZY-ACTION]{"type":"log_fix_request","description":"...","affected_area":"..."}[/VIZZY-ACTION]
-
-MEMORY:
-- [VIZZY-ACTION]{"type":"save_memory","category":"business","content":"..."}[/VIZZY-ACTION]
-
-RC MEETINGS:
-- [VIZZY-ACTION]{"type":"rc_create_meeting","meeting_name":"Team Standup"}[/VIZZY-ACTION]
+═══ MANDATORY DATA REFRESH RULE (CRITICAL — CEO DIRECT ORDER) ═══
+When the CEO asks about a SPECIFIC employee (their activity, calls, emails, performance, status):
+1. ALWAYS call investigate_entity with their name FIRST — before saying a single word about them
+2. NEVER answer from the context snapshot alone — it may be incomplete
+3. If investigate_entity returns empty, THEN say "no activity found" — not before
+4. If the CEO corrects you ("they WERE working"), immediately save_memory with the correction
+This rule is NON-NEGOTIABLE. Breaking it causes the CEO to lose trust.
 ```
 
-#### Change 2: Update voice action result tracking in frontend
-**File**: `src/components/vizzy/VizzyVoiceChat.tsx`
+#### 2. Same Rule for Voice Vizzy + Auto-Learn from Corrections
 
-The existing handler already sends ALL action types to `vizzy-erp-action` generically. Just improve the toast summary to recognize the new types:
+**File**: `src/hooks/useVizzyVoiceEngine.ts` (add near the INTELLIGENCE STANDARD section)
 
-```typescript
-} else if (actionData.type === "create_notifications") {
-  results.tasks += actionData.items?.length || 1;
-} else if (actionData.type === "draft_quotation") {
-  results.other++;
-} else if (actionData.type === "deep_business_scan" || actionData.type === "investigate_entity") {
-  results.other++;
-} else if (actionData.type === "save_memory") {
-  results.other++;
+Add:
+
+```text
+═══ MANDATORY DATA REFRESH RULE (CRITICAL — CEO DIRECT ORDER) ═══
+When asked about a SPECIFIC employee's activity, calls, emails, or performance:
+1. ALWAYS trigger investigate_entity FIRST via [VIZZY-ACTION] before answering
+2. While waiting for results, say "Let me pull up [name]'s full activity..." — do NOT guess
+3. NEVER answer employee questions from pre-digest alone — always verify with a fresh lookup
+4. If the CEO corrects you, IMMEDIATELY save the correction:
+   [VIZZY-ACTION]{"type":"save_memory","category":"business","content":"CEO correction: [what they said]"}[/VIZZY-ACTION]
+
+═══ LEARNING FROM CORRECTIONS ═══
+When the CEO says "that's wrong", "no they were working", or corrects any claim you made:
+- Acknowledge the error immediately: "You're right, my mistake."
+- Save the correction to memory so you never repeat it
+- NEVER argue with or question the CEO's correction
 ```
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/hooks/useVizzyVoiceEngine.ts` | Add all missing ERP action types to voice instructions |
-| `src/components/vizzy/VizzyVoiceChat.tsx` | Improve toast summary for new action types |
+| `supabase/functions/admin-chat/index.ts` | Add MANDATORY DATA REFRESH rule to system prompt |
+| `src/hooks/useVizzyVoiceEngine.ts` | Add same rule + auto-learn from corrections |
 
-### What is NOT Changed
-- `admin-chat/index.ts` — text Vizzy already has everything
-- `vizzy-erp-action/index.ts` — already handles all action types server-side
-- No schema changes
-- No new edge functions
+### What This Fixes
+- Vizzy will always call `investigate_entity` before answering about any employee
+- No more "no activity" answers based on incomplete snapshots
+- CEO corrections are saved as memory to prevent repeat mistakes
 
