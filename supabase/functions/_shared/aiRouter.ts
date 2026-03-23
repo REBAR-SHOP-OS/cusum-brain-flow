@@ -89,6 +89,11 @@ async function _callAISingle(provider: AIProvider, model: string, opts: AIReques
     temperature: opts.temperature ?? 0.5,
   };
 
+  // GPT-5 only supports temperature=1.0
+  if (model.startsWith("gpt-5")) {
+    body.temperature = 1;
+  }
+
   if (opts.maxTokens) {
     // GPT-5 requires max_completion_tokens instead of max_tokens
     if (model.startsWith("gpt-5")) {
