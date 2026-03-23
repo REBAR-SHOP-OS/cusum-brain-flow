@@ -1,41 +1,60 @@
 
 
-## Fix: Approved Posts Still Showing "Pending Approval"
+## Fix: Ensure Story Content Type is Reliably Published as Story
 
-### Root Cause
+### Analysis Summary
 
-There are **two approval paths** in the app, and they are inconsistent:
+After thorough code audit, the entire publish pipeline for Instagram stories is **structurally correct**:
+- Frontend passes `content_type: localContentType` to `usePublishPost`
+- `usePublishPost` sends `content_type` to the edge function
+- Edge function parses it, passes to `publishToInstagram`
+- `publishToInstagram` sets `media_type: "STORIES"` when `contentType === "story"`
 
-1. **ApprovalsPanel** (`useSocialApprovals.ts` → `approvePost`): Updates `social_approvals` status to "approved" and sets `social_posts.status = "scheduled"` + `qa_status = "approved"` — but **never sets `neel_approved: true`**
-2. **PostReviewPanel** (line 940): Correctly sets `neel_approved: true` on the post
+The most likely cause of the reported issue is a **timing/state problem**: the `content_type` was either not yet saved or was "post" when the publish was triggered, and was changed to "story" afterward.
 
-When Neel approves posts through the Approvals panel, the `neel_approved` flag stays `false`. The calendar card (SocialCalendar.tsx line 237) checks `neel_approved` to show the "Approved" badge. Additionally, if the RLS policy blocks the status update on `social_posts`, the post remains stuck at `pending_approval`.
+### Root Cause: No Pre-Publish Content Type Sync
 
-### Fix (1 file, 1 line addition)
+When the user clicks "Publish Now", the code uses `localContentType` from React state. However:
+1. There is no explicit `await` to ensure the DB `content_type` matches before the edge function call
+2. If `content_type` was changed and the DB update failed silently, the post could be published correctly (via local state) but the DB would still show `content_type: "post"`
+3. More critically: if the page refreshed or the review panel was reopened before publishing, `localContentType` reinitializes from `post.content_type` (DB value), which might still be "post"
 
-**File: `src/hooks/useSocialApprovals.ts`** — line 71
+### Fix (2 files, minimal)
 
-Current:
+**Patch 1: `src/components/social/PostReviewPanel.tsx`**
+
+Add a defensive `content_type` sync to DB **before** the publish call in the "Publish Now" button handler (~line 969). Before building combos, ensure the DB has the correct content_type:
+
 ```typescript
-.update({ status: "scheduled", qa_status: "approved" })
+// Defensive: sync content_type to DB before publish
+await supabase
+  .from("social_posts")
+  .update({ content_type: localContentType })
+  .eq("id", post.id);
 ```
 
-Fixed:
+This is a single extra update that ensures DB and UI state are synchronized before the publish edge function fires.
+
+**Patch 2: `supabase/functions/social-publish/index.ts`**
+
+Add a log line after parsing to show exactly what `content_type` was received:
+
 ```typescript
-.update({ status: "scheduled", qa_status: "approved", neel_approved: true })
+console.log(`[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`);
 ```
 
-This ensures the Approvals panel approval path sets the same flag as the PostReviewPanel path.
+This enables debugging future cases.
 
-### Why Safe
-- Additive — only adds one field to an existing update
-- Both approval paths will now produce the same post state
+### Files Changed
+
+| File | Change | Category | Rollback |
+|---|---|---|---|
+| `src/components/social/PostReviewPanel.tsx` | Add pre-publish `content_type` DB sync | Safe additive | Remove the 3 lines |
+| `supabase/functions/social-publish/index.ts` | Add diagnostic log line | Safe additive | Remove the log line |
+
+### What Remains Unchanged
+- Instagram STORIES API call logic (already correct)
+- Caption stripping for stories (already correct)
+- All other publish paths
 - No route, schema, or UI changes
-- Calendar card already has the rendering logic for `neel_approved` (line 237)
-
-### Rollback
-Remove `, neel_approved: true` from the update call.
-
-### Regression Risk
-None — `neel_approved: true` is the correct end-state for approved posts regardless of which path triggers it.
 
