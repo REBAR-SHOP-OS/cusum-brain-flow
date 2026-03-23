@@ -1852,6 +1852,71 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
+    case "auto_diagnose_fix": {
+      try {
+        const title = args.title || "Unknown issue";
+        const description = args.description || "";
+        const severity = args.severity || "medium";
+
+        const diagnosisPrompt = `You are a senior full-stack developer and debugging expert analyzing bug reports for a production application built with:
+- **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Backend:** Supabase (PostgreSQL, Edge Functions in Deno, Row Level Security, Storage)
+- **State Management:** TanStack React Query + React hooks
+- **Routing:** React Router v6
+
+Your job: Analyze the bug report and produce a comprehensive, actionable diagnosis.
+
+## MANDATORY OUTPUT STRUCTURE
+
+**PROBLEM:** Clear one-line summary with impact.
+**ROOT CAUSE:** Deep technical analysis of WHY this happens.
+**CONTEXT:** Which pages/components/flows are involved.
+**FILE/COMPONENT:** Exact file paths and component names.
+**FIX:** Step-by-step code changes with actual code snippets.
+**TESTING:** How to verify the fix works.
+**DO NOT TOUCH:** Files that must NOT be changed.
+**SEVERITY:** ${severity}
+
+## Bug Report
+**Title:** ${title}
+**Description:** ${description}
+**Severity:** ${severity}`;
+
+        const aiResult = await callAI({
+          provider: "gemini",
+          model: "gemini-2.5-pro",
+          agentName: "system",
+          messages: [
+            { role: "system", content: "You are a senior debugging expert. Produce structured, actionable diagnoses." },
+            { role: "user", content: diagnosisPrompt },
+          ],
+          temperature: 0.3,
+          maxTokens: 3000,
+          fallback: { provider: "gemini", model: "gemini-2.5-flash" },
+        });
+
+        const diagnosis = aiResult.content || "No diagnosis generated";
+
+        // Save to vizzy_memory for tracking
+        const memoryKey = `auto_fix_${new Date().toISOString().slice(0, 19).replace(/[:-]/g, "")}`;
+        await supabase.from("vizzy_memory").insert({
+          user_id: "system",
+          category: "auto_fix",
+          content: JSON.stringify({ title, severity, diagnosis: diagnosis.slice(0, 2000) }),
+          company_id: companyId,
+        }).then(() => {}).catch(() => {});
+
+        return JSON.stringify({
+          tool: "auto_diagnose_fix",
+          title,
+          severity,
+          diagnosis,
+          memory_key: memoryKey,
+          note: "Diagnosis saved to memory. Share with App Builder to apply fix.",
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
