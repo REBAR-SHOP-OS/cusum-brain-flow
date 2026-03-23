@@ -104,8 +104,8 @@ export function RoleGuard({ children }: RoleGuardProps) {
     return <>{children}</>;
   }
 
-  // Block zahra@rebar.shop from /customers
-  if (email.toLowerCase() === "zahra@rebar.shop" && location.pathname.startsWith("/customers")) {
+  // Block specific emails from /customers (UX gate only — not a security boundary)
+  if (ACCESS_POLICIES.blockedFromCustomers.includes(email.toLowerCase()) && location.pathname.startsWith("/customers")) {
     return <Navigate to="/home" replace />;
   }
 
