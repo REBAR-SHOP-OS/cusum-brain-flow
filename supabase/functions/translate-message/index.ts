@@ -93,7 +93,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
     const makeRequest = async (prompt: string) => {
       return await callAI({
         provider: "gemini",
-        model: "gemini-2.5-pro",
+        model: "gemini-2.5-flash",
         agentName: "system",
         messages: [
           { role: "system", content: systemPrompt },
@@ -124,17 +124,10 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
       translations = {};
     }
 
-    // Retry fallback: if all translations are empty and input has 3+ real words, retry once
-    const wordCount = text.split(/\s+/).filter((w: string) => w.length > 0).length;
+    // If all translations empty, return raw text as fallback instead of expensive retry
     const allEmpty = langsToTranslate.every((l: string) => !translations[l]);
-    if (allEmpty && wordCount >= 3) {
-      console.log("Retry: empty translation for valid input, retrying with simpler prompt");
-      try {
-        const retryResult = await makeRequest(`Translate this to ${targetList}. Output JSON only:\n${text}`);
-        translations = parseTranslation(retryResult.content);
-      } catch {
-        console.error("Retry also failed");
-      }
+    if (allEmpty) {
+      console.log("Empty translation, returning raw text as fallback");
     }
 
     return new Response(
