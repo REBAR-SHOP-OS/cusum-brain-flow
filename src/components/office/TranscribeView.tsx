@@ -148,9 +148,6 @@ export function TranscribeView() {
   const [sourceLang, setSourceLang] = useState("auto");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(CONVERSATION_SPEAKERS[0].name);
   const [translationLang, setTranslationLang] = useState("fa");
-  const [translationMap, setTranslationMap] = useState<Record<string, string>>({});
-  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
-  const translatedForLangRef = useRef<string>("fa");
   const [formality, setFormality] = useState("neutral");
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
@@ -212,60 +209,7 @@ export function TranscribeView() {
     }
   }, [realtime.isConnected, realtime.committedTranscripts.length]);
 
-  // Live translation panel: translate new committed transcripts into selected language
-  useEffect(() => {
-    if (!translationLang || !realtime.committedTranscripts.length) return;
-
-    // If language changed, clear old translations and retranslate all
-    if (translatedForLangRef.current !== translationLang) {
-      translatedForLangRef.current = translationLang;
-      setTranslationMap({});
-      setTranslatingIds(new Set());
-    }
-
-    const toTranslate = realtime.committedTranscripts.filter(
-      (t) => !translationMap[t.id] && !translatingIds.has(t.id)
-    );
-
-    if (toTranslate.length === 0) return;
-
-    const newTranslating = new Set(translatingIds);
-    toTranslate.forEach((t) => newTranslating.add(t.id));
-    setTranslatingIds(newTranslating);
-
-    // Batch all untranslated segments into a single API call
-    const combinedText = toTranslate.map(t => t.text).join("\n---SEG---\n");
-    const ids = toTranslate.map(t => t.id);
-
-    supabase.functions
-      .invoke("translate-message", {
-        body: { text: combinedText, sourceLang: "auto", targetLangs: [translationLang] },
-      })
-      .then(({ data: res }) => {
-        const translated = res?.translations?.[translationLang] || "";
-        const parts = translated.split("\n---SEG---\n");
-        const newMap: Record<string, string> = {};
-        ids.forEach((id, i) => {
-          newMap[id] = (parts[i] || toTranslate[i].text).trim();
-        });
-        setTranslationMap((prev) => ({ ...prev, ...newMap }));
-        setTranslatingIds((prev) => {
-          const next = new Set(prev);
-          ids.forEach(id => next.delete(id));
-          return next;
-        });
-      })
-      .catch(() => {
-        const newMap: Record<string, string> = {};
-        ids.forEach((id, i) => { newMap[id] = toTranslate[i].text; });
-        setTranslationMap((prev) => ({ ...prev, ...newMap }));
-        setTranslatingIds((prev) => {
-          const next = new Set(prev);
-          ids.forEach(id => next.delete(id));
-          return next;
-        });
-      });
-  }, [realtime.committedTranscripts, translationLang]);
+  // Sidebar now reads directly from hook's englishText/farsiText — no duplicate API calls
 
   const callTranslateAPI = async (body: any, isFormData = false) => {
     setIsProcessing(true);
@@ -1112,7 +1056,7 @@ export function TranscribeView() {
         {/* Language selector header */}
         <div className="flex items-center gap-2 p-3 border-b border-border">
           <Globe className="w-4 h-4 text-primary" />
-          <Select value={translationLang} onValueChange={(v) => { setTranslationLang(v); setTranslationMap({}); setTranslatingIds(new Set()); translatedForLangRef.current = v; }}>
+          <Select value={translationLang} onValueChange={(v) => { setTranslationLang(v); }}>
             <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Select language" /></SelectTrigger>
             <SelectContent>
               {TRANSLATION_LANGUAGES.map((l) => (
@@ -1131,17 +1075,14 @@ export function TranscribeView() {
               </p>
             )}
             {realtime.committedTranscripts.map((t) => {
-              const translated = translationMap[t.id];
-              const isTranslating = translatingIds.has(t.id);
-              // Use explicit language field when available
               const displayText = translationLang === "fa"
-                ? (t.farsiText || t.originalCleanText || translated)
-                : (t.englishText || translated || t.translatedText);
+                ? (t.farsiText || "")
+                : (t.englishText || "");
               return (
                 <div key={t.id} className="space-y-0.5">
                   <p className="text-sm text-foreground" dir="auto">
                     {displayText || ""}
-                    {isTranslating && !displayText && (
+                    {t.isTranslating && !displayText && (
                       <span className="ml-1 text-xs text-muted-foreground italic animate-pulse">translating…</span>
                     )}
                   </p>
