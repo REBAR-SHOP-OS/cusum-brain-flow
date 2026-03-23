@@ -38,11 +38,11 @@ export const edgeFunctionInventory: EdgeFunctionEntry[] = [
   { name: "manage-bend", domain: "manufacturing", risk: "high", purpose: "Manage rebar bending batches and operations", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
   { name: "manage-extract", domain: "manufacturing", risk: "high", purpose: "Manage barlist extraction sessions and OCR processing", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
   { name: "manage-inventory", domain: "manufacturing", risk: "high", purpose: "Track raw material and finished goods inventory", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
-  { name: "shape-vision", domain: "manufacturing", risk: "medium", purpose: "AI shape recognition from rebar drawings", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "AI shape recognition" },
+  { name: "shape-vision", domain: "manufacturing", risk: "medium", purpose: "AI shape recognition from rebar drawings", usesSharedWrapper: true, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "Migrated to handleRequest in Wave 3" },
 
   // --- Delivery ---
   { name: "smart-dispatch", domain: "delivery", risk: "critical", purpose: "AI-powered delivery route optimization and dispatch", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p1", notes: "AI dispatch routing" },
-  { name: "validate-clearance-photo", domain: "delivery", risk: "medium", purpose: "Validate delivery site clearance photos via AI", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3" },
+  { name: "validate-clearance-photo", domain: "delivery", risk: "medium", purpose: "Validate delivery site clearance photos via AI", usesSharedWrapper: true, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "Migrated to handleRequest in Wave 3" },
 
   // --- Accounting ---
   { name: "qb-sync-engine", domain: "accounting", risk: "critical", purpose: "Full bidirectional QuickBooks data synchronization", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p1", notes: "QuickBooks full sync" },
