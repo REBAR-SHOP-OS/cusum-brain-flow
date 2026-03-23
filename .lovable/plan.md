@@ -1,190 +1,175 @@
 
 
-## Zero-Downtime Stabilization Plan — Phase 1 Execution Wave
+## Wave 2 — Control, Visibility & Read-Side Structure
 
-### Current State Summary
-
-The system already has solid building blocks:
-- `_shared/auth.ts` — `requireAuth()` and `optionalAuth()` 
-- `_shared/featureFlags.ts` — `isEnabled()` for env-based flags
-- `_shared/writeEvent.ts` — standardized activity event logging
-- `_shared/cache.ts` — in-memory TTL cache
-- `_shared/aiRouter.ts` — centralized AI model routing
-
-**What's missing**: company resolution is copy-pasted across 85+ functions. No structured logging. No database-driven feature flags. Only 1 test file exists. No service layer abstraction.
+All changes are additive. No existing files modified except extending `smoke-tests/index.ts`.
 
 ---
 
-### New Files to Introduce
+### TASK 1 — Upgrade Smoke Tests
 
-```text
-supabase/functions/_shared/
-├── auth.ts                    (exists — keep as-is)
-├── featureFlags.ts            (exists — extend)
-├── resolveCompany.ts          (NEW — centralize company_id lookup)
-├── structuredLog.ts           (NEW — JSON structured logging)
-├── requestHandler.ts          (NEW — shared request wrapper)
-├── roleCheck.ts               (NEW — server-side role validation)
-└── responseHelpers.ts         (NEW — standardized error/success shapes)
+**File: `supabase/functions/smoke-tests/index.ts`** (edit existing)
 
-supabase/functions/smoke-tests/
-└── index.ts                   (NEW — health check endpoint)
+Add 5 new read-only checks to the existing smoke test function:
 
-src/lib/
-├── featureFlagService.ts      (NEW — client-side flag reader)
-└── serviceLayer/
-    ├── authService.ts         (NEW — thin wrapper)
-    └── quoteService.ts        (NEW — thin wrapper)
-```
+| Check | What it does |
+|---|---|
+| `auth_service_available` | Verify `supabase.auth.admin.listUsers({ perPage: 1 })` responds without error |
+| `quote_response_shape` | Fetch 1 quotation, assert it has `id`, `company_id`, `status`, `created_at` |
+| `order_response_shape` | Fetch 1 order, assert it has `id`, `company_id`, `status` |
+| `feature_flag_fetch` | Fetch from `feature_flags`, verify array response with `flag_key` field |
+| `role_lookup` | Query `user_roles` with `.limit(1)`, verify it returns without error and has `role` field |
+
+All use service client, all are `SELECT` only, zero mutations.
+
+**Safety**: Extends existing endpoint. No new function folder. Rollback = revert to current file.
 
 ---
 
-### Phase 1A — Shared Edge Function Middleware (4 new files)
+### TASK 2 — Rollout Governance Config
 
-**1. `_shared/resolveCompany.ts`** — Eliminates 85+ duplicated company lookups
+**File: `src/lib/rolloutRegistry.ts`** (new)
+
+A typed, machine-readable registry of all feature flags and their rollout metadata:
 
 ```typescript
-// Single function: resolveCompanyId(serviceClient, userId) → companyId | throws
-// Includes cache (5min TTL) to reduce DB hits
-// Returns null-safe with clear error message
+export interface RolloutEntry {
+  flagKey: string;
+  owner: string;
+  domain: string;
+  targetRoles: string[];
+  targetUserIds: string[];
+  phase: "off" | "canary" | "percentage" | "ga";
+  rollbackSteps: string;
+  dependencies: string[];
+}
+
+export const rolloutRegistry: RolloutEntry[] = [
+  { flagKey: "use_new_request_handler", owner: "platform", domain: "infra", ... },
+  { flagKey: "use_new_quote_engine", owner: "sales", domain: "quotes", ... },
+  { flagKey: "use_new_pipeline_ui", owner: "sales", domain: "crm", ... },
+  { flagKey: "use_structured_logging", owner: "platform", domain: "infra", ... },
+];
 ```
 
-**2. `_shared/structuredLog.ts`** — JSON structured logging
+No UI. Just a typed config file that can be imported by admin tools later.
+
+**Safety**: New file, nothing imports it yet. Rollback = delete file.
+
+---
+
+### TASK 3 — Safe Domain Read Wrappers
+
+Four new files in `src/lib/serviceLayer/`:
+
+**`orderService.ts`** — Read-only order queries
+- `listOrders(companyId, options?)` — paginated, filterable by status
+- `getOrderById(orderId)` — single order fetch
+
+**`productionService.ts`** — Read-only production queries
+- `listProductionTasks(companyId, options?)` — paginated
+- `getProductionTaskById(taskId)`
+
+**`deliveryService.ts`** — Read-only delivery queries  
+- `listDeliveries(companyId, options?)` — paginated
+- `getDeliveryById(deliveryId)`
+
+**`roleService.ts`** — Read-only role/capability queries
+- `getUserRoles(userId)` — returns roles array
+- `hasUserRole(userId, role)` — boolean check
+- `listCompanyUsersWithRoles(companyId)` — joins profiles + user_roles
+
+All follow the same pattern as `quoteService.ts`: `(supabase as any).from(table).select(...)`, throw on error, return typed results.
+
+**Safety**: All new files. No existing code calls them. Read-only queries only. Rollback = delete files.
+
+---
+
+### TASK 4 — Critical Function Inventory
+
+**File: `src/lib/edgeFunctionInventory.ts`** (new)
+
+Machine-readable JSON-like TypeScript array categorizing ~40 critical edge functions:
 
 ```typescript
-// logInfo(functionName, message, metadata)
-// logWarn(functionName, message, metadata)  
-// logError(functionName, message, error, metadata)
-// All output JSON to stdout for edge function log parsing
-// Includes: timestamp, function, companyId, userId, requestId, duration
+export interface EdgeFunctionEntry {
+  name: string;
+  domain: "auth" | "quotes" | "orders" | "manufacturing" | "delivery" | "accounting" | "comms" | "ai" | "admin";
+  risk: "critical" | "high" | "medium" | "low";
+  usesSharedWrapper: boolean;
+  hasFeatureFlag: boolean;
+  hasSmokeCoverage: boolean;
+  notes?: string;
+}
 ```
 
-**3. `_shared/requestHandler.ts`** — Wrapper that handles boilerplate
+Covers key functions like:
+- **auth**: `google-oauth`, `kiosk-lookup`, `kiosk-punch`
+- **quotes**: `quote-engine`, `ai-generate-quotation`, `quote-expiry-watchdog`
+- **orders**: `convert-quote-to-order`, `odoo-sync-order-lines`
+- **manufacturing**: `manage-machine`, `log-machine-run`, `manage-bend`, `manage-extract`, `manage-inventory`
+- **delivery**: `smart-dispatch`, `validate-clearance-photo`
+- **accounting**: `qb-sync-engine`, `qb-audit`, `qb-webhook`, `payroll-engine`
+- **comms**: `gmail-sync`, `gmail-send`, `ringcentral-sync`, `ringcentral-webhook`
+
+**Safety**: New file, pure data. Rollback = delete file.
+
+---
+
+### TASK 5 — Safe Audit Helpers
+
+**File: `supabase/functions/_shared/auditLog.ts`** (new)
 
 ```typescript
-// handleRequest(req, handler, options) → Response
-// Handles: CORS preflight, auth, company resolution, error catching
-// Options: { requireAuth, requireCompany, requireRole, functionName }
-// Catches thrown Responses (from requireAuth) + unexpected errors
-// Returns standardized JSON shape: { ok, data, error }
+export interface AuditEntry {
+  action: string;        // e.g. "role_change", "order_delete", "config_update"
+  actorId: string;
+  targetEntity: string;
+  targetId: string;
+  companyId: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export async function writeAuditLog(client, entry: AuditEntry): Promise<void>
+// Best-effort insert into activity_events with event_type = "audit"
+// Uses existing activity_events table — no new table needed
+// Never throws — logs errors to structured logger
 ```
 
-**4. `_shared/roleCheck.ts`** — Server-side role validation
+**One example integration**: Add audit logging to `smoke-tests/index.ts` — log when smoke tests are run (who ran them, results summary). This is zero-risk since smoke tests are already non-critical.
 
-```typescript
-// hasRole(serviceClient, userId, role) → boolean
-// requireRole(serviceClient, userId, role) → void | throws Response(403)
-// Uses same user_roles table as frontend
-```
-
-**Adoption strategy**: These are purely additive. No existing function changes. New functions can opt-in by importing the wrapper. Old functions continue working unchanged.
+**Safety**: New shared file. One tiny addition to smoke-tests. Rollback = delete file + revert smoke-tests.
 
 ---
 
-### Phase 1B — Database Feature Flags
+### Files Summary
 
-**Migration**: Create `feature_flags` table
+| File | Action | Safe? | Rollback |
+|---|---|---|---|
+| `supabase/functions/smoke-tests/index.ts` | Edit — add 5 checks + audit | Yes — extends existing, read-only | Revert to current |
+| `src/lib/rolloutRegistry.ts` | New | Yes — nothing imports it | Delete |
+| `src/lib/serviceLayer/orderService.ts` | New | Yes — read-only wrapper | Delete |
+| `src/lib/serviceLayer/productionService.ts` | New | Yes — read-only wrapper | Delete |
+| `src/lib/serviceLayer/deliveryService.ts` | New | Yes — read-only wrapper | Delete |
+| `src/lib/serviceLayer/roleService.ts` | New | Yes — read-only wrapper | Delete |
+| `src/lib/edgeFunctionInventory.ts` | New | Yes — pure data | Delete |
+| `supabase/functions/_shared/auditLog.ts` | New | Yes — helper only | Delete |
 
-```sql
-CREATE TABLE public.feature_flags (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  flag_key TEXT UNIQUE NOT NULL,
-  enabled BOOLEAN DEFAULT false,
-  description TEXT,
-  allowed_roles TEXT[] DEFAULT '{}',
-  allowed_user_ids UUID[] DEFAULT '{}',
-  allowed_emails TEXT[] DEFAULT '{}',
-  metadata JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+### What MUST NOT Be Touched
 
--- RLS: readable by authenticated, writable by admin only
-ALTER TABLE public.feature_flags ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Authenticated can read flags"
-  ON public.feature_flags FOR SELECT TO authenticated USING (true);
-```
+1. Any existing edge function (except smoke-tests)
+2. Any database table or column
+3. `_shared/auth.ts` signature
+4. Any route or component
+5. Write-path logic in any service
 
-**Seed flags** (all disabled by default):
-- `use_new_request_handler`
-- `use_new_quote_engine`
-- `use_new_pipeline_ui`
-- `use_structured_logging`
+### Next Recommended Migration Order (after Wave 2)
 
-**Client-side**: `src/lib/featureFlagService.ts` — fetches flags, caches in memory, provides `useFeatureFlag(key)` hook. Falls back to `false` on any error.
-
----
-
-### Phase 1C — Smoke Test Endpoint
-
-**`supabase/functions/smoke-tests/index.ts`** — A single edge function that runs health checks:
-
-- Auth: can create a service client
-- DB: can query `profiles` table
-- Company resolution: can resolve default company
-- Quotes: can read from `quotations` table
-- Orders: can read from `orders` table
-- Returns JSON report with pass/fail per check + latency
-
-Called manually or via cron. No writes, read-only checks.
-
----
-
-### Phase 1D — First Service Layer Wrappers
-
-**`src/lib/serviceLayer/authService.ts`**
-- Wraps `supabase.auth.getUser()`, `signIn`, `signOut`
-- Adds structured error handling
-- Existing `useAuth` hook calls this instead of raw supabase
-
-**`src/lib/serviceLayer/quoteService.ts`**
-- Wraps quote CRUD operations
-- Existing quote components call this instead of raw supabase queries
-- Same inputs/outputs — zero behavior change
-
----
-
-### First 10 Safest Changes (in order)
-
-| # | Change | Risk |
-|---|--------|------|
-| 1 | Add `_shared/structuredLog.ts` | Zero — new file, nothing imports it yet |
-| 2 | Add `_shared/resolveCompany.ts` | Zero — new file, nothing imports it yet |
-| 3 | Add `_shared/roleCheck.ts` | Zero — new file |
-| 4 | Add `_shared/requestHandler.ts` | Zero — new file |
-| 5 | Create `feature_flags` table (migration) | Low — new table, no existing code affected |
-| 6 | Add `src/lib/featureFlagService.ts` | Zero — new file |
-| 7 | Add `supabase/functions/smoke-tests/index.ts` | Zero — new endpoint |
-| 8 | Migrate ONE edge function (`build-learning-pairs`) to use `requestHandler` | Low — small, non-critical function |
-| 9 | Add `src/lib/serviceLayer/authService.ts` wrapper | Zero — new file |
-| 10 | Add `src/lib/serviceLayer/quoteService.ts` wrapper | Zero — new file |
-
----
-
-### First 5 Things Explicitly Forbidden
-
-| # | Forbidden Action | Reason |
-|---|-----------------|--------|
-| 1 | Renaming any edge function folder | Breaks all client calls immediately |
-| 2 | Changing `_shared/auth.ts` signature | 150+ functions import it |
-| 3 | Modifying `RoleGuard.tsx` logic | Live routing for all users |
-| 4 | Deleting or renaming any database table/column | Live data dependencies |
-| 5 | Force-migrating existing functions to new wrapper | Must be opt-in, one at a time |
-
----
-
-### Rollback Plan
-
-Every change is a new file or new table. Rollback = delete the file or drop the table. No existing code is modified in Phase 1.
-
-### Test Plan
-
-- Smoke test endpoint validates core DB connectivity
-- Each new shared helper gets a unit test in `_shared/__tests__/`
-- Feature flag service tested by toggling a flag and verifying client reads
-- Service layer wrappers tested by calling through them and comparing output to direct calls
-
-### Risk Assessment
-
-**Phase 1 overall risk: MINIMAL** — All changes are purely additive. No existing behavior is modified. New code is opt-in only. Old functions continue working unchanged.
+1. Wire `orderService` into one order-list component (read path only)
+2. Wire `roleService` into admin panel role display
+3. Migrate `build-learning-pairs` to `requestHandler` (lowest risk function)
+4. Enable `use_structured_logging` flag for one domain
+5. Add write wrappers for quotes (Phase 4 territory)
 
