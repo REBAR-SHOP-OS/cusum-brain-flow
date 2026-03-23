@@ -119,25 +119,15 @@ export default function AzinInterpreter() {
           </div>
           <ScrollArea className="flex-1 px-4 py-2">
             <div className="space-y-4" dir="rtl">
-              {committedTranscripts.map((t) => {
-                const isOriginal = t.sourceLang === "fa";
-                const isEnSource = t.sourceLang === "en";
-                const displayText = isOriginal
-                  ? t.text
-                  : isEnSource
-                  ? t.translatedText
-                  : t.originalCleanText || t.text;
-
-                return (
+              {committedTranscripts.map((t) => (
                   <div key={t.id} className="text-base text-foreground leading-relaxed" style={{ fontFamily: '"Vazirmatn", "Tahoma", sans-serif' }}>
                     {t.isTranslating ? (
                       <span className="text-muted-foreground italic">در حال ترجمه...</span>
                     ) : (
-                      <span>{displayText}</span>
+                      <span>{t.farsiText || t.originalCleanText || t.text}</span>
                     )}
                   </div>
-                );
-              })}
+                ))}
               {partialText && sourceLang === "fa" && (
                 <div className="text-base text-muted-foreground italic leading-relaxed" style={{ fontFamily: '"Vazirmatn", "Tahoma", sans-serif' }}>{partialText}</div>
               )}

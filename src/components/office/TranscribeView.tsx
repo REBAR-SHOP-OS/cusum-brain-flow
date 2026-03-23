@@ -1133,15 +1133,14 @@ export function TranscribeView() {
             {realtime.committedTranscripts.map((t) => {
               const translated = translationMap[t.id];
               const isTranslating = translatingIds.has(t.id);
-              // Use originalCleanText from the hook (cleaned original language) if available,
-              // otherwise fall back to side-panel translation
-              const displayText = (translationLang === "fa" && t.originalCleanText)
-                ? t.originalCleanText
-                : translated;
+              // Use explicit language field when available
+              const displayText = translationLang === "fa"
+                ? (t.farsiText || t.originalCleanText || translated)
+                : (t.englishText || translated || t.translatedText);
               return (
                 <div key={t.id} className="space-y-0.5">
                   <p className="text-sm text-foreground" dir="auto">
-                    {displayText || t.translatedText || ""}
+                    {displayText || ""}
                     {isTranslating && !displayText && (
                       <span className="ml-1 text-xs text-muted-foreground italic animate-pulse">translating…</span>
                     )}
