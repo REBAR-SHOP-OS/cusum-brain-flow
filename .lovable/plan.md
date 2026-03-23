@@ -1,57 +1,42 @@
 
 
-## Fix: Odoo Sync Timeout on Full Sync (2,965 leads)
+## Why Voice Vizzy Says "Vicky Has Activity" When She's Absent
 
 ### Root Cause
 
-The `odoo-crm-sync` edge function successfully fetches all 2,965 leads from Odoo (logs confirm this), but then **times out during processing** because it processes each lead sequentially with individual DB queries:
+Voice Vizzy uses OpenAI's Realtime API (`gpt-4o-mini-realtime-preview`) which does **NOT support tool calling**. Unlike text Vizzy (which can call `deep_business_scan`, `investigate_entity`, etc. in real-time), voice Vizzy gets a **single static context snapshot** at session start via `vizzy-pre-digest`.
 
-1. For each of ~3,000 leads, it runs a customer lookup query (`customers` table)
-2. If no customer found, it inserts a new one
-3. Then upserts the lead
-4. Then logs lead events for stage changes
+The pre-digest includes 7 days of call notes and benchmark history. So even if Vicky is absent TODAY, the digest contains her previous days' activity. The AI then incorrectly references that older data when asked about "today."
 
-That's potentially 6,000+ individual DB queries executed one-by-one. Edge functions have a ~60s execution limit, and this easily exceeds it.
+### The Fix: Strengthen Today-Only Awareness in Pre-Digest
 
-### Fix Strategy: Batch Processing
+**File**: `supabase/functions/vizzy-pre-digest/index.ts`
 
-**File**: `supabase/functions/odoo-crm-sync/index.ts`
+Add an explicit instruction to the AI digestion prompt:
 
-#### Change 1: Pre-load all customers in one query
+1. **Add an ABSENT EMPLOYEES section** — The digest prompt should explicitly list employees with ZERO activity today (no clock-in, no calls, no emails, no page views) and mark them clearly as **"ABSENT TODAY — DO NOT report any activity for this person today"**
 
-Instead of querying `customers` table per-lead (~3,000 queries), load ALL customers for the company in a single paginated query upfront and build an in-memory lookup map.
+2. **Separate TODAY vs HISTORICAL data** — Add a clear header in the digest: `═══ TODAY ONLY (do NOT mix with previous days) ═══` for today's data, and `═══ HISTORICAL CONTEXT (previous days, for reference only) ═══` for call notes from earlier days
 
-```text
-BEFORE: 3,000 individual SELECT queries to customers table
-AFTER:  1 paginated query → Map<name_lowercase, customer_id>
-```
+3. **Add a hard rule to the VIZZY_INSTRUCTIONS** in `useVizzyVoiceEngine.ts`:
+   ```text
+   ═══ ABSENCE DETECTION (CRITICAL) ═══
+   The pre-digest marks employees as ABSENT TODAY when they have zero activity.
+   If someone is marked ABSENT:
+   - Say "[Name] is off today — no clock-in, no calls, no emails."
+   - NEVER reference their previous days' activity as if it happened today.
+   - If asked "what did [absent person] do today?" → "Nothing — they're not in today."
+   ```
 
-#### Change 2: Batch customer inserts
+### Changes
 
-Collect all new customer names first, then insert them in batches of 100 instead of one-by-one.
+| File | Change |
+|---|---|
+| `supabase/functions/vizzy-pre-digest/index.ts` | Add "ABSENT EMPLOYEES" section to digest prompt + separate today vs historical data |
+| `src/hooks/useVizzyVoiceEngine.ts` | Add ABSENCE DETECTION rule to VIZZY_INSTRUCTIONS (~5 lines) |
 
-#### Change 3: Batch lead upserts
-
-Instead of upserting leads one at a time, collect upsert payloads and execute in batches of 50-100 using `.upsert()` with arrays.
-
-#### Change 4: Batch lead event inserts
-
-Collect all lead events and insert them in batches at the end instead of per-lead.
-
-### Expected Impact
-
-- **Before**: ~6,000+ sequential DB queries → timeout at ~60s
-- **After**: ~20-30 batched queries → completes in ~10-15s
-
-### Files Changed
-
-| File | Change | Category |
-|---|---|---|
-| `supabase/functions/odoo-crm-sync/index.ts` | Batch customer resolution, lead upserts, and event inserts | Performance fix |
-
-### What is NOT Changed
-- Odoo API calls unchanged (already paginated)
-- Validation logic unchanged
-- Dedup/reconciliation logic unchanged
-- No schema changes
+### What This Fixes
+- Voice Vizzy will correctly say "Vicky is off today" instead of fabricating activity
+- Historical call notes from previous days won't be confused with today's data
+- Clear separation prevents the LLM from mixing time periods
 
