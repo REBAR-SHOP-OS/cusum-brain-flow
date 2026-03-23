@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import {
   Shield, Plus, Pencil, Trash2, DollarSign, Users, Building2, Loader2,
-  Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch, BarChart3,
+  Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch, BarChart3, Flag,
 } from "lucide-react";
 import { LiveMonitorView } from "@/components/office/LiveMonitorView";
 import { CEODashboardView } from "@/components/office/CEODashboardView";
@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { OdooReconciliationReport } from "@/components/admin/OdooReconciliationReport";
 import { FieldAuditTrailView } from "@/components/admin/FieldAuditTrailView";
+import { FeatureFlagAdmin } from "@/components/admin/FeatureFlagAdmin";
 
 
 
@@ -174,6 +175,10 @@ export default function AdminPanel() {
           <TabsTrigger value="audit-trail" className="gap-1.5 text-xs">
             <FileSearch className="w-3.5 h-3.5" />
             Audit Trail
+          </TabsTrigger>
+          <TabsTrigger value="feature-flags" className="gap-1.5 text-xs">
+            <Flag className="w-3.5 h-3.5" />
+            Feature Flags
           </TabsTrigger>
           <TabsTrigger value="ceo-portal" className="gap-1.5 text-xs">
             <BarChart3 className="w-3.5 h-3.5" />
@@ -350,6 +355,14 @@ export default function AdminPanel() {
       <TabsContent value="audit-trail" className="flex-1 mt-0 overflow-hidden">
         <ScrollArea className="h-full">
           <FieldAuditTrailView />
+        </ScrollArea>
+      </TabsContent>
+
+      <TabsContent value="feature-flags" className="flex-1 mt-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-6 max-w-5xl mx-auto">
+            <FeatureFlagAdmin />
+          </div>
         </ScrollArea>
       </TabsContent>
     </Tabs>

@@ -19,14 +19,14 @@ export interface EdgeFunctionEntry {
 export const edgeFunctionInventory: EdgeFunctionEntry[] = [
   // --- Auth ---
   { name: "google-oauth", domain: "auth", risk: "critical", purpose: "Google OAuth login flow", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "OAuth flow — do not modify" },
-  { name: "kiosk-lookup", domain: "auth", risk: "high", purpose: "Workshop kiosk employee lookup by PIN", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
+  { name: "kiosk-lookup", domain: "auth", risk: "high", purpose: "Workshop kiosk employee lookup by name", usesSharedWrapper: true, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p1", notes: "Migrated to handleRequest in Wave 4" },
   { name: "kiosk-punch", domain: "auth", risk: "high", purpose: "Workshop time clock punch in/out", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
   { name: "kiosk-register", domain: "auth", risk: "high", purpose: "Workshop kiosk employee registration", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
 
   // --- Quotes ---
   { name: "quote-engine", domain: "quotes", risk: "critical", purpose: "Core pricing engine for quotation generation", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: true, hasAuditLogging: false, migrationPriority: "p1", notes: "Core pricing engine" },
   { name: "ai-generate-quotation", domain: "quotes", risk: "high", purpose: "AI-assisted quotation generation from barlist data", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
-  { name: "quote-expiry-watchdog", domain: "quotes", risk: "medium", purpose: "Auto-expire stale quotations past due date", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
+  { name: "quote-expiry-watchdog", domain: "quotes", risk: "medium", purpose: "Auto-expire stale quotations past due date", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "Cron job — no user auth, cannot use handleRequest" },
 
   // --- Orders ---
   { name: "convert-quote-to-order", domain: "orders", risk: "critical", purpose: "Convert accepted quotation into production order", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: true, hasAuditLogging: false, migrationPriority: "p1", notes: "Quote→Order conversion" },
@@ -37,7 +37,7 @@ export const edgeFunctionInventory: EdgeFunctionEntry[] = [
   { name: "log-machine-run", domain: "manufacturing", risk: "high", purpose: "Record machine run metrics and production output", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
   { name: "manage-bend", domain: "manufacturing", risk: "high", purpose: "Manage rebar bending batches and operations", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
   { name: "manage-extract", domain: "manufacturing", risk: "high", purpose: "Manage barlist extraction sessions and OCR processing", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
-  { name: "manage-inventory", domain: "manufacturing", risk: "high", purpose: "Track raw material and finished goods inventory", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
+  { name: "manage-inventory", domain: "manufacturing", risk: "high", purpose: "Track raw material and finished goods inventory", usesSharedWrapper: true, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p1", notes: "Migrated to handleRequest in Wave 4" },
   { name: "shape-vision", domain: "manufacturing", risk: "medium", purpose: "AI shape recognition from rebar drawings", usesSharedWrapper: true, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "Migrated to handleRequest in Wave 3" },
 
   // --- Delivery ---
