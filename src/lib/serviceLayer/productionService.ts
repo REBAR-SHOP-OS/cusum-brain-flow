@@ -32,12 +32,13 @@ export async function listProductionTasks(options: ProductionListOptions): Promi
   }
 }
 
-export async function getProductionTaskById(taskId: string): Promise<ServiceResult<any>> {
+export async function getProductionTaskById(taskId: string, companyId: string): Promise<ServiceResult<any>> {
   try {
     const { data, error } = await (supabase as any)
       .from("work_orders")
       .select("*")
       .eq("id", taskId)
+      .eq("company_id", companyId)
       .maybeSingle();
 
     if (error) return { ok: false, data: null, error: error.message };
