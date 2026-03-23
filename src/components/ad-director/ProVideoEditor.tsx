@@ -255,10 +255,6 @@ export function ProVideoEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segments.length]);
 
-  // Apply speed to video
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = speed;
-  }, [speed]);
 
   // Auto-play after scene change
   const autoPlayPending = useRef(false);
