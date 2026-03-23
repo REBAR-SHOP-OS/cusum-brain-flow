@@ -1093,6 +1093,7 @@ export function PostReviewPanel({
                             image_url: post.image_url,
                             page_name: combo.page,
                             content_type: localContentType,
+                            cover_image_url: (post as any).cover_image_url,
                           });
                           if (!ok) allOk = false;
                         } else {

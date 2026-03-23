@@ -74,6 +74,7 @@ export function usePublishPost() {
           page_name: post.page_name,
           force_publish: true,
           content_type: post.content_type || "post",
+          cover_image_url: post.cover_image_url || undefined,
         }),
         signal: controller.signal,
       });
