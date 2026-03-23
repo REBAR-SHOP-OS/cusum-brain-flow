@@ -32,12 +32,13 @@ export async function listDeliveries(options: DeliveryListOptions): Promise<Serv
   }
 }
 
-export async function getDeliveryById(deliveryId: string): Promise<ServiceResult<any>> {
+export async function getDeliveryById(deliveryId: string, companyId: string): Promise<ServiceResult<any>> {
   try {
     const { data, error } = await (supabase as any)
       .from("deliveries")
       .select("*")
       .eq("id", deliveryId)
+      .eq("company_id", companyId)
       .maybeSingle();
 
     if (error) return { ok: false, data: null, error: error.message };

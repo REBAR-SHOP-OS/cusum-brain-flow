@@ -28,17 +28,39 @@ export async function hasUserRole(userId: string, role: string): Promise<Service
 
 export async function listCompanyUsersWithRoles(companyId: string): Promise<ServiceResult<Array<{ userId: string; fullName: string; email: string; roles: string[] }>>> {
   try {
-    const { data, error } = await (supabase as any)
+    // Step 1: Fetch profiles for this company
+    const { data: profiles, error: profilesErr } = await (supabase as any)
       .from("profiles")
-      .select("id, full_name, email, company_id, user_roles!inner(role)")
+      .select("id, user_id, full_name, email")
       .eq("company_id", companyId);
 
-    if (error) return { ok: false, data: [], error: error.message };
-    const mapped = (data ?? []).map((p: any) => ({
-      userId: p.id,
+    if (profilesErr) return { ok: false, data: [], error: profilesErr.message };
+    if (!profiles || profiles.length === 0) return { ok: true, data: [] };
+
+    // Step 2: Fetch roles for those user_ids (user_roles.user_id = auth.users.id = profiles.user_id)
+    const userIds = (profiles as any[]).map((p: any) => p.user_id).filter(Boolean);
+    let rolesMap: Record<string, string[]> = {};
+
+    if (userIds.length > 0) {
+      const { data: roles, error: rolesErr } = await (supabase as any)
+        .from("user_roles")
+        .select("user_id, role")
+        .in("user_id", userIds);
+
+      if (!rolesErr && roles) {
+        for (const r of roles as any[]) {
+          if (!rolesMap[r.user_id]) rolesMap[r.user_id] = [];
+          rolesMap[r.user_id].push(r.role);
+        }
+      }
+    }
+
+    // Step 3: Merge
+    const mapped = (profiles as any[]).map((p: any) => ({
+      userId: p.user_id ?? p.id,
       fullName: p.full_name,
       email: p.email,
-      roles: (p.user_roles ?? []).map((r: any) => r.role),
+      roles: rolesMap[p.user_id] ?? [],
     }));
     return { ok: true, data: mapped };
   } catch (err: any) {

@@ -32,12 +32,13 @@ export async function listOrders(options: OrderListOptions): Promise<ServiceResu
   }
 }
 
-export async function getOrderById(orderId: string): Promise<ServiceResult<any>> {
+export async function getOrderById(orderId: string, companyId: string): Promise<ServiceResult<any>> {
   try {
     const { data, error } = await (supabase as any)
       .from("orders")
       .select("*")
       .eq("id", orderId)
+      .eq("company_id", companyId)
       .maybeSingle();
 
     if (error) return { ok: false, data: null, error: error.message };

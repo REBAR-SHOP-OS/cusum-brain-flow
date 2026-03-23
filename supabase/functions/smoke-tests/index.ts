@@ -4,7 +4,9 @@ import { corsHeaders } from "../_shared/auth.ts";
 
 /**
  * Smoke test / health check endpoint.
- * Read-only checks against core tables and services to verify system health.
+ * Non-destructive checks against core tables and services to verify system health.
+ * NOTE: Performs controlled audit writes to activity_events for probe verification
+ * and execution logging. No core business write paths are touched.
  * Returns JSON report with pass/fail + latency per check.
  */
 serve(async (req) => {
@@ -126,6 +128,7 @@ serve(async (req) => {
       event_type: "audit",
       description: "Smoke test audit probe — safe to delete",
       source: "smoke-tests",
+      metadata: { smoke_test: true, probe: true, purpose: "audit_pipeline_verification" },
     });
     if (insertErr) throw new Error(`Audit insert failed: ${insertErr.message}`);
     // Best-effort cleanup
@@ -133,7 +136,7 @@ serve(async (req) => {
     return "audit write + cleanup ok";
   });
 
-  // --- Audit: log smoke test execution ---
+  // --- Audit: log smoke test execution (controlled write, not a business mutation) ---
   try {
     const { data: firstCompany } = await admin.from("companies").select("id").limit(1).maybeSingle();
     if (firstCompany?.id) {
@@ -144,7 +147,7 @@ serve(async (req) => {
         event_type: "audit",
         description: `Smoke test run: ${results.filter(r => r.status === "pass").length}/${results.length} passed`,
         source: "smoke-tests",
-        metadata: { checks: results.map(r => ({ check: r.check, status: r.status, ms: r.ms })) },
+        metadata: { smoke_test: true, purpose: "execution_log", checks: results.map(r => ({ check: r.check, status: r.status, ms: r.ms })) },
       });
     }
   } catch (_auditErr) {
