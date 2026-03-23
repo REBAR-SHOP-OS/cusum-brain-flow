@@ -54,7 +54,7 @@ export interface BarlistItem {
 // ── Projects ─────────────────────────────────────────────────
 
 export async function fetchProjects(companyId?: string): Promise<Project[]> {
-  let query = supabase.from("projects").select("*").order("created_at", { ascending: false });
+  let query = supabase.from("projects").select("*").order("created_at", { ascending: false }).limit(500);
   if (companyId) query = query.eq("company_id", companyId);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
