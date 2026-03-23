@@ -447,6 +447,25 @@ async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
       updates.shape_code_mapped = rawShape || null;
     }
 
+    // ── Straight-bar dimension normalization ──
+    // Per rebar industry convention, straight bars (STR / no shape code) must
+    // have their straight length in dimension B, not A.
+    // This runs AFTER unit conversion so values are already in mm.
+    const effectiveShape = (updates.shape_code_mapped || "").toUpperCase();
+    const isStraight = !effectiveShape || effectiveShape === "STR" || effectiveShape === "STRAIGHT";
+    if (isStraight) {
+      const dimA = updates.dim_a ?? row.dim_a;
+      const dimB = updates.dim_b ?? row.dim_b;
+      const hasA = dimA != null && dimA !== 0 && dimA !== "";
+      const hasB = dimB != null && dimB !== 0 && dimB !== "";
+      if (hasA && !hasB) {
+        // Move A → B, clear A
+        updates.dim_b = dimA;
+        updates.dim_a = null;
+      }
+      // If both A and B exist, leave as-is (source explicitly provided both)
+    }
+
     await sb
       .from("extract_rows")
       .update(updates)
