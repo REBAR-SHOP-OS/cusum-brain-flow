@@ -1060,9 +1060,10 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
         from: e.from_address,
         to: e.to_address,
         direction: e.direction,
-        preview: e.body_preview?.slice(0, 100),
+        preview: e.body_preview?.slice(0, 500),
         urgency: e.ai_urgency,
         time: e.received_at,
+        thread_id: e.thread_id,
       }))});
     }
 
