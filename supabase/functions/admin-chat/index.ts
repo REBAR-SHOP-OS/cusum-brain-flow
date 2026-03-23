@@ -1580,6 +1580,260 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
+    case "investigate_entity": {
+      try {
+        const query = (args.query || "").trim();
+        if (!query) return JSON.stringify({ error: "query parameter is required" });
+
+        const dateFrom = args.date_from || "";
+        const dateTo = args.date_to || "";
+        const includeDomains = new Set(args.include || ["customers", "leads", "orders", "emails", "activity", "deliveries", "production", "financials", "calls", "contacts"]);
+        const q = `%${query}%`;
+
+        const result: Record<string, any> = { query, domains_searched: [...includeDomains] };
+
+        // ── Pass 1: Parallel identity resolution ──
+        const pass1: Promise<void>[] = [];
+        let matchedCustomerIds: string[] = [];
+        let matchedLeadEmails: string[] = [];
+        let matchedLeadIds: string[] = [];
+
+        // Customers
+        if (includeDomains.has("customers")) {
+          pass1.push((async () => {
+            const { data } = await supabase
+              .from("customers")
+              .select("id, name, company_name, email, phone, quickbooks_id, created_at")
+              .or(`name.ilike.${q},company_name.ilike.${q},email.ilike.${q}`)
+              .eq("company_id", companyId)
+              .limit(50);
+            const customers = data || [];
+            matchedCustomerIds = customers.map((c: any) => c.id);
+            result.customers = { count: customers.length, items: customers };
+          })());
+        }
+
+        // Leads
+        if (includeDomains.has("leads")) {
+          pass1.push((async () => {
+            const { data } = await supabase
+              .from("leads")
+              .select("id, title, stage, expected_value, computed_score, priority, contact_name, contact_email, description, created_at, updated_at")
+              .or(`title.ilike.${q},contact_name.ilike.${q},description.ilike.${q},contact_email.ilike.${q}`)
+              .eq("company_id", companyId)
+              .limit(50);
+            const leads = data || [];
+            matchedLeadIds = leads.map((l: any) => l.id);
+            matchedLeadEmails = leads.map((l: any) => l.contact_email).filter(Boolean);
+            result.leads = { count: leads.length, items: leads };
+          })());
+        }
+
+        // Contacts
+        if (includeDomains.has("contacts")) {
+          pass1.push((async () => {
+            const { data } = await supabase
+              .from("contacts")
+              .select("id, first_name, last_name, email, phone, company_name, role, created_at")
+              .or(`first_name.ilike.${q},last_name.ilike.${q},email.ilike.${q},company_name.ilike.${q}`)
+              .eq("company_id", companyId)
+              .limit(50);
+            result.contacts = { count: (data || []).length, items: data || [] };
+          })());
+        }
+
+        // Emails + Calls (communications)
+        if (includeDomains.has("emails") || includeDomains.has("calls")) {
+          pass1.push((async () => {
+            let commQuery = supabase
+              .from("communications")
+              .select("id, subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, ai_category, thread_id, source")
+              .or(`subject.ilike.${q},body_preview.ilike.${q},from_address.ilike.${q},to_address.ilike.${q}`)
+              .eq("company_id", companyId)
+              .order("received_at", { ascending: false })
+              .limit(100);
+            if (dateFrom) commQuery = commQuery.gte("received_at", dateFrom + "T00:00:00");
+            if (dateTo) commQuery = commQuery.lte("received_at", dateTo + "T23:59:59");
+            const { data } = await commQuery;
+            const comms = data || [];
+
+            if (includeDomains.has("emails")) {
+              const emailItems = comms.filter((c: any) => c.source !== "ringcentral");
+              // Group by thread
+              const threads: Record<string, any[]> = {};
+              for (const e of emailItems) {
+                const tid = e.thread_id || e.id;
+                if (!threads[tid]) threads[tid] = [];
+                threads[tid].push(e);
+              }
+              const threadSummaries = Object.entries(threads).map(([tid, msgs]) => {
+                const sorted = msgs.sort((a: any, b: any) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime());
+                const participants = [...new Set(msgs.flatMap((m: any) => [m.from_address, m.to_address].filter(Boolean)))];
+                return {
+                  thread_id: tid,
+                  subject: sorted[0].subject,
+                  message_count: msgs.length,
+                  participants,
+                  latest: sorted[0].received_at,
+                  latest_direction: sorted[0].direction,
+                  messages: sorted.slice(0, 5).map((m: any) => ({
+                    from: m.from_address, to: m.to_address, direction: m.direction,
+                    time: m.received_at, urgency: m.ai_urgency, category: m.ai_category,
+                    preview: m.body_preview?.slice(0, 800),
+                  })),
+                };
+              });
+              result.emails = { total: emailItems.length, threads: threadSummaries.length, items: threadSummaries };
+            }
+
+            if (includeDomains.has("calls")) {
+              const callItems = comms.filter((c: any) => c.source === "ringcentral");
+              result.calls = {
+                total: callItems.length,
+                items: callItems.slice(0, 30).map((c: any) => ({
+                  from: c.from_address, to: c.to_address, direction: c.direction,
+                  time: c.received_at, preview: c.body_preview?.slice(0, 500),
+                })),
+              };
+            }
+          })());
+        }
+
+        // Activity
+        if (includeDomains.has("activity")) {
+          pass1.push((async () => {
+            let actQuery = supabase
+              .from("activity_events")
+              .select("event_type, entity_type, entity_id, description, actor_id, created_at, source, metadata")
+              .ilike("description", q)
+              .eq("company_id", companyId)
+              .order("created_at", { ascending: false })
+              .limit(100);
+            if (dateFrom) actQuery = actQuery.gte("created_at", dateFrom + "T00:00:00");
+            if (dateTo) actQuery = actQuery.lte("created_at", dateTo + "T23:59:59");
+            const { data } = await actQuery;
+            result.activity = { count: (data || []).length, items: (data || []).slice(0, 50) };
+          })());
+        }
+
+        // Deliveries
+        if (includeDomains.has("deliveries")) {
+          pass1.push((async () => {
+            const { data } = await supabase
+              .from("deliveries")
+              .select("id, delivery_number, status, scheduled_date, notes, customer_id, created_at")
+              .or(`delivery_number.ilike.${q},notes.ilike.${q}`)
+              .eq("company_id", companyId)
+              .limit(50);
+            result.deliveries = { count: (data || []).length, items: data || [] };
+          })());
+        }
+
+        // Production (cut_plans)
+        if (includeDomains.has("production")) {
+          pass1.push((async () => {
+            const { data } = await supabase
+              .from("cut_plans")
+              .select("id, name, status, created_at")
+              .ilike("name", q)
+              .eq("company_id", companyId)
+              .limit(50);
+            result.production = { count: (data || []).length, items: data || [] };
+          })());
+        }
+
+        // Financials (accounting_mirror — QuickBooks)
+        if (includeDomains.has("financials")) {
+          pass1.push((async () => {
+            const { data } = await supabase
+              .from("accounting_mirror")
+              .select("id, entity_type, quickbooks_id, balance, data, customer_id, last_synced_at")
+              .eq("company_id", companyId)
+              .limit(500);
+            // Filter by keyword in JSONB data (DisplayName, CustomerRef, VendorRef)
+            const matched = (data || []).filter((r: any) => {
+              const d = r.data || {};
+              const searchStr = JSON.stringify(d).toLowerCase();
+              return searchStr.includes(query.toLowerCase());
+            });
+            const byType: Record<string, number> = {};
+            for (const m of matched) byType[m.entity_type] = (byType[m.entity_type] || 0) + 1;
+            result.financials = {
+              count: matched.length,
+              byType,
+              items: matched.slice(0, 30).map((m: any) => ({
+                type: m.entity_type, qbId: m.quickbooks_id, balance: m.balance,
+                displayName: m.data?.DisplayName || m.data?.CustomerRef?.name || m.data?.VendorRef?.name,
+                date: m.data?.TxnDate || m.data?.DueDate,
+              })),
+            };
+          })());
+        }
+
+        await Promise.all(pass1);
+
+        // ── Pass 2: Cross-reference using matched IDs ──
+        const pass2: Promise<void>[] = [];
+
+        // Orders by matched customer IDs
+        if (includeDomains.has("orders") && matchedCustomerIds.length > 0) {
+          pass2.push((async () => {
+            const { data } = await supabase
+              .from("orders")
+              .select("id, status, total, created_at, customer_id, order_number")
+              .in("customer_id", matchedCustomerIds)
+              .eq("company_id", companyId)
+              .order("created_at", { ascending: false })
+              .limit(50);
+            result.orders = { count: (data || []).length, items: data || [] };
+          })());
+        }
+
+        // Additional emails from matched lead contacts
+        if (includeDomains.has("emails") && matchedLeadEmails.length > 0) {
+          pass2.push((async () => {
+            const orFilter = matchedLeadEmails.map(e => `from_address.ilike.%${e}%,to_address.ilike.%${e}%`).join(",");
+            const { data } = await supabase
+              .from("communications")
+              .select("subject, from_address, to_address, body_preview, direction, received_at, thread_id")
+              .or(orFilter)
+              .eq("company_id", companyId)
+              .order("received_at", { ascending: false })
+              .limit(50);
+            if (data && data.length > 0) {
+              result.lead_related_emails = {
+                count: data.length,
+                items: data.slice(0, 20).map((e: any) => ({
+                  subject: e.subject, from: e.from_address, to: e.to_address,
+                  direction: e.direction, time: e.received_at,
+                  preview: e.body_preview?.slice(0, 800),
+                })),
+              };
+            }
+          })());
+        }
+
+        // Deliveries by matched customer IDs
+        if (includeDomains.has("deliveries") && matchedCustomerIds.length > 0 && !result.deliveries?.count) {
+          pass2.push((async () => {
+            const { data } = await supabase
+              .from("deliveries")
+              .select("id, delivery_number, status, scheduled_date, notes, customer_id")
+              .in("customer_id", matchedCustomerIds)
+              .eq("company_id", companyId)
+              .limit(50);
+            if (data && data.length > 0) {
+              result.deliveries_by_customer = { count: data.length, items: data };
+            }
+          })());
+        }
+
+        if (pass2.length > 0) await Promise.all(pass2);
+
+        return JSON.stringify(result);
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
