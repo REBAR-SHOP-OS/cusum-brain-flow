@@ -72,6 +72,10 @@ export function AdDirectorContent() {
   }, [savedBrand, brandLoading]);
 
   // ─── Full Pipeline: prompt → analyze → generate → result ───
+  // Keep a ref to always have the latest clips (avoids stale closure in export)
+  const clipsRef = useRef<ClipOutput[]>([]);
+  useEffect(() => { clipsRef.current = clips; }, [clips]);
+
   const handleSubmit = useCallback(async (prompt: string, ratio: string, images: File[], introImage: File | null, outroImage: File | null, duration: string) => {
     setUserPrompt(prompt);
     setUserRatio(ratio);
