@@ -1,63 +1,59 @@
 
 
-## Audit: Why Vizzy Can't Read Employee Emails
+## Add "Deep Business Scan" Tool for Vizzy
 
-### Root Cause
+### What You Want
 
-Vizzy has **no tool or action to read email content on-demand**. Here's what exists vs what's missing:
+A way to ask Vizzy to deeply search across ALL your business data — emails, pipeline, calls, activity logs, production — and learn everything about what's happening. Not just today's snapshot, but a comprehensive cross-domain intelligence scan.
 
-**What exists:**
-- `vizzyFullContext.ts` pre-loads today's emails from `communications` table with `body_preview` (truncated to 200 chars) and `subject` — this is injected into the system prompt as static context
-- `vizzy-erp-action` has a `send_email` action but **no `read_emails` or `get_email_details` action**
-- The `communications` table stores `body_preview` (short snippet) but full email bodies are only in Gmail API (not stored locally)
+### What Exists Now
 
-**Why Vizzy fabricates answers:**
-1. Vizzy sees aggregated stats in its context (e.g., "Vicky Anderson: 8 sent, 10 received") and up to 8 email subject lines with 200-char previews
-2. When asked to "read the actual emails," Vizzy has no tool to fetch full email bodies — it can only see the pre-loaded snippets
-3. Without a tool, the LLM hallucinates plausible-sounding summaries instead of saying "I can't access full email content"
+- Vizzy gets a **single-day pre-digested context** (today only) via `vizzyFullContext.ts`
+- Individual tools exist: `get_employee_emails` (one employee, one day), `get_employee_activity` (one employee, one day), `list_leads`, `list_orders`
+- No tool exists to do a **cross-domain deep scan** across multiple data sources at once
 
-### Fix: Add `read_employee_emails` ERP Action
+### Solution: Add `deep_business_scan` Tool
 
-**File**: `supabase/functions/vizzy-erp-action/index.ts`
+A new tool in `admin-chat/index.ts` that aggregates data across ALL domains in a single call:
 
-Add a new `case "read_employee_emails"` that:
-1. Accepts `{ employee_name_or_email: string, limit?: number, date?: string }`
-2. Resolves the employee to their `user_id` via profiles
-3. Queries `communications` table for that user's emails (both directions) with full `body_preview`, `subject`, `from_address`, `to_address`, `direction`, `received_at`
-4. Optionally fetches full email body from Gmail API via `gmail-sync` for specific message IDs
-5. Returns structured email list
+**What it scans:**
+1. **Emails** — All communications for a date range (not just today), with body previews, unanswered threads
+2. **Pipeline** — All active leads with scores, values, stages, last activity
+3. **Calls** — RingCentral call logs with per-employee breakdown
+4. **Activity** — All logged events across all employees
+5. **Production** — Cut plans, work orders, machine utilization
+6. **Financials** — AR/AP aging, overdue invoices/bills
+7. **Deliveries** — Scheduled, in-transit, completed
+8. **Agent usage** — Which AI agents are being used and by whom
 
-**File**: `supabase/functions/_shared/agents/operations.ts`
+**Parameters:**
+- `date_from` (optional, defaults to 7 days ago)
+- `date_to` (optional, defaults to today)
+- `focus` (optional: "emails", "pipeline", "production", "financials", "all" — defaults to "all")
+- `employee_name` (optional: filter to one person)
 
-Update Vizzy's system prompt to include the new tool in her available actions list, so she knows to call `read_employee_emails` instead of guessing.
-
-**File**: `supabase/functions/_shared/vizzyFullContext.ts`
-
-Increase `body_preview` slice from 200 chars to 500 chars in the per-employee email detail section (line 668) to give more context in the pre-loaded data.
-
-### Optional Enhancement: Full Email Body Fetch
-
-The `communications` table only stores `body_preview` (truncated). For full email reading:
-
-Add a `read_email_thread` action that:
-1. Takes a `thread_id` or `communication_id`
-2. Calls Gmail API (via the user's stored OAuth token) to fetch the full message body
-3. Returns the complete email content
-
-This requires the Gmail OAuth token lookup pattern already used in `gmail-sync`.
+**How to use it:** Just tell Vizzy:
+- "Deep scan the business" — scans everything for last 7 days
+- "Go deep on all emails this week" — focuses on emails
+- "Learn everything about what Vicky has been doing" — employee-specific scan
+- "Scan the pipeline and financials for the last 30 days"
 
 ### Files Changed
 
 | File | Change | Category |
 |---|---|---|
-| `supabase/functions/vizzy-erp-action/index.ts` | Add `read_employee_emails` + `read_email_thread` actions | Safe additive |
-| `supabase/functions/_shared/agents/operations.ts` | Add tool documentation to Vizzy's prompt | Safe additive |
-| `supabase/functions/_shared/vizzyFullContext.ts` | Increase preview length to 500 chars | Safe edit |
+| `supabase/functions/admin-chat/index.ts` | Add `deep_business_scan` tool definition + handler | Safe additive |
 
-### Why This Fixes the Problem
+### Implementation Detail
 
-- Vizzy will have an explicit tool to query any employee's emails with full previews
-- The LLM will call the tool instead of hallucinating
-- For deep reading, the thread reader fetches full bodies from Gmail
-- No schema changes needed — uses existing `communications` table + Gmail API
+1. Add tool definition to `JARVIS_TOOLS` array with parameters schema
+2. Add `case "deep_business_scan"` in `executeReadTool` that runs parallel queries across communications, leads, activity_events, cut_plan_items, accounting_mirror, deliveries, work_orders, and chat_sessions for the given date range
+3. Returns a structured summary organized by domain
+4. Update the system prompt's tool usage section to mention this tool
+
+### What is NOT Changed
+- Existing tools remain unchanged
+- Pre-digest flow unchanged
+- No schema changes
+- No new edge functions
 
