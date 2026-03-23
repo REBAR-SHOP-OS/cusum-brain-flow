@@ -1499,7 +1499,60 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
           })());
         }
 
+        // 8. ORDERS
+        if (scanAll) {
+          queries.push((async () => {
+            const { data: orders } = await supabase
+              .from("orders")
+              .select("id, status, total_amount, created_at, customer_id")
+              .gte("created_at", dateFrom + "T00:00:00")
+              .lte("created_at", dateTo + "T23:59:59")
+              .limit(200);
+            const allOrders = orders || [];
+            const totalRevenue = allOrders.reduce((s: number, o: any) => s + (o.total_amount || 0), 0);
+            const byStatus: Record<string, number> = {};
+            for (const o of allOrders) byStatus[o.status || "unknown"] = (byStatus[o.status || "unknown"] || 0) + 1;
+            result.orders = { total: allOrders.length, totalRevenue: Math.round(totalRevenue * 100) / 100, byStatus };
+          })());
+        }
+
         await Promise.all(queries);
+
+        // Cross-reference emails with leads (post-processing)
+        if (scanAll && result.emails && result.pipeline) {
+          const pipeline = result.pipeline as any;
+          const emails = result.emails as any;
+          const leadEmails = new Map<string, { title: string; stage: string }>();
+          for (const l of (pipeline.topLeads || [])) {
+            if (l.contactEmail) leadEmails.set(l.contactEmail.toLowerCase(), { title: l.title, stage: l.stage });
+          }
+          // Fetch all lead contact emails for cross-ref
+          const { data: allLeadContacts } = await supabase
+            .from("leads")
+            .select("contact_email, title, stage")
+            .not("contact_email", "is", null)
+            .in("stage", ["new", "contacted", "qualified", "proposal", "negotiation"])
+            .limit(500);
+          for (const l of (allLeadContacts || [])) {
+            if (l.contact_email) leadEmails.set(l.contact_email.toLowerCase(), { title: l.title, stage: l.stage });
+          }
+          // Enrich recent emails with lead info
+          if (emails.recentItems) {
+            for (const e of emails.recentItems) {
+              const fromLead = leadEmails.get(e.from?.toLowerCase());
+              const toLead = leadEmails.get(e.to?.toLowerCase());
+              if (fromLead) e.relatedLead = fromLead;
+              else if (toLead) e.relatedLead = toLead;
+            }
+          }
+          if (emails.unansweredItems) {
+            for (const e of emails.unansweredItems) {
+              const fromLead = leadEmails.get(e.from?.toLowerCase());
+              if (fromLead) e.relatedLead = fromLead;
+            }
+          }
+        }
+
         return JSON.stringify(result);
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
