@@ -644,6 +644,26 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Email Send Tool ───
+  {
+    type: "function",
+    function: {
+      name: "send_email",
+      description: "Send an email via Gmail on behalf of the CEO. Use when the CEO says 'send', 'email them', or 'send that email'. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Recipient email address" },
+          subject: { type: "string", description: "Email subject line" },
+          body: { type: "string", description: "Email body (HTML supported)" },
+          threadId: { type: "string", description: "Optional Gmail thread ID to reply in an existing thread" },
+          replyToMessageId: { type: "string", description: "Optional Gmail message ID to set In-Reply-To header" },
+        },
+        required: ["to", "subject", "body"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ─── Deep Business Scan Tool ───
   {
     type: "function",
