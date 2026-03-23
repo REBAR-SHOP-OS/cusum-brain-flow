@@ -20,14 +20,6 @@ export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Clear stale auth tokens on mount to prevent bad_jwt loops
-  useEffect(() => {
-    if (!user && !authLoading) {
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith("sb-"))
-        .forEach((k) => localStorage.removeItem(k));
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
