@@ -26,7 +26,7 @@ export const edgeFunctionInventory: EdgeFunctionEntry[] = [
   // --- Quotes ---
   { name: "quote-engine", domain: "quotes", risk: "critical", purpose: "Core pricing engine for quotation generation", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: true, hasAuditLogging: false, migrationPriority: "p1", notes: "Core pricing engine" },
   { name: "ai-generate-quotation", domain: "quotes", risk: "high", purpose: "AI-assisted quotation generation from barlist data", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
-  { name: "quote-expiry-watchdog", domain: "quotes", risk: "medium", purpose: "Auto-expire stale quotations past due date", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
+  { name: "quote-expiry-watchdog", domain: "quotes", risk: "medium", purpose: "Auto-expire stale quotations past due date", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "Cron job — no user auth, cannot use handleRequest" },
 
   // --- Orders ---
   { name: "convert-quote-to-order", domain: "orders", risk: "critical", purpose: "Convert accepted quotation into production order", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: true, hasAuditLogging: false, migrationPriority: "p1", notes: "Quote→Order conversion" },
