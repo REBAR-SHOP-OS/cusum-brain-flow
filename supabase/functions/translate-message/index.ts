@@ -109,11 +109,28 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
 
     const parseTranslation = (raw: string): Record<string, string> => {
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      for (const key of Object.keys(parsed)) {
-        parsed[key] = (parsed[key] || "").trim();
+      
+      // Try standard JSON.parse first
+      try {
+        const parsed = JSON.parse(cleaned);
+        for (const key of Object.keys(parsed)) {
+          parsed[key] = (parsed[key] || "").trim();
+        }
+        return parsed;
+      } catch {
+        // Fallback: extract key-value pairs from truncated JSON using regex
+        const result: Record<string, string> = {};
+        const kvRegex = /"(\w{2})"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+        let match;
+        while ((match = kvRegex.exec(cleaned)) !== null) {
+          result[match[1]] = match[2].trim();
+        }
+        if (Object.keys(result).length > 0) {
+          console.log("Recovered partial JSON:", Object.keys(result).join(", "));
+          return result;
+        }
+        throw new Error("Cannot parse response");
       }
-      return parsed;
     };
 
     let translations: Record<string, string>;
@@ -124,10 +141,10 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
       translations = {};
     }
 
-    // If all translations empty, return raw text as fallback instead of expensive retry
+    // If all translations empty, log but don't retry
     const allEmpty = langsToTranslate.every((l: string) => !translations[l]);
     if (allEmpty) {
-      console.log("Empty translation, returning raw text as fallback");
+      console.log("Empty translation, returning empty result");
     }
 
     return new Response(

@@ -170,15 +170,15 @@ export function useRealtimeTranscribe() {
             )
           );
         } catch {
-          // On failure: show raw text as fallback, NEVER remove entry
+          // On failure: only populate source language field, never cross-contaminate
           setCommittedTranscripts((prev) =>
             prev.map((t) =>
               t.id === entryId
                 ? {
                     ...t,
-                    translatedText: data.text.trim(),
-                    englishText: data.text.trim(),
-                    farsiText: data.text.trim(),
+                    translatedText: undefined,
+                    englishText: currentSourceLang === "en" ? data.text.trim() : undefined,
+                    farsiText: currentSourceLang === "fa" ? data.text.trim() : undefined,
                     isTranslating: false,
                   }
                 : t
