@@ -99,6 +99,7 @@ export const AVAILABLE_MODELS = [
   { id: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", category: "vision" },
   { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash", category: "evaluation" },
   { id: "google/gemini-3-pro-image-preview", label: "Gemini 3 Pro Image", category: "vision" },
+  { id: "google/gemini-2.5-flash-image", label: "Gemini 2.5 Flash Image", category: "vision" },
   { id: "google/gemini-3.1-flash-image-preview", label: "Gemini 3.1 Flash Image", category: "evaluation" },
 ] as const;
 
