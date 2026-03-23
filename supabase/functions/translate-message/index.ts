@@ -129,6 +129,14 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
           console.log("Recovered partial JSON:", Object.keys(result).join(", "));
           return result;
         }
+        // Try recovering truncated trailing value (no closing quote at end of string)
+        const truncatedRegex = /"(\w{2})"\s*:\s*"((?:[^"\\]|\\.)*?)$/;
+        const truncMatch = truncatedRegex.exec(cleaned);
+        if (truncMatch) {
+          result[truncMatch[1]] = truncMatch[2].trim();
+          console.log("Recovered truncated value for:", truncMatch[1]);
+          return result;
+        }
         throw new Error("Cannot parse response");
       }
     };
