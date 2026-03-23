@@ -5,6 +5,8 @@
 
 import { isEnabled } from "./featureFlags.ts";
 import { resolvePolicy } from "./providers/policyRouter.ts";
+import { isBreakerOpen, recordSuccess, recordFailure } from "./providers/circuitBreaker.ts";
+import { cacheGet, cacheSet } from "./cache.ts";
 
 export type AIProvider = "gpt" | "gemini";
 
