@@ -1,32 +1,37 @@
 
 
-## Add Character/Person Image Upload to Ad Director
+## Fix: Preview Login Loop — Stale Token Cleanup Races with Session
 
-### What
-Add a third upload zone labeled "Character" (with a person icon) between Intro and Outro in the ChatPromptBar. This lets users upload a reference photo of a person who should appear in the generated video as a product spokesperson.
+### Root Cause
 
-### Changes
+**Line 24-29 in `Login.tsx`** clears ALL `sb-*` localStorage keys as soon as `!user && !authLoading` is true. After OAuth redirect:
 
-**File: `src/components/ad-director/ChatPromptBar.tsx`**
+1. `onAuthStateChange` fires `INITIAL_SESSION` — if session isn't ready yet, `user=null`, `loading=false`
+2. The cleanup effect runs immediately → wipes `sb-*` tokens from localStorage
+3. The REAL session event arrives moments later but tokens are already gone → `bad_jwt`
+4. User stays on login page
 
-1. Add `characterImage` state + `characterRef` for file input
-2. Add a third upload box between Intro and Outro with a `UserRound` icon and label "Character"
-3. Update `onSubmit` prop signature to include `characterImage: File | null`
-4. Pass `characterImage` in `handleSubmit` call
+This is confirmed by auth logs showing `bad_jwt` / `missing sub claim` errors.
 
-**File: `src/components/ad-director/AdDirectorContent.tsx`**
+### Fix
 
-5. Update `handleSubmit` signature to accept `characterImage: File | null`
-6. If `characterImage` is provided, upload it to storage and include the URL in the `analyze-script` and `write-cinematic-prompt` edge function calls as `characterImageUrl` — this tells the AI to feature this person in the video scenes
-7. Add `characterImageUrl` to the `generate-clip` payload so the video generation model receives the person reference
+**File: `src/pages/Login.tsx`**
 
-### UI Layout
-```text
-[Intro Image]  [Character 👤]  [Outro Image]
+Remove the automatic `sb-*` cleanup on mount (lines 24-30). The manual "Clear session" button at the bottom already provides this functionality for genuinely stuck users. Automatic cleanup is the cause of the problem, not the solution.
+
+```typescript
+// DELETE this entire useEffect block (lines 24-30):
+// useEffect(() => {
+//   if (!user && !authLoading) {
+//     Object.keys(localStorage)
+//       .filter((k) => k.startsWith("sb-"))
+//       .forEach((k) => localStorage.removeItem(k));
+//   }
+// }, []);
 ```
-The Character box uses the same dashed-border style as Intro/Outro but with a `UserRound` icon and slightly different accent color (purple tint) to distinguish it.
+
+That's it. One deletion. The manual "Clear session" button remains for edge cases.
 
 ### Files
-- `src/components/ad-director/ChatPromptBar.tsx` — add character upload zone + pass to onSubmit
-- `src/components/ad-director/AdDirectorContent.tsx` — receive characterImage, upload to storage, include in AI pipeline calls
+- `src/pages/Login.tsx` — remove auto-cleanup useEffect
 
