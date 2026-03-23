@@ -2194,6 +2194,29 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       return { success: true, message: `Fax sent to ${args.to}`, faxId: data.id, status: data.messageStatus };
     }
 
+    // ─── Email Send ───
+    case "send_email": {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const resp = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: args.to,
+          subject: args.subject,
+          body: args.body,
+          threadId: args.threadId,
+          replyToMessageId: args.replyToMessageId,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`Email send failed: ${data?.error || JSON.stringify(data)}`);
+      return { success: true, message: `Email sent to ${args.to}`, messageId: data.messageId || data.id, threadId: data.threadId };
+    }
+
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
   }
