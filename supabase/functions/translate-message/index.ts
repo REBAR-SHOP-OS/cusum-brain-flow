@@ -93,7 +93,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
     const makeRequest = async (prompt: string) => {
       return await callAI({
         provider: "gemini",
-        model: "gemini-2.5-pro",
+        model: "gemini-2.5-flash",
         agentName: "system",
         messages: [
           { role: "system", content: systemPrompt },
