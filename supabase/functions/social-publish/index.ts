@@ -76,6 +76,7 @@ serve(async (req) => {
       page_name: z.string().optional(),
       force_publish: z.boolean().optional(),
       content_type: z.enum(["post", "reel", "story"]).optional().default("post"),
+      cover_image_url: z.string().url().max(2000).optional(),
     });
     const parsed = publishSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -84,7 +85,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish, content_type } = parsed.data;
+    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish, content_type, cover_image_url } = parsed.data;
     console.log(`[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`);
 
     // Strip Persian translation block — server-side safety net
@@ -273,7 +274,7 @@ serve(async (req) => {
       const matchedIg = igAccounts.find((ig) => ig.pageId === pageId);
       if (matchedIg) selectedIg = matchedIg;
       else if (page_name) console.warn(`No IG account matched pageId ${pageId}. Using first: ${igAccounts[0].username}`);
-      result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url, content_type);
+      result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url, content_type, cover_image_url);
     } else if (platform === "linkedin") {
       result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url);
     } else if (platform === "twitter") {
@@ -357,7 +358,8 @@ async function publishToInstagram(
   accessToken: string,
   caption: string,
   imageUrl?: string,
-  contentType: string = "post"
+  contentType: string = "post",
+  coverImageUrl?: string
 ): Promise<{ id?: string; error?: string }> {
   try {
     if (!imageUrl) {
@@ -395,6 +397,10 @@ async function publishToInstagram(
       containerBody.media_type = "REELS";
       containerBody.video_url = imageUrl;
       containerBody.caption = caption;
+      if (coverImageUrl) {
+        containerBody.cover_url = coverImageUrl;
+        console.log(`[social-publish] Using cover image for reel: ${coverImageUrl.substring(0, 60)}…`);
+      }
     } else {
       // For single image posts, omit media_type entirely per IG Graph API
       containerBody.image_url = imageUrl;

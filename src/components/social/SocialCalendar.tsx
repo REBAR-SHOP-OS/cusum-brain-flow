@@ -1,6 +1,7 @@
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Video } from "lucide-react";
 import type { SocialPost } from "@/hooks/useSocialPosts";
 
 const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
@@ -214,6 +215,9 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       <div className={cn("w-5 h-5 rounded flex items-center justify-center", pIcon.bg)}>
                         {pIcon.icon}
                       </div>
+                      {firstPost.image_url?.match(/\.(mp4|mov|webm)(\?|$)/i) && (
+                        <Video className="w-3 h-3 text-muted-foreground" />
+                      )}
                       {posts.length > 1 && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                           ×{posts.length}
