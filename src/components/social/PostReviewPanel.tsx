@@ -526,13 +526,25 @@ export function PostReviewPanel({
                     <div className="rounded-lg overflow-hidden bg-muted relative group">
                       {isVideo ? (
                         <>
-                          <video src={post.image_url} controls className="w-full rounded-lg" style={{ maxHeight: '400px' }} />
-                          {/* Cover image preview for video posts */}
-                          {(post as any).cover_image_url && (
-                            <div className="mt-2 relative">
-                              <p className="text-[10px] text-muted-foreground mb-1">Cover Image</p>
-                              <img src={(post as any).cover_image_url} alt="Cover" className="w-20 h-20 object-cover rounded border" />
+                          {(post as any).cover_image_url && !showVideoPlayer ? (
+                            <div className="relative cursor-pointer" onClick={() => setShowVideoPlayer(true)}>
+                              <img
+                                src={(post as any).cover_image_url}
+                                alt="Video thumbnail"
+                                className="w-full object-cover rounded-lg"
+                                style={{ maxHeight: '400px' }}
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center">
+                                  <Play className="w-6 h-6 text-white ml-0.5" />
+                                </div>
+                              </div>
+                              <span className="absolute bottom-2 left-2 text-[10px] bg-black/60 text-white px-2 py-0.5 rounded">
+                                Thumbnail
+                              </span>
                             </div>
+                          ) : (
+                            <video src={post.image_url} controls className="w-full rounded-lg" style={{ maxHeight: '400px' }} />
                           )}
                         </>
                       ) : (
