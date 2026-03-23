@@ -1686,6 +1686,12 @@ export function AIExtractView() {
               sessionId={activeSession.id}
               onConfirmMapping={handleMappingConfirmed}
               disabled={processing}
+              unitSystem={selectedUnitSystem as any}
+              onUnitSystemChange={(unit) => {
+                userSetUnitRef.current = true;
+                confirmedUnitRef.current = unit;
+                setSelectedUnitSystem(unit);
+              }}
             />
           ) : (
             <Card className="border-yellow-500/30 bg-yellow-500/5">

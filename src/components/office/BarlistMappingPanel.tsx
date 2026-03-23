@@ -182,10 +182,16 @@ export interface MappedRow {
   grade: string;
 }
 
-export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disabled }: BarlistMappingPanelProps) {
+export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disabled, unitSystem: controlledUnit, onUnitSystemChange }: BarlistMappingPanelProps) {
   const [mapping, setMapping] = useState<Record<string, string>>(() => autoDetectMapping(rows));
   const [confirmed, setConfirmed] = useState(false);
-  const [lengthUnit, setLengthUnit] = useState<LengthUnit>("mm");
+  // Use controlled unit from parent if provided, otherwise local state
+  const [localLengthUnit, setLocalLengthUnit] = useState<LengthUnit>("mm");
+  const lengthUnit = controlledUnit ?? localLengthUnit;
+  const setLengthUnit = (unit: LengthUnit) => {
+    if (onUnitSystemChange) onUnitSystemChange(unit);
+    else setLocalLengthUnit(unit);
+  };
 
   const lengthFactor = useMemo(() => LENGTH_UNITS.find(u => u.value === lengthUnit)?.factor ?? 1, [lengthUnit]);
   const unitLabel = useMemo(() => LENGTH_UNITS.find(u => u.value === lengthUnit)?.shortLabel ?? "mm", [lengthUnit]);
