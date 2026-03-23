@@ -1,42 +1,62 @@
 
 
-## Why Voice Vizzy Says "Vicky Has Activity" When She's Absent
+## RingCentral Status Check + Fix Vizzy Email Capability
 
-### Root Cause
+### Findings
 
-Voice Vizzy uses OpenAI's Realtime API (`gpt-4o-mini-realtime-preview`) which does **NOT support tool calling**. Unlike text Vizzy (which can call `deep_business_scan`, `investigate_entity`, etc. in real-time), voice Vizzy gets a **single static context snapshot** at session start via `vizzy-pre-digest`.
+**RingCentral Integration:**
+- Last synced call data: **March 20** (3 days ago)
+- Last `last_sync_at`: March 20 00:59 UTC
+- The cron job runs every 5 min but produces **zero log output** (only boot/shutdown) — the sync is silently failing
+- All recent calls show **"IP Phone Offline"** as the result
+- The `integration_connections` status still shows "connected" with no error — so the UI doesn't flag the problem
+- Active calls API returned a JSON parse error
 
-The pre-digest includes 7 days of call notes and benchmark history. So even if Vicky is absent TODAY, the digest contains her previous days' activity. The AI then incorrectly references that older data when asked about "today."
+**Possible root cause:** The RC token may have expired or been revoked. The `getAccessTokenForUser` call inside `syncAllUsers` is likely throwing an unhandled error or the function is timing out during token refresh. Since the function catches errors and marks status as "error" only for specific error messages (`not_connected`, `invalid_grant`), a different error type could be silently swallowed.
 
-### The Fix: Strengthen Today-Only Awareness in Pre-Digest
+**Vizzy Can't Send Email (text mode):**
+- The `send_email` tool exists in `agentToolExecutor.ts` and works in voice mode
+- But `vizzyContext.ts` (text mode) does NOT list `send_email` as an available tool
+- Text Vizzy literally doesn't know it can send emails
 
-**File**: `supabase/functions/vizzy-pre-digest/index.ts`
+---
 
-Add an explicit instruction to the AI digestion prompt:
+### Plan: 2 Fixes
 
-1. **Add an ABSENT EMPLOYEES section** — The digest prompt should explicitly list employees with ZERO activity today (no clock-in, no calls, no emails, no page views) and mark them clearly as **"ABSENT TODAY — DO NOT report any activity for this person today"**
+#### Fix 1: Add `send_email` to text Vizzy's tool list
 
-2. **Separate TODAY vs HISTORICAL data** — Add a clear header in the digest: `═══ TODAY ONLY (do NOT mix with previous days) ═══` for today's data, and `═══ HISTORICAL CONTEXT (previous days, for reference only) ═══` for call notes from earlier days
+**File:** `src/lib/vizzyContext.ts` (lines ~207-218)
 
-3. **Add a hard rule to the VIZZY_INSTRUCTIONS** in `useVizzyVoiceEngine.ts`:
-   ```text
-   ═══ ABSENCE DETECTION (CRITICAL) ═══
-   The pre-digest marks employees as ABSENT TODAY when they have zero activity.
-   If someone is marked ABSENT:
-   - Say "[Name] is off today — no clock-in, no calls, no emails."
-   - NEVER reference their previous days' activity as if it happened today.
-   - If asked "what did [absent person] do today?" → "Nothing — they're not in today."
-   ```
+Add `send_email` to the ERP tools list:
+```
+• send_email(to, subject, body, threadId?) — Send an email via Gmail on behalf of the CEO
+```
 
-### Changes
+Also add an explicit instruction: "NEVER say you cannot send emails. You CAN send emails using the send_email tool."
+
+#### Fix 2: Add robust error logging + integration status update to RC sync
+
+**File:** `supabase/functions/ringcentral-sync/index.ts`
+
+In the `syncAllUsers` function, wrap the entire body in a try/catch that:
+1. Logs the **full error** to console before returning
+2. Updates `integration_connections` status to `"error"` with the error message for ALL error types (not just `invalid_grant`)
+3. This ensures the UI shows a "Reconnect" banner instead of silently appearing healthy
+
+Also add a top-level log at function entry (`console.log("ringcentral-sync invoked")`) so we can distinguish "function never called" from "function called but failed silently."
+
+---
+
+### Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/vizzy-pre-digest/index.ts` | Add "ABSENT EMPLOYEES" section to digest prompt + separate today vs historical data |
-| `src/hooks/useVizzyVoiceEngine.ts` | Add ABSENCE DETECTION rule to VIZZY_INSTRUCTIONS (~5 lines) |
+| `src/lib/vizzyContext.ts` | Add `send_email` tool + "never refuse email" rule |
+| `supabase/functions/ringcentral-sync/index.ts` | Add entry log + catch-all error logging + always update integration status on failure |
 
-### What This Fixes
-- Voice Vizzy will correctly say "Vicky is off today" instead of fabricating activity
-- Historical call notes from previous days won't be confused with today's data
-- Clear separation prevents the LLM from mixing time periods
+### What is NOT Changed
+- No schema changes
+- No new functions
+- RingCentral cron jobs unchanged
+- Voice engine unchanged (already has email capability)
 
