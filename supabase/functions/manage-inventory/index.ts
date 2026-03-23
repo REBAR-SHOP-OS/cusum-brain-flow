@@ -1,12 +1,6 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
 
 const DEFAULT_STOCK_LENGTH_MM = 12000;
 const REMNANT_THRESHOLD_MM = 300;
@@ -18,58 +12,14 @@ function json(body: unknown, status = 200) {
   });
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return json({ error: "Unauthorized" }, 401);
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const svc = createClient(supabaseUrl, serviceKey);
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } =
-      await supabaseUser.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return json({ error: "Invalid token" }, 401);
-    }
-    const userId = claimsData.claims.sub as string;
-
-    // Role check
-    const { data: userRoles } = await svc
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    const roles = (userRoles || []).map((r: { role: string }) => r.role);
-    if (!roles.some((r: string) => ["admin", "workshop"].includes(r))) {
-      return json({ error: "Forbidden: insufficient role" }, 403);
-    }
-
-    // Get company_id
-    const { data: profile } = await svc
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (!profile?.company_id) {
-      return json({ error: "No company assigned" }, 400);
-    }
-    const companyId = profile.company_id;
+Deno.serve(async (req) => {
+  return handleRequest(req, async (ctx) => {
+    const { userId, companyId, serviceClient: svc, log } = ctx;
 
     const topSchema = z.object({
       action: z.string().min(1).max(50),
     }).passthrough();
-    const parsed = topSchema.safeParse(await req.json());
+    const parsed = topSchema.safeParse(ctx.body);
     if (!parsed.success) {
       return json({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }, 400);
     }
@@ -137,7 +87,7 @@ serve(async (req) => {
             lot_number: lotNumber,
           });
           if (lotErr) {
-            console.error("Lot insert error:", lotErr);
+            log.error("Lot insert error", lotErr);
             continue;
           }
 
@@ -288,7 +238,7 @@ serve(async (req) => {
           .eq("dedupe_key", dedupeKey)
           .maybeSingle();
         if (existingEvent) {
-          console.warn(`[consume-on-start] Deduplicated: ${dedupeKey}`);
+          log.warn("Deduplicated consume-on-start", { dedupeKey });
           return json({ success: true, action, deduplicated: true });
         }
 
@@ -440,7 +390,7 @@ serve(async (req) => {
                 qty_reserved: 0,
                 location: "floor",
               });
-            if (remErr) console.error("Remnant insert error:", remErr);
+            if (remErr) log.error("Remnant insert error", remErr);
 
             events.push({
               entity_type: "inventory",
@@ -463,7 +413,7 @@ serve(async (req) => {
                 qty: 1,
                 reason: "cutoff_below_threshold",
               });
-            if (scrapErr) console.error("Scrap insert error:", scrapErr);
+            if (scrapErr) log.error("Scrap insert error", scrapErr);
 
             events.push({
               entity_type: "inventory",
@@ -570,13 +520,14 @@ serve(async (req) => {
     // Write events
     if (events.length > 0) {
       const { error: evtErr } = await svc.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system", company_id: companyId })));
-      if (evtErr) console.error("Failed to log inventory events:", evtErr);
+      if (evtErr) log.error("Failed to log inventory events", evtErr);
     }
 
     return json({ success: true, action });
-  } catch (error) {
-    console.error("manage-inventory error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, 500);
-  }
+  }, {
+    functionName: "manage-inventory",
+    requireCompany: true,
+    requireAnyRole: ["admin", "workshop"],
+    rawResponse: true,
+  });
 });
