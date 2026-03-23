@@ -1,31 +1,43 @@
 
 
-## Fix: Slow & Inaccurate Translation in Realtime Transcribe
+## Fix: Separate English-Only and Farsi-Only Display in Transcribe View
+
+### Problem
+
+The English column (LiveTranscript) and Farsi sidebar both show mixed-language content. When someone speaks English, the English column shows the Farsi translation (wrong). When someone speaks Farsi, the sidebar sometimes shows English text. Each column must show ONLY its respective language.
 
 ### Root Cause
 
-**Wrong model**: `translate-message` edge function uses `gemini-2.5-pro` (line 96) — the slowest, most expensive model. Per project standards, it should use `gemini-2.5-flash` which is 3-5x faster with comparable translation quality.
+The hook stores a single `translatedText` field that varies by source language — when source is English, `translatedText` = Farsi; when source is Farsi, `translatedText` = English. The LiveTranscript component blindly displays `translatedText` regardless of what language it contains. The sidebar has similar confusion.
 
-Additionally, the retry logic (lines 128-138) doubles latency when translations return empty, and the `invokeEdgeFunction` wrapper adds overhead with session checks on every call.
-
-### Changes
-
-**File: `supabase/functions/translate-message/index.ts`**
-
-1. **Switch model from `gemini-2.5-pro` to `gemini-2.5-flash`** — dramatically reduces latency while maintaining translation accuracy
-2. **Simplify retry logic** — remove the second full AI call on empty results; instead, return the raw text as fallback to avoid doubling response time
-3. **Streamline the prompt** — reduce token count in system prompt for faster processing
+### Fix
 
 **File: `src/hooks/useRealtimeTranscribe.ts`**
 
-4. **Reduce timeout** — the `invokeEdgeFunction` default 30s timeout is too generous; set to 10s for translation calls so failures surface faster
-5. **On translation failure, show raw text instead of discarding** — currently errors silently remove entries (line 108), leaving users with "translating..." forever. Show the original text with a marker instead.
+1. Add `englishText` and `farsiText` fields to `CommittedTranscript` interface
+2. In the translation response handler, populate both fields explicitly:
+   - If source=en: `englishText = original text`, `farsiText = translatedFa`
+   - If source=fa: `englishText = translatedEn`, `farsiText = original text (cleaned)`
+   - If source=auto: `englishText = translatedEn || text`, `farsiText = translatedFa || text`
+3. Keep `translatedText` for backward compatibility with other consumers
 
-### Summary
-- Primary fix: `gemini-2.5-pro` → `gemini-2.5-flash` (3-5x speed improvement)
-- Secondary: remove expensive retry, reduce timeout, show fallback text on failure
+**File: `src/components/transcribe/LiveTranscript.tsx`**
+
+4. The English column — change display from `t.translatedText` to `t.englishText` (the English-only field)
+5. Show `[Raw]` prefix only when `englishText` is missing and falling back to raw text
+
+**File: `src/components/office/TranscribeView.tsx`**
+
+6. The Farsi sidebar (lines 1133-1151) — change display to always use `t.farsiText` instead of the current complex fallback chain
+7. Remove the `originalCleanText` / `translationMap` indirection for the sidebar — use `farsiText` directly from the hook
+
+### Speed Improvement
+
+8. In `useRealtimeTranscribe.ts`, reduce the context window from 3 segments to 1 segment — less prompt tokens = faster response
+9. Remove the post-translation word-count filter (`translationWordCount < 2` check) which silently discards valid short translations
 
 ### Files
-- `supabase/functions/translate-message/index.ts` — faster model + simplified retry
-- `src/hooks/useRealtimeTranscribe.ts` — shorter timeout + graceful fallback
+- `src/hooks/useRealtimeTranscribe.ts` — add `englishText`/`farsiText` fields, reduce context
+- `src/components/transcribe/LiveTranscript.tsx` — display `englishText` only
+- `src/components/office/TranscribeView.tsx` — sidebar displays `farsiText` only
 
