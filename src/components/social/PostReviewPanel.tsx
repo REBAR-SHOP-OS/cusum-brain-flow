@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play, Copy } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
