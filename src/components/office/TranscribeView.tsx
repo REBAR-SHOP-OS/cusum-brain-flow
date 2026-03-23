@@ -1056,7 +1056,7 @@ export function TranscribeView() {
         {/* Language selector header */}
         <div className="flex items-center gap-2 p-3 border-b border-border">
           <Globe className="w-4 h-4 text-primary" />
-          <Select value={translationLang} onValueChange={(v) => { setTranslationLang(v); setTranslationMap({}); setTranslatingIds(new Set()); translatedForLangRef.current = v; }}>
+          <Select value={translationLang} onValueChange={(v) => { setTranslationLang(v); }}>
             <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Select language" /></SelectTrigger>
             <SelectContent>
               {TRANSLATION_LANGUAGES.map((l) => (
