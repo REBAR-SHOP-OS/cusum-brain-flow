@@ -89,8 +89,6 @@ export function ProVideoEditor({
   const [aiCommand, setAiCommand] = useState("");
   const [aiProcessing, setAiProcessing] = useState(false);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
-  const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
-  const [transitionDuration, setTransitionDuration] = useState(0.5);
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
