@@ -105,8 +105,14 @@ export function useRealtimeTranscribe() {
           );
         })
         .catch(() => {
-          // Silent discard on error — never show raw transcription
-          setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
+          // Show raw text as fallback instead of silently discarding
+          setCommittedTranscripts((prev) =>
+            prev.map((t) =>
+              t.id === entryId
+                ? { ...t, translatedText: `[Raw] ${data.text.trim()}`, isTranslating: false }
+                : t
+            )
+          );
         });
     },
   });
