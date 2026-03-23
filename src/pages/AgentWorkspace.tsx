@@ -237,6 +237,9 @@ export default function AgentWorkspace() {
   }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSendInternal = useCallback(async (content: string, slotOverride?: number, files?: UploadedFile[]) => {
+    // Guard: prevent double-enqueue if already loading
+    if (isLoading) return;
+
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
