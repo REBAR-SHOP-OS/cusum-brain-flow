@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play, Copy } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
@@ -158,6 +158,8 @@ export function PostReviewPanel({
   const [imageZoomOpen, setImageZoomOpen] = useState(false);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [repostPopoverOpen, setRepostPopoverOpen] = useState(false);
+  const [reposting, setReposting] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [fbPublishReady, setFbPublishReady] = useState<boolean | null>(null);
   const [fbMissingScopes, setFbMissingScopes] = useState<string[]>([]);
@@ -691,11 +693,54 @@ export function PostReviewPanel({
                           </label>
                         )}
                       </div>
-                     <div>
+                     <div className="flex gap-2 flex-wrap">
                        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowStoryGen(true)}>
                          <Smartphone className="w-3.5 h-3.5" />
                          Auto Generate Story
                        </Button>
+                       <Popover open={repostPopoverOpen} onOpenChange={setRepostPopoverOpen}>
+                         <PopoverTrigger asChild>
+                           <Button variant="outline" size="sm" className="gap-1.5">
+                             <Copy className="w-3.5 h-3.5" />
+                             Repost
+                           </Button>
+                         </PopoverTrigger>
+                         <PopoverContent className="w-auto p-0" align="start" side="top">
+                           <DateSchedulePopover
+                             post={post}
+                             onSetDate={async (newDate) => {
+                               if (!post || reposting) return;
+                               setReposting(true);
+                               try {
+                                 const postAny = post as any;
+                                 const { error } = await supabase.from("social_posts").insert({
+                                   title: post.title,
+                                   content: post.content,
+                                   image_url: post.image_url,
+                                   cover_image_url: postAny.cover_image_url || null,
+                                   hashtags: post.hashtags,
+                                   platform: post.platform,
+                                   page_name: post.page_name,
+                                   content_type: post.content_type,
+                                   user_id: post.user_id,
+                                   scheduled_date: newDate.toISOString(),
+                                   status: "scheduled",
+                                   qa_status: "needs_review",
+                                   neel_approved: false,
+                                 });
+                                 if (error) throw error;
+                                 queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                                 toast({ title: "Repost created ✅", description: `Cloned to ${format(newDate, "PPP")} at ${format(newDate, "HH:mm")}` });
+                                 setRepostPopoverOpen(false);
+                               } catch (err: any) {
+                                 toast({ title: "Repost failed", description: err.message, variant: "destructive" });
+                               } finally {
+                                 setReposting(false);
+                               }
+                             }}
+                           />
+                         </PopoverContent>
+                       </Popover>
                      </div>
                   </div>
                 </div>
