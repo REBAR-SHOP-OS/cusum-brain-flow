@@ -1080,10 +1080,13 @@ export function TranscribeView() {
                 : (t.englishText || "");
               return (
                 <div key={t.id} className="space-y-0.5">
-                  <p className="text-sm text-foreground" dir="auto">
-                    {displayText || ""}
-                    {t.isTranslating && !displayText && (
-                      <span className="ml-1 text-xs text-muted-foreground italic animate-pulse">translating…</span>
+                  <p className="text-sm text-foreground" dir={translationLang === "fa" ? "rtl" : "ltr"}>
+                    {t.isTranslating && !displayText ? (
+                      <span className="text-xs text-muted-foreground italic animate-pulse">translating…</span>
+                    ) : displayText ? (
+                      displayText
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </p>
                 </div>
