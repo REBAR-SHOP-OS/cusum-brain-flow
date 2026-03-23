@@ -2791,7 +2791,7 @@ INSTEAD: End with a sharp next action, a proactive insight, or just stop talking
             let result = "";
             try {
               const args = JSON.parse(tc.function.arguments);
-              result = await executeReadTool(supabase, tc.function.name, args);
+              result = await executeReadTool(supabase, tc.function.name, args, companyId);
             } catch (e) {
               result = `Tool error: ${e instanceof Error ? e.message : "Unknown"}`;
             }
