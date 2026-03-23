@@ -100,7 +100,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
           { role: "user", content: prompt },
         ],
         temperature: 0.1,
-        maxTokens: 300,
+        maxTokens: 800,
       });
     };
 
