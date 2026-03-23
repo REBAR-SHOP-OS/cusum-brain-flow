@@ -1260,19 +1260,6 @@ export function ProVideoEditor({
           )}
         </div>
 
-        {/* ─── Right Panel ─── */}
-        {rightPanelOpen && (
-          <div className="w-56 shrink-0 border-l border-border/30 bg-card/60 overflow-y-auto">
-            <EffectsPanel
-              fadeIn={fadeIn}
-              fadeOut={fadeOut}
-              speed={speed}
-              onFadeInChange={setFadeIn}
-              onFadeOutChange={setFadeOut}
-              onSpeedChange={setSpeed}
-            />
-          </div>
-        )}
       </div>
 
       {/* ─── Bottom Timeline ─── */}
