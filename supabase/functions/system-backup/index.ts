@@ -62,7 +62,8 @@ serve(async (req) => {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"];
+  const { SUPER_ADMIN_EMAILS: _SA, SYSTEM_DEVICE_EMAILS } = await import("../_shared/accessPolicies.ts");
+  const SUPER_ADMIN_EMAILS = [..._SA, ...SYSTEM_DEVICE_EMAILS];
 
   const { data: userData, error: userError } = await userClient.auth.getUser();
 
