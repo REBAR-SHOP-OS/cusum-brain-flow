@@ -132,14 +132,15 @@ export function useRealtimeTranscribe() {
           // Language-aware fallback: NEVER put wrong language in wrong field
           const primaryTranslation = currentSourceLang === "fa" ? translatedEn : (currentSourceLang === "en" ? translatedFa : (translatedEn || translatedFa));
           if (!primaryTranslation || !primaryTranslation.trim()) {
-            // Only populate the source language field with raw text
+            // Fallback: show raw text in source language field, leave other as undefined
+            // This prevents "—" for valid speech while avoiding cross-language contamination
             setCommittedTranscripts((prev) =>
               prev.map((t) =>
                 t.id === entryId
                   ? {
                       ...t,
-                      englishText: currentSourceLang === "en" ? data.text.trim() : undefined,
-                      farsiText: currentSourceLang === "fa" ? data.text.trim() : undefined,
+                      englishText: translatedEn || (currentSourceLang === "en" ? data.text.trim() : undefined),
+                      farsiText: translatedFa || (currentSourceLang === "fa" ? data.text.trim() : undefined),
                       translatedText: undefined,
                       isTranslating: false,
                     }

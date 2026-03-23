@@ -100,7 +100,7 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
           { role: "user", content: prompt },
         ],
         temperature: 0.1,
-        maxTokens: 300,
+        maxTokens: 800,
       });
     };
 
@@ -127,6 +127,14 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
         }
         if (Object.keys(result).length > 0) {
           console.log("Recovered partial JSON:", Object.keys(result).join(", "));
+          return result;
+        }
+        // Try recovering truncated trailing value (no closing quote at end of string)
+        const truncatedRegex = /"(\w{2})"\s*:\s*"((?:[^"\\]|\\.)*?)$/;
+        const truncMatch = truncatedRegex.exec(cleaned);
+        if (truncMatch) {
+          result[truncMatch[1]] = truncMatch[2].trim();
+          console.log("Recovered truncated value for:", truncMatch[1]);
           return result;
         }
         throw new Error("Cannot parse response");
