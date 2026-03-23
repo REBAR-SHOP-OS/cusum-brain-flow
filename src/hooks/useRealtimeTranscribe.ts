@@ -129,18 +129,18 @@ export function useRealtimeTranscribe() {
             farsiText = translatedFa || data.text.trim();
           }
 
-          // Check if primary translation is empty — use raw text as fallback, NEVER remove
-          const primaryTranslation = currentSourceLang === "fa" ? translatedEn : (translatedEn || translatedFa);
+          // Language-aware fallback: NEVER put wrong language in wrong field
+          const primaryTranslation = currentSourceLang === "fa" ? translatedEn : (currentSourceLang === "en" ? translatedFa : (translatedEn || translatedFa));
           if (!primaryTranslation || !primaryTranslation.trim()) {
-            // Fallback: show raw text in both fields instead of removing
+            // Only populate the source language field with raw text
             setCommittedTranscripts((prev) =>
               prev.map((t) =>
                 t.id === entryId
                   ? {
                       ...t,
-                      englishText: englishText || data.text.trim(),
-                      farsiText: farsiText || data.text.trim(),
-                      translatedText: data.text.trim(),
+                      englishText: currentSourceLang === "en" ? data.text.trim() : undefined,
+                      farsiText: currentSourceLang === "fa" ? data.text.trim() : undefined,
+                      translatedText: undefined,
                       isTranslating: false,
                     }
                   : t
