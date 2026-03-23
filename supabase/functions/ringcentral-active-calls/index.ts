@@ -8,7 +8,9 @@ const corsHeaders = {
 };
 
 const RC_SERVER = "https://platform.ringcentral.com";
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop"];
+// Intentional access normalization: radin@rebar.shop added (was missing, already super admin elsewhere)
+import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
+// SUPER_ADMIN_EMAILS replaces local const — now includes both sattar and radin
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

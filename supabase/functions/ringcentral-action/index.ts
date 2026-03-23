@@ -8,7 +8,8 @@ const corsHeaders = {
 };
 
 const RC_SERVER = "https://platform.ringcentral.com";
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop"];
+// Intentional access normalization: radin@rebar.shop added
+import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 
 async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
   const { data: tokenRow } = await supabaseAdmin

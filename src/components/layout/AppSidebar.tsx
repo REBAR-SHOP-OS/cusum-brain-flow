@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
@@ -158,12 +159,12 @@ export function AppSidebar() {
         { name: "Team Hub", href: "/team-hub", icon: MessageSquare, tourId: "nav-team-hub" },
         { name: "Business Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
         { name: "Live Monitor", href: "/live-monitor", icon: Monitor, roles: ["admin", "office", "sales"], lockReason: "Requires Admin, Office or Sales role", tourId: "nav-live-monitor" },
-        { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop"], lockReason: "Requires Super Admin", tourId: "nav-ceo" },
+        { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: [...ACCESS_POLICIES.ceoPortalAccess], lockReason: "Requires Super Admin", tourId: "nav-ceo" },
         { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-support" },
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], lockReason: "Requires Sales or Office role", tourId: "nav-pipeline" },
         { name: "Lead Scoring", href: "/lead-scoring", icon: Zap, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Admin role", tourId: "nav-lead-scoring" },
-        { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers", blockedEmails: ["zahra@rebar.shop"] },
-        { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"], lockReason: "Restricted access", tourId: "nav-accounting" },
+        { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers", blockedEmails: [...ACCESS_POLICIES.blockedFromCustomers] },
+        { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: [...ACCESS_POLICIES.accountingAccess], lockReason: "Restricted access", tourId: "nav-accounting" },
         { name: "Sales", href: "/sales", icon: TrendingUp, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Office role", tourId: "nav-sales" },
       ],
     },

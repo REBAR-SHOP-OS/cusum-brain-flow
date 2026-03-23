@@ -1,57 +1,20 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { requireSuperAdmin } from "../_shared/roleCheck.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+/**
+ * Diagnostic logs — super-admin-only read access to system logs.
+ * Migrated to shared handleRequest wrapper for consistent auth/error handling.
+ * 
+ * Uses requireSuperAdmin for role-first + email-fallback access control.
+ */
+Deno.serve(async (req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase, body } = ctx;
 
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop"];
+    // Super admin check (role-first, email-fallback)
+    await requireSuperAdmin(supabase, userId);
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Verify caller is authenticated
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Super-admin check
-    if (!SUPER_ADMIN_EMAILS.includes(user.email ?? "")) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden: Super admin access only" }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    const { logType = "events", search = "", limit = 100 } = await req.json();
+    const { logType = "events", search = "", limit = 100 } = body;
     const safeLimit = Math.min(Number(limit) || 100, 500);
 
     let logs: any[] = [];
@@ -187,20 +150,12 @@ serve(async (req) => {
       }
 
       default:
-        return new Response(JSON.stringify({ error: "Invalid log type" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        throw new Response(
+          JSON.stringify({ ok: false, error: "Invalid log type" }),
+          { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } },
+        );
     }
 
-    return new Response(JSON.stringify({ logs }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("Error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { logs };
+  }, { functionName: "diagnostic-logs", requireCompany: false })
+);

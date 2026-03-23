@@ -1,4 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
@@ -104,23 +105,21 @@ export function RoleGuard({ children }: RoleGuardProps) {
     return <>{children}</>;
   }
 
-  // Block zahra@rebar.shop from /customers
-  if (email.toLowerCase() === "zahra@rebar.shop" && location.pathname.startsWith("/customers")) {
+  // Block specific emails from /customers (UX gate only — not a security boundary)
+  if (ACCESS_POLICIES.blockedFromCustomers.includes(email.toLowerCase()) && location.pathname.startsWith("/customers")) {
     return <Navigate to="/home" replace />;
   }
 
   // Accounting: email-only access (overrides all roles including admin)
-  const ACCOUNTING_EMAILS = ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"];
-  if (location.pathname.startsWith("/accounting") && !ACCOUNTING_EMAILS.includes(email.toLowerCase())) {
+  if (location.pathname.startsWith("/accounting") && !ACCESS_POLICIES.accountingAccess.includes(email.toLowerCase())) {
     return <Navigate to="/home" replace />;
   }
 
   // Internal users: wait for roles to load
   if (isLoading) return <>{children}</>;
 
-  // ai@rebar.shop is a shared shopfloor device — lock to shop routes only
-  const SHOPFLOOR_DEVICE_EMAILS = ["ai@rebar.shop"];
-  if (SHOPFLOOR_DEVICE_EMAILS.includes(email.toLowerCase())) {
+  // Shared shopfloor device accounts — lock to shop routes only (UX gate only)
+  if (ACCESS_POLICIES.shopfloorDevices.includes(email.toLowerCase())) {
     const DEVICE_ALLOWED = ["/shopfloor", "/shop-floor", "/home", "/timeclock", "/team-hub", "/settings", "/tasks", "/deliveries"];
     const isAllowed = DEVICE_ALLOWED.some((p) => location.pathname.startsWith(p));
     if (!isAllowed) return <Navigate to="/shopfloor" replace />;

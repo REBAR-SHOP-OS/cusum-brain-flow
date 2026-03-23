@@ -1,9 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
-
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 /**
  * Build learning pairs by comparing:
@@ -12,23 +7,15 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
  *
  * This creates entries in estimation_learnings that the AI can reference
  * for future takeoffs as few-shot examples and correction patterns.
+ *
+ * Migrated to shared handleRequest wrapper for consistent auth/error handling.
  */
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId } = await requireAuth(req);
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-
-    const { data: profile } = await admin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
-    if (!profile?.company_id) return json({ error: "No company found" }, 400);
-    const companyId = profile.company_id;
-
-    const body = await req.json();
+Deno.serve(async (req) =>
+  handleRequest(req, async (ctx) => {
+    const { companyId, serviceClient: admin, body, log } = ctx;
     const batchSize = body.batch_size ?? 20;
 
     // Strategy 1: Project-level weight comparison
-    // Find coordination logs with both estimation and detailing weights
     const { data: coordLogs } = await admin
       .from("project_coordination_log")
       .select("*")
@@ -39,47 +26,47 @@ serve(async (req) => {
 
     let pairsCreated = 0;
 
-    for (const log of coordLogs ?? []) {
-      const deltaPct = log.estimation_weight_kg > 0
-        ? Math.round(((log.estimation_weight_kg - log.detailing_weight_kg) / log.estimation_weight_kg) * 10000) / 100
+    for (const logEntry of coordLogs ?? []) {
+      const deltaPct = logEntry.estimation_weight_kg > 0
+        ? Math.round(((logEntry.estimation_weight_kg - logEntry.detailing_weight_kg) / logEntry.estimation_weight_kg) * 10000) / 100
         : 0;
 
       try {
         await admin.from("estimation_learnings").insert({
           company_id: companyId,
-          lead_id: log.lead_id,
+          lead_id: logEntry.lead_id,
           field_name: "total_weight_kg",
-          original_value: String(log.estimation_weight_kg),
-          corrected_value: String(log.detailing_weight_kg),
+          original_value: String(logEntry.estimation_weight_kg),
+          corrected_value: String(logEntry.detailing_weight_kg),
           weight_delta_pct: deltaPct,
           context: {
-            project_name: log.project_name,
-            customer_name: log.customer_name,
-            elements: log.elements,
-            releases_count: (log.releases as any[])?.length ?? 0,
-            revisions_count: (log.revisions as any[])?.length ?? 0,
+            project_name: logEntry.project_name,
+            customer_name: logEntry.customer_name,
+            elements: logEntry.elements,
+            releases_count: (logEntry.releases as any[])?.length ?? 0,
+            revisions_count: (logEntry.revisions as any[])?.length ?? 0,
           },
           confidence_score: Math.max(0, 100 - Math.abs(deltaPct)),
           source: "ingestion",
         });
         pairsCreated++;
       } catch (e) {
-        console.error("Learning pair insert error:", e);
+        log.error("Learning pair insert error", e);
       }
 
-      // Also create element-level learnings from coordination log elements
-      for (const element of (log.elements as any[]) ?? []) {
+      // Element-level learnings from coordination log elements
+      for (const element of (logEntry.elements as any[]) ?? []) {
         if (element.weight_kg > 0) {
           try {
             await admin.from("estimation_learnings").insert({
               company_id: companyId,
-              lead_id: log.lead_id,
+              lead_id: logEntry.lead_id,
               element_type: element.description?.toLowerCase()?.split(" ")[0] ?? "unknown",
               field_name: "element_weight_kg",
-              original_value: "0", // We don't have per-element estimation
+              original_value: "0",
               corrected_value: String(element.weight_kg),
               context: {
-                project_name: log.project_name,
+                project_name: logEntry.project_name,
                 element_description: element.description,
                 drawing_refs: element.drawing_refs,
               },
@@ -87,7 +74,7 @@ serve(async (req) => {
               source: "ingestion",
             });
             pairsCreated++;
-          } catch (e) {
+          } catch {
             // Ignore duplicate inserts
           }
         }
@@ -95,7 +82,6 @@ serve(async (req) => {
     }
 
     // Strategy 2: Item-level comparison between estimation_items and barlist_items
-    // Find estimation projects that have matching barlists via lead_id
     const { data: estProjects } = await admin
       .from("estimation_projects")
       .select("id, lead_id, total_weight_kg")
@@ -104,7 +90,6 @@ serve(async (req) => {
       .limit(batchSize);
 
     for (const proj of estProjects ?? []) {
-      // Find matching barlists
       const { data: barlists } = await admin
         .from("barlists")
         .select("id")
@@ -113,14 +98,12 @@ serve(async (req) => {
 
       if (!barlists || barlists.length === 0) continue;
 
-      // Get estimation items
       const { data: estItems } = await admin
         .from("estimation_items")
         .select("mark, bar_size, quantity, weight_kg, element_type")
         .eq("project_id", proj.id)
         .limit(500);
 
-      // Get barlist items (ground truth)
       const barlistIds = barlists.map((b: any) => b.id);
       const { data: blItems } = await admin
         .from("barlist_items")
@@ -130,7 +113,6 @@ serve(async (req) => {
 
       if (!estItems || !blItems || estItems.length === 0 || blItems.length === 0) continue;
 
-      // Create mark-level learning pairs
       const actualByMark = new Map<string, any>();
       for (const item of blItems) {
         const key = `${item.mark}|${item.bar_code}`;
@@ -172,21 +154,17 @@ serve(async (req) => {
               source: "auto_validation",
             });
             pairsCreated++;
-          } catch (e) {
+          } catch {
             // Ignore
           }
         }
       }
     }
 
-    return json({
+    return {
       message: `Created ${pairsCreated} learning pairs`,
       coordination_logs_processed: coordLogs?.length ?? 0,
       estimation_projects_processed: estProjects?.length ?? 0,
-    });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("build-learning-pairs error:", err);
-    return json({ error: err instanceof Error ? err.message : "Failed" }, 500);
-  }
-});
+    };
+  }, { functionName: "build-learning-pairs", requireCompany: true })
+);
