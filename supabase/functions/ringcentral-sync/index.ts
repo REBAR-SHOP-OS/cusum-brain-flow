@@ -409,19 +409,23 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
       if (companyId) break;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown";
-      console.warn(`CRON: Token for ${row.user_id} failed: ${msg}`);
+      console.error(`CRON: Token for ${row.user_id} failed: ${msg}`);
 
-      if (msg === "not_connected" || msg.includes("invalid_grant") || msg.includes("Token not found")) {
-        await supabaseAdmin
-          .from("integration_connections")
-          .upsert({
-            user_id: row.user_id,
-            integration_id: "ringcentral",
-            status: "error",
-            error_message: "Token expired — please reconnect",
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "user_id,integration_id" });
-      }
+      // Update integration status to "error" for ALL failure types so the UI flags it
+      const errorMessage = (msg === "not_connected" || msg.includes("invalid_grant") || msg.includes("Token not found"))
+        ? "Token expired — please reconnect"
+        : `Sync error: ${msg.slice(0, 200)}`;
+
+      await supabaseAdmin
+        .from("integration_connections")
+        .upsert({
+          user_id: row.user_id,
+          integration_id: "ringcentral",
+          status: "error",
+          error_message: errorMessage,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,integration_id" });
+
       continue;
     }
   }
