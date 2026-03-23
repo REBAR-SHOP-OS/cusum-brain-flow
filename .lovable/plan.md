@@ -1,62 +1,41 @@
 
 
-## Fix: Translations Show "—" Because AI Responses Are Truncated
+## Fix: Video Preview Shows "Not Available" — Stale Closure in Export
 
-### Root Cause (confirmed from edge function logs)
+### Root Cause
 
-**Every single translation is being truncated by the AI model.** Logs show:
+**`handleExportInternal` reads `clips` from a stale React closure.**
 
-```
-Failed to parse translation: {"en": "and get to the root of the
-Failed to parse translation: {"en": "Instead of writing, they
-Failed to parse translation: {"en": "It's a really bad feeling.
-Failed to parse translation: {"en": "Oh, it drew a black line
-```
+The flow in `handleSubmit`:
+1. Line 206: `setClips(initialClips)` — sets clips to idle
+2. Lines 251-282: `setClips(prev => ...)` — updates clips to "completed" with videoUrls during generation loop
+3. Line 290: `await handleExportInternal(...)` — tries to read completed clips
 
-The AI returns JSON cut off mid-value — no closing `"` or `}`. Two compounding issues:
+**But** `handleExportInternal` (line 366) is a `useCallback` that captures `clips` from its closure (line 374). When `handleSubmit` was created, `clips` was the *old* value. Even though `setClips` updates happen during the loop, the `clips` variable inside `handleExportInternal`'s closure still points to the initial empty/idle array.
 
-1. **`maxTokens: 300` is too low** — The model runs out of output tokens before finishing the JSON. For bilingual output (English + Farsi), 300 tokens is insufficient because Farsi script uses more tokens per word.
+Result: `completedClips.length === 0` at line 374 → returns early → `finalVideoUrl` stays `null` → "Video preview not available".
 
-2. **Regex fallback fails on truncated values** — The regex `/"(\w{2})"\s*:\s*"((?:[^"\\]|\\.)*)"/g` requires a closing `"` after the value. When the response is `{"en": "some text that gets cut`, there's no closing quote → regex matches nothing → `translations = {}` → hook gets empty → UI shows "—".
+### Fix
 
-### Fix — Two Changes
+**File: `src/components/ad-director/AdDirectorContent.tsx`**
 
-**File: `supabase/functions/translate-message/index.ts`**
-
-1. **Increase `maxTokens` from 300 to 800** — gives the model enough room to complete both English and Farsi translations without truncation.
-
-2. **Fix the regex to recover truncated values** — add a second pass that captures values even without a closing quote. When the JSON ends mid-value like `{"en": "some text here`, extract `"some text here"` as the value for `en`:
-
+1. **Add a `clipsRef`** that always holds the latest clips value:
 ```typescript
-// After the existing regex pass, handle truncated trailing value
-if (Object.keys(result).length === 0) {
-  // Try capturing value without closing quote (truncated at end)
-  const truncatedRegex = /"(\w{2})"\s*:\s*"((?:[^"\\]|\\.)*?)$/;
-  const truncMatch = truncatedRegex.exec(cleaned);
-  if (truncMatch) {
-    result[truncMatch[1]] = truncMatch[2].trim();
-  }
-}
+const clipsRef = useRef<ClipOutput[]>([]);
+// Sync ref on every clips update
+useEffect(() => { clipsRef.current = clips; }, [clips]);
 ```
 
-**File: `src/hooks/useRealtimeTranscribe.ts`**
-
-3. **Show raw text as fallback in BOTH columns when translation fails** — Currently, if `sourceLang === "fa"` and translation fails, `englishText` stays `undefined` → "—". Instead, when translation completely fails, populate both fields with raw text so the user at least sees something. The "—" should only appear for genuinely empty/noise segments.
-
+2. **In `handleExportInternal`**: Read from `clipsRef.current` instead of `clips`:
 ```typescript
-// On failure or empty translation: show raw text as fallback in both fields
-// rather than leaving one field empty showing "—"
-englishText: translatedEn || (currentSourceLang === "en" ? data.text.trim() : undefined),
-farsiText: translatedFa || (currentSourceLang === "fa" ? data.text.trim() : undefined),
+const completedClips = clipsRef.current.filter(c => c.status === "completed" && c.videoUrl);
 ```
+And similarly for the `orderedClips` mapping that filters by `clip?.status === "completed"`.
 
-### Why This Fixes It
+3. **In `handleExport`** (user-triggered, line 421): Same fix — use `clipsRef.current`.
 
-- **Primary fix**: Increasing `maxTokens` to 800 prevents truncation entirely — the model will complete its JSON output
-- **Safety net**: The improved regex recovers partial translations from any remaining truncated responses
-- **UI resilience**: Raw text fallback ensures users never see just "—" for valid speech
+This ensures the export function always reads the latest clips regardless of React's closure timing.
 
 ### Files
-- `supabase/functions/translate-message/index.ts` — increase maxTokens to 800, fix truncated JSON regex
-- `src/hooks/useRealtimeTranscribe.ts` — better fallback when translation returns empty
+- `src/components/ad-director/AdDirectorContent.tsx` — add `clipsRef`, use it in both export functions
 
