@@ -274,7 +274,7 @@ serve(async (req) => {
       const matchedIg = igAccounts.find((ig) => ig.pageId === pageId);
       if (matchedIg) selectedIg = matchedIg;
       else if (page_name) console.warn(`No IG account matched pageId ${pageId}. Using first: ${igAccounts[0].username}`);
-      result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url, content_type);
+      result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url, content_type, cover_image_url);
     } else if (platform === "linkedin") {
       result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url);
     } else if (platform === "twitter") {
