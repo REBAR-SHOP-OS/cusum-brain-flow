@@ -1,4 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";

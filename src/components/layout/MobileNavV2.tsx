@@ -1,5 +1,6 @@
 // forwardRef cache bust
 import { Link, useLocation } from "react-router-dom";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, DollarSign, MessageSquare, BarChart3, Clock, Share2, FileText, Bot, Globe, Search, Headset, Monitor, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import React, { useState } from "react";
