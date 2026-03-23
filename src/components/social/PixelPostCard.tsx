@@ -32,6 +32,7 @@ interface PixelPostCardProps {
 const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
   ({ post, onView, onApprove, onRegenerate, onEditImage }, ref) => {
     const [approved, setApproved] = useState(false);
+    const [regenerating, setRegenerating] = useState(false);
     const [imageZoomOpen, setImageZoomOpen] = useState(false);
     const [showImageEdit, setShowImageEdit] = useState(false);
     const [currentImageUrl, setCurrentImageUrl] = useState(post.imageUrl);
@@ -44,7 +45,8 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
     };
 
     const handleRegenerate = () => {
-      if (!approved) {
+      if (!approved && !regenerating) {
+        setRegenerating(true);
         onRegenerate?.(post);
       }
     };
