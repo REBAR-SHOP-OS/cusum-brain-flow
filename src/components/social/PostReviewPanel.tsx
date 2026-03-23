@@ -972,6 +972,12 @@ export function PostReviewPanel({
                         return;
                       }
 
+                      // Defensive: sync content_type to DB before publish so edge function gets correct value
+                      await supabase
+                        .from("social_posts")
+                        .update({ content_type: localContentType })
+                        .eq("id", post.id);
+
                       // Defensive repair: auto-fix unassigned platform for stories
                       let currentPlatforms = [...localPlatforms];
                       const isAllUnassigned = currentPlatforms.length === 0 || currentPlatforms.every(p => p === "unassigned");
