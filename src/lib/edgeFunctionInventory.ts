@@ -19,7 +19,7 @@ export interface EdgeFunctionEntry {
 export const edgeFunctionInventory: EdgeFunctionEntry[] = [
   // --- Auth ---
   { name: "google-oauth", domain: "auth", risk: "critical", purpose: "Google OAuth login flow", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p3", notes: "OAuth flow — do not modify" },
-  { name: "kiosk-lookup", domain: "auth", risk: "high", purpose: "Workshop kiosk employee lookup by PIN", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
+  { name: "kiosk-lookup", domain: "auth", risk: "high", purpose: "Workshop kiosk employee lookup by name", usesSharedWrapper: true, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p1", notes: "Migrated to handleRequest in Wave 4" },
   { name: "kiosk-punch", domain: "auth", risk: "high", purpose: "Workshop time clock punch in/out", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
   { name: "kiosk-register", domain: "auth", risk: "high", purpose: "Workshop kiosk employee registration", usesSharedWrapper: false, hasFeatureFlag: false, hasSmokeCoverage: false, hasAuditLogging: false, migrationPriority: "p2" },
 
