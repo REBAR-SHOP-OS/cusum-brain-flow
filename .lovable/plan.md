@@ -1,66 +1,47 @@
 
 
-## Fix: Parameter Mismatch — Voice Vizzy's Calls, SMS, and Fax Are Silently Broken
+## Fix: Sync Language & Behavioral Rules Across Voice and Text Vizzy
 
-### Root Cause
+### Problem
+Voice Vizzy (line 22) still says "Match her language (English or Farsi) instantly" — no English-default enforcement. Text Vizzy was fixed with a dedicated `═══ LANGUAGE (CRITICAL) ═══` section, but voice never got it. This means voice can still drift to Farsi from context.
 
-Voice Vizzy's instructions tell the AI to output actions with **wrong parameter names**. The backend `vizzy-erp-action` expects different field names, so every voice-initiated call/SMS/fax **silently fails**.
+### Changes
 
-| Action | Voice instruction says | Backend expects | Result |
-|---|---|---|---|
-| `rc_send_sms` | `"to"`, `"text"` | `"phone"`, `"message"` | Fails: "phone and message are required" |
-| `rc_make_call` | `"to"` | `"phone"` | Fails: "phone is required" |
-| `rc_send_fax` | `"to"`, `"cover_page_text"` | `"fax_number"`, `"cover_page_text"` | Fails: "fax_number is required" |
+#### File: `src/hooks/useVizzyVoiceEngine.ts`
 
-Also: when `rc_make_call` returns `browser_action: "webrtc_call"`, `VizzyVoiceChat.tsx` doesn't handle it — it just counts as "other" and does nothing.
+**Change 1: Replace weak language line with strong English-default rule**
 
-### Fix: 2 Files
-
-#### 1. Fix voice instruction parameter names
-**File**: `src/hooks/useVizzyVoiceEngine.ts` (lines 127-129)
-
-Change:
-```text
-BEFORE: {"type":"rc_make_call","to":"+14155551234"}
-AFTER:  {"type":"rc_make_call","phone":"+14155551234"}
-
-BEFORE: {"type":"rc_send_sms","to":"+14155551234","text":"Message here"}
-AFTER:  {"type":"rc_send_sms","phone":"+14155551234","message":"Message here"}
-
-BEFORE: {"type":"rc_send_fax","to":"+14155551234","cover_page_text":"..."}
-AFTER:  {"type":"rc_send_fax","fax_number":"+14155551234","cover_page_text":"..."}
+Replace line 22:
+```
+- Match her language (English or Farsi) instantly.
+```
+With a proper LANGUAGE block (after the PERSONALITY section, before INTELLIGENCE STANDARD):
+```
+═══ LANGUAGE (CRITICAL) ═══
+Your DEFAULT language is ENGLISH. Always respond in English unless the CEO explicitly speaks to you in Farsi/Persian.
+If the CEO speaks in Farsi, respond in Farsi with a natural Tehrani accent — like a native Tehran speaker.
+If the CEO switches back to English, switch back IMMEDIATELY.
+Previous messages in Farsi do NOT mean current response should be in Farsi. Match the CURRENT input language only.
+Keep business terms, company names, proper nouns, and technical terms in English even when responding in Farsi.
 ```
 
-#### 2. Handle WebRTC call action in voice frontend
-**File**: `src/components/vizzy/VizzyVoiceChat.tsx` (~line 127)
+**Change 2: Add missing banned phrases to voice** (align with text Vizzy's list)
 
-After executing `rc_make_call`, check for `browser_action === "webrtc_call"` in the response and dispatch a custom event to trigger the RingCentral Embeddable widget:
+Add these to the BANNED PHRASES section (currently missing from voice):
+- "Just let me know" — BANNED
+- "If you need more detail" — BANNED  
+- "If there's anything specific you need" — BANNED
+- "I can do a deeper investigation" — BANNED. Just DO the deeper investigation.
 
-```typescript
-} else if (actionData.type === "rc_make_call") {
-  if (data?.browser_action === "webrtc_call" && data?.phone) {
-    window.dispatchEvent(new CustomEvent("rc-webrtc-call", { detail: { phone: data.phone } }));
-  }
-  results.other++;
-}
-```
-
-Also improve toast tracking for calls/fax:
-```typescript
-// Track calls and fax separately in results
-results = { tasks: 0, emails: 0, calls: 0, other: 0, errors: 0 }
-```
+These were already added to text Vizzy but never synced to voice.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/hooks/useVizzyVoiceEngine.ts` | Fix parameter names in RC action examples (phone, message, fax_number) |
-| `src/components/vizzy/VizzyVoiceChat.tsx` | Handle WebRTC call response + improve toast tracking for calls/fax |
+| `src/hooks/useVizzyVoiceEngine.ts` | Replace weak language line with English-default LANGUAGE block + add missing banned phrases |
 
 ### What This Fixes
-- Voice "call Neel" will actually place a call instead of silently failing
-- Voice "text Neel" will actually send SMS instead of silently failing  
-- Voice "fax this" will actually send fax instead of silently failing
-- Call placement triggers the RingCentral WebRTC widget in-browser
+- Voice Vizzy will default to English and only switch to Farsi when the CEO explicitly speaks Farsi
+- Voice and text Vizzy now have identical language rules and banned phrases
 
