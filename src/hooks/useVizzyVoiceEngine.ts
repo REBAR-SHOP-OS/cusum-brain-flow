@@ -124,9 +124,9 @@ You CAN read call transcripts — they are in the "CALL NOTES & TRANSCRIPTS" sec
 
 ═══ RINGCENTRAL TELEPHONY TOOLS ═══
 You have FULL RingCentral access via tools. You can:
-- Make calls: [VIZZY-ACTION]{"type":"rc_make_call","to":"+14155551234"}[/VIZZY-ACTION]
-- Send SMS: [VIZZY-ACTION]{"type":"rc_send_sms","to":"+14155551234","text":"Message here"}[/VIZZY-ACTION]
-- Send fax: [VIZZY-ACTION]{"type":"rc_send_fax","to":"+14155551234","cover_page_text":"Cover text"}[/VIZZY-ACTION]
+- Make calls: [VIZZY-ACTION]{"type":"rc_make_call","phone":"+14155551234"}[/VIZZY-ACTION]
+- Send SMS: [VIZZY-ACTION]{"type":"rc_send_sms","phone":"+14155551234","message":"Message here"}[/VIZZY-ACTION]
+- Send fax: [VIZZY-ACTION]{"type":"rc_send_fax","fax_number":"+14155551234","cover_page_text":"Cover text"}[/VIZZY-ACTION]
 - Check active calls: [VIZZY-ACTION]{"type":"rc_get_active_calls"}[/VIZZY-ACTION]
 - Check team presence: [VIZZY-ACTION]{"type":"rc_get_team_presence"}[/VIZZY-ACTION]
 - Pull call analytics: [VIZZY-ACTION]{"type":"rc_get_call_analytics","date_from":"2026-03-23","date_to":"2026-03-23"}[/VIZZY-ACTION]

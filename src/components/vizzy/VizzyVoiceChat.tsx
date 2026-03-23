@@ -114,7 +114,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
 
     // Execute all actions and show summary toast
     (async () => {
-      const results = { tasks: 0, emails: 0, other: 0, errors: 0 };
+      const results = { tasks: 0, emails: 0, calls: 0, other: 0, errors: 0 };
 
       for (const { actionData } of pendingActions) {
         try {
@@ -134,6 +134,13 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             results.emails++;
           } else if (actionData.type === "rc_send_sms") {
             results.emails++;
+          } else if (actionData.type === "rc_make_call") {
+            if (data?.browser_action === "webrtc_call" && data?.phone) {
+              window.dispatchEvent(new CustomEvent("rc-webrtc-call", { detail: { phone: data.phone } }));
+            }
+            results.calls++;
+          } else if (actionData.type === "rc_send_fax") {
+            results.calls++;
           } else {
             results.other++;
           }
@@ -146,7 +153,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
       // Build summary toast
       const parts: string[] = [];
       if (results.tasks > 0) parts.push(`${results.tasks} task${results.tasks > 1 ? "s" : ""} created`);
-      if (results.emails > 0) parts.push(`${results.emails} email${results.emails > 1 ? "s" : ""} sent`);
+      if (results.emails > 0) parts.push(`${results.emails} message${results.emails > 1 ? "s" : ""} sent`);
+      if (results.calls > 0) parts.push(`${results.calls} call${results.calls > 1 ? "s" : ""} placed`);
       if (results.other > 0) parts.push(`${results.other} action${results.other > 1 ? "s" : ""} executed`);
       
       if (parts.length > 0) {
