@@ -661,6 +661,29 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Investigate Entity Tool ───
+  {
+    type: "function",
+    function: {
+      name: "investigate_entity",
+      description: "Search across ALL business data by keyword — project name, customer, person, or any term. Use when CEO asks about a specific project, customer, or topic. Searches customers, leads, emails, calls, orders, deliveries, production, financials, activity, and QuickBooks records.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Keyword to search: project name, customer name, person name, or any term" },
+          date_from: { type: "string", description: "Optional start date YYYY-MM-DD for time-scoped results" },
+          date_to: { type: "string", description: "Optional end date YYYY-MM-DD" },
+          include: {
+            type: "array",
+            items: { type: "string", enum: ["customers", "leads", "orders", "emails", "activity", "deliveries", "production", "financials", "calls", "contacts"] },
+            description: "Domains to search. Default: all.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 const RC_SERVER = "https://platform.ringcentral.com";
