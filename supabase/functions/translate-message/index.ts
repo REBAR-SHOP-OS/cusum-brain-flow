@@ -1,29 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
-
-  try {
-    // Auth guard — enforce authentication
-    let rateLimitId: string;
-    try {
-      const auth = await requireAuth(req);
-      rateLimitId = auth.userId;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
-
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    const { data: allowed } = await svcClient.rpc("check_rate_limit", {
-      _user_id: rateLimitId,
+serve((req) =>
+  handleRequest(req, async (ctx) => {
+    // Rate limit
+    const { data: allowed } = await ctx.serviceClient.rpc("check_rate_limit", {
+      _user_id: ctx.userId,
       _function_name: "translate-message",
       _max_requests: 60,
       _window_seconds: 60,
@@ -35,9 +19,7 @@ serve(async (req) => {
       });
     }
 
-    const { text, sourceLang, targetLangs, context } = await req.json();
-    // targetLangs is an array of language codes like ["fa", "es", "en"]
-    // context is an optional string of previous translated segments for coherence
+    const { text, sourceLang, targetLangs, context } = ctx.body;
 
     if (!text || !targetLangs?.length) {
       return new Response(
@@ -46,7 +28,6 @@ serve(async (req) => {
       );
     }
 
-    // Filter out source language from targets
     const langsToTranslate = targetLangs.filter((l: string) => l !== sourceLang);
     if (langsToTranslate.length === 0) {
       return new Response(
@@ -66,12 +47,10 @@ serve(async (req) => {
       .map((l: string) => `"${l}" (${langNames[l] || l})`)
       .join(", ");
 
-    // Build context section for the prompt
     const contextSection = context
       ? `\n\nCONVERSATION CONTEXT (previous translated segments for terminology consistency):\n${context}\n\nUse this context ONLY for consistent terminology — never alter the source meaning.`
       : "";
 
-    // Build system prompt — concise for speed
     const systemPrompt = `TRANSLATION CODEC. You convert text between languages. You are NOT an assistant.
 
 RULES:
@@ -105,12 +84,11 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
     };
 
     const userPrompt = `Source: "${langNames[sourceLang] || sourceLang || "auto-detect"}". Translate to ${targetList}:\n${text}`;
-    let result = await makeRequest(userPrompt);
+    const result = await makeRequest(userPrompt);
 
     const parseTranslation = (raw: string): Record<string, string> => {
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       
-      // Try standard JSON.parse first
       try {
         const parsed = JSON.parse(cleaned);
         for (const key of Object.keys(parsed)) {
@@ -118,7 +96,6 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
         }
         return parsed;
       } catch {
-        // Fallback: extract key-value pairs from truncated JSON using regex
         const result: Record<string, string> = {};
         const kvRegex = /"(\w{2})"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
         let match;
@@ -129,7 +106,6 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
           console.log("Recovered partial JSON:", Object.keys(result).join(", "));
           return result;
         }
-        // Try recovering truncated trailing value (no closing quote at end of string)
         const truncatedRegex = /"(\w{2})"\s*:\s*"((?:[^"\\]|\\.)*?)$/;
         const truncMatch = truncatedRegex.exec(cleaned);
         if (truncMatch) {
@@ -149,7 +125,6 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
       translations = {};
     }
 
-    // If all translations empty, log but don't retry
     const allEmpty = langsToTranslate.every((l: string) => !translations[l]);
     if (allEmpty) {
       console.log("Empty translation, returning empty result");
@@ -159,12 +134,5 @@ Noise → {"en": "", "fa": ""}${contextSection}`;
       JSON.stringify({ translations }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Translation error:", error);
-    const status = error instanceof AIError ? error.status : 500;
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "translate-message", requireCompany: false, rawResponse: true })
+);

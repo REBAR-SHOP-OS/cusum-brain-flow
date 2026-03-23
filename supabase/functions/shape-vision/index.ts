@@ -1,47 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    // Authentication check
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: authError } = await supabase.auth.getClaims(token);
-    if (authError || !claims?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = claims.claims.sub as string;
-
+serve((req) =>
+  handleRequest(req, async (ctx) => {
     // Rate limit
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    const { data: allowed } = await svcClient.rpc("check_rate_limit", {
-      _user_id: userId,
+    const { data: allowed } = await ctx.serviceClient.rpc("check_rate_limit", {
+      _user_id: ctx.userId,
       _function_name: "shape-vision",
       _max_requests: 10,
       _window_seconds: 60,
@@ -53,7 +19,7 @@ serve(async (req) => {
       });
     }
 
-    const { imageUrl, shapeCode, action } = await req.json();
+    const { imageUrl, shapeCode, action } = ctx.body;
 
     if (action === "analyze") {
       const result = await callAI({
@@ -144,16 +110,5 @@ Respond with JSON: {"routing": {"machine_type": "bender|cutter|both", "bend_coun
     return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
-  } catch (e) {
-    console.error("shape-vision error:", e);
-    if (e instanceof AIError) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "shape-vision", requireCompany: false, rawResponse: true })
+);

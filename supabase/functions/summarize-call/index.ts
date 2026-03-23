@@ -1,52 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+import { callAI } from "../_shared/aiRouter.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    // Verify auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: authError } = await supabase.auth.getClaims(token);
-    if (authError || !claimsData?.claims) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const userId = claimsData.claims.sub as string;
-
-    // Rate limit: 10 requests per 60 seconds per user
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    const { data: allowed } = await svcClient.rpc("check_rate_limit", {
-      _user_id: userId,
+serve((req) =>
+  handleRequest(req, async (ctx) => {
+    // Rate limit
+    const { data: allowed } = await ctx.serviceClient.rpc("check_rate_limit", {
+      _user_id: ctx.userId,
       _function_name: "summarize-call",
       _max_requests: 10,
       _window_seconds: 60,
@@ -58,7 +19,7 @@ serve(async (req) => {
       });
     }
 
-    const { transcript, fromNumber, toNumber } = await req.json();
+    const { transcript, fromNumber, toNumber } = ctx.body;
 
     if (!transcript || transcript.trim().length < 10) {
       return new Response(
@@ -95,7 +56,6 @@ Rules:
 
 ${transcript}`;
 
-    // GPT-4o-mini: structured JSON extraction from call transcript
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o-mini",
@@ -110,14 +70,11 @@ ${transcript}`;
 
     const rawReply = result.content;
 
-    // Parse JSON from the AI response
     let parsed: { summary: string; tasks: Array<{ title: string; description: string; priority: string }> };
     try {
-      // Strip markdown code fences if present
       const cleaned = rawReply.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      // Fallback: use the raw reply as summary
       parsed = { summary: rawReply, tasks: [] };
     }
 
@@ -125,11 +82,5 @@ ${transcript}`;
       JSON.stringify(parsed),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Summarize call error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "summarize-call", requireCompany: false, rawResponse: true })
+);

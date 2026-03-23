@@ -46,7 +46,7 @@ export default function TakeoffWizard({ open, onClose, onComplete, initialFiles 
 
   useEffect(() => {
     if (!open) return;
-    supabase.from("v_customers_clean" as any).select("customer_id, display_name").order("display_name").then(({ data }) => {
+    supabase.from("v_customers_clean" as any).select("customer_id, display_name").order("display_name").limit(1000).then(({ data }) => {
       setCustomers(data ?? []);
     });
   }, [open]);
