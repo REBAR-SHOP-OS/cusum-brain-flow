@@ -7,7 +7,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop"];
+// Intentional access normalization: radin@rebar.shop added
+import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const RC_SERVER = "https://platform.ringcentral.com";
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
+import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 
 async function refreshToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string, refreshTokenValue: string): Promise<string | null> {
   const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;

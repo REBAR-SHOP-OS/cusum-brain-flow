@@ -88,7 +88,7 @@ serve(async (req) => {
     const { data: roleRows } = await serviceClient
       .from("user_roles")
       .select("role")
-      .eq("user_id", profileRow.id);
+      .eq("user_id", userId); // Fixed: use auth user ID, not profile UUID
     isAdmin = roleRows?.some((r) => r.role === "admin") ?? false;
   }
 
