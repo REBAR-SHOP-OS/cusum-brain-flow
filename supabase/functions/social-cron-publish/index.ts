@@ -74,7 +74,37 @@ serve(async (req) => {
       .order("scheduled_date", { ascending: true })
       .limit(20);
 
-    console.log(`[social-cron-publish] Query returned ${duePosts?.length ?? 0} posts, error: ${fetchError?.message ?? 'none'}`);
+    console.log(`[social-cron-publish] Query returned ${duePosts?.length ?? 0} approved posts, error: ${fetchError?.message ?? 'none'}`);
+
+    // Auto-publish overdue unapproved posts — deadline: midnight of scheduled day
+    // Business rule: if Neel hasn't approved by midnight, publish anyway
+    const midnightCutoff = new Date();
+    midnightCutoff.setUTCHours(0, 0, 0, 0); // start of today UTC
+
+    const { data: overduePosts } = await supabase
+      .from("social_posts")
+      .select("*")
+      .eq("status", "scheduled")
+      .eq("neel_approved", false)
+      .lt("scheduled_date", midnightCutoff.toISOString())
+      .order("scheduled_date", { ascending: true })
+      .limit(20);
+
+    if (overduePosts && overduePosts.length > 0) {
+      console.log(`[social-cron-publish] Found ${overduePosts.length} overdue unapproved posts — auto-approving (Neel deadline passed)`);
+      for (const op of overduePosts) {
+        console.log(`[social-cron-publish] Auto-approving overdue post ${op.id}: platform=${op.platform}, scheduled_date=${op.scheduled_date}`);
+        await supabase
+          .from("social_posts")
+          .update({ neel_approved: true })
+          .eq("id", op.id);
+        op.neel_approved = true;
+      }
+      // Merge into duePosts, avoiding duplicates
+      if (duePosts) {
+        duePosts.push(...overduePosts.filter(op => !duePosts.some(d => d.id === op.id)));
+      }
+    }
 
     if (fetchError) {
       console.error("Error fetching due posts:", fetchError);
