@@ -177,8 +177,7 @@ export default function AccountingWorkspace() {
     try { return localStorage.getItem(QB_LAST_LOAD_TIME_KEY); } catch { return null; }
   });
 
-  const ACCOUNTING_EMAILS = ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"];
-  const hasAccess = ACCOUNTING_EMAILS.includes(user?.email?.toLowerCase() ?? "");
+  const hasAccess = ACCESS_POLICIES.accountingAccess.includes(user?.email?.toLowerCase() ?? "");
 
   // Stable refs for init-once logic
   const loadAllRef = useRef(qb.loadAll);

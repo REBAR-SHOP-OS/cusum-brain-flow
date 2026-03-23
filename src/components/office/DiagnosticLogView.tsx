@@ -33,7 +33,8 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop"];
+// Intentional access normalization: radin@rebar.shop added (was missing, already super admin elsewhere)
+const SUPER_ADMIN_EMAILS = ACCESS_POLICIES.superAdmins;
 
 type LogType = "events" | "commands" | "machine_runs" | "db_stats";
 

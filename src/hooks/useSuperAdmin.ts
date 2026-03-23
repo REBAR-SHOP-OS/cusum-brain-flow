@@ -1,9 +1,8 @@
 import { useAuth } from "@/lib/auth";
-
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 
 export function useSuperAdmin() {
   const { user } = useAuth();
-  const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(user?.email ?? "");
+  const isSuperAdmin = ACCESS_POLICIES.superAdmins.includes(user?.email ?? "");
   return { isSuperAdmin };
 }

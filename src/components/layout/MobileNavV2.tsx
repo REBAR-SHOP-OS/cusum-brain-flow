@@ -18,10 +18,10 @@ const primaryNav = [
 const moreItems = [
   { name: "Inbox", href: "/inbox-manager", icon: Inbox, roles: ["admin", "office"] },
   { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "shop_supervisor"] },
-  { name: "Customers", href: "/customers", icon: Users, blockedEmails: ["zahra@rebar.shop"] },
+  { name: "Customers", href: "/customers", icon: Users, blockedEmails: [...ACCESS_POLICIES.blockedFromCustomers] },
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
-  { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"] },
-  { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: ["sattar@rebar.shop", "radin@rebar.shop"] },
+  { name: "Accounting", href: "/accounting", icon: DollarSign, allowedEmails: [...ACCESS_POLICIES.accountingAccess] },
+  { name: "CEO Portal", href: "/ceo", icon: BarChart3, allowedEmails: [...ACCESS_POLICIES.ceoPortalAccess] },
   { name: "Live Monitor", href: "/live-monitor", icon: Monitor, roles: ["admin", "office", "sales"] },
   
   { name: "Calls", href: "/phonecalls", icon: Phone },
