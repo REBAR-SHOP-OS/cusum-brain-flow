@@ -521,7 +521,16 @@ export function PostReviewPanel({
                   {post.image_url ? (
                     <div className="rounded-lg overflow-hidden bg-muted relative group">
                       {isVideo ? (
-                        <video src={post.image_url} controls className="w-full rounded-lg" style={{ maxHeight: '400px' }} />
+                        <>
+                          <video src={post.image_url} controls className="w-full rounded-lg" style={{ maxHeight: '400px' }} />
+                          {/* Cover image preview for video posts */}
+                          {(post as any).cover_image_url && (
+                            <div className="mt-2 relative">
+                              <p className="text-[10px] text-muted-foreground mb-1">Cover Image</p>
+                              <img src={(post as any).cover_image_url} alt="Cover" className="w-20 h-20 object-cover rounded border" />
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <>
                           <img src={post.image_url} alt="Post preview" className="w-full object-contain rounded-lg" />
