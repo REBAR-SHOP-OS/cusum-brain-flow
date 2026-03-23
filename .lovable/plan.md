@@ -1,59 +1,60 @@
 
 
-## Add "Deep Business Scan" Tool for Vizzy
+## Enhance Deep Business Scan — Full Email Intelligence + Project Correlation
 
-### What You Want
+### Problem
 
-A way to ask Vizzy to deeply search across ALL your business data — emails, pipeline, calls, activity logs, production — and learn everything about what's happening. Not just today's snapshot, but a comprehensive cross-domain intelligence scan.
+The current `deep_business_scan` tool has three limitations that prevent Vizzy from truly "understanding" the business:
 
-### What Exists Now
+1. **Email previews truncated to 300 chars** — not enough to understand content
+2. **No thread grouping** — emails about the same project/topic aren't correlated
+3. **No cross-domain linking** — emails aren't connected to their related leads, orders, or customers
+4. **`get_employee_emails` only shows 100 chars** — even less useful
 
-- Vizzy gets a **single-day pre-digested context** (today only) via `vizzyFullContext.ts`
-- Individual tools exist: `get_employee_emails` (one employee, one day), `get_employee_activity` (one employee, one day), `list_leads`, `list_orders`
-- No tool exists to do a **cross-domain deep scan** across multiple data sources at once
+### Enhancements (1 file)
 
-### Solution: Add `deep_business_scan` Tool
+**File**: `supabase/functions/admin-chat/index.ts`
 
-A new tool in `admin-chat/index.ts` that aggregates data across ALL domains in a single call:
+#### Fix 1: Increase email preview lengths
 
-**What it scans:**
-1. **Emails** — All communications for a date range (not just today), with body previews, unanswered threads
-2. **Pipeline** — All active leads with scores, values, stages, last activity
-3. **Calls** — RingCentral call logs with per-employee breakdown
-4. **Activity** — All logged events across all employees
-5. **Production** — Cut plans, work orders, machine utilization
-6. **Financials** — AR/AP aging, overdue invoices/bills
-7. **Deliveries** — Scheduled, in-transit, completed
-8. **Agent usage** — Which AI agents are being used and by whom
+- In `deep_business_scan` handler: increase `body_preview` slice from 300 → 800 chars for both `unansweredItems` and `recentItems`
+- In `get_employee_emails` handler (line 1063): increase from 100 → 500 chars
+- Return more emails: increase `recentItems` from 20 → 50, `unansweredItems` from 10 → 25
 
-**Parameters:**
-- `date_from` (optional, defaults to 7 days ago)
-- `date_to` (optional, defaults to today)
-- `focus` (optional: "emails", "pipeline", "production", "financials", "all" — defaults to "all")
-- `employee_name` (optional: filter to one person)
+#### Fix 2: Group emails by thread
 
-**How to use it:** Just tell Vizzy:
-- "Deep scan the business" — scans everything for last 7 days
-- "Go deep on all emails this week" — focuses on emails
-- "Learn everything about what Vicky has been doing" — employee-specific scan
-- "Scan the pipeline and financials for the last 30 days"
+In the emails section of `deep_business_scan`, after collecting emails, group by `thread_id` to show conversation threads:
+- Group emails sharing the same `thread_id`
+- For each thread: show subject, participants, message count, latest message time, direction flow (who replied to whom)
+- This lets Vizzy see "this thread has 5 messages between us and XYZ Company, last reply was from them 2 days ago — unanswered"
+
+#### Fix 3: Cross-reference emails with leads/customers
+
+After collecting emails and pipeline data (when `focus === "all"`):
+- Match email addresses from communications against `contact_email` in leads
+- Flag emails that are from/to active lead contacts
+- Add `relatedLead` field to email items showing the lead title + stage
+
+#### Fix 4: Add `orders` to the scan
+
+Currently missing — add an orders query when `scanAll`:
+- Query `orders` table for the date range
+- Show order count, total revenue, status breakdown
+- Cross-reference customer emails with order contacts
+
+### Technical Detail
+
+All changes are within the existing `case "deep_business_scan"` handler. The thread grouping is a post-processing step on the already-fetched email data. The cross-referencing uses leads data already fetched by the pipeline query. No new DB queries beyond the orders query.
 
 ### Files Changed
 
 | File | Change | Category |
 |---|---|---|
-| `supabase/functions/admin-chat/index.ts` | Add `deep_business_scan` tool definition + handler | Safe additive |
+| `supabase/functions/admin-chat/index.ts` | Enhance deep scan: longer previews, thread grouping, cross-references, orders | Safe edit (same handler) |
 
-### Implementation Detail
-
-1. Add tool definition to `JARVIS_TOOLS` array with parameters schema
-2. Add `case "deep_business_scan"` in `executeReadTool` that runs parallel queries across communications, leads, activity_events, cut_plan_items, accounting_mirror, deliveries, work_orders, and chat_sessions for the given date range
-3. Returns a structured summary organized by domain
-4. Update the system prompt's tool usage section to mention this tool
-
-### What is NOT Changed
-- Existing tools remain unchanged
-- Pre-digest flow unchanged
+### What is NOT changed
+- Tool parameters unchanged
 - No schema changes
 - No new edge functions
+- Other tools unaffected
 
