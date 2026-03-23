@@ -161,11 +161,16 @@ Structure it as:
       DO NOT TOUCH: All other files
     - Summary line: "Agent Health: X agents audited, Y need attention, Z Lovable patches ready"
 
+═══ HISTORICAL CONTEXT (previous days, for reference only — NOT today) ═══
+17. PREVIOUS DAYS CALL NOTES — Only include call notes from days BEFORE today, clearly dated
+18. TREND DATA — Benchmark comparisons from previous sessions
+
 CRITICAL RULES:
 - Preserve ALL specific numbers, names, amounts — Vizzy needs these for voice answers
 - Pre-analyze patterns so Vizzy doesn't have to think — just speak
 - Compare against previous benchmarks when available: "AR is up 12% from last week"
 - Be opinionated — this is Vizzy's internal analysis, not a neutral report
+- ABSENT EMPLOYEES MUST be listed even if the list is short — voice mode depends on this to avoid hallucinating activity
 
 ${benchmarkHistory ? `\n═══ PREVIOUS BENCHMARKS ═══\n${benchmarkHistory}` : "No previous benchmarks — this is the first session."}
 ${agentAuditContext}`,
