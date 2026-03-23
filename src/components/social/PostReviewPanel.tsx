@@ -156,6 +156,7 @@ export function PostReviewPanel({
   const [showImageEdit, setShowImageEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imageZoomOpen, setImageZoomOpen] = useState(false);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [fbPublishReady, setFbPublishReady] = useState<boolean | null>(null);
