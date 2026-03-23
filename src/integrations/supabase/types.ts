@@ -294,6 +294,63 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_execution_log: {
+        Row: {
+          agent_name: string | null
+          company_id: string | null
+          completion_tokens: number | null
+          created_at: string
+          error_message: string | null
+          execution_path: string | null
+          http_status: number | null
+          id: string
+          latency_ms: number | null
+          model: string
+          prompt_tokens: number | null
+          provider: string
+          request_id: string
+          status: string
+          total_tokens: number | null
+          user_id: string | null
+        }
+        Insert: {
+          agent_name?: string | null
+          company_id?: string | null
+          completion_tokens?: number | null
+          created_at?: string
+          error_message?: string | null
+          execution_path?: string | null
+          http_status?: number | null
+          id?: string
+          latency_ms?: number | null
+          model: string
+          prompt_tokens?: number | null
+          provider: string
+          request_id: string
+          status?: string
+          total_tokens?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          agent_name?: string | null
+          company_id?: string | null
+          completion_tokens?: number | null
+          created_at?: string
+          error_message?: string | null
+          execution_path?: string | null
+          http_status?: number | null
+          id?: string
+          latency_ms?: number | null
+          model?: string
+          prompt_tokens?: number | null
+          provider?: string
+          request_id?: string
+          status?: string
+          total_tokens?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       ai_usage_log: {
         Row: {
           agent_name: string | null
