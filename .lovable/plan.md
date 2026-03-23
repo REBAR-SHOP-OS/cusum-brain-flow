@@ -1,62 +1,38 @@
 
 
-## Fix: Vizzy Must Always Verify Before Speaking About Employees
+## Fix: Add `send_email` Tool to Admin-Chat (Text Vizzy)
 
-### Problem
+### Root Cause
 
-When asked about Ben's activity, Vizzy first said "no activity" (relying on the context snapshot), then reversed after being pushed. The CEO's rule: **refresh all data before answering — no more mistakes like this.**
+Vizzy said "I can't send emails directly" because **admin-chat has no `send_email` function-calling tool registered**. The system prompt tells her she can send emails, but the OpenAI tools array has no such tool — so she literally cannot call it. The tool exists in `agentTools.ts` (for sub-agents like sales/accounting) and in `vizzy-erp-action` (for voice mode), but was never wired into admin-chat's own tool definitions or executor.
 
-The root cause: Text Vizzy has `investigate_entity` but doesn't always call it before answering employee questions. It sometimes answers from the pre-built context snapshot (which may not include granular per-employee data), then only investigates when challenged.
+### Fix
 
-### Fix: 2 Changes
+**File: `supabase/functions/admin-chat/index.ts`**
 
-#### 1. Mandatory Employee Investigation Rule (Text Vizzy)
+Two additions:
 
-**File**: `supabase/functions/admin-chat/index.ts` (~line 2508, DEEP INVESTIGATION PROTOCOL section)
+1. **Tool definition** — Add a `send_email` function tool to the tools array (alongside existing tools like `rc_send_sms`, `rc_make_call`):
+   ```
+   name: "send_email"
+   parameters: to (required), subject (required), body (required), threadId (optional), replyToMessageId (optional)
+   ```
 
-Add a hard rule:
+2. **Tool executor** — Add a `case "send_email"` block in the tool execution switch that calls `gmail-send` edge function (same pattern used in `agentToolExecutor.ts`):
+   - Calls `supabase.functions.invoke("gmail-send", { body: { to, subject, body, threadId, replyToMessageId } })`
+   - Returns success with messageId/threadId
+   - Add to confirmation-required list so Vizzy shows "Send email to X?" before executing
 
-```text
-═══ MANDATORY DATA REFRESH RULE (CRITICAL — CEO DIRECT ORDER) ═══
-When the CEO asks about a SPECIFIC employee (their activity, calls, emails, performance, status):
-1. ALWAYS call investigate_entity with their name FIRST — before saying a single word about them
-2. NEVER answer from the context snapshot alone — it may be incomplete
-3. If investigate_entity returns empty, THEN say "no activity found" — not before
-4. If the CEO corrects you ("they WERE working"), immediately save_memory with the correction
-This rule is NON-NEGOTIABLE. Breaking it causes the CEO to lose trust.
-```
-
-#### 2. Same Rule for Voice Vizzy + Auto-Learn from Corrections
-
-**File**: `src/hooks/useVizzyVoiceEngine.ts` (add near the INTELLIGENCE STANDARD section)
-
-Add:
-
-```text
-═══ MANDATORY DATA REFRESH RULE (CRITICAL — CEO DIRECT ORDER) ═══
-When asked about a SPECIFIC employee's activity, calls, emails, or performance:
-1. ALWAYS trigger investigate_entity FIRST via [VIZZY-ACTION] before answering
-2. While waiting for results, say "Let me pull up [name]'s full activity..." — do NOT guess
-3. NEVER answer employee questions from pre-digest alone — always verify with a fresh lookup
-4. If the CEO corrects you, IMMEDIATELY save the correction:
-   [VIZZY-ACTION]{"type":"save_memory","category":"business","content":"CEO correction: [what they said]"}[/VIZZY-ACTION]
-
-═══ LEARNING FROM CORRECTIONS ═══
-When the CEO says "that's wrong", "no they were working", or corrects any claim you made:
-- Acknowledge the error immediately: "You're right, my mistake."
-- Save the correction to memory so you never repeat it
-- NEVER argue with or question the CEO's correction
-```
+3. **Confirmation description** — Add `send_email` to the `getConfirmationDescription` function: `Send email to ${args.to}: "${args.subject}"`
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/admin-chat/index.ts` | Add MANDATORY DATA REFRESH rule to system prompt |
-| `src/hooks/useVizzyVoiceEngine.ts` | Add same rule + auto-learn from corrections |
+| `supabase/functions/admin-chat/index.ts` | Add `send_email` tool definition, executor case, and confirmation description |
 
 ### What This Fixes
-- Vizzy will always call `investigate_entity` before answering about any employee
-- No more "no activity" answers based on incomplete snapshots
-- CEO corrections are saved as memory to prevent repeat mistakes
+- Text Vizzy will be able to actually send emails when the CEO says "send"
+- No more "copy and paste it yourself" responses
+- Same email sending capability that voice Vizzy and sub-agents already have
 
