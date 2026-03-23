@@ -175,11 +175,15 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
               </button>
               <button
                 onClick={handleRegenerate}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500/15 text-orange-500 hover:bg-orange-500/25 transition-colors font-medium text-sm"
+                disabled={regenerating}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500/15 text-orange-500 hover:bg-orange-500/25 transition-colors font-medium text-sm",
+                  regenerating && "opacity-50 cursor-not-allowed"
+                )}
                 aria-label="Regenerate post"
               >
-                <RefreshCw className="w-7 h-7" />
-                Regenerate
+                <RefreshCw className={cn("w-7 h-7", regenerating && "animate-spin")} />
+                {regenerating ? "Regenerating…" : "Regenerate"}
               </button>
             </>
           )}

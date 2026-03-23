@@ -403,7 +403,7 @@ export default function AgentWorkspace() {
         aiModel,
       );
     }
-  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate, aiModel, agentId, isSuperAdmin, imageStyles, selectedProducts, imageAspectRatio]);
+  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate, aiModel, agentId, isSuperAdmin, imageStyles, selectedProducts, imageAspectRatio, isLoading]);
 
   // Keep ref in sync
   useEffect(() => { sendRef.current = handleSendInternal; }, [handleSendInternal]);
