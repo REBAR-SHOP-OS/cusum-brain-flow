@@ -684,6 +684,24 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Auto Diagnose & Fix Tool ───
+  {
+    type: "function",
+    function: {
+      name: "auto_diagnose_fix",
+      description: "Diagnose a system bug using AI analysis. Generates root cause analysis, suggested code fix, and affected files. Use when CEO reports a bug, error, or broken feature.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short bug title" },
+          description: { type: "string", description: "What's happening — symptoms, error messages, context" },
+          severity: { type: "string", enum: ["critical", "high", "medium", "low"], description: "How urgent" },
+        },
+        required: ["title", "description"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 const RC_SERVER = "https://platform.ringcentral.com";
