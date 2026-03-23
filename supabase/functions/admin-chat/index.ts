@@ -1307,19 +1307,46 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
             const outboundAddresses = new Set(emailItems.filter((e: any) => e.direction === "outbound").map((e: any) => e.to_address?.toLowerCase()));
             const unanswered = inbound.filter((e: any) => !outboundAddresses.has(e.from_address?.toLowerCase()));
 
+            // Thread grouping
+            const threadMap: Record<string, { subject: string; participants: Set<string>; count: number; latest: string; firstDirection: string; lastDirection: string; messages: any[] }> = {};
+            for (const e of emailItems) {
+              const tid = e.thread_id || e.subject || "unknown";
+              if (!threadMap[tid]) {
+                threadMap[tid] = { subject: e.subject, participants: new Set(), count: 0, latest: e.received_at, firstDirection: e.direction, lastDirection: e.direction, messages: [] };
+              }
+              const t = threadMap[tid];
+              t.count++;
+              if (e.from_address) t.participants.add(e.from_address.toLowerCase());
+              if (e.to_address) t.participants.add(e.to_address.toLowerCase());
+              if (e.received_at > t.latest) { t.latest = e.received_at; t.lastDirection = e.direction; }
+              t.messages.push(e);
+            }
+            const threads = Object.entries(threadMap).map(([tid, t]) => ({
+              threadId: tid,
+              subject: t.subject,
+              participants: [...t.participants],
+              messageCount: t.count,
+              latestTime: t.latest,
+              lastDirection: t.lastDirection,
+              needsReply: t.lastDirection === "inbound",
+            })).sort((a, b) => b.latestTime.localeCompare(a.latestTime));
+
             result.emails = {
               total: emailItems.length,
               sent: emailItems.filter((e: any) => e.direction === "outbound").length,
               received: inbound.length,
               unanswered: unanswered.length,
-              unansweredItems: unanswered.slice(0, 10).map((e: any) => ({
+              threadCount: threads.length,
+              threadsNeedingReply: threads.filter(t => t.needsReply).length,
+              threads: threads.slice(0, 30),
+              unansweredItems: unanswered.slice(0, 25).map((e: any) => ({
                 subject: e.subject, from: e.from_address, time: e.received_at, urgency: e.ai_urgency,
-                preview: e.body_preview?.slice(0, 300),
+                preview: e.body_preview?.slice(0, 800), thread_id: e.thread_id,
               })),
-              recentItems: emailItems.slice(0, 20).map((e: any) => ({
+              recentItems: emailItems.slice(0, 50).map((e: any) => ({
                 subject: e.subject, from: e.from_address, to: e.to_address,
                 direction: e.direction, time: e.received_at, urgency: e.ai_urgency, category: e.ai_category,
-                preview: e.body_preview?.slice(0, 300),
+                preview: e.body_preview?.slice(0, 800), thread_id: e.thread_id,
               })),
             };
             if (scanAll || focus === "calls") {
