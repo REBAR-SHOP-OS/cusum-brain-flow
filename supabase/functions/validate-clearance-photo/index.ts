@@ -1,17 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { user } = await requireAuth(req);
-
-    const { photo_storage_path, expected_mark_number, expected_drawing_ref, photo_type } = await req.json();
+serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { photo_storage_path, expected_mark_number, expected_drawing_ref, photo_type } = ctx.body;
 
     if (!photo_storage_path) {
       return new Response(JSON.stringify({ error: "photo_storage_path is required" }), {
@@ -20,13 +14,7 @@ serve(async (req) => {
       });
     }
 
-    // Get a signed URL for the photo so AI can see it
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const { data: signedData, error: signedErr } = await supabase.storage
+    const { data: signedData, error: signedErr } = await ctx.serviceClient.storage
       .from("clearance-photos")
       .createSignedUrl(photo_storage_path, 300);
 
@@ -67,78 +55,72 @@ Return ONLY valid JSON in this format:
   "reason": "brief explanation"
 }`;
 
-    const result = await callAI({
-      provider: "gemini",
-      model: "gemini-2.5-flash",
-      agentName: "shopfloor",
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: userPrompt },
-            { type: "image_url", image_url: { url: photoUrl } },
-          ],
-        },
-      ],
-      maxTokens: 1000,
-      temperature: 0.1,
-    });
-
-    // Parse the AI response
-    let validation: any;
     try {
-      const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-      validation = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-    } catch {
-      validation = null;
-    }
+      const result = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+        agentName: "shopfloor",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userPrompt },
+              { type: "image_url", image_url: { url: photoUrl } },
+            ],
+          },
+        ],
+        maxTokens: 1000,
+        temperature: 0.1,
+      });
 
-    if (!validation) {
+      let validation: any;
+      try {
+        const jsonMatch = result.content.match(/\{[\s\S]*\}/);
+        validation = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+      } catch {
+        validation = null;
+      }
+
+      if (!validation) {
+        return new Response(
+          JSON.stringify({
+            valid: true,
+            confidence: "unreadable",
+            reason: "Could not parse AI validation response — photo accepted without verification",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const hasExpectedMark = !!expected_mark_number;
+      let valid = true;
+      if (validation.confidence === "unreadable") {
+        valid = true;
+      } else if (hasExpectedMark && validation.mark_match === false && validation.confidence !== "low") {
+        valid = false;
+      }
+
       return new Response(
         JSON.stringify({
-          valid: true, // Don't block on parse failure
-          confidence: "unreadable",
-          reason: "Could not parse AI validation response — photo accepted without verification",
+          valid,
+          detected_mark: validation.detected_mark || null,
+          detected_drawing: validation.detected_drawing || null,
+          mark_match: validation.mark_match ?? null,
+          drawing_match: validation.drawing_match ?? null,
+          confidence: validation.confidence || "low",
+          reason: validation.reason || "",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    } catch (e) {
+      if (e instanceof AIError) {
+        return new Response(
+          JSON.stringify({ valid: true, confidence: "unreadable", reason: "AI service unavailable — photo accepted" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      throw e;
     }
-
-    // Determine overall validity
-    const hasExpectedMark = !!expected_mark_number;
-    const hasExpectedDrawing = !!expected_drawing_ref;
-
-    let valid = true;
-    if (validation.confidence === "unreadable") {
-      valid = true; // Can't validate, allow through with warning
-    } else if (hasExpectedMark && validation.mark_match === false && validation.confidence !== "low") {
-      valid = false;
-    }
-
-    return new Response(
-      JSON.stringify({
-        valid,
-        detected_mark: validation.detected_mark || null,
-        detected_drawing: validation.detected_drawing || null,
-        mark_match: validation.mark_match ?? null,
-        drawing_match: validation.drawing_match ?? null,
-        confidence: validation.confidence || "low",
-        reason: validation.reason || "",
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("validate-clearance-photo error:", e);
-    if (e instanceof AIError) {
-      return new Response(
-        JSON.stringify({ valid: true, confidence: "unreadable", reason: "AI service unavailable — photo accepted" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "validate-clearance-photo", requireCompany: false, rawResponse: true })
+);

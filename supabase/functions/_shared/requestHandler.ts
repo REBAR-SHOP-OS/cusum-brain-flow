@@ -32,6 +32,8 @@ export interface HandlerOptions {
   requireCompany?: boolean; // default true
   requireRole?: AppRole;
   requireAnyRole?: AppRole[];
+  /** If true, the handler must return a Response object directly. Skips { ok, data } wrapping. */
+  rawResponse?: boolean;
 }
 
 /**
