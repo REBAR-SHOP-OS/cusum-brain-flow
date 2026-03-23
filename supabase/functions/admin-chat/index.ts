@@ -2197,11 +2197,12 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
     // ─── Email Send ───
     case "send_email": {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      // Use the user's JWT (passed via userAuthToken) so gmail-send can resolve the user
+      const authToken = args._userAuthToken || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const resp = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${serviceKey}`,
+          Authorization: `Bearer ${authToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
