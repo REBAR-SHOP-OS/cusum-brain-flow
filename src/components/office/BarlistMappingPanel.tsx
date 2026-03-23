@@ -163,6 +163,10 @@ interface BarlistMappingPanelProps {
   sessionId: string;
   onConfirmMapping: (mappedRows: MappedRow[], unitSystem: string) => void;
   disabled?: boolean;
+  /** Controlled unit system from parent */
+  unitSystem?: LengthUnit;
+  /** Callback when user changes unit */
+  onUnitSystemChange?: (unit: LengthUnit) => void;
 }
 
 export interface MappedRow {
