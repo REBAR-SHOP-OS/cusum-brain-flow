@@ -643,6 +643,24 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Deep Business Scan Tool ───
+  {
+    type: "function",
+    function: {
+      name: "deep_business_scan",
+      description: "Comprehensive cross-domain intelligence scan across emails, pipeline, calls, activity, production, financials, deliveries, and agent usage. Use when the user asks to 'deep scan', 'learn everything', 'audit the business', or wants a multi-day overview of all operations.",
+      parameters: {
+        type: "object",
+        properties: {
+          date_from: { type: "string", description: "Start date YYYY-MM-DD. Defaults to 7 days ago." },
+          date_to: { type: "string", description: "End date YYYY-MM-DD. Defaults to today." },
+          focus: { type: "string", enum: ["all", "emails", "pipeline", "production", "financials", "calls", "activity"], description: "Focus area. Default: all" },
+          employee_name: { type: "string", description: "Optional: filter everything to a specific employee by name" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 const RC_SERVER = "https://platform.ringcentral.com";
