@@ -27,6 +27,7 @@ export function usePublishPost() {
     image_url: string | null;
     page_name?: string;
     content_type?: string;
+    cover_image_url?: string | null;
   }) => {
     setPublishing(true);
     try {
