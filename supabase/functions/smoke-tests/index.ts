@@ -128,6 +128,7 @@ serve(async (req) => {
       event_type: "audit",
       description: "Smoke test audit probe — safe to delete",
       source: "smoke-tests",
+      metadata: { smoke_test: true, probe: true, purpose: "audit_pipeline_verification" },
     });
     if (insertErr) throw new Error(`Audit insert failed: ${insertErr.message}`);
     // Best-effort cleanup
