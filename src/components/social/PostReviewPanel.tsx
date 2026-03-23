@@ -1062,6 +1062,7 @@ export function PostReviewPanel({
                         image_url: post.image_url,
                         page_name: firstCombo.page,
                         content_type: localContentType,
+                        cover_image_url: (post as any).cover_image_url,
                       });
                       if (!firstOk) allOk = false;
 
