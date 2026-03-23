@@ -12,6 +12,9 @@ export interface AuditEntry {
   targetEntity: string;
   targetId: string;
   companyId: string;
+  requestId?: string;
+  status?: "success" | "failure";
+  timestamp?: string;
   before?: Record<string, unknown>;
   after?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
@@ -35,8 +38,11 @@ export async function writeAuditLog(
       source: "audit",
       actor_id: entry.actorId,
       actor_type: "user",
+      ...(entry.timestamp ? { created_at: entry.timestamp } : {}),
       metadata: {
         audit_action: entry.action,
+        request_id: entry.requestId ?? null,
+        status: entry.status ?? "success",
         before: entry.before ?? null,
         after: entry.after ?? null,
         ...(entry.metadata ?? {}),
