@@ -13,6 +13,8 @@ interface CommittedTranscript {
   timestamp: number;
   translatedText?: string;
   originalCleanText?: string;
+  englishText?: string;
+  farsiText?: string;
   isTranslating?: boolean;
 }
 
@@ -55,7 +57,7 @@ export function LiveTranscript({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="text-sm text-foreground cursor-help">
-                        {t.translatedText || ""}
+                        {t.englishText || t.translatedText || ""}
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs">

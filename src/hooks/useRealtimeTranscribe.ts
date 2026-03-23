@@ -12,6 +12,8 @@ interface CommittedTranscript {
   timestamp: number;
   translatedText?: string;
   originalCleanText?: string;
+  englishText?: string;
+  farsiText?: string;
   isTranslating?: boolean;
   sourceLang: SourceLang;
 }
@@ -55,7 +57,7 @@ export function useRealtimeTranscribe() {
       setPartialText("");
 
       // Send last 5 translated segments as context for better accuracy
-      const contextWindow = contextRef.current.slice(-3).join(" | ");
+      const contextWindow = contextRef.current.slice(-1).join(" | ");
 
       invokeEdgeFunction<{ translations: Record<string, string> }>(
         "translate-message",
@@ -78,17 +80,25 @@ export function useRealtimeTranscribe() {
             return;
           }
 
-          // Post-translation length check: if translation is too short, discard
-          const translationWordCount = primaryTranslation.trim().split(/\s+/).length;
-          if (translationWordCount < 2) {
-            setCommittedTranscripts((prev) => prev.filter((t) => t.id !== entryId));
-            return;
-          }
-
           // Push successful translation to context buffer
           contextRef.current.push(translatedEn || translatedFa || data.text);
           if (contextRef.current.length > 10) {
             contextRef.current = contextRef.current.slice(-5);
+          }
+
+          // Build explicit per-language fields
+          let englishText: string | undefined;
+          let farsiText: string | undefined;
+
+          if (currentSourceLang === "en") {
+            englishText = data.text.trim();
+            farsiText = translatedFa || undefined;
+          } else if (currentSourceLang === "fa") {
+            englishText = translatedEn || undefined;
+            farsiText = data.text.trim();
+          } else {
+            englishText = translatedEn || data.text.trim();
+            farsiText = translatedFa || data.text.trim();
           }
 
           setCommittedTranscripts((prev) =>
@@ -98,6 +108,8 @@ export function useRealtimeTranscribe() {
                     ...t,
                     translatedText: currentSourceLang === "fa" ? translatedEn : (currentSourceLang === "en" ? translatedFa : translatedEn),
                     originalCleanText: currentSourceLang === "en" ? undefined : translatedFa,
+                    englishText,
+                    farsiText,
                     isTranslating: false,
                   }
                 : t
