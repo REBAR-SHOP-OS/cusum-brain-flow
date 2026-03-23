@@ -41,23 +41,7 @@ const LENGTH_UNITS: { value: LengthUnit; label: string; shortLabel: string; fact
   { value: "imperial", label: "Imperial (ft-in)", shortLabel: "ft-in", factor: 25.4 },
 ];
 
-/** Format a mm value as ft-in string (e.g. 1981mm → 6'-6") */
-function formatMmToFtIn(mm: number): string {
-  if (!mm) return "0\"";
-  const totalInches = mm / 25.4;
-  const feet = Math.floor(totalInches / 12);
-  const rawInches = totalInches % 12;
-  const eighths = Math.round(rawInches * 8);
-  const wholeInches = Math.floor(eighths / 8);
-  const remainderEighths = eighths % 8;
-  const fractionMap: Record<number, string> = {
-    0: "", 1: "⅛", 2: "¼", 3: "⅜", 4: "½", 5: "⅝", 6: "¾", 7: "⅞",
-  };
-  const frac = fractionMap[remainderEighths] || "";
-  if (feet === 0) return `${wholeInches}${frac}"`;
-  if (wholeInches === 0 && !frac) return `${feet}'-0"`;
-  return `${feet}'-${wholeInches}${frac}"`;
-}
+import { formatLengthByMode, type LengthDisplayMode } from "@/lib/unitSystem";
 
 // ── Header alias map (lowercase → canonical key) ─────────────
 const HEADER_ALIASES: Record<string, string> = {
@@ -369,12 +353,12 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                           <TableCell className="text-xs p-1.5">{row.size || "—"}</TableCell>
                           <TableCell className="text-xs p-1.5">{row.shape || "—"}</TableCell>
                           <TableCell className="text-xs p-1.5 text-right font-mono">
-                            {row.length ? (lengthUnit === "imperial" ? formatMmToFtIn(row.length) : String(row.length)) : "—"}
+                            {row.length ? formatLengthByMode(row.length, lengthUnit as LengthDisplayMode) || "—" : "—"}
                           </TableCell>
                           <TableCell className="text-xs p-1.5 text-right font-mono">{row.quantity || "—"}</TableCell>
                           <TableCell className="text-[10px] p-1.5 text-muted-foreground max-w-[150px] truncate">
                             {dimEntries.length > 0
-                              ? dimEntries.map(([k, v]) => `${k}=${lengthUnit === "imperial" ? formatMmToFtIn(v) : String(v)}`).join(" ")
+                              ? dimEntries.map(([k, v]) => `${k}=${formatLengthByMode(v, lengthUnit as LengthDisplayMode)}`).join(" ")
                               : "—"}
                           </TableCell>
                         </TableRow>

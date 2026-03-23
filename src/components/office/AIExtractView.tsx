@@ -58,28 +58,7 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
-/** Format a dimension value (always stored in mm in DB) for display.
- *  For imperial: converts mm → inches first, then formats as ft-in. */
-function formatDimForDisplay(val: number | null | undefined, unitSystem: string): string {
-  if (val == null || val === 0) return "";
-  const rounded = Math.round(val);
-  if (unitSystem === "imperial") {
-    const totalInches = rounded / 25.4; // mm → inches
-    const feet = Math.floor(totalInches / 12);
-    const rawInches = totalInches % 12;
-    const eighths = Math.round(rawInches * 8);
-    const wholeInches = Math.floor(eighths / 8);
-    const remainderEighths = eighths % 8;
-    const fractionMap: Record<number, string> = {
-      0: "", 1: "⅛", 2: "¼", 3: "⅜", 4: "½", 5: "⅝", 6: "¾", 7: "⅞",
-    };
-    const frac = fractionMap[remainderEighths] || "";
-    if (feet === 0) return `${wholeInches}${frac}"`;
-    if (wholeInches === 0 && !frac) return `${feet}'-0"`;
-    return `${feet}'-${wholeInches}${frac}"`;
-  }
-  return String(rounded);
-}
+import { formatLengthByMode, lengthUnitLabelByMode, type LengthDisplayMode } from "@/lib/unitSystem";
 
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
   const [showRetry, setShowRetry] = useState(false);
@@ -1918,7 +1897,7 @@ export function AIExtractView() {
                                   {row.bar_size_mapped || row.bar_size || "—"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs font-mono p-1.5">{selectedUnitSystem === "imperial" && row.total_length_mm != null ? formatDimForDisplay(row.total_length_mm, "imperial") : (row.total_length_mm ?? "—")}</TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : "—"}</TableCell>
                               <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
                               <TableCell className="text-xs p-1.5">
                                 {survivorRow ? (
@@ -2027,7 +2006,7 @@ export function AIExtractView() {
                         <TableHead className="text-[10px] font-bold tracking-wider w-[50px] sticky top-0 bg-muted/95 z-10">SIZE</TableHead>
                         <TableHead className="text-[10px] font-bold tracking-wider w-[50px] sticky top-0 bg-muted/95 z-10">TYPE</TableHead>
                         <TableHead className="text-[10px] font-bold tracking-wider w-[70px] text-right sticky top-0 bg-muted/95 z-10">
-                          LENGTH {selectedUnitSystem === "imperial" ? "(ft-in)" : "(mm)"}
+                          LENGTH ({lengthUnitLabelByMode(selectedUnitSystem as LengthDisplayMode)})
                         </TableHead>
                         {dimCols.map((d) => (
                           <TableHead key={d} className="text-[10px] font-bold tracking-wider w-[50px] text-right sticky top-0 bg-muted/95 z-10">{d}</TableHead>
@@ -2094,7 +2073,7 @@ export function AIExtractView() {
                             <TableCell className="text-xs text-right font-mono p-1">
                               {edit ? (
                                 <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
-                              ) : (selectedUnitSystem === "imperial" && row.total_length_mm != null ? formatDimForDisplay(row.total_length_mm, "imperial") : (row.total_length_mm ?? "—"))}
+                              ) : (row.total_length_mm != null ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : "—")}
                             </TableCell>
                             {dimCols.map((d) => {
                               const key = `dim_${d.toLowerCase()}`;
@@ -2103,7 +2082,7 @@ export function AIExtractView() {
                                   {edit ? (
                                     <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
                                   ) : (
-                                    (row as any)[key] != null ? formatDimForDisplay((row as any)[key], selectedUnitSystem === "imperial" ? "imperial" : "metric") : ""
+                                    (row as any)[key] != null ? formatLengthByMode((row as any)[key], selectedUnitSystem as LengthDisplayMode) : ""
                                   )}
                                 </TableCell>
                               );

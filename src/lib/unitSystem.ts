@@ -129,6 +129,58 @@ export function lengthUnit(system: UnitSystem): string {
   return system === "metric" ? "mm" : "in";
 }
 
+// ─── 4-Mode Length Formatting (for extraction flow) ─────────
+export type LengthDisplayMode = "mm" | "in" | "ft" | "imperial";
+
+const INCHES_PER_MM = 1 / 25.4;
+const FEET_PER_MM = 1 / 304.8;
+
+/** Format a stored mm value for display in any of the 4 modes */
+export function formatLengthByMode(mm: number | null | undefined, mode: LengthDisplayMode): string {
+  if (mm == null || mm === 0) return "";
+  const rounded = Math.round(mm);
+  switch (mode) {
+    case "mm":
+      return String(rounded);
+    case "in": {
+      const inches = rounded * INCHES_PER_MM;
+      return inches % 1 === 0 ? `${inches}` : `${inches.toFixed(2)}`;
+    }
+    case "ft": {
+      const feet = rounded * FEET_PER_MM;
+      return feet % 1 === 0 ? `${feet}` : `${feet.toFixed(2)}`;
+    }
+    case "imperial": {
+      const totalInches = rounded / 25.4;
+      const feet = Math.floor(totalInches / 12);
+      const rawInches = totalInches % 12;
+      const eighths = Math.round(rawInches * 8);
+      const wholeInches = Math.floor(eighths / 8);
+      const remainderEighths = eighths % 8;
+      const fractionMap: Record<number, string> = {
+        0: "", 1: "⅛", 2: "¼", 3: "⅜", 4: "½", 5: "⅝", 6: "¾", 7: "⅞",
+      };
+      const frac = fractionMap[remainderEighths] || "";
+      if (feet === 0) return `${wholeInches}${frac}"`;
+      if (wholeInches === 0 && !frac) return `${feet}'-0"`;
+      return `${feet}'-${wholeInches}${frac}"`;
+    }
+    default:
+      return String(rounded);
+  }
+}
+
+/** Get the short unit label for a display mode */
+export function lengthUnitLabelByMode(mode: LengthDisplayMode): string {
+  switch (mode) {
+    case "mm": return "mm";
+    case "in": return "in";
+    case "ft": return "ft";
+    case "imperial": return "ft-in";
+    default: return "mm";
+  }
+}
+
 // ─── Hook: read company's unit_system ───────────────────────
 export function useUnitSystem(): UnitSystem {
   const { user } = useAuth();
