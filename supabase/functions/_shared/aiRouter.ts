@@ -3,6 +3,9 @@
  * Eliminates Lovable AI gateway dependency.
  */
 
+import { isEnabled } from "./featureFlags.ts";
+import { resolvePolicy } from "./providers/policyRouter.ts";
+
 export type AIProvider = "gpt" | "gemini";
 
 export interface AIMessage {
