@@ -1076,22 +1076,9 @@ export function ProVideoEditor({
                   onUpdateClipUrl={onUpdateClipUrl}
                 />
               )}
-              {activeTab === "record" && <RecordTab />}
               {activeTab === "text" && <TextTab onAddText={() => setTextDialogOpen(true)} />}
               {activeTab === "music" && (
                 <MusicTab onTrackSelect={(track) => handleMusicSelect(track?.url ?? null)} />
-              )}
-              {activeTab === "stock-video" && <StockVideoTab />}
-              {activeTab === "stock-images" && <StockImagesTab />}
-              {activeTab === "templates" && <TemplatesTab />}
-              {activeTab === "graphics" && <GraphicsTab />}
-              {activeTab === "transitions" && (
-                <TransitionsTab
-                  activeTransition={editorSettings.transitionPreset}
-                  onSelect={(t) => setEditorSettings(prev => ({ ...prev, transitionPreset: t }))}
-                  duration={transitionDuration}
-                  onDurationChange={setTransitionDuration}
-                />
               )}
               {activeTab === "brand-kit" && (
                 <BrandKitTab
