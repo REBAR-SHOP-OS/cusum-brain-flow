@@ -55,25 +55,33 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
   const provider = opts.provider || "gpt";
   const model = opts.model || "gpt-4o";
   const maxRetries = 3;
+  const requestId = crypto.randomUUID().slice(0, 12);
+  const callStart = performance.now();
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await _callAISingle(provider, model, opts);
+      const result = await _callAISingle(provider, model, opts);
+      // Shadow telemetry — fire-and-forget, flag-gated
+      _logExecution(requestId, provider, model, "success", result.raw?.usage, opts, Math.round(performance.now() - callStart), attempt === 0 ? "primary" : `retry-${attempt}`).catch(() => {});
+      return result;
     } catch (e) {
       if (e instanceof AIError) {
-        // Retry on transient errors (503/504) with exponential backoff
         if ((e.status === 503 || e.status === 504) && attempt < maxRetries) {
           const delay = 1000 * Math.pow(2, attempt);
           console.warn(`AI ${model} returned ${e.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        // Fallback on 429 or exhausted 503 retries
         if ((e.status === 429 || e.status === 503 || e.status === 504) && opts.fallback) {
           console.warn(`AI ${model} error ${e.status}, falling back to ${opts.fallback.model}`);
-          return await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+          _logExecution(requestId, provider, model, "error", undefined, opts, Math.round(performance.now() - callStart), `error-${e.status}`, e.message, e.status).catch(() => {});
+          const fallbackStart = performance.now();
+          const result = await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+          _logExecution(requestId, opts.fallback.provider, opts.fallback.model, "fallback", result.raw?.usage, opts, Math.round(performance.now() - fallbackStart), "fallback").catch(() => {});
+          return result;
         }
       }
+      _logExecution(requestId, provider, model, "error", undefined, opts, Math.round(performance.now() - callStart), `error-final`, e instanceof Error ? e.message : String(e), e instanceof AIError ? e.status : undefined).catch(() => {});
       throw e;
     }
   }
