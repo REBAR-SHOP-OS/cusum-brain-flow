@@ -52,6 +52,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [membersOpen, setMembersOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
   const { unreadSenderIds } = useUnreadSenders();
 
   const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
