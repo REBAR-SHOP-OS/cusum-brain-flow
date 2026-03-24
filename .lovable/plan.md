@@ -1,64 +1,77 @@
 
 
-## Upgrade Sales Lead Drawer to Match Pipeline Detail Template
+## Rebuild Sales Pipeline to Match Main Pipeline Template
 
 ### What
-Rebuild `SalesLeadDrawer` to match the Pipeline's `LeadDetailDrawer` layout — with stage ribbon, contact grid, timeline/details tabs, log notes, activity scheduling, and a proper footer with delete confirmation.
+Replace the current simple Sales Pipeline board with the exact same architecture and visual design as the main Pipeline page (`/pipeline`). This means reusing `PipelineBoard`, `PipelineColumn`, and `LeadCard`-style components, plus the full header with search, stage group filters, analytics bar, and overflow menu.
 
-### Current State
-- **Pipeline drawer** (`LeadDetailDrawer.tsx`, 546 lines): Rich Odoo-style layout with stage breadcrumb ribbon, contact info grid, AI scoring, "Next Best Action", Timeline/Details tabs, OdooChatter (log note + send message + schedule activity), files, activities, and a footer with timestamps + delete confirmation dialog.
-- **Sales drawer** (`SalesLeadDrawer.tsx`, 169 lines): Simple form with dropdowns, text inputs, and a delete button. No timeline, no activity logging, no tabs.
+### Key Differences to Bridge
+The main Pipeline uses `leads` table (with `customers` join) while Sales Pipeline uses `sales_leads` table (with inline contact fields). We need an adapter layer to map `SalesLead` to the shape `PipelineColumn`/`LeadCard` expects (`LeadWithCustomer`).
 
-### Plan
+### Changes
 
-**File**: `src/components/sales/SalesLeadDrawer.tsx` — Full rewrite
+**File**: `src/pages/sales/SalesPipeline.tsx` — Major rewrite
 
-1. **Header**: Title + edit/close buttons, priority badge, age badge
-2. **Stage Ribbon**: Clickable breadcrumb-style stage buttons using `SALES_STAGES` (same pattern as Pipeline's `PIPELINE_STAGES` ribbon)
-3. **Info Grid**: Customer name, company, email (clickable mailto), phone (clickable tel), expected value, source — label-above-value layout
-4. **Tabs**: "Timeline" and "Details" tabs
-   - **Timeline tab**: Embed a new `SalesLeadChatter` component (simplified version of OdooChatter) that:
-     - Has "Log note" / "Send message" / "Schedule activity" action buttons
-     - Shows a chronological feed of notes/activities from a `sales_lead_activities` table
-     - Supports "All" / "Notes" / "System" sub-filters
-   - **Details tab**: Notes textarea, description, lost reason (when stage=lost)
-5. **Footer**: Created/Updated timestamps + Delete with AlertDialog confirmation
+1. **Adapter function**: Map `SalesLead` → `LeadWithCustomer` shape so we can reuse `PipelineBoard` directly:
+   - `customers.name` ← `contact_name`
+   - `customers.company_name` ← `contact_company`
+   - Pass through all other fields with defaults for missing ones (`source`, `expected_close_date`, etc.)
 
-**New file**: `src/components/sales/SalesLeadChatter.tsx`
-- Simplified chatter for sales leads
-- Log note: saves to `sales_lead_activities` table with type "note"
-- Schedule activity: date picker + type selector, saves as type "activity"
-- Displays activity feed with avatars, timestamps, icons
+2. **Header (Row 1)**: Match Pipeline exactly:
+   - Title with count: `Sales Pipeline (N)`
+   - `+ New` button (right side)
 
-**Database migration**: Create `sales_lead_activities` table
-```sql
-CREATE TABLE public.sales_lead_activities (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  sales_lead_id uuid NOT NULL REFERENCES public.sales_leads(id) ON DELETE CASCADE,
-  company_id uuid NOT NULL,
-  activity_type text NOT NULL DEFAULT 'note', -- note, call, email, meeting, stage_change, system
-  subject text,
-  body text,
-  user_id uuid REFERENCES auth.users(id),
-  user_name text,
-  scheduled_date date,
-  completed_at timestamptz,
-  created_at timestamptz DEFAULT now()
-);
+3. **Header (Row 2)**: Add `SalesSearchBar` (already exists) styled like `PipelineFilters`
 
-ALTER TABLE public.sales_lead_activities ENABLE ROW LEVEL SECURITY;
+4. **Header (Row 3)**: Add stage group filter chips (VIEW row):
+   - Define `SALES_STAGE_GROUPS`: e.g. `Active` (new, contacted, qualified, estimating), `Quotes` (quote_sent, follow_up), `Closed` (won, lost)
+   - Colored pills with counts, togglable, "Show all" link
 
-CREATE POLICY "Users can manage own company activities"
-  ON public.sales_lead_activities FOR ALL TO authenticated
-  USING (company_id IN (SELECT company_id FROM public.profiles WHERE id = auth.uid()))
-  WITH CHECK (company_id IN (SELECT company_id FROM public.profiles WHERE id = auth.uid()));
+5. **Board**: Replace inline column rendering with `PipelineBoard` component:
+   - Pass adapted leads grouped by stage
+   - Enable drag-and-drop stage changes (already works)
+   - Activity status bars in column headers (uses `expected_close_date` from sales leads)
+
+6. **Analytics**: Replace `SalesSummaryCards` with `PipelineAnalytics`-style inline badges (compact, in header)
+
+7. **Lead cards**: Use `LeadCard` (or a thin wrapper) showing:
+   - Title, company, contact name
+   - Priority stars, staleness indicator
+   - Expected value
+   - Activity status icon (from `sales_lead_activities`)
+
+8. **Detail drawer**: Keep existing `SalesLeadDrawer` (already upgraded to Odoo-style)
+
+9. **Create dialog**: Keep existing dialog with contact autocomplete
+
+**File**: `src/components/sales/SalesLeadCard.tsx` — Delete or keep as fallback (replaced by `LeadCard` via adapter)
+
+### Technical Approach
+
+Rather than duplicating 1000 lines, we adapt data shapes:
+
+```typescript
+function adaptSalesLead(sl: SalesLead): LeadWithCustomer {
+  return {
+    ...sl,
+    customer_id: null,
+    description: sl.description,
+    win_prob_score: null,
+    metadata: sl.metadata,
+    customers: {
+      name: sl.contact_name || sl.title,
+      company_name: sl.contact_company,
+    },
+  } as unknown as LeadWithCustomer;
+}
 ```
+
+Then pass to `PipelineBoard` with `SALES_STAGES` (reformatted to match `{ id, label, color: "bg-..." }` format).
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/sales/SalesLeadDrawer.tsx` | Full rewrite: Odoo-style layout with stage ribbon, info grid, tabs, footer |
-| `src/components/sales/SalesLeadChatter.tsx` | New: Timeline chatter with log note, schedule activity, activity feed |
-| Database migration | New `sales_lead_activities` table with RLS |
+| `src/pages/sales/SalesPipeline.tsx` | Major rewrite: use PipelineBoard, stage groups, analytics badges, adapter layer |
+| `src/hooks/useSalesLeads.ts` | Update `SALES_STAGES` color format from hex to tailwind class names |
 
