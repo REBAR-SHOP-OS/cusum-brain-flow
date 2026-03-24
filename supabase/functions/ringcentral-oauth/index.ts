@@ -130,13 +130,31 @@ serve(async (req) => {
         .maybeSingle();
 
       if (tokenData) {
-        // Ensure integration_connections row exists
+        // Check if there's an existing error state from sync — don't blindly overwrite it
+        const { data: existingConn } = await supabaseAdmin
+          .from("integration_connections")
+          .select("status, error_message, last_sync_at")
+          .eq("user_id", userId)
+          .eq("integration_id", "ringcentral")
+          .maybeSingle();
+
+        const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
+        const lastSyncAge = existingConn?.last_sync_at
+          ? Date.now() - new Date(existingConn.last_sync_at).getTime()
+          : Infinity;
+        const syncIsStale = lastSyncAge > STALE_THRESHOLD_MS;
+        const hasError = existingConn?.status === "error";
+
+        // Only set "connected" if sync is recent OR there's no existing error
+        const resolvedStatus = (hasError && syncIsStale) ? "error" : "connected";
+        const resolvedError = (hasError && syncIsStale) ? existingConn.error_message : null;
+
         await supabaseAdmin.from("integration_connections").upsert({
           user_id: userId,
           integration_id: "ringcentral",
-          status: "connected",
+          status: resolvedStatus,
           last_checked_at: new Date().toISOString(),
-          error_message: null,
+          error_message: resolvedError,
           config: { rc_email: tokenData.rc_email },
         }, { onConflict: "user_id,integration_id" });
 

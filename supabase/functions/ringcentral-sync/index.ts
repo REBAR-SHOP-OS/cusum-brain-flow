@@ -366,6 +366,7 @@ function resolveUserId(record: any, extMap: Map<string, string>, fallbackUserId:
  * Uses one admin token to fetch data for all extensions, then maps each record to the correct user.
  */
 async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
+  console.log("CRON: syncAllUsers started");
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -374,12 +375,15 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
   const syncType = body.syncType || "all";
   const daysBack = body.daysBack || 1;
   const dateFrom = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+  console.log(`CRON: syncType=${syncType}, daysBack=${daysBack}, dateFrom=${dateFrom}`);
 
   // Get the first available RC token (admin user)
   const { data: tokenRows, error: tokErr } = await supabaseAdmin
     .from("user_ringcentral_tokens")
     .select("user_id")
     .limit(10);
+
+  console.log(`CRON: Found ${tokenRows?.length ?? 0} token rows, error: ${tokErr?.message ?? "none"}`);
 
   if (tokErr || !tokenRows?.length) {
     console.log("CRON: No RC tokens found", tokErr?.message);
@@ -395,8 +399,10 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
   let companyId: string | null = null;
 
   for (const row of tokenRows) {
+    console.log(`CRON: Attempting token for user ${row.user_id}`);
     try {
       accessToken = await getAccessTokenForUser(row.user_id, supabaseAdmin);
+      console.log(`CRON: Token acquired for user ${row.user_id}`);
       adminUserId = row.user_id;
 
       const { data: profile } = await supabaseAdmin
@@ -406,6 +412,7 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
         .maybeSingle();
 
       companyId = profile?.company_id || null;
+      console.log(`CRON: companyId=${companyId} for user ${row.user_id}`);
       if (companyId) break;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown";
@@ -441,7 +448,26 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
   console.log(`CRON: Using admin token from user ${adminUserId}, company ${companyId}`);
 
   // Build extension → user_id map
-  const extMap = await buildExtensionUserMap(accessToken, companyId, supabaseAdmin, adminUserId);
+  console.log("CRON: Building extension→user map...");
+  let extMap: Map<string, string>;
+  try {
+    extMap = await buildExtensionUserMap(accessToken, companyId, supabaseAdmin, adminUserId);
+    console.log(`CRON: Extension map built with ${extMap.size} entries`);
+  } catch (e) {
+    console.error("CRON: FATAL - buildExtensionUserMap crashed:", e instanceof Error ? e.message : e);
+    // Update status to error so UI shows it
+    await supabaseAdmin.from("integration_connections").upsert({
+      user_id: adminUserId,
+      integration_id: "ringcentral",
+      status: "error",
+      error_message: `Extension map build failed: ${e instanceof Error ? e.message : "Unknown"}`,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,integration_id" });
+    return new Response(
+      JSON.stringify({ cronMode: true, users_synced: 0, message: "Extension map build failed" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
 
   let callsUpserted = 0, smsUpserted = 0, voicemailsUpserted = 0, faxesUpserted = 0;
   const usersSeen = new Set<string>();
