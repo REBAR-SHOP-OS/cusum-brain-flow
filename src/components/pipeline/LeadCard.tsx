@@ -235,15 +235,17 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
             </span>
           )}
 
-          {/* Salesperson badge */}
-          {salesperson && (
+          {/* Multi-assignee avatars (junction table) */}
+          {hasAssignees ? (
+            <AssigneeAvatars assignees={assignees} max={3} />
+          ) : salesperson ? (
             <div
               className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", salesperson.color)}
               title={salesperson.name}
             >
               {salesperson.initials}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
