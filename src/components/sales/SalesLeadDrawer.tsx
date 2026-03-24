@@ -33,6 +33,7 @@ interface Props {
   profiles?: Profile[];
   onAddAssignee?: (profileId: string) => void;
   onRemoveAssignee?: (profileId: string) => void;
+  isExternalEstimator?: boolean;
 }
 
 const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
@@ -44,7 +45,7 @@ const priorityConfig: Record<string, { label: string; class: string }> = {
   low: { label: "Low", class: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" },
 };
 
-export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete, assignees = [], profiles = [], onAddAssignee, onRemoveAssignee }: Props) {
+export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete, assignees = [], profiles = [], onAddAssignee, onRemoveAssignee, isExternalEstimator }: Props) {
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
   const [lostReason, setLostReason] = useState("");
@@ -89,17 +90,18 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
               <Clock className="w-3 h-3" />
               {age} old
             </Badge>
-            {/* Priority selector inline */}
-            <Select value={lead.priority || "medium"} onValueChange={(v) => onUpdate({ id: lead.id, priority: v })}>
-              <SelectTrigger className="h-5 w-auto text-[10px] border-none bg-transparent px-1 gap-0.5">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRIORITIES.map((p) => (
-                  <SelectItem key={p} value={p} className="capitalize text-xs">{p}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!isExternalEstimator && (
+              <Select value={lead.priority || "medium"} onValueChange={(v) => onUpdate({ id: lead.id, priority: v })}>
+                <SelectTrigger className="h-5 w-auto text-[10px] border-none bg-transparent px-1 gap-0.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORITIES.map((p) => (
+                    <SelectItem key={p} value={p} className="capitalize text-xs">{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* ── Stage Ribbon — Odoo breadcrumb style ── */}
@@ -107,7 +109,8 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
             {SALES_STAGES.map((stage, i) => (
               <button
                 key={stage.id}
-                onClick={() => onUpdate({ id: lead.id, stage: stage.id })}
+                onClick={() => !isExternalEstimator && onUpdate({ id: lead.id, stage: stage.id })}
+                disabled={isExternalEstimator}
                 className={cn(
                   "shrink-0 px-2.5 py-1 text-[11px] font-medium border-y border-r first:border-l first:rounded-l-sm last:rounded-r-sm transition-colors",
                   i === currentStageIndex
@@ -176,6 +179,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
               profiles={profiles}
               onAdd={onAddAssignee || (() => {})}
               onRemove={onRemoveAssignee || (() => {})}
+              readOnly={isExternalEstimator}
             />
           </div>
         </div>
@@ -278,35 +282,37 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
         {/* ── Footer ── */}
         <div className="border-t border-border p-3 text-[11px] text-muted-foreground flex items-center justify-between bg-muted/30">
           <span>Created {format(new Date(lead.created_at), "MMM d, yyyy")}</span>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1 h-6 text-[11px] rounded-sm"
-              >
-                <Trash2 className="w-3 h-3" />
-                Delete
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action cannot be undone. The lead "{lead.title}" will be permanently removed.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={() => { onDelete(lead.id); onClose(); }}
+          {!isExternalEstimator && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1 h-6 text-[11px] rounded-sm"
                 >
+                  <Trash2 className="w-3 h-3" />
                   Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. The lead "{lead.title}" will be permanently removed.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => { onDelete(lead.id); onClose(); }}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <span>Updated {formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true })}</span>
         </div>
       </SheetContent>

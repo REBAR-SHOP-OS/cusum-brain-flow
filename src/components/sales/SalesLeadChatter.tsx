@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { useSalesLeadActivities, type SalesLeadActivity } from "@/hooks/useSales
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
+import { MentionMenu } from "@/components/chat/MentionMenu";
 
 interface Props {
   salesLeadId: string;
@@ -74,6 +75,35 @@ export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
   const [pendingFiles, setPendingFiles] = useState<{ file: File; previewUrl: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Mention support
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  const handleTextChange = useCallback((val: string) => {
+    setText(val);
+    const match = val.match(/@(\w*)$/);
+    if (match) {
+      setMentionFilter(match[1]);
+      setMentionOpen(true);
+      setMentionIndex(0);
+    } else {
+      setMentionOpen(false);
+    }
+  }, []);
+
+  const handleMentionSelect = useCallback((item: { id: string; label: string }) => {
+    setText(prev => prev.replace(/@\w*$/, `@${item.label} `));
+    setMentionOpen(false);
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!mentionOpen) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => i + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(0, i - 1)); }
+    else if (e.key === "Escape") { setMentionOpen(false); }
+  }, [mentionOpen]);
 
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -203,14 +233,24 @@ export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
               />
             </div>
           )}
-          <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onPaste={handlePaste}
-            placeholder={activeTab === "note" ? "Write a note..." : "Activity description..."}
-            rows={3}
-            className="text-sm resize-none"
-          />
+          <div className="relative">
+            <Textarea
+              value={text}
+              onChange={(e) => handleTextChange(e.target.value)}
+              onPaste={handlePaste}
+              onKeyDown={handleKeyDown}
+              placeholder={activeTab === "note" ? "Write a note... (type @ to mention)" : "Activity description..."}
+              rows={3}
+              className="text-sm resize-none"
+            />
+            <MentionMenu
+              isOpen={mentionOpen}
+              filter={mentionFilter}
+              selectedIndex={mentionIndex}
+              onSelect={handleMentionSelect}
+              onClose={() => setMentionOpen(false)}
+            />
+          </div>
 
           {/* File previews */}
           {pendingFiles.length > 0 && (
