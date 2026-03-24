@@ -39,11 +39,21 @@ const TONES = [
 interface ComposeEmailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTo?: string;
+  initialSubject?: string;
 }
 
-export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogProps) {
-  const [to, setTo] = useState("");
-  const [subject, setSubject] = useState("");
+export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubject }: ComposeEmailDialogProps) {
+  const [to, setTo] = useState(initialTo || "");
+  const [subject, setSubject] = useState(initialSubject || "");
+
+  // Sync initial values when dialog opens with new props
+  useEffect(() => {
+    if (open) {
+      if (initialTo) setTo(initialTo);
+      if (initialSubject) setSubject(initialSubject);
+    }
+  }, [open, initialTo, initialSubject]);
   const [body, setBody] = useState("");
   const [prompt, setPrompt] = useState("");
   const [drafting, setDrafting] = useState(false);
