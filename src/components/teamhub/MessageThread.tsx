@@ -584,6 +584,7 @@ export function MessageThread({
 
                           return (
                             <div className="relative">
+                              {cleanText && (
                                 <p
                                   className={cn(
                                     "text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed",
@@ -592,12 +593,6 @@ export function MessageThread({
                                   dir={detectRtl(cleanText) ? "rtl" : "ltr"}
                                 >
                                   {renderMentionText(cleanText)}
-                                </p>
-                                    detectRtl(cleanText) && "text-right"
-                                  )}
-                                  dir={detectRtl(cleanText) ? "rtl" : "ltr"}
-                                >
-                                  {cleanText}
                                 </p>
                               )}
 
