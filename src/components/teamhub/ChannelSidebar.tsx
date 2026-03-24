@@ -30,6 +30,7 @@ interface ChannelSidebarProps {
   onlineCount: number;
   profiles: Profile[];
   onCreateChannel: () => void;
+  onCreateGroup?: () => void;
   onClickMember: (profileId: string, name: string) => void;
   onClose?: () => void;
   myProfile?: Profile;
@@ -50,7 +51,7 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose, myProfile }: ChannelSidebarProps) {
+export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onCreateGroup, onClickMember, onClose, myProfile }: ChannelSidebarProps) {
   const [membersOpen, setMembersOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -58,8 +59,12 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [previewProfile, setPreviewProfile] = useState<Profile | null>(null);
   const { unreadSenderIds } = useUnreadSenders();
 
-  const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
+  const officialChannel = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
+  const userChannels = channels.filter((c) => c.channel_type === "group" && c.name !== "Official Channel" && c.name !== "Official Group" && c.name !== "My Notes");
+  const groupChannels = [...officialChannel, ...userChannels];
   const officialGroup = channels.filter((c) => c.channel_type === "group" && c.name === "Official Group");
+  const userGroups = channels.filter((c) => c.channel_type === "group" && c.name !== "Official Channel" && c.name !== "Official Group" && c.name !== "My Notes" && !userChannels.find((uc) => uc.id === c.id));
+  // Note: For now, user-created entries appear under Channels. Groups section shows Official Group only.
   const activeProfiles = profiles.filter((p) => 
     p.email?.endsWith("@rebar.shop")
   );
@@ -143,10 +148,13 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
         </button>
 
         {/* Channels Section */}
-        <div className="flex items-center pr-1">
+        <div className="flex items-center justify-between pr-1">
           <span className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground">
             Channels
           </span>
+          <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-foreground" onClick={onCreateChannel}>
+            <Plus className="w-3.5 h-3.5" />
+          </Button>
         </div>
 
         <div className="space-y-0.5 mb-3">
@@ -168,13 +176,20 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
         </div>
 
         {/* Groups Section */}
-        <button
-          onClick={() => setGroupsOpen(!groupsOpen)}
-          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors mt-2"
-        >
-          {groupsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          Groups
-        </button>
+        <div className="flex items-center justify-between mt-2">
+          <button
+            onClick={() => setGroupsOpen(!groupsOpen)}
+            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {groupsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            Groups
+          </button>
+          {onCreateGroup && (
+            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-foreground mr-1" onClick={onCreateGroup}>
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
 
         {groupsOpen && (
           <div className="space-y-0.5 mb-3">

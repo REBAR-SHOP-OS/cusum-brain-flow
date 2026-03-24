@@ -26,6 +26,7 @@ interface CreateChannelDialogProps {
     memberIds: string[];
   }) => Promise<void>;
   isCreating: boolean;
+  mode?: "channel" | "group";
 }
 
 const avatarColors = [
@@ -49,7 +50,11 @@ export function CreateChannelDialog({
   profiles,
   onCreateChannel,
   isCreating,
+  mode = "channel",
 }: CreateChannelDialogProps) {
+  const isGroup = mode === "group";
+  const label = isGroup ? "Group" : "Channel";
+  const Icon = isGroup ? Users : Hash;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
@@ -95,9 +100,9 @@ export function CreateChannelDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Hash className="w-4 h-4 text-primary" />
+              <Icon className="w-4 h-4 text-primary" />
             </div>
-            Create Channel
+            Create {label}
           </DialogTitle>
         </DialogHeader>
 
@@ -108,7 +113,7 @@ export function CreateChannelDialog({
               Channel Name
             </label>
             <div className="relative">
-              <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
@@ -216,9 +221,9 @@ export function CreateChannelDialog({
             {isCreating ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Hash className="w-3.5 h-3.5" />
+              <Icon className="w-3.5 h-3.5" />
             )}
-            Create Channel
+            Create {label}
           </Button>
         </DialogFooter>
       </DialogContent>

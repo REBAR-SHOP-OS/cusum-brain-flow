@@ -29,6 +29,7 @@ export default function TeamHub() {
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createDialogMode, setCreateDialogMode] = useState<"channel" | "group">("channel");
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
   const [activeMeeting, setActiveMeeting] = useState<TeamMeeting | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -180,7 +181,8 @@ export default function TeamHub() {
       onSelect={setSelectedChannelId}
       onlineCount={onlineCount}
       profiles={profiles}
-      onCreateChannel={() => setShowCreateDialog(true)}
+      onCreateChannel={() => { setCreateDialogMode("channel"); setShowCreateDialog(true); }}
+      onCreateGroup={() => { setCreateDialogMode("group"); setShowCreateDialog(true); }}
       myProfile={myProfile}
       onClickMember={async (profileId, name) => {
         if (profileId === myProfile?.id) return;
@@ -333,6 +335,7 @@ export default function TeamHub() {
         profiles={profiles}
         onCreateChannel={handleCreateChannel}
         isCreating={createChannelMutation.isPending}
+        mode={createDialogMode}
       />
       <StartMeetingDialog
         open={showMeetingDialog}
