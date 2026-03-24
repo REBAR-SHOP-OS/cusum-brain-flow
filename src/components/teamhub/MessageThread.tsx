@@ -191,10 +191,68 @@ export function MessageThread({
   const handleSubmit = () => {
     const trimmed = input.trim();
     if (!trimmed && pendingFiles.length === 0) return;
-    onSend(trimmed || "📎", pendingFiles.length > 0 ? pendingFiles : undefined);
+    onSend(trimmed || "📎", pendingFiles.length > 0 ? pendingFiles : undefined, replyTo?.id || null);
     setInput("");
     setPendingFiles([]);
+    setReplyTo(null);
+    setMentionOpen(false);
     textareaRef.current?.focus();
+  };
+
+  // Build a message map for reply lookups
+  const messageMap = useMemo(() => {
+    const map = new Map<string, TeamMessage>();
+    for (const m of messages) map.set(m.id, m);
+    return map;
+  }, [messages]);
+
+  // Handle @mention detection in input
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+
+    const cursorPos = e.target.selectionStart || 0;
+    const textBefore = val.slice(0, cursorPos);
+    const atIdx = textBefore.lastIndexOf("@");
+
+    if (atIdx >= 0 && (atIdx === 0 || textBefore[atIdx - 1] === " " || textBefore[atIdx - 1] === "\n")) {
+      const filter = textBefore.slice(atIdx + 1);
+      if (!filter.includes(" ") && filter.length < 30) {
+        setMentionOpen(true);
+        setMentionFilter(filter);
+        setMentionStart(atIdx);
+        setMentionIndex(0);
+        return;
+      }
+    }
+    setMentionOpen(false);
+  };
+
+  const handleMentionSelect = (item: { id: string; label: string }) => {
+    const before = input.slice(0, mentionStart);
+    const after = input.slice((textareaRef.current?.selectionStart || mentionStart + mentionFilter.length + 1));
+    setInput(before + `@${item.label} ` + after);
+    setMentionOpen(false);
+    textareaRef.current?.focus();
+  };
+
+  // Render text with @mentions highlighted
+  const renderMentionText = (text: string) => {
+    const parts = text.split(/(@\S+)/g);
+    const profileNames = new Set(profiles.map(p => p.full_name));
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        const name = part.slice(1);
+        if (profileNames.has(name)) {
+          return (
+            <span key={i} className="inline-flex items-center px-1 py-0.5 rounded bg-primary/15 text-primary text-xs font-medium">
+              {part}
+            </span>
+          );
+        }
+      }
+      return <span key={i}>{part}</span>;
+    });
   };
 
   const handleEmojiSelect = (emoji: string) => {
