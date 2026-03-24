@@ -179,6 +179,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
               profiles={profiles}
               onAdd={onAddAssignee || (() => {})}
               onRemove={onRemoveAssignee || (() => {})}
+              readOnly={isExternalEstimator}
             />
           </div>
         </div>
