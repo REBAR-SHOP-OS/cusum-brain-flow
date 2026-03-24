@@ -1,24 +1,23 @@
 
 
-## Add Assignee Dropdown to Schedule Activity Form
-
-### Problem
-The "Schedule Activity" form in `SalesLeadChatter` has activity type and date pickers but no assignee selector. The `assignees` prop is already passed to the component but not used in the activity form.
+## Hide Details Tab & Schedule Activity for External Estimators
 
 ### Changes
 
-**File**: `src/components/sales/SalesLeadChatter.tsx`
-1. Add state: `const [assignedName, setAssignedName] = useState("")`
-2. In the activity composer (after the date input, line ~274), add an assignee `Select` dropdown populated from the existing `assignees` prop
-3. Pass `assignedName` in the `user_name` field when creating the activity via `create.mutate()`
+**File**: `src/components/sales/SalesLeadDrawer.tsx` (line 236)
+- Change tab list from `["timeline", "details"]` to dynamically exclude "details" for external estimators:
+  ```tsx
+  {(["timeline", ...(isExternalEstimator ? [] : ["details"])] as const).map((tab) => (
+  ```
 
-Layout after change:
-```text
-[📞 Follow-up ▾] [03/24/2026] [Assign to... ▾]
-[Activity description...                       ]
-```
+**File**: `src/components/sales/SalesLeadChatter.tsx` (line 240)
+- Change action buttons from `["note", "activity"]` to exclude "activity" for external estimators:
+  ```tsx
+  {(["note", ...(isExternalEstimator ? [] : ["activity"])] as const).map((tab) => (
+  ```
 
 | File | Change |
 |---|---|
-| `src/components/sales/SalesLeadChatter.tsx` | Add assignee Select dropdown in activity form |
+| `SalesLeadDrawer.tsx` | Hide "Details" tab for external estimators |
+| `SalesLeadChatter.tsx` | Hide "Schedule activity" button for external estimators |
 
