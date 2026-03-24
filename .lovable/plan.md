@@ -1,49 +1,58 @@
 
 
-## Fix: Vizzy Reports 0 Completed Pieces (Missing Column)
+## Train Forge: Comprehensive Shop Floor + Office Data & Reporting Tools
 
-### Root Cause
-The `vizzy-context` edge function queries `cut_plan_items.updated_at` to count today's completions — but **that column does not exist** on the `cut_plan_items` table. The query silently returns 0 rows.
+### Problem
+Forge (Shop Floor Commander) can only see machine statuses and 15 active work orders. It has **one tool** (`update_machine_status`). When asked "what did you do today" or "show work orders," it correctly says "I cannot show you the work orders." It needs access to production data, machine runs, cut plans, inventory, timeclock, and office-relevant data to give comprehensive reports.
 
-### Database Reality (Today)
-- 20 completed machine runs on CUTTER-01
-- **896 pieces produced** (sum of `output_qty`)
-- 104 items in `complete` phase, 53 in `clearance`
-- No `updated_at` column on `cut_plan_items`
+### Changes
 
-### Fix
+**File: `supabase/functions/_shared/agentContext.ts`** — Expand shopfloor context block
 
-**File: `supabase/functions/vizzy-context/index.ts`**
+Add these queries inside the `agent === "shopfloor"` block:
 
-1. **Remove the broken `completedTodayItems` query** (line 90) that filters on non-existent `updated_at`
+1. **Today's machine runs** — `machine_runs` with operator profile join, started today
+2. **Cut plans** — active `cut_plans` with status
+3. **Cut plan items** — `cut_plan_items` in active phases + completed today
+4. **Today's timeclock entries** — `timeclock_entries` for today (who's clocked in, hours)
+5. **Inventory levels** — `inventory` low-stock items or recent consumption
+6. **Orders with customer names** — expand work_orders query to join `orders(order_number, customers(name))` and increase limit to 50
 
-2. **Derive `completedToday` from `machine_runs`** — sum `output_qty` from today's completed runs (this data already exists in `machineRunsToday`)
+**File: `supabase/functions/_shared/agentTools.ts`** — Add read tools for Forge
 
-3. **Add `totalPiecesProduced` to production snapshot** — sum of `output_qty` from completed machine runs today, giving Vizzy the actual piece count (896)
+Add these tools when `agent === "shopfloor"`:
 
-4. **Add operator names to machine runs** — currently all operators show as `null`; join `operator_profile_id` with profiles to show who ran each machine
+1. `get_production_report` — Fetches today's machine runs, pieces produced, operator activity summary
+2. `get_work_orders` — Lists work orders with status, customer, priority (read-only)  
+3. `get_cut_plan_status` — Shows cut plan progress (items completed vs total)
+4. `get_timeclock_summary` — Who's clocked in, shift hours, breaks
 
-5. **Redeploy** the edge function
+**File: `supabase/functions/_shared/agentToolExecutor.ts`** — Implement tool executors
 
-### Snapshot Changes
+Add execution handlers for each new tool:
+- `get_production_report`: Query `machine_runs` today with operator names, aggregate output_qty
+- `get_work_orders`: Query `work_orders` joined with orders/customers, return formatted list
+- `get_cut_plan_status`: Query `cut_plans` + `cut_plan_items` phase counts
+- `get_timeclock_summary`: Query `timeclock_entries` for today
 
-```typescript
-production: {
-  completedToday: /* count of completed machine_runs today */,
-  totalPiecesProduced: /* sum of output_qty from completed runs = 896 */,
-  machineRunsToday: /* count */,
-  // ... existing fields
-},
-machineRuns: {
-  runs: [{ machine_name, process, status, output_qty, operator_name }], // add operator_name
-}
-```
+**File: `supabase/functions/_shared/agents/support.ts`** — Update Forge prompt
+
+Expand the Forge section to instruct it to:
+- Always check production data before answering "what happened today"
+- Use `get_production_report` for daily summaries
+- Report pieces produced, machine runs completed, operator assignments
+- Include cut plan progress in daily briefings
+- Reference timeclock data for who was working
+
+**Deploy**: Redeploy `ai-agent` edge function
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/vizzy-context/index.ts` | Fix completedToday from machine_runs, add totalPiecesProduced, add operator names |
-| `src/types/vizzy.ts` | Add `totalPiecesProduced` and `operator_name` fields |
-| Deploy | Redeploy `vizzy-context` |
+| `_shared/agentContext.ts` | Add machine_runs, cut_plans, cut_plan_items, timeclock to shopfloor context |
+| `_shared/agentTools.ts` | Add 4 read tools for shopfloor agent |
+| `_shared/agentToolExecutor.ts` | Implement 4 new tool executors |
+| `_shared/agents/support.ts` | Update Forge prompt with reporting instructions |
+| Deploy | Redeploy `ai-agent` |
 
