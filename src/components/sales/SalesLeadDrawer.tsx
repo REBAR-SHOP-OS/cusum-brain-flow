@@ -16,6 +16,7 @@ import {
   Clock, X, ClipboardList, User,
 } from "lucide-react";
 import { SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
+import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
@@ -46,6 +47,7 @@ const priorityConfig: Record<string, { label: string; class: string }> = {
 };
 
 export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete, assignees = [], profiles = [], onAddAssignee, onRemoveAssignee, isExternalEstimator }: Props) {
+  const { makeCall } = useRingCentralWidget();
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
   const [lostReason, setLostReason] = useState("");
@@ -145,17 +147,33 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
             {!isExternalEstimator && lead.contact_email && (
               <div>
                 <span className="text-[11px] text-muted-foreground font-medium">Email</span>
-                <a href={`mailto:${lead.contact_email}`} className="text-primary hover:underline truncate block">
-                  {lead.contact_email}
-                </a>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm truncate flex-1">{lead.contact_email}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => window.location.href = `mailto:${lead.contact_email}`}
+                  >
+                    <Mail className="h-3.5 w-3.5 text-primary" />
+                  </Button>
+                </div>
               </div>
             )}
             {!isExternalEstimator && lead.contact_phone && (
               <div>
                 <span className="text-[11px] text-muted-foreground font-medium">Phone</span>
-                <a href={`tel:${lead.contact_phone}`} className="text-primary hover:underline block">
-                  {lead.contact_phone}
-                </a>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm truncate flex-1">{lead.contact_phone}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => makeCall(lead.contact_phone!)}
+                  >
+                    <Phone className="h-3.5 w-3.5 text-green-600" />
+                  </Button>
+                </div>
               </div>
             )}
             {(lead.expected_value ?? 0) > 0 && (
