@@ -12,6 +12,7 @@ import {
   MessageSquare as _MessageSquare,
   Globe,
   ChevronDown,
+  StickyNote,
   ChevronRight,
   Circle,
   X,
@@ -125,6 +126,20 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-auto py-1 px-2">
+        {/* My Notes */}
+        <button
+          onClick={() => handleSelect("__my_notes__")}
+          className={cn(
+            "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all mb-2",
+            selectedId === "__my_notes__"
+              ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          )}
+        >
+          <StickyNote className={cn("w-4 h-4 shrink-0", selectedId === "__my_notes__" ? "text-primary" : "text-muted-foreground/60")} />
+          <span className="truncate flex-1 text-left">My Notes</span>
+        </button>
+
         {/* Channels Section */}
         <div className="flex items-center pr-1">
           <span className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground">

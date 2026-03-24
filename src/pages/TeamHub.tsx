@@ -6,6 +6,7 @@ import { useActiveMeetings, useStartMeeting, useEndMeeting } from "@/hooks/useTe
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { ChannelSidebar } from "@/components/teamhub/ChannelSidebar";
 import { MessageThread } from "@/components/teamhub/MessageThread";
+import { PersonalNotes } from "@/components/teamhub/PersonalNotes";
 import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
 import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
@@ -34,7 +35,8 @@ export default function TeamHub() {
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<TeamMessage | null>(null);
 
-  const activeChannelId = selectedChannelId || (channelsLoading ? null : channels[0]?.id || null);
+  const isNotesView = selectedChannelId === "__my_notes__";
+  const activeChannelId = isNotesView ? null : (selectedChannelId || (channelsLoading ? null : channels[0]?.id || null));
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   const { messages, isLoading: msgsLoading } = useTeamMessages(activeChannelId);
@@ -174,7 +176,7 @@ export default function TeamHub() {
   const sidebarContent = (
     <ChannelSidebar
       channels={channels}
-      selectedId={activeChannelId}
+      selectedId={isNotesView ? "__my_notes__" : activeChannelId}
       onSelect={setSelectedChannelId}
       onlineCount={onlineCount}
       profiles={profiles}
@@ -243,7 +245,9 @@ export default function TeamHub() {
           <div className="flex-1 flex min-w-0 overflow-hidden">
             {/* Message Thread */}
             <div className={activeMeeting ? "flex-1 min-w-0 hidden lg:flex lg:flex-col" : "flex-1 flex flex-col min-w-0"}>
-              {activeChannel ? (
+              {isNotesView && myProfile ? (
+                <PersonalNotes myProfile={myProfile} />
+              ) : activeChannel ? (
                 <MessageThread
                   channelName={activeChannel.name}
                   channelDescription={activeChannel.description}
