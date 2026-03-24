@@ -324,7 +324,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
               {/* Activities */}
               <div className="border border-border rounded-sm p-3">
                 <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Scheduled Activities</h4>
-                <ScheduledActivities entityType="sales_lead" entityId={lead.id} />
+                <ScheduledActivities entityType="sales_lead" entityId={lead.id} assignees={assignees} />
               </div>
             </div>
           )}
