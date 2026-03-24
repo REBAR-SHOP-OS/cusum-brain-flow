@@ -48,9 +48,10 @@ const priorityConfig: Record<string, { label: string; class: string }> = {
 };
 
 export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete, assignees = [], profiles = [], onAddAssignee, onRemoveAssignee, isExternalEstimator }: Props) {
-  const { makeCall } = useRingCentralWidget();
+  const { makeCall, showWidget } = useRingCentralWidget();
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
+  const [composeOpen, setComposeOpen] = useState(false);
   const [lostReason, setLostReason] = useState("");
 
   useEffect(() => {
