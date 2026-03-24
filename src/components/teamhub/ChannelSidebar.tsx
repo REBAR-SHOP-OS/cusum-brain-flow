@@ -148,10 +148,13 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
         </button>
 
         {/* Channels Section */}
-        <div className="flex items-center pr-1">
+        <div className="flex items-center justify-between pr-1">
           <span className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground">
             Channels
           </span>
+          <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-foreground" onClick={onCreateChannel}>
+            <Plus className="w-3.5 h-3.5" />
+          </Button>
         </div>
 
         <div className="space-y-0.5 mb-3">
