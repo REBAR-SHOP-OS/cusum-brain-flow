@@ -30,6 +30,7 @@ interface Props {
 }
 
 export function PackingSlipTemplate({ data, onClose }: Props) {
+  const [receivedSignature, setReceivedSignature] = useState<string | null>(null);
   const handlePrint = () => window.print();
 
   const totalQty = data.items.reduce((sum, item) => sum + item.quantity, 0);
