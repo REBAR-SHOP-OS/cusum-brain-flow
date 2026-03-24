@@ -86,8 +86,17 @@ export default function SalesPipeline() {
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
 
   // Form state
-  const [form, setForm] = useState({ title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "", expected_value: "", source: "", notes: "" });
-  const resetForm = () => setForm({ title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "", expected_value: "", source: "", notes: "" });
+  const SOURCES = ["Email", "Phone/Call", "Website", "Referral", "Trade Show", "Social Media", "Cold Outreach", "Partner", "Other"];
+  const [form, setForm] = useState({
+    title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "",
+    expected_value: "", source: "", notes: "", stage: "new", priority: "medium",
+    probability: "", expected_close_date: "", assigned_to: "", territory: "", description: "", lead_type: "opportunity",
+  });
+  const resetForm = () => setForm({
+    title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "",
+    expected_value: "", source: "", notes: "", stage: "new", priority: "medium",
+    probability: "", expected_close_date: "", assigned_to: "", territory: "", description: "", lead_type: "opportunity",
+  });
 
   // Keyboard shortcuts
   useEffect(() => {
