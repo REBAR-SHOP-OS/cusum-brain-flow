@@ -22,6 +22,7 @@ interface LeadCardProps {
   onClick: (lead: LeadWithCustomer) => void;
   hasAIAction?: boolean;
   pendingActivities?: PendingActivity[];
+  assignees?: { profile_id: string; full_name: string }[];
 }
 
 // Map activity types to icons — Odoo parity
