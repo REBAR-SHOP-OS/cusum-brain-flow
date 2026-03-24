@@ -41,10 +41,13 @@ export function UserMenu() {
   const { warehouse, setWarehouse, toggleIntelligencePanel } = useWorkspace();
   const { isAdmin, isOffice } = useUserRole();
   const { isSuperAdmin } = useSuperAdmin();
+  const { profiles } = useProfiles();
+  const myProfile = profiles.find((p) => p.user_id === user?.id);
 
   if (!user) return null;
 
   const initials = getInitials(user.email);
+  const displayName = myProfile?.full_name || user.email?.split("@")[0];
   const currentWarehouse = warehouses.find((w) => w.id === warehouse) ?? warehouses[0];
 
   return (
