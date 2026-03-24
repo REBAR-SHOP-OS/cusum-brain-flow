@@ -567,7 +567,7 @@ function QueueCard({ plan, onDelete, onEdit }: {
           <Button
             variant="ghost" size="icon"
             className="h-7 w-7 text-destructive/60 hover:text-destructive"
-            onClick={() => setConfirmOpen(true)}
+            onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
