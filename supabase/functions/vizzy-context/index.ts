@@ -67,6 +67,9 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
   const [
     { data: cutPlans },
     { data: cutItems },
+    { data: completedTodayItems },
+    { data: machineRunsToday },
+    { data: allMachines },
     { data: machines },
     { data: leads },
     { data: customers },
