@@ -69,8 +69,25 @@ function renderBodyWithMedia(text: string | null) {
   });
 }
 
-export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, currentUserName, currentUserId, assignees = [] }: Props) {
+export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, currentUserName: propUserName, currentUserId: propUserId, assignees = [] }: Props) {
   const { activities, isLoading, create, markDone } = useSalesLeadActivities(salesLeadId);
+
+  // Resolve current user if not passed
+  const [resolvedUser, setResolvedUser] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (propUserId && propUserName) return;
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        const email = data.user.email || "";
+        // Find matching assignee or profile name
+        const match = assignees.find((a) => a.profile_id === data.user!.id);
+        setResolvedUser({ id: data.user.id, name: match?.full_name || email.split("@")[0] });
+      }
+    });
+  }, [propUserId, propUserName, assignees]);
+
+  const currentUserId = propUserId || resolvedUser?.id;
+  const currentUserName = propUserName || resolvedUser?.name;
 
   // Build extraUsers for MentionMenu from non-rebar assignees
   const extraMentionUsers = assignees
