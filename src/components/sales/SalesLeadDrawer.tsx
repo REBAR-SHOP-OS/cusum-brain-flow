@@ -20,6 +20,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
+import { AssigneeManager } from "@/components/pipeline/AssigneeManager";
+import type { Profile } from "@/hooks/useProfiles";
 
 interface Props {
   lead: SalesLead | null;
@@ -27,6 +29,10 @@ interface Props {
   onClose: () => void;
   onUpdate: (data: Partial<SalesLead> & { id: string }) => void;
   onDelete: (id: string) => void;
+  assignees?: { profile_id: string; full_name: string }[];
+  profiles?: Profile[];
+  onAddAssignee?: (profileId: string) => void;
+  onRemoveAssignee?: (profileId: string) => void;
 }
 
 const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
