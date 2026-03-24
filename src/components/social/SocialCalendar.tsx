@@ -188,8 +188,10 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       allGroupSelected && "ring-2 ring-primary",
                       status === "published"
                         ? "bg-green-500/10 border-green-500/40"
+                        : status === "scheduled" && firstPost.neel_approved
+                        ? "bg-card border-green-500/30"
                         : status === "scheduled"
-                        ? "bg-card border-primary/30"
+                        ? "bg-yellow-500/10 border-yellow-500/30"
                         : status === "draft"
                         ? "bg-muted/30 border-dashed border-muted-foreground/30"
                         : status === "declined"
