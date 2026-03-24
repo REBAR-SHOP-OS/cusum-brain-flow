@@ -36,13 +36,36 @@ export default function TeamHub() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<TeamMessage | null>(null);
+  const [selfChannelId, setSelfChannelId] = useState<string | null>(null);
 
   const isNotesView = selectedChannelId === "__my_notes__";
-  const activeChannelId = isNotesView ? null : (selectedChannelId || (channelsLoading ? null : channels[0]?.id || null));
-  const activeChannel = channels.find((c) => c.id === activeChannelId);
 
-  const { messages, isLoading: msgsLoading } = useTeamMessages(activeChannelId);
-  const { meetings: activeMeetings } = useActiveMeetings(activeChannelId);
+  // Resolve self-DM channel for My Notes
+  useEffect(() => {
+    if (!isNotesView || !myProfile) {
+      setSelfChannelId(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("create_dm_channel" as any, {
+          _my_profile_id: myProfile.id,
+          _target_profile_id: myProfile.id,
+        });
+        if (!cancelled && !error && data) {
+          setSelfChannelId(data as string);
+        }
+      } catch (e) {
+        console.error("Failed to resolve self-notes channel", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isNotesView, myProfile?.id]);
+
+  const resolvedChannelId = isNotesView ? selfChannelId : (selectedChannelId || (channelsLoading ? null : channels[0]?.id || null));
+  const activeChannelId = resolvedChannelId;
+  const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   const [activeLang, setActiveLang] = useState<string | null>(null);
   const myLang = activeLang || myProfile?.preferred_language || "en";
