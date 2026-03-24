@@ -216,7 +216,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
                 onClick={() => handleClickMember(p.id, p.full_name)}
                 className="w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer text-left"
               >
-                <div className="relative">
+                <div className="relative cursor-pointer" onClick={(e) => { e.stopPropagation(); setPreviewProfile(p); }}>
                   <Avatar className="w-6 h-6">
                     <AvatarImage src={p.avatar_url || ""} />
                     <AvatarFallback className={cn("text-[9px] font-bold text-white", getAvatarColor(p.full_name))}>
