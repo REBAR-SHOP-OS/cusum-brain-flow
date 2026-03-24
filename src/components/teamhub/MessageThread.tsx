@@ -132,6 +132,22 @@ export function MessageThread({
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const grammar = useGrammarCheck();
+
+  const DELETE_ADMINS = ["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"];
+  const canDelete = DELETE_ADMINS.includes(myProfile?.email ?? "");
+
+  const handleDeleteMessage = async (msgId: string) => {
+    const { data, error } = await (supabase as any)
+      .from("team_messages")
+      .delete()
+      .eq("id", msgId)
+      .select();
+    if (error || !data?.length) {
+      toast.error("Failed to delete message");
+    } else {
+      toast.success("Message deleted");
+    }
+  };
   const { ensureSession } = useSessionGuard();
   const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
   const [pendingFiles, setPendingFiles] = useState<ChatAttachment[]>([]);
