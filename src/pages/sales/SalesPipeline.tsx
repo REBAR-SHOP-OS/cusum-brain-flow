@@ -161,12 +161,18 @@ export default function SalesPipeline() {
     if (!form.title.trim()) return;
     createLead.mutate({
       title: form.title,
+      stage: form.stage || "new",
+      priority: form.priority || null,
       contact_name: form.contact_name || null,
       contact_company: form.contact_company || null,
       contact_email: form.contact_email || null,
       contact_phone: form.contact_phone || null,
       expected_value: form.expected_value ? Number(form.expected_value) : null,
+      probability: form.probability ? Number(form.probability) : null,
+      expected_close_date: form.expected_close_date || null,
       source: form.source || null,
+      assigned_to: form.assigned_to || null,
+      description: form.description || null,
       notes: form.notes || null,
     });
     setCreateOpen(false);
