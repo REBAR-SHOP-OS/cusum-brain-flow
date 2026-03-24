@@ -57,7 +57,7 @@ export default function TeamHub() {
 
   const onlineCount = profiles.filter((p) => p.is_active).length;
 
-  const handleSend = async (text: string, attachments?: ChatAttachment[]) => {
+  const handleSend = async (text: string, attachments?: ChatAttachment[], replyToId?: string | null) => {
     if (!activeChannelId || !myProfile) {
       toast.error("Cannot send — profile not found");
       return;
@@ -70,6 +70,7 @@ export default function TeamHub() {
         senderLang: myLang,
         targetLangs,
         attachments,
+        replyToId,
       });
     } catch (err: any) {
       toast.error("Failed to send message", { description: err.message });

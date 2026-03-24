@@ -14488,6 +14488,7 @@ export type Database = {
           id: string
           original_language: string
           original_text: string
+          reply_to_id: string | null
           sender_profile_id: string
           translations: Json
         }
@@ -14498,6 +14499,7 @@ export type Database = {
           id?: string
           original_language?: string
           original_text: string
+          reply_to_id?: string | null
           sender_profile_id: string
           translations?: Json
         }
@@ -14508,6 +14510,7 @@ export type Database = {
           id?: string
           original_language?: string
           original_text?: string
+          reply_to_id?: string | null
           sender_profile_id?: string
           translations?: Json
         }
@@ -14517,6 +14520,13 @@ export type Database = {
             columns: ["channel_id"]
             isOneToOne: false
             referencedRelation: "team_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "team_messages"
             referencedColumns: ["id"]
           },
           {

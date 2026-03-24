@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MentionMenu } from "@/components/chat/MentionMenu";
 import {
   Send,
   Loader2,
@@ -23,6 +24,7 @@ import {
   Download,
   SpellCheck,
   Trash2,
+  Reply,
 } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
@@ -71,7 +73,7 @@ interface MessageThreadProps {
   myLang: string;
   isLoading: boolean;
   isSending: boolean;
-  onSend: (text: string, attachments?: ChatAttachment[]) => void;
+  onSend: (text: string, attachments?: ChatAttachment[], replyToId?: string | null) => void;
   activeMeetings?: TeamMeeting[];
   onStartMeeting?: () => void;
   onJoinMeeting?: (meeting: TeamMeeting) => void;
@@ -131,6 +133,11 @@ export function MessageThread({
   readOnly = false,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
+  const [replyTo, setReplyTo] = useState<TeamMessage | null>(null);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionStart, setMentionStart] = useState(-1);
   const grammar = useGrammarCheck();
 
   const DELETE_ADMINS = ["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"];
@@ -184,10 +191,68 @@ export function MessageThread({
   const handleSubmit = () => {
     const trimmed = input.trim();
     if (!trimmed && pendingFiles.length === 0) return;
-    onSend(trimmed || "📎", pendingFiles.length > 0 ? pendingFiles : undefined);
+    onSend(trimmed || "📎", pendingFiles.length > 0 ? pendingFiles : undefined, replyTo?.id || null);
     setInput("");
     setPendingFiles([]);
+    setReplyTo(null);
+    setMentionOpen(false);
     textareaRef.current?.focus();
+  };
+
+  // Build a message map for reply lookups
+  const messageMap = useMemo(() => {
+    const map = new Map<string, TeamMessage>();
+    for (const m of messages) map.set(m.id, m);
+    return map;
+  }, [messages]);
+
+  // Handle @mention detection in input
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+
+    const cursorPos = e.target.selectionStart || 0;
+    const textBefore = val.slice(0, cursorPos);
+    const atIdx = textBefore.lastIndexOf("@");
+
+    if (atIdx >= 0 && (atIdx === 0 || textBefore[atIdx - 1] === " " || textBefore[atIdx - 1] === "\n")) {
+      const filter = textBefore.slice(atIdx + 1);
+      if (!filter.includes(" ") && filter.length < 30) {
+        setMentionOpen(true);
+        setMentionFilter(filter);
+        setMentionStart(atIdx);
+        setMentionIndex(0);
+        return;
+      }
+    }
+    setMentionOpen(false);
+  };
+
+  const handleMentionSelect = (item: { id: string; label: string }) => {
+    const before = input.slice(0, mentionStart);
+    const after = input.slice((textareaRef.current?.selectionStart || mentionStart + mentionFilter.length + 1));
+    setInput(before + `@${item.label} ` + after);
+    setMentionOpen(false);
+    textareaRef.current?.focus();
+  };
+
+  // Render text with @mentions highlighted
+  const renderMentionText = (text: string) => {
+    const parts = text.split(/(@\S+)/g);
+    const profileNames = new Set(profiles.map(p => p.full_name));
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        const name = part.slice(1);
+        if (profileNames.has(name)) {
+          return (
+            <span key={i} className="inline-flex items-center px-1 py-0.5 rounded bg-primary/15 text-primary text-xs font-medium">
+              {part}
+            </span>
+          );
+        }
+      }
+      return <span key={i}>{part}</span>;
+    });
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -486,6 +551,22 @@ export function MessageThread({
                           </div>
                         )}
 
+                        {/* Reply quote */}
+                        {msg.reply_to_id && (() => {
+                          const repliedMsg = messageMap.get(msg.reply_to_id!);
+                          if (!repliedMsg) return null;
+                          return (
+                            <div className="mb-1.5 pl-3 border-l-2 border-primary/40 py-1 rounded-sm bg-muted/30">
+                              <span className="text-[10px] font-semibold text-primary/80">
+                                {repliedMsg.sender?.full_name || "Unknown"}
+                              </span>
+                              <p className="text-[11px] text-muted-foreground truncate max-w-[300px]">
+                                {repliedMsg.original_text.slice(0, 80)}{repliedMsg.original_text.length > 80 ? "…" : ""}
+                              </p>
+                            </div>
+                          );
+                        })()}
+
                         {/* Message Body */}
                         {(() => {
                           const { cleanText, parsedAttachments } = parseAttachmentLinks(displayText);
@@ -511,7 +592,7 @@ export function MessageThread({
                                   )}
                                   dir={detectRtl(cleanText) ? "rtl" : "ltr"}
                                 >
-                                  {cleanText}
+                                  {renderMentionText(cleanText)}
                                 </p>
                               )}
 
@@ -611,6 +692,15 @@ export function MessageThread({
                         >
                           <Volume2 className="w-3.5 h-3.5" />
                         </button>
+                        {!readOnly && (
+                          <button
+                            onClick={() => { setReplyTo(msg); textareaRef.current?.focus(); }}
+                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                            title="Reply"
+                          >
+                            <Reply className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
                         {canDelete && (
                           <button
@@ -659,17 +749,45 @@ export function MessageThread({
           </div>
         )}
 
+        {/* Reply banner */}
+        {replyTo && (
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-1 rounded-lg bg-muted/40 border border-border/50">
+            <Reply className="w-3.5 h-3.5 text-primary shrink-0" />
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-semibold text-primary">{replyTo.sender?.full_name || "Unknown"}</span>
+              <p className="text-[11px] text-muted-foreground truncate">{replyTo.original_text.slice(0, 80)}</p>
+            </div>
+            <button onClick={() => setReplyTo(null)} className="text-muted-foreground hover:text-foreground shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Input area */}
         <div className="relative rounded-xl border border-border bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
+          {/* Mention menu */}
+          <MentionMenu
+            isOpen={mentionOpen}
+            filter={mentionFilter}
+            selectedIndex={mentionIndex}
+            onSelect={handleMentionSelect}
+            onClose={() => setMentionOpen(false)}
+          />
+
           <Textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             placeholder={`Message #${channelName}...`}
             className="min-h-[40px] md:min-h-[44px] max-h-32 resize-none border-0 focus-visible:ring-0 bg-transparent px-3 py-2 md:py-2.5 text-sm"
             rows={1}
             dir="auto"
             onKeyDown={(e) => {
+              if (mentionOpen) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => i + 1); return; }
+                if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(0, i - 1)); return; }
+                if (e.key === "Escape") { e.preventDefault(); setMentionOpen(false); return; }
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 handleSubmit();
