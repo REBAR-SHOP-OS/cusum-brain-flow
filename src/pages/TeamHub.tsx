@@ -283,8 +283,28 @@ export default function TeamHub() {
           <div className="flex-1 flex min-w-0 overflow-hidden">
             {/* Message Thread */}
             <div className={activeMeeting ? "flex-1 min-w-0 hidden lg:flex lg:flex-col" : "flex-1 flex flex-col min-w-0"}>
-              {isNotesView && myProfile ? (
-                <PersonalNotes myProfile={myProfile} />
+              {isNotesView && myProfile && selfChannelId ? (
+                <MessageThread
+                  channelName="My Notes"
+                  channelDescription="Your private saved messages"
+                  messages={messages}
+                  profiles={profiles}
+                  myProfile={myProfile}
+                  myLang={myLang}
+                  isLoading={msgsLoading}
+                  isSending={sendMutation.isPending}
+                  onSend={handleSend}
+                  activeMeetings={[]}
+                  onStartMeeting={() => {}}
+                  onJoinMeeting={() => {}}
+                  readOnly={false}
+                  onForward={(msg) => setForwardMsg(msg)}
+                  onLangChange={setActiveLang}
+                />
+              ) : isNotesView ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary/40" />
+                </div>
               ) : activeChannel ? (
                 <MessageThread
                   channelName={activeChannel.name}
