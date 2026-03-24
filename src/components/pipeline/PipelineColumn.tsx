@@ -67,6 +67,7 @@ export function PipelineColumn({
   aiMode = false,
   aiActionLeadIds = new Set(),
   pendingActivitiesByLead = {},
+  assigneesByLeadId = {},
 }: PipelineColumnProps) {
   const [activityFilter, setActivityFilter] = useState<ActivityStatus | null>(null);
 
