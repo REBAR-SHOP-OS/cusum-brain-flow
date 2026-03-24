@@ -98,7 +98,11 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   };
 
   const handleClickMember = (profileId: string, name: string) => {
-    onClickMember(profileId, name);
+    if (myProfile && profileId === myProfile.id) {
+      onSelect("__my_notes__");
+    } else {
+      onClickMember(profileId, name);
+    }
     onClose?.();
   };
 
