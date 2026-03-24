@@ -40,7 +40,8 @@ export default function TeamHub() {
   const { messages, isLoading: msgsLoading } = useTeamMessages(activeChannelId);
   const { meetings: activeMeetings } = useActiveMeetings(activeChannelId);
 
-  const myLang = myProfile?.preferred_language || "en";
+  const [activeLang, setActiveLang] = useState<string | null>(null);
+  const myLang = activeLang || myProfile?.preferred_language || "en";
 
   // Channel write restrictions
   const CHANNEL_WRITERS = ["sattar@rebar.shop", "radin@rebar.shop", "neel@rebar.shop"];
@@ -257,6 +258,7 @@ export default function TeamHub() {
                   onJoinMeeting={(m) => setActiveMeeting(m)}
                   readOnly={!canWrite}
                   onForward={(msg) => setForwardMsg(msg)}
+                  onLangChange={setActiveLang}
                 />
               ) : channelsLoading ? (
                 <div className="flex items-center justify-center h-full">
