@@ -59,6 +59,9 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
     },
   });
 
+  const { profiles } = useProfiles();
+  const activeProfiles = (profiles ?? []).filter(p => p.is_active);
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {

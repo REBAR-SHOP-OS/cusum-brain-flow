@@ -80,6 +80,8 @@ const PIPELINE_STAGES = SALES_STAGES.map((s) => ({
 export default function SalesPipeline() {
   const { leads, isLoading, createLead, updateLead, deleteLead } = useSalesLeads();
   const { contacts: unifiedContacts } = useSalesContacts();
+  const { profiles } = useProfiles();
+  const activeProfiles = (profiles ?? []).filter(p => p.is_active);
   const [createOpen, setCreateOpen] = useState(false);
   const [drawerLead, setDrawerLead] = useState<SalesLead | null>(null);
   const [search, setSearch] = useState("");
