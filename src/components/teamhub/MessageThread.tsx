@@ -79,6 +79,7 @@ interface MessageThreadProps {
   onStartMeeting?: () => void;
   onJoinMeeting?: (meeting: TeamMeeting) => void;
   readOnly?: boolean;
+  onForward?: (msg: TeamMessage) => void;
 }
 
 const avatarColors = [
