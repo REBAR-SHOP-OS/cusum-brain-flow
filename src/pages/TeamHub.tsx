@@ -176,7 +176,7 @@ export default function TeamHub() {
   const sidebarContent = (
     <ChannelSidebar
       channels={channels}
-      selectedId={activeChannelId}
+      selectedId={isNotesView ? "__my_notes__" : activeChannelId}
       onSelect={setSelectedChannelId}
       onlineCount={onlineCount}
       profiles={profiles}
