@@ -26,6 +26,7 @@ interface CreateChannelDialogProps {
     memberIds: string[];
   }) => Promise<void>;
   isCreating: boolean;
+  mode?: "channel" | "group";
 }
 
 const avatarColors = [
