@@ -28,6 +28,7 @@ import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParse
 import { getRequiredGates, type GateType } from "@/lib/pipelineTransitionGates";
 import { usePipelineMemory } from "@/hooks/usePipelineMemory";
 import { usePipelineRealtime } from "@/hooks/usePipelineRealtime";
+import { useLeadAssignees } from "@/hooks/useLeadAssignees";
 import { logPipelineTransition } from "@/lib/logPipelineTransition";
 import { QualificationGateModal } from "@/components/pipeline/gates/QualificationGateModal";
 import { PricingGateModal } from "@/components/pipeline/gates/PricingGateModal";
