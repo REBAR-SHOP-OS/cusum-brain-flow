@@ -15,6 +15,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useUnreadSenders } from "@/hooks/useUnreadSenders";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import { useAuth } from "@/lib/auth";
+import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 const CHAT_BTN_SIZE = 56;
@@ -40,6 +41,7 @@ export function DockChatBar() {
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
   const { user } = useAuth();
+  const location = useLocation();
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
@@ -50,6 +52,9 @@ export function DockChatBar() {
   useEffect(() => {
     setPortalContainer(getFloatingPortalContainer());
   }, []);
+
+  // Hide on Team Hub page — user already has full chat UI
+  const isTeamHub = location.pathname === "/team-hub";
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
     storageKey: "dock-chat-pos",
@@ -118,7 +123,7 @@ export function DockChatBar() {
   const BOX_WIDTH = 330;
   const LAUNCHER_OFFSET = 80; // space for the launcher pill
 
-  if (!portalContainer) return null;
+  if (!portalContainer || isTeamHub) return null;
 
   return createPortal(
     <>
