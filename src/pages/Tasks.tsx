@@ -533,6 +533,20 @@ export default function Tasks() {
     }
   }
 
+  // Mirror Radin's feedback tasks into Zahra's column
+  const radinTasks = tasksByEmployee.get(RADIN_PROFILE_ID) || [];
+  const zahraTasks = tasksByEmployee.get(ZAHRA_PROFILE_ID);
+  if (zahraTasks) {
+    for (const t of radinTasks) {
+      const src = (t as any).source;
+      if (src === "screenshot_feedback" || src === "feedback_verification") {
+        if (!zahraTasks.some(z => z.id === t.id)) {
+          zahraTasks.push(t);
+        }
+      }
+    }
+  }
+
   // ─── Mutations ────────────────────────────────────────
   const writeAudit = async (taskId: string, action: string, field: string | null, oldVal: string | null, newVal: string | null) => {
     const { data: { user } } = await supabase.auth.getUser();
