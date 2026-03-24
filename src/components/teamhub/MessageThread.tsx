@@ -228,7 +228,7 @@ export function MessageThread({
         const space = prev && !prev.endsWith(" ") ? " " : "";
         return prev + space + speech.fullTranscript;
       });
-      speech.reset();
+      speech.clearTranscripts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [speech.fullTranscript]);

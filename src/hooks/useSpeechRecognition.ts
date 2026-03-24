@@ -144,6 +144,11 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
     setInterimText("");
   }, [stop]);
 
+  const clearTranscripts = useCallback(() => {
+    setTranscripts([]);
+    setInterimText("");
+  }, []);
+
   const fullTranscript = transcripts.map((t) => t.text).join(" ");
 
   return {
