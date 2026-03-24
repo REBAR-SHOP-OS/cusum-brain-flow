@@ -23,6 +23,11 @@ export const ACCESS_POLICIES = {
   /** CEO Portal nav visibility */
   ceoPortalAccess: ["sattar@rebar.shop", "radin@rebar.shop"] as string[],
 
+  /** External estimators — email → allowed pipeline stage ids */
+  externalEstimators: {
+    "info@mavericksrebar.com": ["estimation_karthick"],
+  } as Record<string, string[]>,
+
   /** Internal domain for basic access checks */
   internalDomain: "@rebar.shop",
 };

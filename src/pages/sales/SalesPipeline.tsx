@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
+import { useAuth } from "@/lib/auth";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { useSalesContacts } from "@/hooks/useSalesContacts";
 import { Button } from "@/components/ui/button";
 import { Plus, ChevronsUpDown, Check } from "lucide-react";
