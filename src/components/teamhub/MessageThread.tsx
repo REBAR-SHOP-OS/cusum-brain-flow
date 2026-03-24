@@ -87,6 +87,7 @@ interface MessageThreadProps {
   readOnly?: boolean;
   onForward?: (msg: TeamMessage) => void;
   onLangChange?: (lang: string) => void;
+  headerExtra?: React.ReactNode;
 }
 
 const avatarColors = [
