@@ -555,14 +555,28 @@ export function MessageThread({
                         {msg.reply_to_id && (() => {
                           const repliedMsg = messageMap.get(msg.reply_to_id!);
                           if (!repliedMsg) return null;
+                          const { cleanText: replyClean, parsedAttachments: replyParsed } = parseAttachmentLinks(repliedMsg.original_text);
+                          const replyAttachments = [
+                            ...((repliedMsg.attachments || []) as ChatAttachment[]).map(a => ({ name: a.name, url: fixChatFileUrl(a.url), type: a.type || "" })),
+                            ...replyParsed.map(a => ({ name: a.name, url: a.url, type: "" })),
+                          ];
+                          const seenReply = new Set<string>();
+                          const uniqueReplyAtts = replyAttachments.filter(a => { if (seenReply.has(a.url)) return false; seenReply.add(a.url); return true; });
+                          const replyImages = uniqueReplyAtts.filter(a => isImageType(a.type) || isImageUrl(a.url) || isImageUrl(a.name));
+                          const previewText = replyClean.trim() || (replyImages.length > 0 ? "📷 Photo" : repliedMsg.original_text.slice(0, 80));
                           return (
-                            <div className="mb-1.5 pl-3 border-l-2 border-primary/40 py-1 rounded-sm bg-muted/30">
-                              <span className="text-[10px] font-semibold text-primary/80">
-                                {repliedMsg.sender?.full_name || "Unknown"}
-                              </span>
-                              <p className="text-[11px] text-muted-foreground truncate max-w-[300px]">
-                                {repliedMsg.original_text.slice(0, 80)}{repliedMsg.original_text.length > 80 ? "…" : ""}
-                              </p>
+                            <div className="mb-1.5 pl-3 border-l-2 border-primary/40 py-1 rounded-sm bg-muted/30 flex items-center gap-2">
+                              {replyImages.length > 0 && (
+                                <img src={replyImages[0].url} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 border border-border" />
+                              )}
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-semibold text-primary/80">
+                                  {repliedMsg.sender?.full_name || "Unknown"}
+                                </span>
+                                <p className="text-[11px] text-muted-foreground truncate max-w-[300px]">
+                                  {previewText.slice(0, 80)}{previewText.length > 80 ? "…" : ""}
+                                </p>
+                              </div>
                             </div>
                           );
                         })()}
