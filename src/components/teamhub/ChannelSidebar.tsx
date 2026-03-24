@@ -64,13 +64,19 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onCreateGroup, onClickMember, onClose, myProfile }: ChannelSidebarProps) {
+const PROTECTED_CHANNELS = ["Official Channel", "Official Group", "My Notes"];
+const ADMIN_EMAILS = ["radin@rebar.shop", "neel@rebar.shop", "sattar@rebar.shop"];
+
+export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onCreateGroup, onClickMember, onClose, myProfile, onDeleteChannel }: ChannelSidebarProps) {
+  const { user } = useAuth();
   const [membersOpen, setMembersOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [previewProfile, setPreviewProfile] = useState<Profile | null>(null);
+  const [channelToDelete, setChannelToDelete] = useState<TeamChannel | null>(null);
   const { unreadSenderIds } = useUnreadSenders();
+  const isAdmin = ADMIN_EMAILS.includes(user?.email ?? "");
 
   const officialChannel = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
   const userChannels = channels.filter((c) => c.channel_type === "group" && c.name !== "Official Channel" && c.name !== "Official Group" && c.name !== "My Notes");
