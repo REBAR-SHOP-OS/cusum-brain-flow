@@ -1,5 +1,120 @@
 import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
 
+interface QuickConnectInfo {
+  baseUrl: string;
+  method: string;
+}
+
+/**
+ * Resolve a QuickConnect ID (e.g. "RSI1") to an actual DSM base URL
+ * by querying Synology's global relay service.
+ */
+async function resolveQuickConnect(qcId: string): Promise<QuickConnectInfo> {
+  console.log(`[QC] Resolving QuickConnect ID: ${qcId}`);
+
+  const body = JSON.stringify({
+    command: "get_server_info",
+    id: qcId,
+    version: 1,
+  });
+
+  const res = await fetch("https://global.quickconnect.to/Serv.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+
+  const data = await res.json();
+  console.log("[QC] Resolution response:", JSON.stringify(data).substring(0, 500));
+
+  if (data.errno && data.errno !== 0) {
+    throw new Error(`QuickConnect resolution failed: errno ${data.errno}`);
+  }
+
+  const server = data.server;
+  const service = data.service;
+  const env = data.env;
+
+  // Extract HTTPS port (default 5001)
+  const httpsPort = service?.port || 5001;
+  const externalPort = service?.ext_port || httpsPort;
+
+  // Build candidate URLs in priority order
+  const candidates: { url: string; method: string }[] = [];
+
+  // 1. Direct external IP
+  if (server?.external?.ip) {
+    candidates.push({
+      url: `https://${server.external.ip}:${externalPort}`,
+      method: "external_ip",
+    });
+  }
+
+  // 2. DDNS hostname
+  if (server?.ddns) {
+    candidates.push({
+      url: `https://${server.ddns}:${externalPort}`,
+      method: "ddns",
+    });
+  }
+
+  // 3. Synology relay tunnel
+  if (env?.relay_region) {
+    candidates.push({
+      url: `https://${qcId}.${env.relay_region}.quickconnect.to:${externalPort}`,
+      method: "relay",
+    });
+  }
+
+  // 4. Fallback: try common DDNS pattern
+  candidates.push({
+    url: `https://${qcId}.quickconnect.to`,
+    method: "quickconnect_direct",
+  });
+
+  // Try each candidate - pick the first that returns JSON from the auth API
+  for (const candidate of candidates) {
+    try {
+      console.log(`[QC] Trying ${candidate.method}: ${candidate.url}`);
+      const testUrl = `${candidate.url}/webapi/entry.cgi?api=SYNO.API.Info&version=1&method=query`;
+      const testRes = await fetch(testUrl, {
+        signal: AbortSignal.timeout(8000),
+      });
+      const text = await testRes.text();
+
+      // Check if response is JSON (not HTML login page)
+      if (text.trim().startsWith("{")) {
+        console.log(`[QC] ✓ Success via ${candidate.method}: ${candidate.url}`);
+        return { baseUrl: candidate.url, method: candidate.method };
+      } else {
+        console.log(`[QC] ✗ ${candidate.method} returned HTML, skipping`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`[QC] ✗ ${candidate.method} failed: ${msg}`);
+    }
+  }
+
+  throw new Error(
+    `Could not resolve QuickConnect ID "${qcId}" to a reachable DSM endpoint. Tried ${candidates.length} methods.`
+  );
+}
+
+/**
+ * Get the base URL for the Synology DSM API.
+ * Supports both direct URLs (https://...) and QuickConnect IDs (e.g. RSI1).
+ */
+async function getDsmBaseUrl(synologyUrl: string): Promise<string> {
+  // If it already looks like a URL, use it directly
+  if (synologyUrl.includes("://")) {
+    return synologyUrl.replace(/\/+$/, "");
+  }
+
+  // Otherwise treat as QuickConnect ID
+  const resolved = await resolveQuickConnect(synologyUrl);
+  return resolved.baseUrl;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -9,7 +124,7 @@ Deno.serve(async (req) => {
     const { userId, serviceClient } = await requireAuth(req);
     const { action, path, folderPath } = await req.json();
 
-    const SYNOLOGY_URL = Deno.env.get("SYNOLOGY_URL") || "https://RSIC.synology.me:5001";
+    const SYNOLOGY_URL_RAW = Deno.env.get("SYNOLOGY_URL") || "RSI1";
     const SYNOLOGY_USERNAME = Deno.env.get("SYNOLOGY_USERNAME");
     const SYNOLOGY_PASSWORD = Deno.env.get("SYNOLOGY_PASSWORD");
 
@@ -17,24 +132,43 @@ Deno.serve(async (req) => {
       return json({ error: "Synology credentials not configured" }, 400);
     }
 
+    // Resolve the base URL (handles both direct URLs and QuickConnect IDs)
+    let baseUrl: string;
+    try {
+      baseUrl = await getDsmBaseUrl(SYNOLOGY_URL_RAW);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to resolve NAS URL";
+      console.error("DSM URL resolution error:", msg);
+      return json({ error: msg }, 502);
+    }
+
+    console.log("Using DSM base URL:", baseUrl);
+
     // Helper: login and get sid
     async function getSid(): Promise<string> {
-      const loginUrl = `${SYNOLOGY_URL}/webapi/auth.cgi?api=SYNO.API.Auth&version=3&method=login&account=${encodeURIComponent(SYNOLOGY_USERNAME!)}&passwd=${encodeURIComponent(SYNOLOGY_PASSWORD!)}&session=FileStation&format=sid`;
-      console.log("Attempting DSM login to:", SYNOLOGY_URL);
+      const loginUrl = `${baseUrl}/webapi/auth.cgi?api=SYNO.API.Auth&version=3&method=login&account=${encodeURIComponent(SYNOLOGY_USERNAME!)}&passwd=${encodeURIComponent(SYNOLOGY_PASSWORD!)}&session=FileStation&format=sid`;
+      console.log("Attempting DSM login to:", baseUrl);
       const res = await fetch(loginUrl);
       const text = await res.text();
       console.log("DSM login response status:", res.status, "body preview:", text.substring(0, 200));
-      
+
       let data: any;
       try {
         data = JSON.parse(text);
       } catch {
-        // If we get HTML back, the URL might be wrong or NAS is returning a login page
-        throw new Error(`DSM returned non-JSON response (status ${res.status}). Check SYNOLOGY_URL is correct and includes the port (e.g. https://RSIC.synology.me:5001)`);
+        throw new Error(
+          `DSM returned non-JSON response (status ${res.status}). The resolved URL may be incorrect or the NAS is unreachable.`
+        );
       }
-      
+
       if (!data.success) {
-        throw new Error(`DSM login failed (error code: ${data.error?.code || "unknown"})`);
+        const code = data.error?.code;
+        let hint = "";
+        if (code === 400) hint = " (No such account or incorrect password)";
+        if (code === 401) hint = " (Account disabled)";
+        if (code === 402) hint = " (Permission denied)";
+        if (code === 403) hint = " (2FA required)";
+        throw new Error(`DSM login failed (error code: ${code || "unknown"})${hint}`);
       }
       return data.data.sid;
     }
@@ -42,21 +176,24 @@ Deno.serve(async (req) => {
     // Helper: logout
     async function logout(sid: string) {
       try {
-        await fetch(`${SYNOLOGY_URL}/webapi/auth.cgi?api=SYNO.API.Auth&version=1&method=logout&session=FileStation&_sid=${sid}`);
-      } catch { /* ignore */ }
+        await fetch(
+          `${baseUrl}/webapi/auth.cgi?api=SYNO.API.Auth&version=1&method=logout&session=FileStation&_sid=${sid}`
+        );
+      } catch {
+        /* ignore */
+      }
     }
 
     if (action === "login") {
-      // Test connection
       const sid = await getSid();
       await logout(sid);
-      return json({ success: true, message: "Synology NAS connection verified" });
+      return json({ success: true, message: "Synology NAS connection verified", resolvedUrl: baseUrl });
     }
 
     if (action === "list-shares") {
       const sid = await getSid();
       try {
-        const url = `${SYNOLOGY_URL}/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list_share&_sid=${sid}`;
+        const url = `${baseUrl}/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list_share&_sid=${sid}`;
         const res = await fetch(url);
         const data = await res.json();
         if (!data.success) throw new Error("Failed to list shares");
@@ -70,7 +207,7 @@ Deno.serve(async (req) => {
       if (!folderPath) return json({ error: "folderPath required" }, 400);
       const sid = await getSid();
       try {
-        const url = `${SYNOLOGY_URL}/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list&folder_path=${encodeURIComponent(folderPath)}&additional=%5B%22size%22%2C%22time%22%2C%22type%22%5D&_sid=${sid}`;
+        const url = `${baseUrl}/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list&folder_path=${encodeURIComponent(folderPath)}&additional=%5B%22size%22%2C%22time%22%2C%22type%22%5D&_sid=${sid}`;
         const res = await fetch(url);
         const data = await res.json();
         if (!data.success) throw new Error(`Failed to list files in ${folderPath}`);
@@ -83,18 +220,15 @@ Deno.serve(async (req) => {
     if (action === "system-info") {
       const sid = await getSid();
       try {
-        // Get system utilization
-        const utilUrl = `${SYNOLOGY_URL}/webapi/entry.cgi?api=SYNO.Core.System.Utilization&version=1&method=get&_sid=${sid}`;
+        const utilUrl = `${baseUrl}/webapi/entry.cgi?api=SYNO.Core.System.Utilization&version=1&method=get&_sid=${sid}`;
         const utilRes = await fetch(utilUrl);
         const utilData = await utilRes.json();
 
-        // Get storage info
-        const storageUrl = `${SYNOLOGY_URL}/webapi/entry.cgi?api=SYNO.Storage.CGI.Storage&version=1&method=load_info&_sid=${sid}`;
+        const storageUrl = `${baseUrl}/webapi/entry.cgi?api=SYNO.Storage.CGI.Storage&version=1&method=load_info&_sid=${sid}`;
         const storageRes = await fetch(storageUrl);
         const storageData = await storageRes.json();
 
-        // Get system info
-        const sysUrl = `${SYNOLOGY_URL}/webapi/entry.cgi?api=SYNO.DSM.Info&version=2&method=getinfo&_sid=${sid}`;
+        const sysUrl = `${baseUrl}/webapi/entry.cgi?api=SYNO.DSM.Info&version=2&method=getinfo&_sid=${sid}`;
         const sysRes = await fetch(sysUrl);
         const sysData = await sysRes.json();
 
@@ -112,7 +246,7 @@ Deno.serve(async (req) => {
       if (!path) return json({ error: "path required" }, 400);
       const sid = await getSid();
       try {
-        const url = `${SYNOLOGY_URL}/webapi/entry.cgi?api=SYNO.FileStation.Download&version=2&method=download&path=${encodeURIComponent(path)}&mode=download&_sid=${sid}`;
+        const url = `${baseUrl}/webapi/entry.cgi?api=SYNO.FileStation.Download&version=2&method=download&path=${encodeURIComponent(path)}&mode=download&_sid=${sid}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("Download failed");
         const blob = await res.blob();
