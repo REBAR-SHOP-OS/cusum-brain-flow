@@ -42,6 +42,7 @@ export function ForwardMessageDialog({
 
   const teamMembers = profiles
     .filter((p) => p.email?.endsWith("@rebar.shop"))
+    .filter((p) => p.id !== currentProfileId)
     .filter((p) => p.full_name?.toLowerCase().includes(search.toLowerCase()));
 
   // Build preview
