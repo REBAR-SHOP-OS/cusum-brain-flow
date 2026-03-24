@@ -486,7 +486,7 @@ function PhotoSlot({ label, url, loading, disabled, inputRef, onFileSelect, onPr
         </button>
       )}
       {url ? (
-        <img src={url} alt={label} className="w-full h-full object-cover" />
+        <img src={url} alt={label} className="w-full h-full object-cover" loading="lazy" decoding="async" />
       ) : loading ? (
         <div className="flex flex-col items-center gap-1 text-muted-foreground">
           <Loader2 className="w-6 h-6 animate-spin" />
