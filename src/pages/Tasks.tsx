@@ -804,6 +804,7 @@ export default function Tasks() {
         }
       }
 
+      await mirrorFeedbackCompletion(task, currentProfileId);
       toast.success("Task approved & closed");
       loadData();
     } catch (e: any) {
