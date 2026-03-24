@@ -978,8 +978,13 @@ Deno.serve(async (req) => {
     // Static prefix (system prompt + tools) stays identical across calls for the same agent
     // → OpenAI/Gemini cache this prefix and charge 50-90% less for repeated tokens
     // Dynamic suffix (context, history, user message) varies per call
+    const todayEST = new Date().toLocaleDateString("en-US", {
+      weekday: "long", year: "numeric", month: "long", day: "numeric",
+      timeZone: "America/Toronto",
+    });
     const staticSystemPrompt = ONTARIO_CONTEXT + basePrompt + 
       GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + LANG_INSTRUCTION +
+      `\n\n## Current Date & Time\nToday is: ${todayEST}\nTimezone: Eastern (America/Toronto)` +
       `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
 
     // Dynamic content goes in a separate system message to preserve cache boundary
