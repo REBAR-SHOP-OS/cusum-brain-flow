@@ -35,7 +35,8 @@ export default function TeamHub() {
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<TeamMessage | null>(null);
 
-  const activeChannelId = selectedChannelId || (channelsLoading ? null : channels[0]?.id || null);
+  const isNotesView = selectedChannelId === "__my_notes__";
+  const activeChannelId = isNotesView ? null : (selectedChannelId || (channelsLoading ? null : channels[0]?.id || null));
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   const { messages, isLoading: msgsLoading } = useTeamMessages(activeChannelId);
