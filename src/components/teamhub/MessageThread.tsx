@@ -128,6 +128,7 @@ export function MessageThread({
   activeMeetings = [],
   onStartMeeting,
   onJoinMeeting,
+  readOnly = false,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const grammar = useGrammarCheck();
