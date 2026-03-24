@@ -539,6 +539,27 @@ export function useIntegrations() {
     try {
       const redirectUri = "https://erp.rebar.shop/integrations/callback";
 
+      // Synology NAS — verify connection via edge function
+      if (integrationId === "synology-nas") {
+        const { data, error } = await supabase.functions.invoke("synology-proxy", {
+          body: { action: "login" },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.success) {
+          setIntegrations((prev) =>
+            prev.map((i) =>
+              i.id === "synology-nas"
+                ? { ...i, status: "connected" as const, error: undefined, lastSync: new Date().toLocaleTimeString() }
+                : i
+            )
+          );
+          toast({ title: "Synology NAS connected", description: "DSM connection verified" });
+        } else {
+          throw new Error(data?.error || "NAS connection test failed");
+        }
+        return;
+      }
+
       // rebar.shop — credentials already stored, just verify connection
       if (integrationId === "rebar-shop") {
         const { data, error } = await supabase.functions.invoke("wp-test");

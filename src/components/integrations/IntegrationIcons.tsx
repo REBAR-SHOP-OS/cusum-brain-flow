@@ -192,6 +192,18 @@ export function IntegrationIcon({ id, className }: IntegrationIconProps) {
         </svg>
       );
 
+    case "synology-nas":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect x="3" y="2" width="18" height="20" rx="2" fill="#4B9FD5"/>
+          <rect x="6" y="5" width="12" height="2" rx="0.5" fill="white" opacity="0.9"/>
+          <rect x="6" y="9" width="12" height="2" rx="0.5" fill="white" opacity="0.7"/>
+          <rect x="6" y="13" width="12" height="2" rx="0.5" fill="white" opacity="0.5"/>
+          <circle cx="17" cy="19" r="1.5" fill="#34D399"/>
+          <circle cx="13" cy="19" r="1.5" fill="#FBBF24"/>
+        </svg>
+      );
+
     case "odoo":
       return (
         <svg viewBox="0 0 24 24" className={iconClass}>

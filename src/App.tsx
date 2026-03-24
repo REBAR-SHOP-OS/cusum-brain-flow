@@ -88,6 +88,7 @@ import AppBuilder from "./pages/AppBuilder";
 import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspace";
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
+const SynologyNAS = React.lazy(() => import("./pages/SynologyNAS"));
 
 // Sales Department (new isolated workspace)
 const SalesHub = React.lazy(() => import("./pages/sales/SalesHub"));
@@ -211,6 +212,7 @@ const App = () => (
                     <Route path="/brain" element={<P><Brain /></P>} />
                     <Route path="/integrations" element={<P><Integrations /></P>} />
                     <Route path="/integrations/callback" element={<IntegrationCallback />} />
+                    <Route path="/synology" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SynologyNAS /></Suspense></P>} />
                     <Route path="/settings" element={<P><Settings /></P>} />
 
                     {/* Social / Comms */}
