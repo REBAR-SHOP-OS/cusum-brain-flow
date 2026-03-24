@@ -320,6 +320,14 @@ export default function TeamHub() {
           meetingId={reportMeetingId}
         />
       )}
+      <ForwardMessageDialog
+        open={!!forwardMsg}
+        onOpenChange={(open) => { if (!open) setForwardMsg(null); }}
+        message={forwardMsg}
+        channels={channels}
+        currentChannelId={activeChannelId}
+        onForward={handleForward}
+      />
     </div>
   );
 }
