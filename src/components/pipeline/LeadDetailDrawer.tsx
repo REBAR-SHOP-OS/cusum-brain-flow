@@ -340,6 +340,19 @@ export function LeadDetailDrawer({
                 <p className="font-medium">{format(new Date(lead.expected_close_date), "MMM d, yyyy")}</p>
               </div>
             )}
+
+            {/* Assignees */}
+            {lead && (
+              <div className="col-span-2 mt-1 pt-2 border-t border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium mb-1 block">Assignees</span>
+                <AssigneeManager
+                  assignees={byLeadId[lead.id] ?? []}
+                  profiles={activeProfiles}
+                  onAdd={(pid) => addAssignee.mutate({ leadId: lead.id, profileId: pid })}
+                  onRemove={(pid) => removeAssignee.mutate({ leadId: lead.id, profileId: pid })}
+                />
+              </div>
+            )}
           </div>
           </div>
 
