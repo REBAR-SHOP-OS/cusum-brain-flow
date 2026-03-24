@@ -82,7 +82,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
     }
 
     // External office role (e.g. Karthick) → Pipeline, Time Clock, Team Hub
-    const EXTERNAL_OFFICE_ALLOWED = ["/pipeline", "/timeclock", "/team-hub"];
+    const EXTERNAL_OFFICE_ALLOWED = ["/pipeline", "/timeclock", "/team-hub", "/sales/pipeline"];
     const hasOfficeRole = roles.includes("office" as any);
     if (hasOfficeRole) {
       const isAllowed = EXTERNAL_OFFICE_ALLOWED.some((p) => location.pathname.startsWith(p));

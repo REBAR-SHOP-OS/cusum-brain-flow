@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
+import { useAuth } from "@/lib/auth";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { useSalesContacts } from "@/hooks/useSalesContacts";
 import { Button } from "@/components/ui/button";
 import { Plus, ChevronsUpDown, Check } from "lucide-react";
@@ -80,6 +82,11 @@ const PIPELINE_STAGES = SALES_STAGES.map((s) => ({
 }));
 
 export default function SalesPipeline() {
+  const { user } = useAuth();
+  const userEmail = user?.email?.toLowerCase() || "";
+  const externalEstimatorStages = ACCESS_POLICIES.externalEstimators[userEmail];
+  const isExternalEstimator = !!externalEstimatorStages;
+
   const { leads, isLoading, createLead, updateLead, deleteLead } = useSalesLeads();
   const { contacts: unifiedContacts } = useSalesContacts();
   const { profiles } = useProfiles();
@@ -114,12 +121,13 @@ export default function SalesPipeline() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Determine visible stage IDs based on active group filter
+  // Determine visible stage IDs based on active group filter or external estimator restriction
   const visibleStageIds = useMemo(() => {
+    if (isExternalEstimator) return externalEstimatorStages;
     if (!activeGroup) return SALES_STAGES.map((s) => s.id);
     const group = SALES_STAGE_GROUPS.find((g) => g.label === activeGroup);
     return group ? [...group.ids] : SALES_STAGES.map((s) => s.id);
-  }, [activeGroup]);
+  }, [activeGroup, isExternalEstimator, externalEstimatorStages]);
 
   const visibleStages = useMemo(
     () => PIPELINE_STAGES.filter((s) => visibleStageIds.includes(s.id)),
@@ -212,7 +220,9 @@ export default function SalesPipeline() {
           </h1>
           <PipelineAnalytics leads={allAdapted} />
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1" />New Lead</Button>
+        {!isExternalEstimator && (
+          <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1" />New Lead</Button>
+        )}
       </div>
 
       {/* Header Row 2: Search + Stage Group Filters */}
@@ -220,33 +230,35 @@ export default function SalesPipeline() {
         <div className="w-56">
           <SalesSearchBar value={search} onChange={setSearch} placeholder="Search leads... ( / )" />
         </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => setActiveGroup(null)}
-            className={cn(
-              "text-xs px-2 py-0.5 rounded-sm transition-colors",
-              !activeGroup ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            )}
-          >
-            Show all
-          </button>
-          {SALES_STAGE_GROUPS.map((g) => (
+        {!isExternalEstimator && (
+          <div className="flex items-center gap-1.5">
             <button
-              key={g.label}
-              onClick={() => setActiveGroup((prev) => (prev === g.label ? null : g.label))}
+              onClick={() => setActiveGroup(null)}
               className={cn(
-                "flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-sm transition-colors",
-                activeGroup === g.label ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                "text-xs px-2 py-0.5 rounded-sm transition-colors",
+                !activeGroup ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
-              <span className={cn("w-2 h-2 rounded-full", g.color)} />
-              {g.label}
-              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5 min-w-[16px] justify-center rounded-sm">
-                {groupCounts[g.label] || 0}
-              </Badge>
+              Show all
             </button>
-          ))}
-        </div>
+            {SALES_STAGE_GROUPS.map((g) => (
+              <button
+                key={g.label}
+                onClick={() => setActiveGroup((prev) => (prev === g.label ? null : g.label))}
+                className={cn(
+                  "flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-sm transition-colors",
+                  activeGroup === g.label ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <span className={cn("w-2 h-2 rounded-full", g.color)} />
+                {g.label}
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5 min-w-[16px] justify-center rounded-sm">
+                  {groupCounts[g.label] || 0}
+                </Badge>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Board — reuse PipelineBoard */}
