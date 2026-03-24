@@ -232,6 +232,26 @@ export function FixRequestQueue() {
     toast.success("Marked as resolved");
   };
 
+  const handleAutoFix = async (req: FixRequest) => {
+    setGeneratingId(req.id);
+    try {
+      const result = await invokeEdgeFunction<{ prompt: string }>("generate-fix-prompt", {
+        title: req.affected_area || "Fix Request",
+        description: req.description,
+        screenshots: req.photo_url ? [req.photo_url] : [],
+        priority: classifySeverity(req.description),
+        source: "vizzy_auto_fix",
+      });
+      await navigator.clipboard.writeText(result.prompt);
+      toast.success("Fix command copied to clipboard — paste in Lovable chat");
+      await resolveRequest(req.id);
+    } catch (err: any) {
+      toast.error("Auto-fix failed", { description: err.message });
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
   const generateLovableCommand = async (req: FixRequest) => {
     setGeneratingId(req.id);
     try {
@@ -315,6 +335,14 @@ export function FixRequestQueue() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handleAutoFix(req)}
+                    disabled={generatingId === req.id}
+                    className="p-1.5 rounded-md hover:bg-muted transition-colors text-emerald-500 hover:text-emerald-400 disabled:opacity-50"
+                    title="Auto-fix: generate & copy fix command"
+                  >
+                    <Wand2 className={`w-3.5 h-3.5 ${generatingId === req.id ? "animate-spin" : ""}`} />
+                  </button>
                   <button
                     onClick={() => generateLovableCommand(req)}
                     disabled={generatingId === req.id}
