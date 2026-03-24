@@ -222,6 +222,14 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
           </div>
         )}
       </div>
+
+      {myProfile && (
+        <ProfileEditDialog
+          open={profileEditOpen}
+          onClose={() => setProfileEditOpen(false)}
+          profile={myProfile}
+        />
+      )}
     </div>
   );
 }
