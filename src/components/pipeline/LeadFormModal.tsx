@@ -395,26 +395,36 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="assigned_to"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Assigned To</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {activeProfiles.map(p => (
-                          <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormItem>
+                <FormLabel>Assign To</FormLabel>
+                <Popover open={assigneePopoverOpen} onOpenChange={setAssigneePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between font-normal h-10">
+                      {selectedAssignees.length > 0
+                        ? `${selectedAssignees.length} selected`
+                        : <span className="text-muted-foreground">Select members...</span>}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[220px] p-2" align="start">
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                      {activeProfiles.map(p => (
+                        <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent cursor-pointer text-sm">
+                          <Checkbox
+                            checked={selectedAssignees.includes(p.id)}
+                            onCheckedChange={(checked) => {
+                              setSelectedAssignees(prev =>
+                                checked ? [...prev, p.id] : prev.filter(id => id !== p.id)
+                              );
+                            }}
+                          />
+                          {p.full_name}
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </FormItem>
 
               <FormField
                 control={form.control}
