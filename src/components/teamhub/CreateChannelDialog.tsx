@@ -113,7 +113,7 @@ export function CreateChannelDialog({
               Channel Name
             </label>
             <div className="relative">
-              <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
