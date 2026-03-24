@@ -27,6 +27,7 @@ export interface TeamMessage {
   original_language: string;
   translations: Record<string, string>;
   attachments: ChatAttachment[];
+  reply_to_id: string | null;
   created_at: string;
   sender?: Profile;
 }
