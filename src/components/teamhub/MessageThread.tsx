@@ -149,6 +149,7 @@ export function MessageThread({
   onJoinMeeting,
   readOnly = false,
   onForward,
+  onLangChange,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const [replyTo, setReplyTo] = useState<TeamMessage | null>(null);
