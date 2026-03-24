@@ -137,7 +137,24 @@ export function PackingSlipTemplate({ data, onClose }: Props) {
             <p className="text-xs text-gray-500">Delivered By (Signature)</p>
           </div>
           <div>
-            <div className="border-b border-gray-400 mb-1 h-10"></div>
+            {/* Interactive pad — hidden when printing */}
+            <div className="print:hidden">
+              <SignaturePad
+                onSignatureChange={setReceivedSignature}
+                width={300}
+                height={120}
+              />
+            </div>
+            {/* Static image for print */}
+            <div className="hidden print:block">
+              {receivedSignature ? (
+                <div className="mb-1 h-10 flex items-end">
+                  <img src={receivedSignature} alt="Customer signature" className="max-h-[40px] max-w-[200px] object-contain" />
+                </div>
+              ) : (
+                <div className="border-b border-gray-400 mb-1 h-10"></div>
+              )}
+            </div>
             <p className="text-xs text-gray-500">Received By (Signature)</p>
           </div>
         </div>
