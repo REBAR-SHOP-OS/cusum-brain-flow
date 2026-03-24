@@ -16,6 +16,7 @@ interface MentionMenuProps {
   selectedIndex: number;
   onSelect: (item: MentionItem) => void;
   onClose: () => void;
+  extraUsers?: { id: string; label: string; subtitle?: string }[];
 }
 
 export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }: MentionMenuProps) {
