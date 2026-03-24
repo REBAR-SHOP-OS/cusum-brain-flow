@@ -873,18 +873,20 @@ Deno.serve(async (req) => {
 
     // Log the action as an event
     const { data: profile } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
-    await supabaseAdmin.from("activity_events").insert({
-      company_id: profile?.company_id,
-      entity_type: "vizzy_action",
-      entity_id: params?.id || crypto.randomUUID(),
-      event_type: `vizzy_${action}`,
-      description: `Vizzy executed: ${action}`,
-      actor_id: userId,
-      actor_type: "vizzy",
-      metadata: { params },
-      source: "system",
-      dedupe_key: `vizzy_action:${action}:${params?.id || ""}:${new Date().toISOString().slice(0, 13)}`,
-    }).catch(() => {});
+    try {
+      await supabaseAdmin.from("activity_events").insert({
+        company_id: profile?.company_id,
+        entity_type: "vizzy_action",
+        entity_id: params?.id || crypto.randomUUID(),
+        event_type: `vizzy_${action}`,
+        description: `Vizzy executed: ${action}`,
+        actor_id: userId,
+        actor_type: "vizzy",
+        metadata: { params },
+        source: "system",
+        dedupe_key: `vizzy_action:${action}:${params?.id || ""}:${new Date().toISOString().slice(0, 13)}`,
+      });
+    } catch { /* ignore */ }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
