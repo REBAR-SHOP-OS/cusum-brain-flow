@@ -1,12 +1,15 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
+import { useSalesContacts } from "@/hooks/useSalesContacts";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, ChevronsUpDown, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import SalesSearchBar from "@/components/sales/SalesSearchBar";
 import SalesSummaryCards, { SummaryCardData } from "@/components/sales/SalesSummaryCards";
@@ -15,11 +18,13 @@ import SalesLeadDrawer from "@/components/sales/SalesLeadDrawer";
 
 export default function SalesPipeline() {
   const { leads, isLoading, createLead, updateLead, deleteLead } = useSalesLeads();
+  const { contacts: unifiedContacts } = useSalesContacts();
   const [createOpen, setCreateOpen] = useState(false);
   const [drawerLead, setDrawerLead] = useState<SalesLead | null>(null);
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
 
   // Form state
   const [form, setForm] = useState({ title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "", expected_value: "", source: "", notes: "" });
@@ -170,7 +175,47 @@ export default function SalesPipeline() {
           <div className="space-y-3">
             <div><Label>Title *</Label><Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Lead title" /></div>
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Contact Name</Label><Input value={form.contact_name} onChange={e => setForm(p => ({ ...p, contact_name: e.target.value }))} /></div>
+              <div>
+                <Label>Contact Name</Label>
+                <Popover open={contactPopoverOpen} onOpenChange={setContactPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between font-normal h-10">
+                      {form.contact_name || <span className="text-muted-foreground">Select contact...</span>}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[240px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search contacts..." />
+                      <CommandList>
+                        <CommandEmpty>No contact found.</CommandEmpty>
+                        {unifiedContacts.map(c => (
+                          <CommandItem
+                            key={c.id}
+                            value={`${c.name} ${c.company_name ?? ""} ${c.email ?? ""}`}
+                            onSelect={() => {
+                              setForm(p => ({
+                                ...p,
+                                contact_name: c.name,
+                                contact_company: c.company_name ?? "",
+                                contact_email: c.email ?? "",
+                                contact_phone: c.phone ?? "",
+                              }));
+                              setContactPopoverOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", form.contact_name === c.name ? "opacity-100" : "opacity-0")} />
+                            <div className="flex flex-col">
+                              <span className="text-sm">{c.name}</span>
+                              {c.company_name && <span className="text-xs text-muted-foreground">{c.company_name}</span>}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <div><Label>Company</Label><Input value={form.contact_company} onChange={e => setForm(p => ({ ...p, contact_company: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-2">
