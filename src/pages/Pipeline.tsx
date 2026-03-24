@@ -116,6 +116,7 @@ function getDateCutoff(rangeId: string): Date | null {
 
 export default function Pipeline() {
   usePipelineRealtime();
+  const { byLeadId: assigneesByLeadId } = useLeadAssignees();
   const [searchQuery, setSearchQuery] = useState("");
   // Stage group filter — default shows Sales + Estimation + Quotation + Operations (hides Terminal)
   const [activeGroups, setActiveGroups] = useState<Set<string>>(() => new Set(["sales", "estimation", "quotation", "operations"]));
