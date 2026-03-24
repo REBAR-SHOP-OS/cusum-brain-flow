@@ -88,6 +88,7 @@ import AppBuilder from "./pages/AppBuilder";
 import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspace";
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
+const SynologyNAS = React.lazy(() => import("./pages/SynologyNAS"));
 
 // Sales Department (new isolated workspace)
 const SalesHub = React.lazy(() => import("./pages/sales/SalesHub"));
