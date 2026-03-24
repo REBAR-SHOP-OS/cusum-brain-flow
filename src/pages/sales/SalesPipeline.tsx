@@ -22,11 +22,13 @@ import type { Tables } from "@/integrations/supabase/types";
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
 
-// Stage groups for filter chips
+// Stage groups for filter chips — matches main Pipeline
 const SALES_STAGE_GROUPS = [
-  { label: "Active", ids: ["new", "contacted", "qualified", "estimating"], color: "bg-blue-500" },
-  { label: "Quotes", ids: ["quote_sent", "follow_up"], color: "bg-purple-500" },
-  { label: "Closed", ids: ["won", "lost"], color: "bg-emerald-500" },
+  { label: "Sales", ids: ["prospecting", "new", "telephonic_enquiries", "qualified", "hot_enquiries", "rfi", "addendums"], color: "bg-blue-500" },
+  { label: "Estimation", ids: ["estimation_ben", "estimation_karthick", "estimation_others", "estimation_partha", "qc_ben"], color: "bg-amber-500" },
+  { label: "Quotation", ids: ["quotation_priority", "quotation_bids"], color: "bg-rose-500" },
+  { label: "Operations", ids: ["shop_drawing", "shop_drawing_approval", "fabrication_in_shop", "ready_to_dispatch", "out_for_delivery", "delivered_pickup_done"], color: "bg-violet-500" },
+  { label: "Terminal", ids: ["won", "lost", "loss", "merged", "no_rebars_out_of_scope", "temp_ir_vam", "migration_others", "dreamers", "archived_orphan"], color: "bg-zinc-500" },
 ] as const;
 
 // Adapter: SalesLead → LeadWithCustomer shape for PipelineBoard/LeadCard
