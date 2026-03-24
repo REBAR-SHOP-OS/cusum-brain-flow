@@ -308,6 +308,31 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!channelToDelete} onOpenChange={() => setChannelToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{channelToDelete?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this channel and all its messages. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (channelToDelete && onDeleteChannel) {
+                  onDeleteChannel(channelToDelete.id);
+                }
+                setChannelToDelete(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
