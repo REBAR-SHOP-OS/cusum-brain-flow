@@ -1,26 +1,33 @@
 
 
-## Use Same Pipeline Columns in Sales Pipeline
+## Add Karthick as External Estimator with Restricted Sales Pipeline Access
 
 ### What
-Replace the 8 Sales Pipeline stages (New, Contacted, Qualified, Estimating, Quote Sent, Follow Up, Won, Lost) with the exact same 26 stages from the main Pipeline (`PIPELINE_STAGES`).
+Add `info@mavericksrebar.com` (Karthick) as an external user who can only access the Sales Pipeline (`/sales/pipeline`) and only see the **Estimation - Karthick** column. He should not see any other columns or other Sales sub-pages.
 
 ### Changes
 
-**File**: `src/hooks/useSalesLeads.ts`
-- Replace `SALES_STAGES` array with the same stages as `PIPELINE_STAGES` from `src/pages/Pipeline.tsx` (all 26 stages: Prospecting, New, Telephonic Enquiries, QC - Ben, Estimation - Ben, ... through Archived / Orphan)
-- Keep hex color format but map from the tailwind classes
+**File**: `src/components/auth/RoleGuard.tsx`
+- Add `/sales/pipeline` to `EXTERNAL_OFFICE_ALLOWED` so office-role external users (Karthick) can access the Sales Pipeline route
 
 **File**: `src/pages/sales/SalesPipeline.tsx`
-- Update `SALES_STAGE_GROUPS` to match the main Pipeline's `STAGE_GROUPS` (Sales, Estimation, Quotation, Production, Closed)
+- Import `useAuth` to get the current user's email
+- Add a stage filter: if the user's email is `info@mavericksrebar.com`, override `visibleStageIds` to only show `["estimation_karthick"]`
+- Hide the `+ New` button and stage group filter chips for this user (read-only estimator view)
 
-**File**: `src/components/sales/SalesLeadDrawer.tsx`
-- No changes needed — it already imports `SALES_STAGES` dynamically
+**File**: `src/lib/accessPolicies.ts`
+- Add a new policy entry `externalEstimators` mapping emails to their allowed stages:
+  ```typescript
+  externalEstimators: {
+    "info@mavericksrebar.com": ["estimation_karthick"],
+  } as Record<string, string[]>,
+  ```
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/hooks/useSalesLeads.ts` | Replace `SALES_STAGES` with all 26 stages matching main Pipeline |
-| `src/pages/sales/SalesPipeline.tsx` | Update stage groups to match main Pipeline groups |
+| `src/lib/accessPolicies.ts` | Add `externalEstimators` policy map |
+| `src/components/auth/RoleGuard.tsx` | Add `/sales/pipeline` to external office allowed routes |
+| `src/pages/sales/SalesPipeline.tsx` | Filter visible stages for external estimators, hide create button |
 
