@@ -12,7 +12,7 @@ import { ContentActions } from "@/components/shared/ContentActions";
 
 export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function IntelligencePanel(_props, ref) {
   const { intelligencePanelOpen, setIntelligencePanelOpen } = useWorkspace();
-  const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream, deleteMessage } = useAdminChat();
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
