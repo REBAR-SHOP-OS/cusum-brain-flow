@@ -66,7 +66,7 @@ serve((req) =>
 
     // 4. Build email content
     const recordLink = `https://cusum-brain-flow.lovable.app/sales/pipeline?lead=${sales_lead_id}`;
-    const subject = `[Rebar.shop] Lead Update: ${lead.title}`;
+    const subject = `ERP | Rebar.shop | ${lead.title}`;
 
     let actionDesc = "";
     if (event_type === "stage_change") {
@@ -114,7 +114,8 @@ serve((req) =>
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
-      throw new Error("Failed to get Gmail access token");
+      log.error("Gmail token refresh failed. Google response:", JSON.stringify(tokenData));
+      throw new Error("Failed to get Gmail access token: " + (tokenData.error || "unknown"));
     }
 
     let sentCount = 0;
@@ -122,6 +123,7 @@ serve((req) =>
       try {
         // Build RFC 2822 email
         const rawEmail = [
+          `From: ai@rebar.shop`,
           `To: ${recipient.email}`,
           `Subject: ${subject}`,
           `Content-Type: text/plain; charset=UTF-8`,
