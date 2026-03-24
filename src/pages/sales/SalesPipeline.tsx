@@ -136,13 +136,28 @@ export default function SalesPipeline() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // For external estimators: filter leads to only those assigned to them
+  const effectiveLeads = useMemo(() => {
+    if (!isExternalEstimator || !myProfileId) return leads;
+    return leads.filter(l => {
+      const assignees = bySalesLeadId[l.id] ?? [];
+      return assignees.some(a => a.profile_id === myProfileId);
+    });
+  }, [leads, isExternalEstimator, myProfileId, bySalesLeadId]);
+
   // Determine visible stage IDs based on active group filter or external estimator restriction
   const visibleStageIds = useMemo(() => {
-    if (isExternalEstimator) return externalEstimatorStages;
+    if (isExternalEstimator) {
+      // Derive columns from the stages of assigned leads
+      const stageSet = new Set(effectiveLeads.map(l => l.stage));
+      // Also include the default assigned stages so columns always show
+      externalEstimatorStages.forEach(s => stageSet.add(s));
+      return [...stageSet];
+    }
     if (!activeGroup) return SALES_STAGES.map((s) => s.id);
     const group = SALES_STAGE_GROUPS.find((g) => g.label === activeGroup);
     return group ? [...group.ids] : SALES_STAGES.map((s) => s.id);
-  }, [activeGroup, isExternalEstimator, externalEstimatorStages]);
+  }, [activeGroup, isExternalEstimator, externalEstimatorStages, effectiveLeads]);
 
   const visibleStages = useMemo(
     () => PIPELINE_STAGES.filter((s) => visibleStageIds.includes(s.id)),
@@ -151,15 +166,16 @@ export default function SalesPipeline() {
 
   // Filter leads by search
   const filtered = useMemo(() => {
-    if (!search.trim()) return leads;
+    const source = isExternalEstimator ? effectiveLeads : leads;
+    if (!search.trim()) return source;
     const q = search.toLowerCase();
-    return leads.filter(l =>
+    return source.filter(l =>
       l.title.toLowerCase().includes(q) ||
       (l.contact_name || "").toLowerCase().includes(q) ||
       (l.contact_company || "").toLowerCase().includes(q) ||
       (l.contact_email || "").toLowerCase().includes(q)
     );
-  }, [leads, search]);
+  }, [leads, effectiveLeads, search, isExternalEstimator]);
 
   // Group adapted leads by stage
   const leadsByStage = useMemo(() => {
