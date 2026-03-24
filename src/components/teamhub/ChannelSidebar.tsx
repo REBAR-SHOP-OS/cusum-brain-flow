@@ -53,6 +53,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const { unreadSenderIds } = useUnreadSenders();
 
   const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "کانال رسمی شرکت");
+  const officialGroup = channels.filter((c) => c.channel_type === "group" && c.name === "گروه رسمی شرکت");
   const activeProfiles = profiles.filter((p) => 
     p.email?.endsWith("@rebar.shop") || p.email?.endsWith("@gmail.com")
   );
