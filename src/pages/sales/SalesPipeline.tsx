@@ -259,10 +259,13 @@ export default function SalesPipeline() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New Sales Lead</DialogTitle></DialogHeader>
           <div className="space-y-3">
+            {/* Title */}
             <div><Label>Title *</Label><Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Lead title" /></div>
+
+            {/* Contact Name + Company */}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label>Contact Name</Label>
@@ -307,16 +310,87 @@ export default function SalesPipeline() {
               </div>
               <div><Label>Company</Label><Input value={form.contact_company} onChange={e => setForm(p => ({ ...p, contact_company: e.target.value }))} /></div>
             </div>
+
+            {/* Email + Phone */}
             <div className="grid grid-cols-2 gap-2">
               <div><Label>Email</Label><Input type="email" value={form.contact_email} onChange={e => setForm(p => ({ ...p, contact_email: e.target.value }))} /></div>
               <div><Label>Phone</Label><Input value={form.contact_phone} onChange={e => setForm(p => ({ ...p, contact_phone: e.target.value }))} /></div>
             </div>
+
+            {/* Stage + Priority */}
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Expected Value</Label><Input type="number" value={form.expected_value} onChange={e => setForm(p => ({ ...p, expected_value: e.target.value }))} /></div>
-              <div><Label>Source</Label><Input value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="e.g. Website, Referral" /></div>
+              <div>
+                <Label>Stage</Label>
+                <Select value={form.stage} onValueChange={v => setForm(p => ({ ...p, stage: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SALES_STAGES.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Priority</Label>
+                <Select value={form.priority} onValueChange={v => setForm(p => ({ ...p, priority: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div><Label>Notes</Label><Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} /></div>
-            <Button onClick={handleCreate} className="w-full" disabled={!form.title.trim()}>Create Lead</Button>
+
+            {/* Lead Type + Source */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Lead Type</Label>
+                <Select value={form.lead_type} onValueChange={v => setForm(p => ({ ...p, lead_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="opportunity">Opportunity</SelectItem>
+                    <SelectItem value="lead">Lead</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Source</Label>
+                <Select value={form.source || ""} onValueChange={v => setForm(p => ({ ...p, source: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
+                  <SelectContent>
+                    {SOURCES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Expected Value + Probability */}
+            <div className="grid grid-cols-2 gap-2">
+              <div><Label>Expected Value</Label><Input type="number" value={form.expected_value} onChange={e => setForm(p => ({ ...p, expected_value: e.target.value }))} placeholder="$0" /></div>
+              <div><Label>Probability (%)</Label><Input type="number" min={0} max={100} value={form.probability} onChange={e => setForm(p => ({ ...p, probability: e.target.value }))} placeholder="0-100" /></div>
+            </div>
+
+            {/* Expected Close Date */}
+            <div><Label>Expected Close Date</Label><Input type="date" value={form.expected_close_date} onChange={e => setForm(p => ({ ...p, expected_close_date: e.target.value }))} /></div>
+
+            {/* Assigned To + Territory */}
+            <div className="grid grid-cols-2 gap-2">
+              <div><Label>Assigned To</Label><Input value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Team member" /></div>
+              <div><Label>Territory</Label><Input value={form.territory} onChange={e => setForm(p => ({ ...p, territory: e.target.value }))} placeholder="Region" /></div>
+            </div>
+
+            {/* Description */}
+            <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Lead description..." /></div>
+
+            {/* Notes */}
+            <div><Label>Notes</Label><Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Internal notes..." /></div>
+
+            {/* Footer */}
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => { setCreateOpen(false); resetForm(); }}>Cancel</Button>
+              <Button className="flex-1" onClick={handleCreate} disabled={!form.title.trim()}>Create Lead</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
