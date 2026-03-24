@@ -27,6 +27,8 @@ import {
   Trash2,
   Reply,
   Forward,
+  Mic,
+  Square,
 } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
