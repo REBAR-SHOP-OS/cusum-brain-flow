@@ -20,10 +20,19 @@ Deno.serve(async (req) => {
     // Helper: login and get sid
     async function getSid(): Promise<string> {
       const loginUrl = `${SYNOLOGY_URL}/webapi/auth.cgi?api=SYNO.API.Auth&version=3&method=login&account=${encodeURIComponent(SYNOLOGY_USERNAME!)}&passwd=${encodeURIComponent(SYNOLOGY_PASSWORD!)}&session=FileStation&format=sid`;
-      const res = await fetch(loginUrl, {
-        // Skip SSL verification for self-signed certs common on NAS
-      });
-      const data = await res.json();
+      console.log("Attempting DSM login to:", SYNOLOGY_URL);
+      const res = await fetch(loginUrl);
+      const text = await res.text();
+      console.log("DSM login response status:", res.status, "body preview:", text.substring(0, 200));
+      
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // If we get HTML back, the URL might be wrong or NAS is returning a login page
+        throw new Error(`DSM returned non-JSON response (status ${res.status}). Check SYNOLOGY_URL is correct and includes the port (e.g. https://RSIC.synology.me:5001)`);
+      }
+      
       if (!data.success) {
         throw new Error(`DSM login failed (error code: ${data.error?.code || "unknown"})`);
       }
