@@ -110,7 +110,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         assigned_to: lead.assigned_to || "",
         territory: (lead as any).territory || "",
       });
-    } else {
+      setSelectedAssignees([]);
       form.reset({
         title: "",
         description: "",
