@@ -366,9 +366,16 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Assigned To</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Rep name or ID..." {...field} />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {activeProfiles.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

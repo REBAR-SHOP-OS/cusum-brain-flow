@@ -377,7 +377,16 @@ export default function SalesPipeline() {
 
             {/* Assigned To + Territory */}
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Assigned To</Label><Input value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Team member" /></div>
+              <div><Label>Assigned To</Label>
+                <Select value={form.assigned_to} onValueChange={v => setForm(p => ({ ...p, assigned_to: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
+                  <SelectContent>
+                    {activeProfiles.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div><Label>Territory</Label><Input value={form.territory} onChange={e => setForm(p => ({ ...p, territory: e.target.value }))} placeholder="Region" /></div>
             </div>
 
