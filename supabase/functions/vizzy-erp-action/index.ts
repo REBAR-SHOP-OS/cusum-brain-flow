@@ -384,14 +384,16 @@ Deno.serve(async (req) => {
               actions.push({ id: fr.id, action_taken: "machine_reset" });
             } else if (area.includes("order") || area.includes("lead") || area.includes("delivery")) {
               // Log as human task for manual review
-              await supabaseAdmin.from("human_tasks").insert({
-                company_id: companyId,
-                title: `Fix request: ${fr.description?.slice(0, 100)}`,
-                description: `Auto-created from fix request. Area: ${fr.affected_area}. Original: ${fr.description}`,
-                status: "open",
-                priority: "high",
-                created_by: userId,
-              }).catch(() => {});
+              try {
+                await supabaseAdmin.from("human_tasks").insert({
+                  company_id: companyId,
+                  title: `Fix request: ${fr.description?.slice(0, 100)}`,
+                  description: `Auto-created from fix request. Area: ${fr.affected_area}. Original: ${fr.description}`,
+                  status: "open",
+                  priority: "high",
+                  created_by: userId,
+                });
+              } catch { /* ignore */ }
               actions.push({ id: fr.id, action_taken: "human_task_created" });
             } else {
               // Unknown area — create human task
