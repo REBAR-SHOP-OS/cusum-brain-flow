@@ -1,27 +1,32 @@
 
 
-## Mirror Radin's Feedback Tasks to Zahra's Column
+## Add Vendors to Mentions & Filter Activities for 3rd Party Users
 
 ### Problem
-Feedback tasks (`source: "screenshot_feedback"`) assigned to Radin only appear in Radin's column. Zahra (delegate) can manage them but has to look in Radin's column. The user wants these feedback tasks to also appear in Zahra's column so she can see and generate fixes from her own view.
+1. The `@` mention menu only shows `@rebar.shop` users — 3rd party assignees (vendors) on the lead cannot be mentioned
+2. External estimators (3rd party) can see ALL notes/activities on a lead — they should only see activities where they are explicitly `@mentioned`
 
 ### Changes
 
-**File**: `src/pages/Tasks.tsx`
+**File: `src/components/chat/MentionMenu.tsx`**
+- Accept optional `extraUsers` prop: `{ id: string; label: string; subtitle?: string }[]`
+- After loading `@rebar.shop` profiles, append `extraUsers` to the items list (filtered by `mentionFilter`)
+- This allows the chatter to pass lead assignees who are non-rebar users
 
-1. **Mirror feedback tasks to Zahra's column** (after line 533, in the task grouping loop):
-   - After grouping tasks by employee, iterate through Radin's feedback tasks (`source === "screenshot_feedback"` or `source === "feedback_verification"`)
-   - Push copies of those tasks into Zahra's column in `tasksByEmployee`
-   - This way Zahra sees all of Radin's feedback tasks directly in her column
+**File: `src/components/sales/SalesLeadChatter.tsx`**
+- Accept new props: `isExternalEstimator?: boolean`, `currentUserEmail?: string`, `assignees?: { profile_id: string; full_name: string }[]`
+- Pass non-`@rebar.shop` assignees as `extraUsers` to `MentionMenu`
+- When `isExternalEstimator` is true, filter `activities` client-side to only show items where `body` or `subject` contains `@CurrentUserName` (matched by email/name from assignees list)
+- Also always show activities created by the current user themselves
 
-2. **No permission changes needed** — the existing `canDeleteOrFix` function already grants Zahra access via `isDelegateFor(task.assigned_to)`, so "Generate Fix", "Delete", "Approve", and "Reopen with Issue" all work for her on Radin's tasks.
+**File: `src/components/sales/SalesLeadDrawer.tsx`**
+- Pass `isExternalEstimator`, `assignees`, and current user email to `SalesLeadChatter`
 
-### Result
-- Zahra sees all feedback tasks in her own column (mirrored from Radin)
-- She can open any feedback task and click "Generate Fix"
-- Original tasks remain in Radin's column too
+### Files Changed
 
 | File | Change |
 |---|---|
-| `src/pages/Tasks.tsx` | Add feedback task mirroring from Radin's column to Zahra's column |
+| `src/components/chat/MentionMenu.tsx` | Add `extraUsers` prop, merge with rebar profiles |
+| `src/components/sales/SalesLeadChatter.tsx` | Pass vendor assignees to MentionMenu; filter activities for 3rd party to only @mentioned ones |
+| `src/components/sales/SalesLeadDrawer.tsx` | Forward `isExternalEstimator`, `assignees`, user email to chatter |
 
