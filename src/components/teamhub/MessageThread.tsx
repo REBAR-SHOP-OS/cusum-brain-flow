@@ -920,6 +920,9 @@ export function MessageThread({
                     isSupported={speech.isSupported}
                     onToggle={speech.isListening ? speech.stop : speech.start}
                     disabled={isSending}
+                    lang={voiceLang}
+                    onLangChange={(l) => { if (speech.isListening) speech.stop(); setVoiceLang(l); }}
+                    languages={LANG_LABELS}
                   />
                   <button
                     type="button"
