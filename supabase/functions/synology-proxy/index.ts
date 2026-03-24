@@ -105,9 +105,46 @@ async function resolveQuickConnect(qcId: string): Promise<QuickConnectInfo> {
  * Supports both direct URLs (https://...) and QuickConnect IDs (e.g. RSI1).
  */
 async function getDsmBaseUrl(synologyUrl: string): Promise<string> {
-  // If it already looks like a full URL with port, use it directly
+  // If it already looks like a full URL with port, try it directly (with HTTP fallback)
   if (synologyUrl.match(/^https?:\/\/.+:\d+/)) {
-    return synologyUrl.replace(/\/+$/, "");
+    const directUrl = synologyUrl.replace(/\/+$/, "");
+    
+    // Try the URL as-is first
+    try {
+      const testRes = await fetch(`${directUrl}/webapi/entry.cgi?api=SYNO.API.Info&version=1&method=query`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      const text = await testRes.text();
+      if (text.trim().startsWith("{")) {
+        console.log(`[DSM] Direct URL works: ${directUrl}`);
+        return directUrl;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`[DSM] Direct URL failed (${directUrl}): ${msg}`);
+    }
+
+    // If HTTPS failed, try HTTP fallback on port 5000
+    if (directUrl.startsWith("https://")) {
+      const httpFallback = directUrl.replace("https://", "http://").replace(/:5001\b/, ":5000");
+      try {
+        const testRes = await fetch(`${httpFallback}/webapi/entry.cgi?api=SYNO.API.Info&version=1&method=query`, {
+          signal: AbortSignal.timeout(10000),
+        });
+        const text = await testRes.text();
+        if (text.trim().startsWith("{")) {
+          console.log(`[DSM] HTTP fallback works: ${httpFallback}`);
+          return httpFallback;
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.log(`[DSM] HTTP fallback also failed (${httpFallback}): ${msg}`);
+      }
+    }
+
+    // Return original URL anyway, let caller handle the error
+    console.log(`[DSM] Using original URL despite failures: ${directUrl}`);
+    return directUrl;
   }
 
   // Extract QuickConnect ID from various formats:
