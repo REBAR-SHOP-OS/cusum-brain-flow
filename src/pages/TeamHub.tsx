@@ -67,6 +67,9 @@ export default function TeamHub() {
   const activeChannelId = resolvedChannelId;
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
+  const { messages, isLoading: msgsLoading } = useTeamMessages(activeChannelId);
+  const { meetings: activeMeetings } = useActiveMeetings(activeChannelId);
+
   const [activeLang, setActiveLang] = useState<string | null>(null);
   const myLang = activeLang || myProfile?.preferred_language || "en";
 
