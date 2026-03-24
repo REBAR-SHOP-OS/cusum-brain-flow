@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ProfileEditDialog } from "./ProfileEditDialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [previewProfile, setPreviewProfile] = useState<Profile | null>(null);
   const { unreadSenderIds } = useUnreadSenders();
 
   const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
@@ -214,7 +216,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
                 onClick={() => handleClickMember(p.id, p.full_name)}
                 className="w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer text-left"
               >
-                <div className="relative">
+                <div className="relative cursor-pointer" onClick={(e) => { e.stopPropagation(); setPreviewProfile(p); }}>
                   <Avatar className="w-6 h-6">
                     <AvatarImage src={p.avatar_url || ""} />
                     <AvatarFallback className={cn("text-[9px] font-bold text-white", getAvatarColor(p.full_name))}>
@@ -245,6 +247,21 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
           profile={myProfile}
         />
       )}
+
+      <Dialog open={!!previewProfile} onOpenChange={() => setPreviewProfile(null)}>
+        <DialogContent className="max-w-xs flex flex-col items-center gap-4 p-6">
+          <Avatar className="w-40 h-40 border-2 border-border">
+            <AvatarImage src={previewProfile?.avatar_url || ""} className="object-cover" />
+            <AvatarFallback className={cn("text-4xl font-bold text-white", getAvatarColor(previewProfile?.full_name || ""))}>
+              {getInitials(previewProfile?.full_name || "?")}
+            </AvatarFallback>
+          </Avatar>
+          <h3 className="text-lg font-semibold text-foreground">{previewProfile?.full_name}</h3>
+          {previewProfile?.title && (
+            <p className="text-sm text-muted-foreground">{previewProfile.title}</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
