@@ -17,6 +17,7 @@ interface ForwardMessageDialogProps {
   onForward: (targetChannelId: string, msg: TeamMessage) => void;
   profiles?: Profile[];
   onForwardToMember?: (profileId: string, msg: TeamMessage) => void;
+  currentProfileId?: string;
 }
 
 export function ForwardMessageDialog({
