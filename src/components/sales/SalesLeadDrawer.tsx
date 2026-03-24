@@ -90,17 +90,18 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
               <Clock className="w-3 h-3" />
               {age} old
             </Badge>
-            {/* Priority selector inline */}
-            <Select value={lead.priority || "medium"} onValueChange={(v) => onUpdate({ id: lead.id, priority: v })}>
-              <SelectTrigger className="h-5 w-auto text-[10px] border-none bg-transparent px-1 gap-0.5">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRIORITIES.map((p) => (
-                  <SelectItem key={p} value={p} className="capitalize text-xs">{p}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!isExternalEstimator && (
+              <Select value={lead.priority || "medium"} onValueChange={(v) => onUpdate({ id: lead.id, priority: v })}>
+                <SelectTrigger className="h-5 w-auto text-[10px] border-none bg-transparent px-1 gap-0.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORITIES.map((p) => (
+                    <SelectItem key={p} value={p} className="capitalize text-xs">{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* ── Stage Ribbon — Odoo breadcrumb style ── */}
