@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { useProfiles } from "@/hooks/useProfiles";
 import SalesSearchBar from "@/components/sales/SalesSearchBar";
 import SalesLeadDrawer from "@/components/sales/SalesLeadDrawer";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
@@ -79,6 +80,8 @@ const PIPELINE_STAGES = SALES_STAGES.map((s) => ({
 export default function SalesPipeline() {
   const { leads, isLoading, createLead, updateLead, deleteLead } = useSalesLeads();
   const { contacts: unifiedContacts } = useSalesContacts();
+  const { profiles } = useProfiles();
+  const activeProfiles = (profiles ?? []).filter(p => p.is_active);
   const [createOpen, setCreateOpen] = useState(false);
   const [drawerLead, setDrawerLead] = useState<SalesLead | null>(null);
   const [search, setSearch] = useState("");
@@ -376,7 +379,16 @@ export default function SalesPipeline() {
 
             {/* Assigned To + Territory */}
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Assigned To</Label><Input value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} placeholder="Team member" /></div>
+              <div><Label>Assigned To</Label>
+                <Select value={form.assigned_to} onValueChange={v => setForm(p => ({ ...p, assigned_to: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
+                  <SelectContent>
+                    {activeProfiles.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div><Label>Territory</Label><Input value={form.territory} onChange={e => setForm(p => ({ ...p, territory: e.target.value }))} placeholder="Region" /></div>
             </div>
 

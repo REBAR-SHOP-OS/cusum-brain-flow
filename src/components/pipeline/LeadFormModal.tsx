@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useProfiles } from "@/hooks/useProfiles";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -57,6 +58,9 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
       return (data as unknown) as Array<{customer_id: string; display_name: string; company_name: string | null}>;
     },
   });
+
+  const { profiles } = useProfiles();
+  const activeProfiles = (profiles ?? []).filter(p => p.is_active);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -365,9 +369,16 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Assigned To</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Rep name or ID..." {...field} />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {activeProfiles.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
