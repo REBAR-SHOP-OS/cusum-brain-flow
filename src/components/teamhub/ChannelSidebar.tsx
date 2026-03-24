@@ -116,26 +116,10 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
       {/* Scrollable Content */}
       <div className="flex-1 overflow-auto py-1 px-2">
         {/* Channels Section */}
-        <div className="flex items-center justify-between pr-1">
-          <button
-            onClick={() => setChannelsOpen(!channelsOpen)}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {channelsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <div className="flex items-center pr-1">
+          <span className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground">
             Channels
-            <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0 h-4">
-              {groupChannels.length}
-            </Badge>
-          </button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onCreateChannel}
-            title="Create channel"
-          >
-            <Plus className="w-3.5 h-3.5 text-muted-foreground" />
-          </Button>
+          </span>
         </div>
 
         {channelsOpen && (
