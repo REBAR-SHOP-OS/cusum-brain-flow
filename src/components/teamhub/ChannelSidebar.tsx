@@ -29,6 +29,7 @@ interface ChannelSidebarProps {
   onCreateChannel: () => void;
   onClickMember: (profileId: string, name: string) => void;
   onClose?: () => void;
+  myProfile?: Profile;
 }
 
 function getInitials(name: string) {
