@@ -478,6 +478,7 @@ export function MessageThread({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {headerExtra}
           <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" onClick={onStartMeeting}>
             <Video className="w-4 h-4 text-muted-foreground" />
           </Button>
