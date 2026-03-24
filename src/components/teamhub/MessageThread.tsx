@@ -133,6 +133,11 @@ export function MessageThread({
   readOnly = false,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
+  const [replyTo, setReplyTo] = useState<TeamMessage | null>(null);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionStart, setMentionStart] = useState(-1);
   const grammar = useGrammarCheck();
 
   const DELETE_ADMINS = ["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"];
