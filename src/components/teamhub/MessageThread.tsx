@@ -24,7 +24,7 @@ import {
   Image as ImageIcon,
   X,
   Download,
-  SpellCheck,
+  
   Trash2,
   Reply,
   Forward,
@@ -33,7 +33,7 @@ import {
   Square,
   ChevronDown,
 } from "lucide-react";
-import { useGrammarCheck } from "@/hooks/useGrammarCheck";
+
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
 import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -157,7 +157,7 @@ export function MessageThread({
   const [mentionFilter, setMentionFilter] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(-1);
-  const grammar = useGrammarCheck();
+  
 
   // Voice recorder
   const voiceRecorder = useVoiceRecorder();
@@ -920,22 +920,6 @@ export function MessageThread({
               <>
                 <div className="flex items-center gap-1">
                   <EmojiPicker onSelect={handleEmojiSelect} disabled={isSending} />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!input.trim()) return;
-                      const result = await grammar.check(input);
-                      if (result.changed) setInput(result.corrected);
-                    }}
-                    disabled={grammar.checking || !input.trim() || isSending}
-                    className={cn(
-                      "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
-                      (grammar.checking || !input.trim() || isSending) && "opacity-50 cursor-not-allowed"
-                    )}
-                    title="Check spelling"
-                  >
-                    {grammar.checking ? <Loader2 className="w-5 h-5 animate-spin" /> : <SpellCheck className="w-5 h-5" />}
-                  </button>
                   <VoiceInputButton
                     isListening={speech.isListening}
                     isSupported={speech.isSupported}
