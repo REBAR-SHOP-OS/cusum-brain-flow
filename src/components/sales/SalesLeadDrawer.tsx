@@ -53,6 +53,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
+  const [noteTakerOpen, setNoteTakerOpen] = useState(false);
   const [lostReason, setLostReason] = useState("");
 
   useEffect(() => {
