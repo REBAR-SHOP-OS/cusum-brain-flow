@@ -1,42 +1,28 @@
 
 
-## Transform "My Notes" into a Shared Team Chat
+## In-App Email Compose & Phone Transfer from Sales Lead Drawer
 
 ### Problem
-"My Notes" currently works as a personal notes system. The user wants it to be a shared chat space where all `@rebar.shop` users can post messages that persist — essentially another group channel.
-
-### Approach
-Instead of building a custom chat from scratch, create a dedicated database channel called "My Notes" (type `group`) and reuse the existing `MessageThread` component. This gives full chat capabilities (messages, attachments, mentions, etc.) for free.
+1. **Email**: Clicking the email icon opens the external mail client (`mailto:`). User wants it to open the in-app compose dialog instead.
+2. **Phone**: After calling, user wants to be able to transfer the call to their RingCentral mobile app. The Embeddable widget already supports transfer — but the widget needs to be shown after initiating the call.
 
 ### Changes
 
-**Database Migration** — Insert a "My Notes" channel:
-```sql
-INSERT INTO public.team_channels (name, channel_type, created_by)
-VALUES ('My Notes', 'group', (SELECT user_id FROM public.profiles WHERE email = 'radin@rebar.shop' LIMIT 1))
-ON CONFLICT DO NOTHING;
-```
+**File**: `src/components/inbox/ComposeEmailDialog.tsx`
+- Add optional props: `initialTo?: string`, `initialSubject?: string`
+- Use them to pre-fill the `to` and `subject` fields via `useEffect` when dialog opens
 
-**File**: `src/components/teamhub/ChannelSidebar.tsx`
-- Instead of firing `onSelect("__my_notes__")`, find the "My Notes" channel from the channels list and select its real channel ID
-- Keep the `StickyNote` icon and position in the sidebar
+**File**: `src/components/sales/SalesLeadDrawer.tsx`
+1. **Email button**: Replace `window.location.href = mailto:...` with opening `ComposeEmailDialog` inside the drawer
+   - Add state `composeOpen` to control the dialog
+   - Pre-fill `initialTo` with `lead.contact_email` and `initialSubject` with lead title
+   - Import and render `ComposeEmailDialog`
 
-**File**: `src/pages/TeamHub.tsx`
-- Remove the `isNotesView` / `__my_notes__` special case
-- "My Notes" channel will render via the normal `MessageThread` path since it's now a real channel
-- All `@rebar.shop` users can read and write (same as Official Group behavior)
-
-**File**: `src/components/teamhub/PersonalNotes.tsx`
-- No longer needed — can be kept but won't be rendered
-
-### Result
-- "My Notes" becomes a shared chat visible to all `@rebar.shop` users
-- Messages persist in the database like any other channel
-- Full chat features: attachments, mentions, voice messages, forwarding, etc.
+2. **Phone button**: After calling `makeCall()`, also call `showWidget()` to bring up the RingCentral Embeddable widget — which has built-in transfer, hold, mute, and forward-to-phone controls
+   - Already have `useRingCentralWidget` imported — just destructure `showWidget` alongside `makeCall`
 
 | File | Change |
 |---|---|
-| DB Migration | Create "My Notes" group channel |
-| `src/components/teamhub/ChannelSidebar.tsx` | Select real channel ID instead of `__my_notes__` magic string |
-| `src/pages/TeamHub.tsx` | Remove `isNotesView` special case |
+| `src/components/inbox/ComposeEmailDialog.tsx` | Add `initialTo` and `initialSubject` optional props |
+| `src/components/sales/SalesLeadDrawer.tsx` | Open in-app compose dialog for email; show RC widget after call for transfer |
 
