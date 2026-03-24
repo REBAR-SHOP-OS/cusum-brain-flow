@@ -246,7 +246,7 @@ export default function SalesPipeline() {
             new_stage: newStage,
             actor_name: "System",
           },
-        }).catch(() => {});
+        }).catch((err) => console.error("notify-lead-assignees error:", err));
       },
     });
   }, [updateLead, leads]);
