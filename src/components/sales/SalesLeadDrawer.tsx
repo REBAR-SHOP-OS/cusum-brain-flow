@@ -16,6 +16,7 @@ import {
   Clock, X, ClipboardList, User,
 } from "lucide-react";
 import { SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
+import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
