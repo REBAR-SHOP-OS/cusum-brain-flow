@@ -216,3 +216,49 @@ export function DetailedListView() {
     </div>
   );
 }
+
+function DeleteItemButton({ itemId, markNumber }: { itemId: string; markNumber: string | null }) {
+  const qc = useQueryClient();
+
+  const handleDelete = async () => {
+    const { data, error } = await supabase
+      .from("cut_plan_items")
+      .delete()
+      .eq("id", itemId)
+      .select();
+    if (error) {
+      toast.error("Permission denied", { description: error.message });
+      return;
+    }
+    if (!data || data.length === 0) {
+      toast.error("Permission denied", { description: "Item was not deleted — check your role." });
+      return;
+    }
+    toast.success(`Item ${markNumber || itemId.slice(0, 5)} deleted`);
+    qc.invalidateQueries({ queryKey: ["cut-plan-items"] });
+  };
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button className="text-muted-foreground hover:text-destructive transition-colors">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Item</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete item <strong>{markNumber || itemId.slice(0, 5)}</strong>? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
