@@ -96,21 +96,62 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
 
   // Shop Floor Tools
   if (agent === "shopfloor") {
-    tools.push({
-      type: "function" as const,
-      function: {
-        name: "update_machine_status",
-        description: "Update machine status.",
-        parameters: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            status: { type: "string", enum: ["idle", "running", "blocked", "down"] }
-          },
-          required: ["id", "status"]
+    tools.push(
+      {
+        type: "function" as const,
+        function: {
+          name: "update_machine_status",
+          description: "Update machine status.",
+          parameters: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              status: { type: "string", enum: ["idle", "running", "blocked", "down"] }
+            },
+            required: ["id", "status"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "get_production_report",
+          description: "Fetch today's production report: machine runs, pieces produced, operator activity, scrap. Use for daily summaries and 'what happened today' questions.",
+          parameters: { type: "object", properties: {}, required: [] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "get_work_orders",
+          description: "List work orders with status, priority, and order info. Use when asked about work orders, job status, or production queue.",
+          parameters: {
+            type: "object",
+            properties: {
+              status_filter: { type: "string", description: "Filter by status: queued, pending, in-progress, completed (default: all active)" },
+              limit: { type: "number", description: "Max results (default 30)" }
+            },
+            required: []
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "get_cut_plan_status",
+          description: "Show cut plan progress: items by phase (queued, cutting, bending, complete, clearance). Use for production tracking.",
+          parameters: { type: "object", properties: {}, required: [] }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "get_timeclock_summary",
+          description: "Show who is clocked in today, shift hours, breaks. Use for staffing and attendance questions.",
+          parameters: { type: "object", properties: {}, required: [] }
         }
       }
-    });
+    );
   }
 
   // Delivery Tools
