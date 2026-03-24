@@ -3,6 +3,7 @@ import { differenceInDays, differenceInHours, formatDistanceToNowStrict, differe
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import { LeadScoreBreakdown } from "./LeadScoreBreakdown";
+import { AssigneeAvatars } from "./AssigneeManager";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
