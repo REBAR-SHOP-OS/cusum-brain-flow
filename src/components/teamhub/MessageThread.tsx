@@ -129,6 +129,7 @@ export function MessageThread({
   onJoinMeeting,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
+  const grammar = useGrammarCheck();
   const { ensureSession } = useSessionGuard();
   const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
   const [pendingFiles, setPendingFiles] = useState<ChatAttachment[]>([]);
