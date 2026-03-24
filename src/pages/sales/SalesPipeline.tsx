@@ -121,12 +121,13 @@ export default function SalesPipeline() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Determine visible stage IDs based on active group filter
+  // Determine visible stage IDs based on active group filter or external estimator restriction
   const visibleStageIds = useMemo(() => {
+    if (isExternalEstimator) return externalEstimatorStages;
     if (!activeGroup) return SALES_STAGES.map((s) => s.id);
     const group = SALES_STAGE_GROUPS.find((g) => g.label === activeGroup);
     return group ? [...group.ids] : SALES_STAGES.map((s) => s.id);
-  }, [activeGroup]);
+  }, [activeGroup, isExternalEstimator, externalEstimatorStages]);
 
   const visibleStages = useMemo(
     () => PIPELINE_STAGES.filter((s) => visibleStageIds.includes(s.id)),
