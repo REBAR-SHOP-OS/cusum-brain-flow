@@ -692,6 +692,15 @@ export function MessageThread({
                         >
                           <Volume2 className="w-3.5 h-3.5" />
                         </button>
+                        {!readOnly && (
+                          <button
+                            onClick={() => { setReplyTo(msg); textareaRef.current?.focus(); }}
+                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                            title="Reply"
+                          >
+                            <Reply className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
                         {canDelete && (
                           <button
