@@ -221,9 +221,9 @@ export function CreateChannelDialog({
             {isCreating ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Hash className="w-3.5 h-3.5" />
+              <Icon className="w-3.5 h-3.5" />
             )}
-            Create Channel
+            Create {label}
           </Button>
         </DialogFooter>
       </DialogContent>

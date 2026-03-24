@@ -335,6 +335,7 @@ export default function TeamHub() {
         profiles={profiles}
         onCreateChannel={handleCreateChannel}
         isCreating={createChannelMutation.isPending}
+        mode={createDialogMode}
       />
       <StartMeetingDialog
         open={showMeetingDialog}

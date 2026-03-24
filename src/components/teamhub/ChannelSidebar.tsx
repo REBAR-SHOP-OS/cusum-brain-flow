@@ -176,13 +176,20 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
         </div>
 
         {/* Groups Section */}
-        <button
-          onClick={() => setGroupsOpen(!groupsOpen)}
-          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors mt-2"
-        >
-          {groupsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          Groups
-        </button>
+        <div className="flex items-center justify-between mt-2">
+          <button
+            onClick={() => setGroupsOpen(!groupsOpen)}
+            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {groupsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            Groups
+          </button>
+          {onCreateGroup && (
+            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-foreground mr-1" onClick={onCreateGroup}>
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
 
         {groupsOpen && (
           <div className="space-y-0.5 mb-3">
