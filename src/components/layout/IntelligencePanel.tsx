@@ -12,7 +12,7 @@ import { ContentActions } from "@/components/shared/ContentActions";
 
 export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function IntelligencePanel(_props, ref) {
   const { intelligencePanelOpen, setIntelligencePanelOpen } = useWorkspace();
-  const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream, deleteMessage } = useAdminChat();
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -78,12 +78,19 @@ export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function Inte
             <div
               key={msg.id}
               className={cn(
-                "rounded-lg px-3 py-2 text-xs max-w-[95%]",
+                "group/msg relative rounded-lg px-3 py-2 text-xs max-w-[95%]",
                 msg.role === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
                   : "mr-auto bg-muted text-foreground"
               )}
             >
+              <button
+                onClick={() => deleteMessage(msg.id)}
+                className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+                title="Delete"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
               {msg.role === "assistant" ? (
                 <RichMarkdown content={msg.content} className="text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_p]:text-xs" />
               ) : (

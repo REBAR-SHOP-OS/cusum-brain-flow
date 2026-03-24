@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus, Eye, Archive } from "lucide-react";
+import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus, Eye, Archive, SpellCheck } from "lucide-react";
+import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -42,7 +43,8 @@ interface WebsiteChatProps {
 
 export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "normal", onChatModeChange }: WebsiteChatProps) {
   const chat = useAdminChat(`/website`);
-  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream } = chat;
+  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream, deleteMessage } = chat;
+  const grammar = useGrammarCheck();
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -274,17 +276,23 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
             <div
               key={msg.id}
               className={cn(
-                "rounded-xl px-3 py-2 text-sm max-w-[85%] overflow-hidden min-w-0 [overflow-wrap:anywhere] [word-break:break-word]",
+                "group/msg relative rounded-xl px-3 py-2 text-sm max-w-[85%] overflow-hidden min-w-0 [overflow-wrap:anywhere] [word-break:break-word]",
                 msg.role === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
                   : "mr-auto bg-muted text-foreground"
               )}
             >
+              <button
+                onClick={() => deleteMessage(msg.id)}
+                className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+                title="Delete"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
               {msg.role === "assistant" ? (
                 <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_p]:[overflow-wrap:anywhere] [&_*]:max-w-full [&_a]:break-all" />
               ) : (
                 <p className="whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
-                  {/* Strip the context prefix from display */}
                   {msg.content.replace(/^\[Currently viewing:.*?\]\n/, "")}
                 </p>
               )}
@@ -408,6 +416,20 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
             rows={1}
             disabled={isStreaming || !!pendingAction || isUploading}
           />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-9 w-9 rounded-lg shrink-0"
+            onClick={async () => {
+              if (!input.trim()) return;
+              const result = await grammar.check(input);
+              if (result.changed) setInput(result.corrected);
+            }}
+            disabled={grammar.checking || !input.trim() || isStreaming || !!pendingAction}
+            title="Check spelling"
+          >
+            {grammar.checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <SpellCheck className="w-4 h-4" />}
+          </Button>
           {isStreaming ? (
             <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
               <Square className="w-4 h-4" />

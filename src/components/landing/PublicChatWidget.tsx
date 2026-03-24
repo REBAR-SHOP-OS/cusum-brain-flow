@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { MessageCircle, X, Send, Loader2 } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Trash2, SpellCheck } from "lucide-react";
+import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,6 +21,8 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
+  const grammar = useGrammarCheck();
+  const deleteMessage = useCallback((id: string) => setMessages((prev) => prev.filter((m) => m.id !== id)), []);
   const [isStreaming, setIsStreaming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -218,10 +221,17 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
                 <div
                   key={msg.id}
                   className={cn(
-                    "max-w-[85%] min-w-0",
+                    "group/msg relative max-w-[85%] min-w-0",
                     msg.role === "user" ? "ml-auto" : "mr-auto"
                   )}
                 >
+                  <button
+                    onClick={() => deleteMessage(msg.id)}
+                    className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
                   <div
                     className={cn(
                       "rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed break-words min-w-0 [overflow-wrap:anywhere]",
@@ -263,6 +273,19 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
                 rows={1}
                 disabled={isStreaming}
               />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!input.trim()) return;
+                  const result = await grammar.check(input);
+                  if (result.changed) setInput(result.corrected);
+                }}
+                disabled={grammar.checking || !input.trim() || isStreaming}
+                title="Check spelling"
+                className="h-10 w-10 p-0 shrink-0 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {grammar.checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <SpellCheck className="w-4 h-4" />}
+              </button>
               <Button
                 size="sm"
                 className="h-10 w-10 p-0 shrink-0 rounded-xl"

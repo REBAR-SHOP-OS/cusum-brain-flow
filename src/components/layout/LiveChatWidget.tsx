@@ -1,6 +1,7 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, SpellCheck } from "lucide-react";
+import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
@@ -17,7 +18,8 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
     return () => window.removeEventListener("toggle-live-chat", handler);
   }, []);
   const [input, setInput] = useState("");
-  const { messages, isStreaming, sendMessage, clearChat, cancelStream, pendingAction, confirmAction, cancelAction } = useAdminChat();
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream, pendingAction, confirmAction, cancelAction, deleteMessage } = useAdminChat();
+  const grammar = useGrammarCheck();
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -86,12 +88,19 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
                 <div
                   key={msg.id}
                   className={cn(
-                    "rounded-xl px-3 py-2 text-xs max-w-[90%]",
+                    "group/msg relative rounded-xl px-3 py-2 text-xs max-w-[90%]",
                     msg.role === "user"
                       ? "ml-auto bg-primary text-primary-foreground"
                       : "mr-auto bg-muted text-foreground"
                   )}
                 >
+                  <button
+                    onClick={() => deleteMessage(msg.id)}
+                    className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
                   {msg.role === "assistant" ? (
                     <RichMarkdown content={msg.content} className="text-xs [&_p]:text-xs" />
                   ) : (
@@ -144,6 +153,19 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
                 rows={1}
                 disabled={isStreaming || !!pendingAction}
               />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!input.trim()) return;
+                  const result = await grammar.check(input);
+                  if (result.changed) setInput(result.corrected);
+                }}
+                disabled={grammar.checking || !input.trim() || isStreaming}
+                title="Check spelling"
+                className="h-9 w-9 p-0 shrink-0 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {grammar.checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <SpellCheck className="w-3.5 h-3.5" />}
+              </button>
               {isStreaming ? (
                 <Button size="sm" variant="destructive" className="h-9 w-9 p-0 shrink-0 rounded-lg" onClick={cancelStream}>
                   <Square className="w-3 h-3" />

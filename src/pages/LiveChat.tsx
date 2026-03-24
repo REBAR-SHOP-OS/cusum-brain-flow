@@ -3,7 +3,7 @@ import { AnimatePresence } from "framer-motion";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router-dom";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle, Mic } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle, Mic, SpellCheck } from "lucide-react";
 import { VizzyVoiceChat } from "@/components/vizzy/VizzyVoiceChat";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ import { SlashCommandMenu, SlashCommand } from "@/components/chat/SlashCommandMe
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
+import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -57,7 +58,8 @@ export default function LiveChat() {
   }, [widgetMakeCall]);
 
   const chat = useAdminChat(undefined, handleBrowserAction);
-  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream } = chat;
+  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream, deleteMessage } = chat;
+  const grammar = useGrammarCheck();
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
@@ -292,12 +294,19 @@ export default function LiveChat() {
               <div
                 key={msg.id}
                 className={cn(
-                  "rounded-2xl px-4 py-3 text-sm max-w-[85%]",
+                  "group/msg relative rounded-2xl px-4 py-3 text-sm max-w-[85%]",
                   msg.role === "user"
                     ? "ml-auto bg-primary text-primary-foreground"
                     : "mr-auto bg-muted text-foreground"
                 )}
               >
+                <button
+                  onClick={() => deleteMessage(msg.id)}
+                  className="absolute -top-2 -right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center shadow-sm hover:scale-110"
+                  title="Delete message"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
                 {msg.role === "assistant" ? (
                   <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm" />
                 ) : (
@@ -449,6 +458,27 @@ export default function LiveChat() {
                 </Tooltip>
 
                 <div className="flex-1" />
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!input.trim()) return;
+                        const result = await grammar.check(input);
+                        if (result.changed) setInput(result.corrected);
+                      }}
+                      disabled={grammar.checking || !input.trim() || isStreaming}
+                      className={cn(
+                        "p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
+                    >
+                      {grammar.checking ? <Loader2 className="w-5 h-5 animate-spin" /> : <SpellCheck className="w-5 h-5" />}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Check spelling</TooltipContent>
+                </Tooltip>
 
                 {isStreaming ? (
                   <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream} aria-label="Stop generating">
