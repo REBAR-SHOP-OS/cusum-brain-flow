@@ -218,6 +218,15 @@ export default function SalesPipeline() {
       assigned_to: form.assigned_to || null,
       description: form.description || null,
       notes: form.notes || null,
+    }, {
+      onSuccess: (data: any) => {
+        // Insert assignees into junction table
+        if (selectedAssignees.length > 0 && data?.id) {
+          selectedAssignees.forEach(profileId => {
+            addAssignee.mutate({ salesLeadId: data.id, profileId });
+          });
+        }
+      },
     });
     setCreateOpen(false);
     resetForm();
