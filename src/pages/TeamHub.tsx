@@ -350,6 +350,7 @@ export default function TeamHub() {
         onForward={handleForward}
         profiles={profiles}
         onForwardToMember={handleForwardToMember}
+        currentProfileId={myProfile?.id}
       />
     </div>
   );

@@ -17,6 +17,7 @@ interface ForwardMessageDialogProps {
   onForward: (targetChannelId: string, msg: TeamMessage) => void;
   profiles?: Profile[];
   onForwardToMember?: (profileId: string, msg: TeamMessage) => void;
+  currentProfileId?: string;
 }
 
 export function ForwardMessageDialog({
@@ -28,6 +29,7 @@ export function ForwardMessageDialog({
   onForward,
   profiles = [],
   onForwardToMember,
+  currentProfileId,
 }: ForwardMessageDialogProps) {
   const [search, setSearch] = useState("");
 
@@ -40,6 +42,7 @@ export function ForwardMessageDialog({
 
   const teamMembers = profiles
     .filter((p) => p.email?.endsWith("@rebar.shop"))
+    .filter((p) => p.id !== currentProfileId)
     .filter((p) => p.full_name?.toLowerCase().includes(search.toLowerCase()));
 
   // Build preview
