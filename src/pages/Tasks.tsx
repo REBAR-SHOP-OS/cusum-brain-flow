@@ -706,6 +706,11 @@ export default function Tasks() {
       await dismissTaskNotifications(task.id);
     }
 
+    // Mirror feedback completion between Zahra & Radin
+    if (!isCompleted) {
+      await mirrorFeedbackCompletion(task, currentProfileId);
+    }
+
     toast.success(isCompleted ? "Task reopened" : "Task completed");
     loadData();
   };
