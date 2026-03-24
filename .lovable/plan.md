@@ -1,47 +1,28 @@
 
 
-## Keep Voice-to-Text Active Until User Manually Stops
+## Fix RTL Text Overlapping Toolbar Icons in Chat Composer
 
 ### Problem
-When the speech recognition produces a final transcript, the `useEffect` in `MessageThread.tsx` calls `speech.reset()` to append text to input. But `reset()` internally calls `stop()`, which kills the recognition session. The user has to click the mic button again to restart.
+When typing Farsi (RTL) text in the chat input, the text flows underneath the bottom toolbar icons (emoji, voice, attach, etc.) because the textarea and toolbar share the same container without sufficient spacing.
 
 ### Changes
 
-**File**: `src/hooks/useSpeechRecognition.ts`
+**File**: `src/components/teamhub/MessageThread.tsx`
 
-Add a new method `clearTranscripts()` that clears accumulated transcripts and interim text **without stopping** the recognition:
+1. Add `pb-10` (padding-bottom) to the Textarea so text content never flows behind the toolbar row
+2. Make the bottom toolbar use `absolute` positioning at the bottom of the container so it overlays cleanly without interfering with text flow
 
-```typescript
-const clearTranscripts = useCallback(() => {
-  setTranscripts([]);
-  setInterimText("");
-}, []);
-```
+Update the container and textarea (lines 852-881):
+- Add `relative` to the container div (already there)
+- Change Textarea className to include `pb-10` so text has clearance above the toolbar
+- Optionally add `overflow-y-auto` to ensure long text scrolls properly
 
-Also remove the silence timeout auto-stop behavior — keep the `onSilenceEnd` callback available but don't auto-fire it (or just remove the silence timer entirely since the user wants manual control).
-
-Add `clearTranscripts` to the return object.
-
-**File**: `src/components/teamhub/MessageThread.tsx` (lines 224-234)
-
-Replace `speech.reset()` with `speech.clearTranscripts()` so recognition keeps running:
-
-```typescript
-useEffect(() => {
-  if (speech.fullTranscript) {
-    setInput((prev) => {
-      const space = prev && !prev.endsWith(" ") ? " " : "";
-      return prev + space + speech.fullTranscript;
-    });
-    speech.clearTranscripts(); // Don't stop, just clear accumulated text
-  }
-}, [speech.fullTranscript]);
-```
+Update the bottom bar div (line 884):
+- Keep it as a normal flow element but ensure the textarea's bottom padding creates enough space
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/hooks/useSpeechRecognition.ts` | Add `clearTranscripts()` method that clears state without stopping recognition |
-| `src/components/teamhub/MessageThread.tsx` | Use `clearTranscripts()` instead of `reset()` |
+| `src/components/teamhub/MessageThread.tsx` | Add bottom padding to Textarea to prevent RTL text from going under toolbar icons |
 
