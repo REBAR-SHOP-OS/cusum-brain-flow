@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus, Eye, Archive } from "lucide-react";
+import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus, Eye, Archive, SpellCheck } from "lucide-react";
+import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
