@@ -1,27 +1,29 @@
 
 
-## Mirror Radin's Feedback Tasks to Zahra's Column
+## Populate Profile Page from Database & Show Avatar Everywhere
 
 ### Problem
-Feedback tasks (`source: "screenshot_feedback"`) assigned to Radin only appear in Radin's column. Zahra (delegate) can manage them but has to look in Radin's column. The user wants these feedback tasks to also appear in Zahra's column so she can see and generate fixes from her own view.
+1. The Settings profile form fields (name, surname, job title) are empty — not loaded from the database profile
+2. Changes to these fields are not saved back to the database
+3. The `UserMenu` avatar shows only initials, never the profile photo
 
 ### Changes
 
-**File**: `src/pages/Tasks.tsx`
-
-1. **Mirror feedback tasks to Zahra's column** (after line 533, in the task grouping loop):
-   - After grouping tasks by employee, iterate through Radin's feedback tasks (`source === "screenshot_feedback"` or `source === "feedback_verification"`)
-   - Push copies of those tasks into Zahra's column in `tasksByEmployee`
-   - This way Zahra sees all of Radin's feedback tasks directly in her column
-
-2. **No permission changes needed** — the existing `canDeleteOrFix` function already grants Zahra access via `isDelegateFor(task.assigned_to)`, so "Generate Fix", "Delete", "Approve", and "Reopen with Issue" all work for her on Radin's tasks.
-
-### Result
-- Zahra sees all feedback tasks in her own column (mirrored from Radin)
-- She can open any feedback task and click "Generate Fix"
-- Original tasks remain in Radin's column too
-
 | File | Change |
 |---|---|
-| `src/pages/Tasks.tsx` | Add feedback task mirroring from Radin's column to Zahra's column |
+| `src/pages/Settings.tsx` | Load `formData` from `myProfile` on mount (full_name split into name/surname, title, preferred_language). Add a "Save" button that calls `updateProfile`. |
+| `src/components/layout/UserMenu.tsx` | Import `useProfiles`, find `myProfile`, show `AvatarImage` with `avatar_url` in both the trigger button and the dropdown header |
+
+### Detail
+
+**Settings.tsx**:
+- Add `useEffect` to populate `formData` from `myProfile` when it loads (split `full_name` by space into name + surname, map `title` → `jobTitle`)
+- Add a `handleSave` function that calls `updateProfile.mutate({ id: myProfile.id, full_name, title })` 
+- Add a "Save changes" button below the Personal Details section
+
+**UserMenu.tsx**:
+- Import `useProfiles` hook
+- Find `myProfile` by matching `user_id === user.id`
+- Add `<AvatarImage src={myProfile?.avatar_url} />` to both Avatar instances (trigger + dropdown)
+- Show `myProfile?.full_name` instead of email prefix where available
 
