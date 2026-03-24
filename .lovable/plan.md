@@ -1,48 +1,76 @@
 
 
-## Add Profile Editor Dialog on Avatar Click in Team Hub Sidebar
+## Add Personal Notes/Storage Space for Each @rebar.shop User
 
 ### Problem
-When a user clicks their avatar in the sidebar header, nothing happens. They should be able to upload a new profile picture and edit their name.
+Users want a personal space within Team Hub to save notes, text, and information privately.
 
 ### Changes
 
-**File**: `src/components/teamhub/ProfileEditDialog.tsx` (NEW)
-- Create a dialog component with:
-  - Avatar display with camera/upload overlay on hover
-  - Hidden file input for avatar upload (uses `useAvatarUpload().uploadSingle`)
-  - Input field for `full_name` with save button (uses `useProfiles().updateProfile`)
-  - Cancel/Close button
+**Database Migration** — Create `user_notes` table:
+```sql
+CREATE TABLE public.user_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  company_id UUID NOT NULL,
+  title TEXT NOT NULL DEFAULT 'Untitled',
+  content TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.user_notes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own notes"
+  ON public.user_notes FOR ALL TO authenticated
+  USING (profile_id IN (
+    SELECT id FROM public.profiles WHERE user_id = auth.uid()
+  ))
+  WITH CHECK (profile_id IN (
+    SELECT id FROM public.profiles WHERE user_id = auth.uid()
+  ));
+```
+
+**File**: `src/components/teamhub/PersonalNotes.tsx` (NEW)
+- A panel component showing user's saved notes as a list
+- Create, edit, delete notes with title + rich text content
+- Auto-save on blur or after a short debounce
+- Search/filter notes by title
 
 **File**: `src/components/teamhub/ChannelSidebar.tsx`
-- Make the avatar clickable (wrap in button or add `onClick`)
-- Add state `profileEditOpen` to toggle the dialog
-- Render `<ProfileEditDialog>` passing `myProfile`, open state, and close handler
+- Add a "My Notes" item (with `StickyNote` icon) in the sidebar, above CHANNELS section
+- When clicked, set a special selection mode (e.g. `onSelect("__my_notes__")`)
 
-### New Component: `ProfileEditDialog`
+**File**: `src/pages/TeamHub.tsx`
+- Detect when `activeChannelId === "__my_notes__"` and render `<PersonalNotes>` instead of `<MessageThread>`
+- Pass `myProfile` to `PersonalNotes`
 
+**File**: `src/hooks/usePersonalNotes.ts` (NEW)
+- CRUD hook using `@tanstack/react-query` for `user_notes` table
+- `useNotes(profileId)` — fetch all notes for user
+- `createNote`, `updateNote`, `deleteNote` mutations
+
+### UI Layout
 ```
-Props: { open, onClose, profile: Profile }
-
-Layout:
-┌─────────────────────────┐
-│  [X]   Edit Profile     │
-│                         │
-│      (  Avatar  )       │
-│    click to upload      │
-│                         │
-│  Full Name: [________]  │
-│                         │
-│  [Cancel]      [Save]   │
-└─────────────────────────┘
+Sidebar:                    Main Area (when "My Notes" selected):
+┌──────────────────┐       ┌─────────────────────────────────────┐
+│ [Avatar] Team Hub│       │  My Notes          [+ New Note]     │
+│ [Search...]      │       │─────────────────────────────────────│
+│                  │       │  📝 Meeting recap    Mar 24         │
+│ 📝 My Notes     │◄──    │  📝 Project ideas    Mar 23         │
+│                  │       │  📝 TODO list        Mar 22         │
+│ CHANNELS         │       │─────────────────────────────────────│
+│ # Official Chan. │       │  [Selected note editor area]        │
+│ ...              │       │  Title: [____________]              │
+└──────────────────┘       │  Content: [___________________]     │
+                           └─────────────────────────────────────┘
 ```
-
-- Uses existing `useAvatarUpload` hook for photo upload
-- Uses existing `useProfiles().updateProfile` for name change
-- After successful upload/update, queries are invalidated automatically (already in hooks)
 
 | File | Change |
 |---|---|
-| `src/components/teamhub/ProfileEditDialog.tsx` | New dialog for avatar upload + name edit |
-| `src/components/teamhub/ChannelSidebar.tsx` | Make avatar clickable, show ProfileEditDialog |
+| DB Migration | Create `user_notes` table with RLS |
+| `src/hooks/usePersonalNotes.ts` | NEW — CRUD hook for notes |
+| `src/components/teamhub/PersonalNotes.tsx` | NEW — Notes list + editor panel |
+| `src/components/teamhub/ChannelSidebar.tsx` | Add "My Notes" sidebar item |
+| `src/pages/TeamHub.tsx` | Render PersonalNotes when selected |
 
