@@ -325,6 +325,7 @@ export default function TeamHub() {
                   readOnly={!canWrite}
                   onForward={(msg) => setForwardMsg(msg)}
                   onLangChange={setActiveLang}
+                  headerExtra={<BackgroundThemePicker themeId={themeId} onSelect={setTheme} />}
                 />
               ) : channelsLoading ? (
                 <div className="flex items-center justify-center h-full">
