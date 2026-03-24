@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,8 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronsUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useLeadAssignees } from "@/hooks/useLeadAssignees";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import type { Tables } from "@/integrations/supabase/types";
 
