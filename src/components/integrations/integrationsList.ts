@@ -232,4 +232,17 @@ export const defaultIntegrations: Integration[] = [
       { key: "WP_APP_PASSWORD", label: "Application Password", type: "password", placeholder: "xxxx xxxx xxxx xxxx", helpText: "From WordPress → Users → Profile → Application Passwords" },
     ],
   },
+  {
+    id: "synology-nas",
+    name: "Synology NAS",
+    description: "File storage, backup, monitoring, and team file sharing.",
+    status: "available",
+    icon: "synology-nas",
+    docsUrl: "https://RSIC.synology.me:5001",
+    fields: [
+      { key: "SYNOLOGY_URL", label: "DSM URL", type: "text", placeholder: "https://RSIC.synology.me:5001", helpText: "Your Synology DSM HTTPS endpoint" },
+      { key: "SYNOLOGY_USERNAME", label: "DSM Username", type: "text", placeholder: "admin", helpText: "Your Synology DSM admin username" },
+      { key: "SYNOLOGY_PASSWORD", label: "DSM Password", type: "password", placeholder: "••••••••", helpText: "Your Synology DSM password" },
+    ],
+  },
 ];

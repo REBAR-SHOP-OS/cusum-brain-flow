@@ -212,6 +212,7 @@ const App = () => (
                     <Route path="/brain" element={<P><Brain /></P>} />
                     <Route path="/integrations" element={<P><Integrations /></P>} />
                     <Route path="/integrations/callback" element={<IntegrationCallback />} />
+                    <Route path="/synology" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SynologyNAS /></Suspense></P>} />
                     <Route path="/settings" element={<P><Settings /></P>} />
 
                     {/* Social / Comms */}
