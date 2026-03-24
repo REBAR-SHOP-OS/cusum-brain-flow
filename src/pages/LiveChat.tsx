@@ -294,12 +294,19 @@ export default function LiveChat() {
               <div
                 key={msg.id}
                 className={cn(
-                  "rounded-2xl px-4 py-3 text-sm max-w-[85%]",
+                  "group/msg relative rounded-2xl px-4 py-3 text-sm max-w-[85%]",
                   msg.role === "user"
                     ? "ml-auto bg-primary text-primary-foreground"
                     : "mr-auto bg-muted text-foreground"
                 )}
               >
+                <button
+                  onClick={() => deleteMessage(msg.id)}
+                  className="absolute -top-2 -right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center shadow-sm hover:scale-110"
+                  title="Delete message"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
                 {msg.role === "assistant" ? (
                   <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm" />
                 ) : (
