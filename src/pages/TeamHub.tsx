@@ -181,7 +181,8 @@ export default function TeamHub() {
       onSelect={setSelectedChannelId}
       onlineCount={onlineCount}
       profiles={profiles}
-      onCreateChannel={() => setShowCreateDialog(true)}
+      onCreateChannel={() => { setCreateDialogMode("channel"); setShowCreateDialog(true); }}
+      onCreateGroup={() => { setCreateDialogMode("group"); setShowCreateDialog(true); }}
       myProfile={myProfile}
       onClickMember={async (profileId, name) => {
         if (profileId === myProfile?.id) return;
