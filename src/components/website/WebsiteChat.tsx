@@ -43,7 +43,8 @@ interface WebsiteChatProps {
 
 export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "normal", onChatModeChange }: WebsiteChatProps) {
   const chat = useAdminChat(`/website`);
-  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream } = chat;
+  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream, deleteMessage } = chat;
+  const grammar = useGrammarCheck();
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
