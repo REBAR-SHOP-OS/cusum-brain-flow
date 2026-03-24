@@ -105,25 +105,26 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
           </div>
 
           {/* ── Stage Ribbon — Odoo breadcrumb style ── */}
-          <div className="flex gap-0 overflow-x-auto mt-3 -mx-1 px-1">
-            {SALES_STAGES.map((stage, i) => (
-              <button
-                key={stage.id}
-                onClick={() => !isExternalEstimator && onUpdate({ id: lead.id, stage: stage.id })}
-                disabled={isExternalEstimator}
-                className={cn(
-                  "shrink-0 px-2.5 py-1 text-[11px] font-medium border-y border-r first:border-l first:rounded-l-sm last:rounded-r-sm transition-colors",
-                  i === currentStageIndex
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : i < currentStageIndex
-                    ? "bg-primary/15 text-primary border-primary/20 hover:bg-primary/25"
-                    : "bg-muted text-muted-foreground border-border hover:bg-accent"
-                )}
-              >
-                {stage.label}
-              </button>
-            ))}
-          </div>
+          {!isExternalEstimator && (
+            <div className="flex gap-0 overflow-x-auto mt-3 -mx-1 px-1">
+              {SALES_STAGES.map((stage, i) => (
+                <button
+                  key={stage.id}
+                  onClick={() => onUpdate({ id: lead.id, stage: stage.id })}
+                  className={cn(
+                    "shrink-0 px-2.5 py-1 text-[11px] font-medium border-y border-r first:border-l first:rounded-l-sm last:rounded-r-sm transition-colors",
+                    i === currentStageIndex
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : i < currentStageIndex
+                      ? "bg-primary/15 text-primary border-primary/20 hover:bg-primary/25"
+                      : "bg-muted text-muted-foreground border-border hover:bg-accent"
+                  )}
+                >
+                  {stage.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Info Grid — Odoo form layout ── */}
@@ -141,7 +142,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                 <p className="font-medium truncate">{lead.contact_company}</p>
               </div>
             )}
-            {lead.contact_email && (
+            {!isExternalEstimator && lead.contact_email && (
               <div>
                 <span className="text-[11px] text-muted-foreground font-medium">Email</span>
                 <a href={`mailto:${lead.contact_email}`} className="text-primary hover:underline truncate block">
@@ -149,7 +150,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                 </a>
               </div>
             )}
-            {lead.contact_phone && (
+            {!isExternalEstimator && lead.contact_phone && (
               <div>
                 <span className="text-[11px] text-muted-foreground font-medium">Phone</span>
                 <a href={`tel:${lead.contact_phone}`} className="text-primary hover:underline block">
@@ -172,16 +173,17 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
           </div>
 
           {/* Assignees */}
-          <div className="col-span-2 mt-1 pt-2 border-t border-border/50">
-            <span className="text-[11px] text-muted-foreground font-medium mb-1 block">Assignees</span>
-            <AssigneeManager
-              assignees={assignees}
-              profiles={profiles}
-              onAdd={onAddAssignee || (() => {})}
-              onRemove={onRemoveAssignee || (() => {})}
-              readOnly={isExternalEstimator}
-            />
-          </div>
+          {!isExternalEstimator && (
+            <div className="col-span-2 mt-1 pt-2 border-t border-border/50">
+              <span className="text-[11px] text-muted-foreground font-medium mb-1 block">Assignees</span>
+              <AssigneeManager
+                assignees={assignees}
+                profiles={profiles}
+                onAdd={onAddAssignee || (() => {})}
+                onRemove={onRemoveAssignee || (() => {})}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Tab Bar ── */}
