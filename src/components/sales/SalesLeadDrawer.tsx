@@ -105,25 +105,26 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
           </div>
 
           {/* ── Stage Ribbon — Odoo breadcrumb style ── */}
-          <div className="flex gap-0 overflow-x-auto mt-3 -mx-1 px-1">
-            {SALES_STAGES.map((stage, i) => (
-              <button
-                key={stage.id}
-                onClick={() => !isExternalEstimator && onUpdate({ id: lead.id, stage: stage.id })}
-                disabled={isExternalEstimator}
-                className={cn(
-                  "shrink-0 px-2.5 py-1 text-[11px] font-medium border-y border-r first:border-l first:rounded-l-sm last:rounded-r-sm transition-colors",
-                  i === currentStageIndex
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : i < currentStageIndex
-                    ? "bg-primary/15 text-primary border-primary/20 hover:bg-primary/25"
-                    : "bg-muted text-muted-foreground border-border hover:bg-accent"
-                )}
-              >
-                {stage.label}
-              </button>
-            ))}
-          </div>
+          {!isExternalEstimator && (
+            <div className="flex gap-0 overflow-x-auto mt-3 -mx-1 px-1">
+              {SALES_STAGES.map((stage, i) => (
+                <button
+                  key={stage.id}
+                  onClick={() => onUpdate({ id: lead.id, stage: stage.id })}
+                  className={cn(
+                    "shrink-0 px-2.5 py-1 text-[11px] font-medium border-y border-r first:border-l first:rounded-l-sm last:rounded-r-sm transition-colors",
+                    i === currentStageIndex
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : i < currentStageIndex
+                      ? "bg-primary/15 text-primary border-primary/20 hover:bg-primary/25"
+                      : "bg-muted text-muted-foreground border-border hover:bg-accent"
+                  )}
+                >
+                  {stage.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Info Grid — Odoo form layout ── */}
