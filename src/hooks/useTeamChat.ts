@@ -123,6 +123,7 @@ export function useSendMessage() {
       senderLang,
       targetLangs,
       attachments = [],
+      replyToId,
     }: {
       channelId: string;
       senderProfileId: string;
@@ -130,6 +131,7 @@ export function useSendMessage() {
       senderLang: string;
       targetLangs: string[];
       attachments?: ChatAttachment[];
+      replyToId?: string | null;
     }) => {
       // Get translations from edge function
       let translations: Record<string, string> = {};
