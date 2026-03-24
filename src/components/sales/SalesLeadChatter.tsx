@@ -272,6 +272,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
               selectedIndex={mentionIndex}
               onSelect={handleMentionSelect}
               onClose={() => setMentionOpen(false)}
+              extraUsers={extraMentionUsers}
             />
           </div>
 
