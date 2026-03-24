@@ -230,33 +230,35 @@ export default function SalesPipeline() {
         <div className="w-56">
           <SalesSearchBar value={search} onChange={setSearch} placeholder="Search leads... ( / )" />
         </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => setActiveGroup(null)}
-            className={cn(
-              "text-xs px-2 py-0.5 rounded-sm transition-colors",
-              !activeGroup ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            )}
-          >
-            Show all
-          </button>
-          {SALES_STAGE_GROUPS.map((g) => (
+        {!isExternalEstimator && (
+          <div className="flex items-center gap-1.5">
             <button
-              key={g.label}
-              onClick={() => setActiveGroup((prev) => (prev === g.label ? null : g.label))}
+              onClick={() => setActiveGroup(null)}
               className={cn(
-                "flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-sm transition-colors",
-                activeGroup === g.label ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                "text-xs px-2 py-0.5 rounded-sm transition-colors",
+                !activeGroup ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
-              <span className={cn("w-2 h-2 rounded-full", g.color)} />
-              {g.label}
-              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5 min-w-[16px] justify-center rounded-sm">
-                {groupCounts[g.label] || 0}
-              </Badge>
+              Show all
             </button>
-          ))}
-        </div>
+            {SALES_STAGE_GROUPS.map((g) => (
+              <button
+                key={g.label}
+                onClick={() => setActiveGroup((prev) => (prev === g.label ? null : g.label))}
+                className={cn(
+                  "flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-sm transition-colors",
+                  activeGroup === g.label ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <span className={cn("w-2 h-2 rounded-full", g.color)} />
+                {g.label}
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5 min-w-[16px] justify-center rounded-sm">
+                  {groupCounts[g.label] || 0}
+                </Badge>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Board — reuse PipelineBoard */}
