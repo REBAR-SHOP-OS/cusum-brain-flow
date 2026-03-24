@@ -15,6 +15,7 @@ import { useScheduledActivities, type ScheduledActivity } from "@/hooks/useSched
 interface ScheduledActivitiesProps {
   entityType: string;
   entityId: string;
+  assignees?: { profile_id: string; full_name: string }[];
 }
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -33,12 +34,13 @@ const typeLabels: Record<string, string> = {
   follow_up: "Follow-up",
 };
 
-export function ScheduledActivities({ entityType, entityId }: ScheduledActivitiesProps) {
+export function ScheduledActivities({ entityType, entityId, assignees }: ScheduledActivitiesProps) {
   const { planned, done, isLoading, createActivity, markDone, cancelActivity } = useScheduledActivities(entityType, entityId);
   const [showForm, setShowForm] = useState(false);
   const [activityType, setActivityType] = useState("call");
   const [summary, setSummary] = useState("");
   const [dueDate, setDueDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [assignedName, setAssignedName] = useState("");
 
   const handleSubmit = () => {
     if (!summary.trim()) return;
@@ -49,11 +51,12 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
         activity_type: activityType,
         summary,
         due_date: dueDate,
+        assigned_name: assignedName || undefined,
       },
       {
         onSuccess: () => {
           setSummary("");
-          setShowForm(false);
+          setAssignedName("");
           setShowForm(false);
         },
       }
@@ -101,6 +104,20 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
               className="w-36 h-8 text-xs"
             />
           </div>
+          {assignees && assignees.length > 0 && (
+            <Select value={assignedName} onValueChange={setAssignedName}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Assign to..." />
+              </SelectTrigger>
+              <SelectContent>
+                {assignees.map((a) => (
+                  <SelectItem key={a.profile_id} value={a.full_name}>
+                    {a.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Textarea
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
