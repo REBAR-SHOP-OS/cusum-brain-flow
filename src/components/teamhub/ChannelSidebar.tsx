@@ -46,12 +46,11 @@ function getAvatarColor(name: string) {
 }
 
 export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose }: ChannelSidebarProps) {
-  const [channelsOpen, setChannelsOpen] = useState(true);
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const { unreadSenderIds } = useUnreadSenders();
 
-  const groupChannels = channels.filter((c) => c.channel_type === "group");
+  const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "کانال رسمی شرکت");
   const activeProfiles = profiles.filter((p) => 
     p.email?.endsWith("@rebar.shop") || p.email?.endsWith("@gmail.com")
   );
@@ -116,47 +115,29 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
       {/* Scrollable Content */}
       <div className="flex-1 overflow-auto py-1 px-2">
         {/* Channels Section */}
-        <div className="flex items-center justify-between pr-1">
-          <button
-            onClick={() => setChannelsOpen(!channelsOpen)}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {channelsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <div className="flex items-center pr-1">
+          <span className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground">
             Channels
-            <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0 h-4">
-              {groupChannels.length}
-            </Badge>
-          </button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onCreateChannel}
-            title="Create channel"
-          >
-            <Plus className="w-3.5 h-3.5 text-muted-foreground" />
-          </Button>
+          </span>
         </div>
 
-        {channelsOpen && (
-          <div className="space-y-0.5 mb-3">
-            {groupChannels.map((ch) => (
-              <button
-                key={ch.id}
-                onClick={() => handleSelect(ch.id)}
-                className={cn(
-                  "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all group",
-                  selectedId === ch.id
-                    ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                )}
-              >
-                <Hash className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
-                <span className="truncate flex-1 text-left">{ch.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="space-y-0.5 mb-3">
+          {groupChannels.map((ch) => (
+            <button
+              key={ch.id}
+              onClick={() => handleSelect(ch.id)}
+              className={cn(
+                "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all group",
+                selectedId === ch.id
+                  ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              )}
+            >
+              <Hash className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
+              <span className="truncate flex-1 text-left">{ch.name}</span>
+            </button>
+          ))}
+        </div>
 
         {/* Team Members */}
         <button
