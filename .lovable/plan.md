@@ -1,26 +1,32 @@
 
 
-## Fix Image Preview & Optimize Clearance Photos
+## Upgrade Sales Pipeline "New Sales Lead" Dialog to Match Main Pipeline's "Add Lead" Dialog
 
-### Problems
-1. **Preview opens too big**: The fullscreen dialog (line 401) uses `max-w-[90vw] max-h-[90vh]` but the image has no max constraints, so large photos overflow the viewport.
-2. **No image optimization on thumbnails**: The card thumbnails load full-resolution signed URLs without any size constraints beyond CSS `object-cover`.
+### What
+The "New Sales Lead" dialog in `/sales` is a simple form with only 6 fields (Title, Contact Name, Company, Email, Phone, Expected Value, Source, Notes). The main Pipeline's `LeadFormModal` has a full-featured form with Stage, Priority, Lead Type, Source (dropdown), Expected Value, Probability, Expected Close Date, Assigned To, Territory, Description, and Notes. We need to make the Sales dialog match.
 
 ### Changes
 
-**File**: `src/components/clearance/ClearanceCard.tsx`
+**File**: `src/pages/sales/SalesPipeline.tsx`
 
-1. **Fix preview dialog** (line 401-405): Constrain the image inside the dialog so it fits the screen properly:
-   - Change `DialogContent` to include `flex items-center justify-center` and proper overflow handling
-   - Add `max-w-full max-h-[80vh] object-contain` to the `<img>` tag so the photo scales down to fit
+Replace the inline create dialog (lines 245-306) with a full form matching `LeadFormModal`'s layout:
 
-2. **Add thumbnail optimization to PhotoSlot** (line 489): Add `loading="lazy"` and explicit dimension constraints to thumbnail images so browsers don't render them at full resolution.
+1. **Title** — text input (keep)
+2. **Contact Name** — keep existing combobox with unified contacts (this replaces "Customer" dropdown since sales_leads uses inline contact fields)
+3. **Stage + Priority** — 2-col row with Select dropdowns (using `SALES_STAGES`)
+4. **Lead Type + Source** — 2-col row; Lead Type = Opportunity/Lead; Source = dropdown with Email, Phone/Call, Website, Referral, Trade Show, Social Media, Cold Outreach, Partner, Other
+5. **Expected Value + Probability** — 2-col row, number inputs
+6. **Expected Close Date** — full-width date input
+7. **Assigned To + Territory** — 2-col row, text inputs
+8. **Description** — textarea (3 rows)
+9. **Notes** — textarea (2 rows)
+10. **Footer** — Cancel + Create buttons
 
-3. **Reduce compression defaults**: The `compressImage` utility already handles upload compression (2048px max, 80% JPEG). This is adequate — no changes needed there.
+Add new fields to the form state: `stage`, `priority`, `probability`, `expected_close_date`, `lead_type`, `assigned_to`, `territory`, `description`. Pass all to `createLead.mutate()`.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/clearance/ClearanceCard.tsx` | Fix preview dialog sizing + add lazy loading to thumbnails |
+| `src/pages/sales/SalesPipeline.tsx` | Expand create dialog with all fields matching LeadFormModal layout |
 
