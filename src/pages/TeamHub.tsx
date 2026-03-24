@@ -98,6 +98,27 @@ export default function TeamHub() {
     }
   };
 
+  const handleForwardToMember = async (profileId: string, msg: TeamMessage) => {
+    if (!myProfile) return;
+    try {
+      const result = await openDMMutation.mutateAsync({ targetProfileId: profileId });
+      if (result?.id) {
+        const forwardPrefix = `↪ Forwarded from ${msg.sender?.full_name || "Unknown"}:\n`;
+        await sendMutation.mutateAsync({
+          channelId: result.id,
+          senderProfileId: myProfile.id,
+          text: forwardPrefix + msg.original_text,
+          senderLang: myLang,
+          targetLangs,
+          attachments: msg.attachments || [],
+        });
+        toast.success("Message forwarded");
+      }
+    } catch (err: any) {
+      toast.error("Failed to forward", { description: err.message });
+    }
+  };
+
   const handleCreateChannel = async (data: {
     name: string;
     description: string;
