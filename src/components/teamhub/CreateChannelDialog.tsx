@@ -50,7 +50,11 @@ export function CreateChannelDialog({
   profiles,
   onCreateChannel,
   isCreating,
+  mode = "channel",
 }: CreateChannelDialogProps) {
+  const isGroup = mode === "group";
+  const label = isGroup ? "Group" : "Channel";
+  const Icon = isGroup ? Users : Hash;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
