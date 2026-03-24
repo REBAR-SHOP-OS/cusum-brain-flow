@@ -220,7 +220,9 @@ export default function SalesPipeline() {
           </h1>
           <PipelineAnalytics leads={allAdapted} />
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1" />New Lead</Button>
+        {!isExternalEstimator && (
+          <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1" />New Lead</Button>
+        )}
       </div>
 
       {/* Header Row 2: Search + Stage Group Filters */}
