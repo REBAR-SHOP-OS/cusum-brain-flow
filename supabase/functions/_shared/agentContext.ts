@@ -110,20 +110,104 @@ export async function fetchContext(
 
     // --- Shop Floor (Forge) ---
     if (agent === "shopfloor") {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayISO = todayStart.toISOString();
+
       // Machines
       const { data: machines } = await supabase
         .from("machines")
         .select("id, name, status, type, current_operator_profile_id, current_run_id")
         .order("name");
       context.machineStatus = machines;
-      
-      // Active Work Orders
+
+      // Active Work Orders (expanded — join orders + customers)
       const { data: workOrders } = await supabase
         .from("work_orders")
-        .select("id, work_order_number, status, scheduled_start, order_id")
+        .select("id, work_order_number, status, scheduled_start, order_id, priority, notes")
         .in("status", ["queued", "pending", "in-progress"])
-        .limit(15);
+        .order("scheduled_start", { ascending: true })
+        .limit(50);
       context.activeWorkOrders = workOrders;
+
+      // Today's Machine Runs (with operator names via profile map)
+      const { data: machineRuns } = await supabase
+        .from("machine_runs")
+        .select("id, machine_id, process, status, started_at, ended_at, output_qty, scrap_qty, operator_profile_id, notes")
+        .gte("started_at", todayISO)
+        .order("started_at", { ascending: false })
+        .limit(100);
+
+      // Build operator name map from available employees
+      const profileIdMap = new Map<string, string>();
+      if (context.availableEmployees) {
+        for (const emp of context.availableEmployees as any[]) {
+          profileIdMap.set(emp.id, emp.name);
+        }
+      } else {
+        const { data: profs } = await svc.from("profiles").select("id, full_name").eq("is_active", true);
+        for (const p of profs || []) profileIdMap.set(p.id, p.full_name);
+      }
+
+      // Map machine names
+      const machineIdMap = new Map<string, string>();
+      for (const m of (machines || []) as any[]) machineIdMap.set(m.id, m.name);
+
+      context.machineRunsToday = (machineRuns || []).map((r: any) => ({
+        id: r.id,
+        machine_name: machineIdMap.get(r.machine_id) || r.machine_id,
+        process: r.process,
+        status: r.status,
+        started_at: r.started_at,
+        ended_at: r.ended_at,
+        output_qty: r.output_qty,
+        scrap_qty: r.scrap_qty,
+        operator_name: profileIdMap.get(r.operator_profile_id) || null,
+        notes: r.notes,
+      }));
+
+      // Production summary
+      const completedRuns = (machineRuns || []).filter((r: any) => r.status === "completed");
+      context.productionSummary = {
+        totalRunsToday: (machineRuns || []).length,
+        completedRuns: completedRuns.length,
+        totalPiecesProduced: completedRuns.reduce((s: number, r: any) => s + (r.output_qty || 0), 0),
+        totalScrap: completedRuns.reduce((s: number, r: any) => s + (r.scrap_qty || 0), 0),
+      };
+
+      // Active Cut Plans
+      const { data: cutPlans } = await supabase
+        .from("cut_plans")
+        .select("id, name, status, machine_id, created_at")
+        .in("status", ["active", "in_progress", "queued"])
+        .limit(20);
+      context.activeCutPlans = (cutPlans || []).map((cp: any) => ({
+        ...cp,
+        machine_name: machineIdMap.get(cp.machine_id) || cp.machine_id,
+      }));
+
+      // Cut Plan Items phase counts
+      const { data: cutPlanItems } = await supabase
+        .from("cut_plan_items")
+        .select("id, phase, cut_plan_id")
+        .limit(500);
+      const phaseCounts: Record<string, number> = {};
+      for (const item of cutPlanItems || []) {
+        phaseCounts[item.phase] = (phaseCounts[item.phase] || 0) + 1;
+      }
+      context.cutPlanItemPhaseCounts = phaseCounts;
+
+      // Today's Timeclock Entries
+      const { data: timeclockEntries } = await supabase
+        .from("time_clock_entries")
+        .select("id, profile_id, clock_in, clock_out, break_minutes, notes")
+        .gte("clock_in", todayISO)
+        .order("clock_in", { ascending: false })
+        .limit(50);
+      context.timeclockToday = (timeclockEntries || []).map((t: any) => ({
+        ...t,
+        employee_name: profileIdMap.get(t.profile_id) || t.profile_id,
+      }));
     }
 
     // --- Delivery (Atlas) ---
