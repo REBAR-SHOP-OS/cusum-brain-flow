@@ -1,43 +1,50 @@
 
 
-## Fix: Delete Message Shows False Error
+## Show "Pending Approval" / "Scheduled · Approved" on Calendar Cards
 
-### Root Cause
+### What
+Scheduled cards should show **"Pending Approval"** by default, and only show **"Scheduled · Approved"** after `neel_approved` is true (approved by neel@rebar.shop or sattar@rebar.shop).
 
-In `MessageThread.tsx` line 145, the code checks:
-```typescript
-if (error || !data?.length) {
-  toast.error("Failed to delete message");
-}
-```
-
-The `.select()` after `.delete()` can return an empty array even when the delete succeeds (RLS interaction). The `!data?.length` check then falsely triggers the error toast.
+### Current Behavior
+Line 240 shows `statusLabel` (which says "Scheduled" for scheduled posts) and appends "· Approved" only if `neel_approved` is true. But unapproved scheduled cards still say "Scheduled" — they should say "Pending Approval" instead.
 
 ### Fix
 
-**File**: `src/components/teamhub/MessageThread.tsx` (lines 139-150)
+**File**: `src/components/social/SocialCalendar.tsx` (lines 233-244)
 
-Remove the `.select()` call and the `data?.length` check. Only check for `error`:
+Change the display logic so that for `status === "scheduled"`:
+- If `neel_approved` is **false** → show "Pending Approval" in yellow
+- If `neel_approved` is **true** → show "Scheduled · Approved" in green
 
-```typescript
-const handleDeleteMessage = async (msgId: string) => {
-  const { error } = await (supabase as any)
-    .from("team_messages")
-    .delete()
-    .eq("id", msgId);
-  if (error) {
-    toast.error("Failed to delete message");
-  } else {
-    toast.success("Message deleted");
-  }
-};
+```tsx
+// Replace lines 233-244
+<span className={cn(
+  status === "published" ? "text-green-600 font-medium"
+    : status === "scheduled" && firstPost.neel_approved ? "text-green-500 font-medium"
+    : status === "scheduled" ? "text-yellow-600"
+    : status === "declined" ? "text-destructive"
+    : status === "pending_approval" ? "text-yellow-600"
+    : "text-muted-foreground"
+)}>
+  {status === "scheduled" && !firstPost.neel_approved
+    ? "Pending Approval"
+    : status === "scheduled" && firstPost.neel_approved
+    ? "Scheduled · Approved"
+    : statusLabel}
+</span>
 ```
 
-The realtime subscription will automatically remove the message from the UI for all users.
+Also update card border color (lines 191-192) so unapproved scheduled cards get yellow border:
+```tsx
+: status === "scheduled" && firstPost.neel_approved
+? "bg-card border-green-500/30"
+: status === "scheduled"
+? "bg-yellow-500/10 border-yellow-500/30"
+```
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/teamhub/MessageThread.tsx` | Remove `.select()` and `data?.length` check from delete handler |
+| `src/components/social/SocialCalendar.tsx` | Show "Pending Approval" for unapproved scheduled cards, "Scheduled · Approved" for approved ones |
 
