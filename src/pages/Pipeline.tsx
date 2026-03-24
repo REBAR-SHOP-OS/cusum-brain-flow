@@ -917,6 +917,7 @@ export default function Pipeline() {
               aiMode={aiMode}
               aiActionLeadIds={new Set(aiActions.filter(a => a.status === "pending").map(a => a.lead_id))}
               pendingActivitiesByLead={pendingActivitiesByLead}
+              assigneesByLeadId={assigneesByLeadId}
             />
           )}
         </div>
