@@ -55,6 +55,7 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <button className="w-8 h-8 rounded-full flex items-center justify-center hover:ring-2 hover:ring-white/30 transition-all">
           <Avatar className="w-8 h-8">
+            <AvatarImage src={myProfile?.avatar_url || undefined} />
             <AvatarFallback className="bg-white/20 text-primary-foreground text-xs font-semibold">
               {initials}
             </AvatarFallback>
