@@ -97,6 +97,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   const [text, setText] = useState("");
   const [activityType, setActivityType] = useState("follow_up");
   const [dueDate, setDueDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [assignedName, setAssignedName] = useState("");
   const [filter, setFilter] = useState<ThreadFilter>("all");
   const [pendingFiles, setPendingFiles] = useState<{ file: File; previewUrl: string }[]>([]);
   const [uploading, setUploading] = useState(false);
