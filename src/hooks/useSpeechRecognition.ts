@@ -22,6 +22,7 @@ interface UseSpeechRecognitionReturn {
   start: () => void;
   stop: () => void;
   reset: () => void;
+  clearTranscripts: () => void;
   isSupported: boolean;
 }
 
