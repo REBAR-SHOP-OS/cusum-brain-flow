@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Building, Mail, Phone, DollarSign, Pencil, Trash2,
-  Clock, X, ClipboardList, User,
+  Clock, X, ClipboardList, User, NotebookPen,
 } from "lucide-react";
 import { SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
