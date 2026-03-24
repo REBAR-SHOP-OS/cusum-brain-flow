@@ -73,7 +73,7 @@ interface MessageThreadProps {
   myLang: string;
   isLoading: boolean;
   isSending: boolean;
-  onSend: (text: string, attachments?: ChatAttachment[]) => void;
+  onSend: (text: string, attachments?: ChatAttachment[], replyToId?: string | null) => void;
   activeMeetings?: TeamMeeting[];
   onStartMeeting?: () => void;
   onJoinMeeting?: (meeting: TeamMeeting) => void;
