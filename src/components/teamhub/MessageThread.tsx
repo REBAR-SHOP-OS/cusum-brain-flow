@@ -987,7 +987,8 @@ export function MessageThread({
         <div className="h-3 md:h-4 mt-0.5 md:mt-1">
           <p className="text-[10px] text-muted-foreground/60">
             {isSending && "Translating & sending..."}
-            {speech.isListening && !isSending && "🎙️ Listening..."}
+            {voiceRecorder.isRecording && !isSending && "🔴 Recording voice message..."}
+            {speech.isListening && !isSending && !voiceRecorder.isRecording && "🎙️ Listening..."}
             {speech.interimText && !isSending && ` ${speech.interimText}`}
           </p>
         </div>
