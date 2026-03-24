@@ -245,7 +245,9 @@ export default function TeamHub() {
           <div className="flex-1 flex min-w-0 overflow-hidden">
             {/* Message Thread */}
             <div className={activeMeeting ? "flex-1 min-w-0 hidden lg:flex lg:flex-col" : "flex-1 flex flex-col min-w-0"}>
-              {activeChannel ? (
+              {isNotesView && myProfile ? (
+                <PersonalNotes myProfile={myProfile} />
+              ) : activeChannel ? (
                 <MessageThread
                   channelName={activeChannel.name}
                   channelDescription={activeChannel.description}
