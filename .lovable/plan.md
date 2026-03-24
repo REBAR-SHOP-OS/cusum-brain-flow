@@ -1,27 +1,18 @@
 
 
-## Fix Hardcoded "MM" Unit Labels in Dimension Displays
-
-### Problem
-In `DetailedListView.tsx`, the dimension column subscript is hardcoded as `"MM"` regardless of the company's unit system setting. When the company uses imperial units, dimensions should not show "MM".
+## Fix Notification Emails: Token Refresh, From Address & Subject
 
 ### Changes
 
-**File: `src/components/office/DetailedListView.tsx`** (line 201)
+**File: `supabase/functions/notify-lead-assignees/index.ts`**
 
-Replace the hardcoded `MM` subscript with a dynamic label based on the unit system:
-
-```tsx
-// BEFORE (line 201)
-{dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">MM</sub></span> : ""}
-
-// AFTER
-{dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
-```
-
-The `unitSystem` variable is already available in this component (line 21: `const unitSystem = useUnitSystem()`), so no additional imports are needed.
+1. **Log token error details** — After the token refresh call, log `tokenData` when `access_token` is missing so we can diagnose the real Google error (e.g., `invalid_grant`)
+2. **Add `From: ai@rebar.shop`** to the raw RFC 2822 email headers
+3. **Change subject** from `[Rebar.shop] Lead Update: {title}` to `ERP | Rebar.shop | {lead_title}`
+4. **Redeploy** the function
 
 | File | Change |
 |---|---|
-| `DetailedListView.tsx` line 201 | Replace hardcoded `"MM"` with dynamic unit label based on `unitSystem` |
+| `notify-lead-assignees/index.ts` | Log token error, add From header, update subject |
+| Deploy | Redeploy edge function |
 
