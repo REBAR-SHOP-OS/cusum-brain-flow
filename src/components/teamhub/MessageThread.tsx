@@ -864,7 +864,7 @@ export function MessageThread({
             value={input}
             onChange={handleInputChange}
             placeholder={`Message #${channelName}...`}
-            className="min-h-[40px] md:min-h-[44px] max-h-32 resize-none border-0 focus-visible:ring-0 bg-transparent px-3 py-2 md:py-2.5 text-sm"
+            className="min-h-[40px] md:min-h-[44px] max-h-32 resize-none border-0 focus-visible:ring-0 bg-transparent px-3 py-2 md:py-2.5 pb-10 text-sm overflow-y-auto"
             rows={1}
             dir="auto"
             onKeyDown={(e) => {
