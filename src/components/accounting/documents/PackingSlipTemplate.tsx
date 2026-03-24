@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer, X } from "lucide-react";
 import brandLogo from "@/assets/brand-logo.png";
+import { SignaturePad } from "@/components/shopfloor/SignaturePad";
 
 interface PackingSlipItem {
   dwNumber?: string;
