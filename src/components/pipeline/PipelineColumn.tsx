@@ -159,6 +159,7 @@ export function PipelineColumn({
               onClick={onLeadClick}
               hasAIAction={aiMode && aiActionLeadIds.has(lead.id)}
               pendingActivities={pendingActivitiesByLead[lead.id] || []}
+              assignees={assigneesByLeadId[lead.id] || []}
             />
           ))
         )}
