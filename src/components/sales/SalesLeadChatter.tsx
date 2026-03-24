@@ -19,6 +19,10 @@ import { MentionMenu } from "@/components/chat/MentionMenu";
 interface Props {
   salesLeadId: string;
   companyId: string;
+  isExternalEstimator?: boolean;
+  currentUserName?: string;
+  currentUserId?: string;
+  assignees?: { profile_id: string; full_name: string }[];
 }
 
 type TabMode = "note" | "activity" | null;
