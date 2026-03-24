@@ -1,103 +1,67 @@
 
 
-## Multi-Assignee Support + External Estimator Visibility
+## Add @Mention and Reply-to-Message in Team Hub Chat
 
 ### What
-1. Each lead in both Pipelines gets **multiple assignees** via junction tables
-2. External estimators see **only leads where they are assigned** — across any column, not just their designated stage
-3. If assigned to a "Shop Drawing" lead, they see that column and that lead
+1. **@Mention**: When typing `@` in Team Hub chat, show the existing `MentionMenu` dropdown with all rebar.shop team members. Selecting a mention inserts `@Name` into the message. Mentioned names are rendered as highlighted badges in message bubbles.
+2. **Reply**: Add a reply button to each message's hover actions. Clicking it sets a "replying to" banner above the composer showing the original message preview. The reply reference is stored in the database and displayed as a quoted block above the reply message.
 
 ### Database Changes (Migration)
 
-```sql
-CREATE TABLE public.lead_assignees (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  lead_id uuid NOT NULL REFERENCES public.leads(id) ON DELETE CASCADE,
-  profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  company_id text NOT NULL,
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(lead_id, profile_id)
-);
-ALTER TABLE public.lead_assignees ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Company members can manage lead assignees"
-  ON public.lead_assignees FOR ALL TO authenticated
-  USING (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+Add a `reply_to_id` column to `team_messages`:
 
-CREATE TABLE public.sales_lead_assignees (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  sales_lead_id uuid NOT NULL REFERENCES public.sales_leads(id) ON DELETE CASCADE,
-  profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  company_id text NOT NULL,
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(sales_lead_id, profile_id)
-);
-ALTER TABLE public.sales_lead_assignees ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Company members can manage sales lead assignees"
-  ON public.sales_lead_assignees FOR ALL TO authenticated
-  USING (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+```sql
+ALTER TABLE public.team_messages
+  ADD COLUMN reply_to_id uuid REFERENCES public.team_messages(id) ON DELETE SET NULL;
 ```
 
 ### Code Changes
 
-**`src/hooks/useSalesLeads.ts`**
-- Extend `SalesLead` type with `assignees: { profile_id: string; full_name: string }[]`
-- Fetch `sales_lead_assignees(profile_id, profiles(full_name))` alongside each lead
-- Add `addSalesLeadAssignee` and `removeSalesLeadAssignee` mutations
+**File**: `src/components/teamhub/MessageThread.tsx`
 
-**`src/hooks/useLeads.ts`** (main pipeline)
-- Same pattern: extend lead type with assignees array
-- Fetch `lead_assignees(profile_id, profiles(full_name))`
-- Add `addLeadAssignee` / `removeLeadAssignee` mutations
+1. **@Mention integration**:
+   - Import `MentionMenu` from `@/components/chat/MentionMenu`
+   - Add state: `mentionOpen`, `mentionFilter`, `mentionIndex`
+   - On `@` keypress in textarea, open the mention menu; on selection, replace `@filter` with `@Name` in input
+   - Render `MentionMenu` positioned above the composer
+   - In message display, parse `@Name` patterns and render them as highlighted `<span>` tags
 
-**`src/pages/sales/SalesPipeline.tsx`**
-- Replace single `assigned_to` Select with multi-select checkbox dropdown using active profiles
-- On create: insert into `sales_lead_assignees` for each selected profile
-- **External estimator visibility**: Instead of filtering by stage only, find the estimator's profile ID from their email, then:
-  - Show **only** leads where their profile ID is in `sales_lead_assignees`
-  - Dynamically derive visible columns from the stages of those assigned leads (not hardcoded to "estimation_karthick")
-  - This means if Karthick is assigned to a "shop_drawing" lead, the shop_drawing column appears
+2. **Reply-to-message**:
+   - Add state: `replyTo: TeamMessage | null`
+   - Add a Reply button (↩ icon) to the hover action bar next to TTS/delete
+   - When clicked, set `replyTo` state and focus the textarea
+   - Show a reply preview banner above the composer with the original sender name + truncated text + close button
+   - Pass `reply_to_id` when sending via `onSend`
 
-**`src/components/pipeline/LeadFormModal.tsx`**
-- Replace single `assigned_to` Select with multi-select checkbox dropdown
-- On save: sync `lead_assignees` junction table (delete old + insert new)
+3. **Reply display in messages**:
+   - When a message has `reply_to_id`, find the referenced message and render a compact quoted block above the message body (sender name + first line, with a left border accent)
 
-**`src/components/pipeline/LeadCard.tsx`**
-- Update `getSalesperson()` to accept an optional `assignees` array prop
-- Show stacked avatars for multiple assignees (max 3, then "+N")
+**File**: `src/hooks/useTeamChat.ts`
 
-**`src/components/sales/SalesLeadDrawer.tsx`**
-- Add assignee chips section with add/remove buttons using active profiles dropdown
+- Add `reply_to_id` to `TeamMessage` interface
+- Include `reply_to_id` in the insert payload of `useSendMessage`
+- Update `onSend` callback signature to accept optional `replyToId`
 
-**`src/components/pipeline/LeadDetailDrawer.tsx`**
-- Same assignee management UI as SalesLeadDrawer
+**File**: `src/components/teamhub/MessageThread.tsx` (props update)
 
-### External Estimator Visibility Logic (key change)
+- Update `onSend` prop type to include optional `replyToId: string`
 
-```typescript
-// In SalesPipeline.tsx
-if (isExternalEstimator) {
-  // Find estimator's profile ID by email
-  const myProfileId = profiles?.find(p => p.email === userEmail)?.id;
-  // Filter leads to only those where estimator is assigned
-  const myLeads = leads.filter(l => 
-    l.assignees?.some(a => a.profile_id === myProfileId)
-  );
-  // Derive visible columns from those leads' stages
-  const myStageIds = [...new Set(myLeads.map(l => l.stage))];
-  // Use myStageIds as visibleStageIds, show only myLeads
-}
-```
+**File**: `src/pages/TeamHub.tsx`
+
+- Pass `replyToId` through from `MessageThread.onSend` to `sendMutation`
+
+### Technical Detail
+
+- The `MentionMenu` already queries `profiles_safe` for team members — no new queries needed
+- Mention detection: track cursor position in textarea, detect `@` followed by text, filter menu accordingly
+- Reply quote rendering: build a `messageMap` (Map of id → message) from the messages array, look up `reply_to_id` to get the quoted message
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| Migration | Create `lead_assignees` + `sales_lead_assignees` tables |
-| `src/hooks/useSalesLeads.ts` | Fetch assignees, add/remove mutations |
-| `src/hooks/useLeads.ts` | Fetch assignees, add/remove mutations |
-| `src/pages/sales/SalesPipeline.tsx` | Multi-select, external estimator shows only assigned leads + their columns |
-| `src/components/pipeline/LeadFormModal.tsx` | Multi-select assignee dropdown |
-| `src/components/pipeline/LeadCard.tsx` | Stacked assignee avatars |
-| `src/components/sales/SalesLeadDrawer.tsx` | Assignee management chips |
-| `src/components/pipeline/LeadDetailDrawer.tsx` | Assignee management chips |
+| Migration | Add `reply_to_id` column to `team_messages` |
+| `src/hooks/useTeamChat.ts` | Add `reply_to_id` to types + insert |
+| `src/components/teamhub/MessageThread.tsx` | Add MentionMenu, reply state, reply UI, mention rendering |
+| `src/pages/TeamHub.tsx` | Pass replyToId through onSend |
 
