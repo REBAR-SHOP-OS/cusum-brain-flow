@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,10 @@ import { MentionMenu } from "@/components/chat/MentionMenu";
 interface Props {
   salesLeadId: string;
   companyId: string;
+  isExternalEstimator?: boolean;
+  currentUserName?: string;
+  currentUserId?: string;
+  assignees?: { profile_id: string; full_name: string }[];
 }
 
 type TabMode = "note" | "activity" | null;
@@ -65,8 +69,30 @@ function renderBodyWithMedia(text: string | null) {
   });
 }
 
-export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
+export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, currentUserName: propUserName, currentUserId: propUserId, assignees = [] }: Props) {
   const { activities, isLoading, create, markDone } = useSalesLeadActivities(salesLeadId);
+
+  // Resolve current user if not passed
+  const [resolvedUser, setResolvedUser] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (propUserId && propUserName) return;
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        const email = data.user.email || "";
+        // Find matching assignee or profile name
+        const match = assignees.find((a) => a.profile_id === data.user!.id);
+        setResolvedUser({ id: data.user.id, name: match?.full_name || email.split("@")[0] });
+      }
+    });
+  }, [propUserId, propUserName, assignees]);
+
+  const currentUserId = propUserId || resolvedUser?.id;
+  const currentUserName = propUserName || resolvedUser?.name;
+
+  // Build extraUsers for MentionMenu from non-rebar assignees
+  const extraMentionUsers = assignees
+    .filter((a) => !a.full_name.toLowerCase().includes("rebar"))
+    .map((a) => ({ id: a.profile_id, label: a.full_name, subtitle: "External estimator" }));
   const [activeTab, setActiveTab] = useState<TabMode>(null);
   const [text, setText] = useState("");
   const [activityType, setActivityType] = useState("follow_up");
@@ -185,11 +211,25 @@ export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
     }
   };
 
-  const filtered = activities.filter((a) => {
+  // Filter by tab
+  let filtered = activities.filter((a) => {
     if (filter === "notes") return a.activity_type === "note" || a.activity_type === "email";
     if (filter === "system") return a.activity_type === "stage_change" || a.activity_type === "system";
     return true;
   });
+
+  // External estimators only see activities where they are @mentioned or ones they authored
+  if (isExternalEstimator && currentUserName) {
+    filtered = filtered.filter((a) => {
+      // Always show own activities
+      if (currentUserId && a.user_id === currentUserId) return true;
+      // Check if @mentioned in body or subject
+      const mentionTag = `@${currentUserName}`;
+      if (a.body?.includes(mentionTag)) return true;
+      if (a.subject?.includes(mentionTag)) return true;
+      return false;
+    });
+  }
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -249,6 +289,7 @@ export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
               selectedIndex={mentionIndex}
               onSelect={handleMentionSelect}
               onClose={() => setMentionOpen(false)}
+              extraUsers={extraMentionUsers}
             />
           </div>
 

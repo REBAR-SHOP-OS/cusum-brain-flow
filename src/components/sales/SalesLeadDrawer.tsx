@@ -210,7 +210,12 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
         {/* ── Tab Content ── */}
         <div className="bg-background min-h-[200px]">
           {activeTab === "timeline" && (
-            <SalesLeadChatter salesLeadId={lead.id} companyId={lead.company_id} />
+            <SalesLeadChatter
+              salesLeadId={lead.id}
+              companyId={lead.company_id}
+              isExternalEstimator={isExternalEstimator}
+              assignees={assignees}
+            />
           )}
 
           {activeTab === "details" && (
