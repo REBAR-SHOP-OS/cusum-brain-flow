@@ -24,7 +24,7 @@ import {
   Image as ImageIcon,
   X,
   Download,
-  SpellCheck,
+  
   Trash2,
   Reply,
   Forward,
