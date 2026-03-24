@@ -12,12 +12,13 @@ export interface VizzyBusinessSnapshot {
     activeCutPlans: number;
     queuedItems: number;
     completedToday: number;
+    totalPiecesProduced: number;
     machinesRunning: number;
     machineRunsToday: number;
   };
   machineRuns?: {
     totalToday: number;
-    runs: { machine_name: string; process: string; status: string; started_at: string | null; output_qty: number | null }[];
+    runs: { machine_name: string; process: string; status: string; started_at: string | null; output_qty: number | null; operator_name: string | null }[];
   };
   crm: {
     openLeads: number;

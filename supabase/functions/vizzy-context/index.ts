@@ -186,6 +186,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
         status: r.status,
         started_at: r.started_at,
         output_qty: r.output_qty,
+        operator_name: profileIdMap.get(r.operator_profile_id) || null,
       }));
       return { totalToday: runs.length, runs };
     })(),
