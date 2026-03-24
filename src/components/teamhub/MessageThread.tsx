@@ -597,7 +597,7 @@ export function MessageThread({
                         {/* Header */}
                         {!item.isGrouped && (
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="font-semibold text-sm text-foreground">
+                            <span className="font-bold text-sm text-foreground">
                               {msg.sender?.full_name || "Unknown"}
                             </span>
                             <span className="text-[10px] text-muted-foreground">
