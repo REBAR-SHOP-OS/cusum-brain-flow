@@ -114,7 +114,8 @@ serve((req) =>
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
-      throw new Error("Failed to get Gmail access token");
+      log.error("Gmail token refresh failed. Google response:", JSON.stringify(tokenData));
+      throw new Error("Failed to get Gmail access token: " + (tokenData.error || "unknown"));
     }
 
     let sentCount = 0;
