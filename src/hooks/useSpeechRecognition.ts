@@ -22,6 +22,7 @@ interface UseSpeechRecognitionReturn {
   start: () => void;
   stop: () => void;
   reset: () => void;
+  clearTranscripts: () => void;
   isSupported: boolean;
 }
 
@@ -144,6 +145,11 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
     setInterimText("");
   }, [stop]);
 
+  const clearTranscripts = useCallback(() => {
+    setTranscripts([]);
+    setInterimText("");
+  }, []);
+
   const fullTranscript = transcripts.map((t) => t.text).join(" ");
 
   return {
@@ -154,6 +160,7 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
     start,
     stop,
     reset,
+    clearTranscripts,
     isSupported,
   };
 }
