@@ -199,6 +199,15 @@ export default function TeamHub() {
           toast.error("Failed to open DM", { description: err.message });
         }
       }}
+      onDeleteChannel={async (id) => {
+        try {
+          await deleteChannelMutation.mutateAsync(id);
+          if (selectedChannelId === id) setSelectedChannelId(null);
+          toast.success("Channel deleted");
+        } catch (err: any) {
+          toast.error("Failed to delete", { description: err.message });
+        }
+      }}
       onClose={() => setSidebarOpen(false)}
     />
   );
