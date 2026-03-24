@@ -1,38 +1,28 @@
 
 
-## Improve Background Theme Colors for Better Readability
+## Mirror Feedback Task Completion Between Zahra & Radin
 
 ### Problem
-Current theme swatches are very dark and similar-looking, making it hard to distinguish them and causing poor text readability. The user wants brighter, more beautiful colors that maintain good contrast with text.
+Feedback tasks (`screenshot_feedback` and `feedback_verification`) are visually mirrored between Zahra and Radin's columns, but completing one doesn't auto-complete the paired task. When either user checks off a feedback task, the linked task should also be marked complete.
 
 ### Changes
 
-**File**: `src/components/teamhub/BackgroundThemePicker.tsx`
+**File**: `src/pages/Tasks.tsx`
 
-Replace the 10 dark themes with brighter, more distinct options that keep text readable:
+Add a helper function `mirrorFeedbackCompletion(task)` called after successful completion in three places:
 
-| Theme | Preview/Style |
-|---|---|
-| Default | Current dark background (no change) |
-| Sky Blue | Soft blue gradient `hsl(210 60% 85%)` → `hsl(220 50% 75%)` |
-| Mint Green | Fresh mint `hsl(160 40% 85%)` → `hsl(170 35% 75%)` |
-| Lavender | Soft purple `hsl(270 40% 85%)` → `hsl(260 35% 78%)` |
-| Peach | Warm peach `hsl(20 60% 88%)` → `hsl(15 50% 80%)` |
-| Rose | Soft pink `hsl(340 40% 88%)` → `hsl(350 35% 80%)` |
-| Sand | Warm beige `hsl(40 40% 88%)` → `hsl(35 35% 80%)` |
-| Teal | Ocean teal `hsl(180 40% 82%)` → `hsl(190 35% 72%)` |
-| Lilac | Light violet `hsl(280 35% 88%)` → `hsl(290 30% 80%)` |
-| Cloud | Neutral gray `hsl(220 15% 90%)` → `hsl(220 10% 82%)` |
+1. **`toggleComplete`** (line ~611, after successful update): If the task source is `screenshot_feedback` or `feedback_verification`, and the acting user is Zahra or Radin, find and complete the paired task.
 
-Since the app uses dark mode, all text is light-colored. These brighter backgrounds will create strong contrast, making text highly readable while looking visually appealing. The text color in messages will need to be set to dark for readability against these light backgrounds.
+2. **`confirmFeedbackFix`** (line ~678): Same — after confirming, auto-complete the linked original task.
 
-**Additional change**: Add `color: "hsl(222 47% 11%)"` (dark text) to each non-default theme's `style` object so message text remains readable on light backgrounds. Message bubbles and UI elements inside the chat area will also need dark text overrides.
+3. **`approveAndClose`** (line ~719): Same pattern.
 
-**File**: `src/components/teamhub/MessageThread.tsx`
-- When a non-default theme is active, add a CSS class that forces dark text color on the chat message area so all content remains readable against the light backgrounds.
+**Mirror logic**:
+- If a `feedback_verification` task is completed → find the original `screenshot_feedback` task via `metadata.original_task_id` → mark it completed
+- If a `screenshot_feedback` task is completed → find any `feedback_verification` task where `metadata->>'original_task_id'` equals this task's ID → mark it completed
+- Only triggers when the acting user's profile is Zahra or Radin
 
 | File | Change |
 |---|---|
-| `BackgroundThemePicker.tsx` | Replace dark swatches with bright, colorful gradients |
-| `MessageThread.tsx` | Ensure text contrast adapts to light backgrounds |
+| `src/pages/Tasks.tsx` | Add `mirrorFeedbackCompletion` helper, call it in `toggleComplete`, `confirmFeedbackFix`, and `approveAndClose` |
 
