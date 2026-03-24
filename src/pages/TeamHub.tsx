@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile, type ChatAttachment } from "@/hooks/useTeamChat";
+import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile, type ChatAttachment, type TeamMessage } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useCreateChannel, useOpenDM } from "@/hooks/useChannelManagement";
 import { useActiveMeetings, useStartMeeting, useEndMeeting } from "@/hooks/useTeamMeetings";
@@ -10,6 +10,7 @@ import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
 import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
 import { MeetingReportDialog } from "@/components/teamhub/MeetingReportDialog";
+import { ForwardMessageDialog } from "@/components/teamhub/ForwardMessageDialog";
 import { MessageSquare, Globe, Users, Sparkles, Menu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -31,6 +32,7 @@ export default function TeamHub() {
   const [activeMeeting, setActiveMeeting] = useState<TeamMeeting | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
+  const [forwardMsg, setForwardMsg] = useState<TeamMessage | null>(null);
 
   const activeChannelId = selectedChannelId || (channelsLoading ? null : channels[0]?.id || null);
   const activeChannel = channels.find((c) => c.id === activeChannelId);
@@ -74,6 +76,25 @@ export default function TeamHub() {
       });
     } catch (err: any) {
       toast.error("Failed to send message", { description: err.message });
+    }
+  };
+
+  const handleForward = async (targetChannelId: string, msg: TeamMessage) => {
+    if (!myProfile) return;
+    const forwardPrefix = `↪ Forwarded from ${msg.sender?.full_name || "Unknown"}:\n`;
+    const text = forwardPrefix + msg.original_text;
+    try {
+      await sendMutation.mutateAsync({
+        channelId: targetChannelId,
+        senderProfileId: myProfile.id,
+        text,
+        senderLang: myLang,
+        targetLangs,
+        attachments: msg.attachments || [],
+      });
+      toast.success("Message forwarded");
+    } catch (err: any) {
+      toast.error("Failed to forward", { description: err.message });
     }
   };
 
@@ -214,6 +235,7 @@ export default function TeamHub() {
                   onStartMeeting={() => setShowMeetingDialog(true)}
                   onJoinMeeting={(m) => setActiveMeeting(m)}
                   readOnly={!canWrite}
+                  onForward={(msg) => setForwardMsg(msg)}
                 />
               ) : channelsLoading ? (
                 <div className="flex items-center justify-center h-full">
@@ -298,6 +320,14 @@ export default function TeamHub() {
           meetingId={reportMeetingId}
         />
       )}
+      <ForwardMessageDialog
+        open={!!forwardMsg}
+        onOpenChange={(open) => { if (!open) setForwardMsg(null); }}
+        message={forwardMsg}
+        channels={channels}
+        currentChannelId={activeChannelId}
+        onForward={handleForward}
+      />
     </div>
   );
 }

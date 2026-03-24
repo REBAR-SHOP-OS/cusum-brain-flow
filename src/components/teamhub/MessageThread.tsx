@@ -25,6 +25,7 @@ import {
   SpellCheck,
   Trash2,
   Reply,
+  Forward,
 } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
@@ -78,6 +79,7 @@ interface MessageThreadProps {
   onStartMeeting?: () => void;
   onJoinMeeting?: (meeting: TeamMeeting) => void;
   readOnly?: boolean;
+  onForward?: (msg: TeamMessage) => void;
 }
 
 const avatarColors = [
@@ -131,6 +133,7 @@ export function MessageThread({
   onStartMeeting,
   onJoinMeeting,
   readOnly = false,
+  onForward,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const [replyTo, setReplyTo] = useState<TeamMessage | null>(null);
@@ -713,6 +716,15 @@ export function MessageThread({
                             title="Reply"
                           >
                             <Reply className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {onForward && (
+                          <button
+                            onClick={() => onForward(msg)}
+                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                            title="Forward"
+                          >
+                            <Forward className="w-3.5 h-3.5" />
                           </button>
                         )}
                         <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
