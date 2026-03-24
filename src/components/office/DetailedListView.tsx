@@ -154,7 +154,7 @@ export function DetailedListView() {
       <div className="flex-1 overflow-x-auto">
         <div className="min-w-[1200px]">
           {/* Table header */}
-          <div className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_40px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0">
+          <div className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_70px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0">
             <span>DWG #</span>
             <span>Item</span>
             <span>Grade</span>
@@ -164,7 +164,7 @@ export function DetailedListView() {
             <span>Type</span>
             <span>Length</span>
             {dimCols.map(c => <span key={c}>{c}</span>)}
-            <span>Actions</span>
+            <span>ACT</span>
           </div>
 
           {/* Rows */}
