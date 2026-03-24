@@ -14,13 +14,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Building, Mail, Phone, DollarSign, Pencil, Trash2,
-  Clock, X, ClipboardList, User,
+  Clock, X, ClipboardList, User, NotebookPen,
 } from "lucide-react";
 import { SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
+import { LiveNoteTaker } from "./LiveNoteTaker";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { AssigneeManager } from "@/components/pipeline/AssigneeManager";
 import type { Profile } from "@/hooks/useProfiles";
@@ -52,6 +53,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
+  const [noteTakerOpen, setNoteTakerOpen] = useState(false);
   const [lostReason, setLostReason] = useState("");
 
   useEffect(() => {
@@ -191,7 +193,28 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                 <p className="font-medium capitalize">{lead.source}</p>
               </div>
             )}
+            {/* Live Note-Taker toggle */}
+            {!isExternalEstimator && (
+              <div className="col-span-2">
+                <Button
+                  size="sm"
+                  variant={noteTakerOpen ? "secondary" : "outline"}
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => setNoteTakerOpen((v) => !v)}
+                >
+                  <NotebookPen className="w-3.5 h-3.5" />
+                  Live Notes
+                </Button>
+              </div>
+            )}
           </div>
+
+          {/* Live Note-Taker panel */}
+          {noteTakerOpen && lead.company_id && (
+            <div className="mt-2">
+              <LiveNoteTaker salesLeadId={lead.id} companyId={lead.company_id} />
+            </div>
+          )}
 
           {/* Assignees */}
           {!isExternalEstimator && (
