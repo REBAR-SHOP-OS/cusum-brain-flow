@@ -40,6 +40,7 @@ interface PipelineColumnProps {
   aiMode?: boolean;
   aiActionLeadIds?: Set<string>;
   pendingActivitiesByLead?: Record<string, { type: string; dueDate: string }[]>;
+  assigneesByLeadId?: Record<string, { profile_id: string; full_name: string }[]>;
 }
 
 const ACTIVITY_COLORS: Record<ActivityStatus, string> = {
@@ -66,6 +67,7 @@ export function PipelineColumn({
   aiMode = false,
   aiActionLeadIds = new Set(),
   pendingActivitiesByLead = {},
+  assigneesByLeadId = {},
 }: PipelineColumnProps) {
   const [activityFilter, setActivityFilter] = useState<ActivityStatus | null>(null);
 
@@ -157,6 +159,7 @@ export function PipelineColumn({
               onClick={onLeadClick}
               hasAIAction={aiMode && aiActionLeadIds.has(lead.id)}
               pendingActivities={pendingActivitiesByLead[lead.id] || []}
+              assignees={assigneesByLeadId[lead.id] || []}
             />
           ))
         )}

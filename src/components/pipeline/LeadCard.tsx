@@ -3,6 +3,7 @@ import { differenceInDays, differenceInHours, formatDistanceToNowStrict, differe
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import { LeadScoreBreakdown } from "./LeadScoreBreakdown";
+import { AssigneeAvatars } from "./AssigneeManager";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -21,6 +22,7 @@ interface LeadCardProps {
   onClick: (lead: LeadWithCustomer) => void;
   hasAIAction?: boolean;
   pendingActivities?: PendingActivity[];
+  assignees?: { profile_id: string; full_name: string }[];
 }
 
 // Map activity types to icons — Odoo parity
@@ -106,7 +108,7 @@ function getSlaInfo(lead: Lead): { label: string; urgent: boolean; breached: boo
   return { label: dist, urgent: hoursLeft <= 12, breached: false };
 }
 
-export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick, hasAIAction = false, pendingActivities = [] }: LeadCardProps) {
+export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick, hasAIAction = false, pendingActivities = [], assignees = [] }: LeadCardProps) {
   const stars = getPriorityStars(lead);
   const salesperson = getSalesperson(lead);
   const meta = lead.metadata as Record<string, unknown> | null;
@@ -119,6 +121,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const scoreConfidence = lead.score_confidence as string | null;
   const slaInfo = getSlaInfo(lead);
   const isStale = differenceInCalendarDays(new Date(), new Date(lead.updated_at)) >= 7 && lead.stage !== "won" && lead.stage !== "lost";
+  const hasAssignees = assignees.length > 0;
 
   return (
     <div
@@ -232,15 +235,17 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
             </span>
           )}
 
-          {/* Salesperson badge */}
-          {salesperson && (
+          {/* Multi-assignee avatars (junction table) */}
+          {hasAssignees ? (
+            <AssigneeAvatars assignees={assignees} max={3} />
+          ) : salesperson ? (
             <div
               className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", salesperson.color)}
               title={salesperson.name}
             >
               {salesperson.initials}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

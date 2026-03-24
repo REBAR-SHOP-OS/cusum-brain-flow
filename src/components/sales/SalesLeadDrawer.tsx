@@ -20,6 +20,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
+import { AssigneeManager } from "@/components/pipeline/AssigneeManager";
+import type { Profile } from "@/hooks/useProfiles";
 
 interface Props {
   lead: SalesLead | null;
@@ -27,6 +29,10 @@ interface Props {
   onClose: () => void;
   onUpdate: (data: Partial<SalesLead> & { id: string }) => void;
   onDelete: (id: string) => void;
+  assignees?: { profile_id: string; full_name: string }[];
+  profiles?: Profile[];
+  onAddAssignee?: (profileId: string) => void;
+  onRemoveAssignee?: (profileId: string) => void;
 }
 
 const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
@@ -38,7 +44,7 @@ const priorityConfig: Record<string, { label: string; class: string }> = {
   low: { label: "Low", class: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" },
 };
 
-export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete }: Props) {
+export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete, assignees = [], profiles = [], onAddAssignee, onRemoveAssignee }: Props) {
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
   const [lostReason, setLostReason] = useState("");
@@ -160,6 +166,17 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                 <p className="font-medium capitalize">{lead.source}</p>
               </div>
             )}
+          </div>
+
+          {/* Assignees */}
+          <div className="col-span-2 mt-1 pt-2 border-t border-border/50">
+            <span className="text-[11px] text-muted-foreground font-medium mb-1 block">Assignees</span>
+            <AssigneeManager
+              assignees={assignees}
+              profiles={profiles}
+              onAdd={onAddAssignee || (() => {})}
+              onRemove={onRemoveAssignee || (() => {})}
+            />
           </div>
         </div>
 

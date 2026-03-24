@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,8 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronsUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useLeadAssignees } from "@/hooks/useLeadAssignees";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -46,6 +50,9 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
+  const { byLeadId, addAssignee, removeAssignee } = useLeadAssignees();
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
 
   const { data: customers = [] } = useQuery({
     queryKey: ["customers-select"],
@@ -83,6 +90,9 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
 
   useEffect(() => {
     if (lead) {
+      // Populate assignees from junction table
+      const existing = byLeadId[lead.id] ?? [];
+      setSelectedAssignees(existing.map(a => a.profile_id));
       form.reset({
         title: lead.title,
         description: lead.description || "",
@@ -100,7 +110,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         assigned_to: lead.assigned_to || "",
         territory: (lead as any).territory || "",
       });
-    } else {
+      setSelectedAssignees([]);
       form.reset({
         title: "",
         description: "",
@@ -138,6 +148,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         territory: data.territory || null,
       } as any;
 
+      let leadId = lead?.id;
       if (lead) {
         const { error } = await supabase
           .from("leads")
@@ -145,12 +156,33 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
           .eq("id", lead.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("leads").insert({ ...payload, company_id: companyId! });
+        const { data: created, error } = await supabase.from("leads").insert({ ...payload, company_id: companyId! }).select("id").single();
         if (error) throw error;
+        leadId = created?.id;
+      }
+
+      // Sync assignees
+      if (leadId && companyId) {
+        const existing = byLeadId[leadId] ?? [];
+        const existingIds = new Set(existing.map(a => a.profile_id));
+        const newIds = new Set(selectedAssignees);
+        // Add new
+        for (const pid of selectedAssignees) {
+          if (!existingIds.has(pid)) {
+            await supabase.from("lead_assignees" as any).insert({ lead_id: leadId, profile_id: pid, company_id: companyId });
+          }
+        }
+        // Remove old
+        for (const a of existing) {
+          if (!newIds.has(a.profile_id)) {
+            await supabase.from("lead_assignees" as any).delete().eq("lead_id", leadId).eq("profile_id", a.profile_id);
+          }
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["lead_assignees"] });
       toast({ title: lead ? "Lead updated" : "Lead created" });
       onOpenChange(false);
     },
@@ -363,26 +395,36 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="assigned_to"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Assigned To</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {activeProfiles.map(p => (
-                          <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormItem>
+                <FormLabel>Assign To</FormLabel>
+                <Popover open={assigneePopoverOpen} onOpenChange={setAssigneePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between font-normal h-10">
+                      {selectedAssignees.length > 0
+                        ? `${selectedAssignees.length} selected`
+                        : <span className="text-muted-foreground">Select members...</span>}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[220px] p-2" align="start">
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                      {activeProfiles.map(p => (
+                        <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent cursor-pointer text-sm">
+                          <Checkbox
+                            checked={selectedAssignees.includes(p.id)}
+                            onCheckedChange={(checked) => {
+                              setSelectedAssignees(prev =>
+                                checked ? [...prev, p.id] : prev.filter(id => id !== p.id)
+                              );
+                            }}
+                          />
+                          {p.full_name}
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </FormItem>
 
               <FormField
                 control={form.control}

@@ -28,6 +28,7 @@ import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParse
 import { getRequiredGates, type GateType } from "@/lib/pipelineTransitionGates";
 import { usePipelineMemory } from "@/hooks/usePipelineMemory";
 import { usePipelineRealtime } from "@/hooks/usePipelineRealtime";
+import { useLeadAssignees } from "@/hooks/useLeadAssignees";
 import { logPipelineTransition } from "@/lib/logPipelineTransition";
 import { QualificationGateModal } from "@/components/pipeline/gates/QualificationGateModal";
 import { PricingGateModal } from "@/components/pipeline/gates/PricingGateModal";
@@ -115,6 +116,7 @@ function getDateCutoff(rangeId: string): Date | null {
 
 export default function Pipeline() {
   usePipelineRealtime();
+  const { byLeadId: assigneesByLeadId } = useLeadAssignees();
   const [searchQuery, setSearchQuery] = useState("");
   // Stage group filter — default shows Sales + Estimation + Quotation + Operations (hides Terminal)
   const [activeGroups, setActiveGroups] = useState<Set<string>>(() => new Set(["sales", "estimation", "quotation", "operations"]));
@@ -915,6 +917,7 @@ export default function Pipeline() {
               aiMode={aiMode}
               aiActionLeadIds={new Set(aiActions.filter(a => a.status === "pending").map(a => a.lead_id))}
               pendingActivitiesByLead={pendingActivitiesByLead}
+              assigneesByLeadId={assigneesByLeadId}
             />
           )}
         </div>

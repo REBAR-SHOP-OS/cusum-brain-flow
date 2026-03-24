@@ -26,6 +26,7 @@ interface PipelineBoardProps {
   aiMode?: boolean;
   aiActionLeadIds?: Set<string>;
   pendingActivitiesByLead?: Record<string, { type: string; dueDate: string }[]>;
+  assigneesByLeadId?: Record<string, { profile_id: string; full_name: string }[]>;
 }
 
 export { type PipelineBoardProps };
@@ -46,6 +47,7 @@ export function PipelineBoard({
   aiMode = false,
   aiActionLeadIds = new Set(),
   pendingActivitiesByLead = {},
+  assigneesByLeadId = {},
 }: PipelineBoardProps) {
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -221,6 +223,7 @@ export function PipelineBoard({
               aiMode={aiMode}
               aiActionLeadIds={aiActionLeadIds}
               pendingActivitiesByLead={pendingActivitiesByLead}
+              assigneesByLeadId={assigneesByLeadId}
             />
           </div>
         ))}

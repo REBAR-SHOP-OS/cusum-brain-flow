@@ -3,6 +3,7 @@ import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { useAuth } from "@/lib/auth";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { useSalesContacts } from "@/hooks/useSalesContacts";
+import { useSalesLeadAssignees } from "@/hooks/useLeadAssignees";
 import { Button } from "@/components/ui/button";
 import { Plus, ChevronsUpDown, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useProfiles } from "@/hooks/useProfiles";
 import SalesSearchBar from "@/components/sales/SalesSearchBar";
@@ -91,11 +93,21 @@ export default function SalesPipeline() {
   const { contacts: unifiedContacts } = useSalesContacts();
   const { profiles } = useProfiles();
   const activeProfiles = (profiles ?? []).filter(p => p.is_active);
+  const { bySalesLeadId, addAssignee, removeAssignee } = useSalesLeadAssignees();
+
+  // Find external estimator's profile ID
+  const myProfileId = useMemo(() => {
+    if (!isExternalEstimator) return null;
+    return activeProfiles.find(p => p.email?.toLowerCase() === userEmail)?.id ?? null;
+  }, [isExternalEstimator, activeProfiles, userEmail]);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [drawerLead, setDrawerLead] = useState<SalesLead | null>(null);
   const [search, setSearch] = useState("");
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
 
   // Form state
   const SOURCES = ["Email", "Phone/Call", "Website", "Referral", "Trade Show", "Social Media", "Cold Outreach", "Partner", "Other"];
@@ -104,11 +116,14 @@ export default function SalesPipeline() {
     expected_value: "", source: "", notes: "", stage: "new", priority: "medium",
     probability: "", expected_close_date: "", assigned_to: "", territory: "", description: "", lead_type: "opportunity",
   });
-  const resetForm = () => setForm({
-    title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "",
-    expected_value: "", source: "", notes: "", stage: "new", priority: "medium",
-    probability: "", expected_close_date: "", assigned_to: "", territory: "", description: "", lead_type: "opportunity",
-  });
+  const resetForm = () => {
+    setForm({
+      title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "",
+      expected_value: "", source: "", notes: "", stage: "new", priority: "medium",
+      probability: "", expected_close_date: "", assigned_to: "", territory: "", description: "", lead_type: "opportunity",
+    });
+    setSelectedAssignees([]);
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -121,13 +136,28 @@ export default function SalesPipeline() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // For external estimators: filter leads to only those assigned to them
+  const effectiveLeads = useMemo(() => {
+    if (!isExternalEstimator || !myProfileId) return leads;
+    return leads.filter(l => {
+      const assignees = bySalesLeadId[l.id] ?? [];
+      return assignees.some(a => a.profile_id === myProfileId);
+    });
+  }, [leads, isExternalEstimator, myProfileId, bySalesLeadId]);
+
   // Determine visible stage IDs based on active group filter or external estimator restriction
   const visibleStageIds = useMemo(() => {
-    if (isExternalEstimator) return externalEstimatorStages;
+    if (isExternalEstimator) {
+      // Derive columns from the stages of assigned leads
+      const stageSet = new Set(effectiveLeads.map(l => l.stage));
+      // Also include the default assigned stages so columns always show
+      externalEstimatorStages.forEach(s => stageSet.add(s));
+      return [...stageSet];
+    }
     if (!activeGroup) return SALES_STAGES.map((s) => s.id);
     const group = SALES_STAGE_GROUPS.find((g) => g.label === activeGroup);
     return group ? [...group.ids] : SALES_STAGES.map((s) => s.id);
-  }, [activeGroup, isExternalEstimator, externalEstimatorStages]);
+  }, [activeGroup, isExternalEstimator, externalEstimatorStages, effectiveLeads]);
 
   const visibleStages = useMemo(
     () => PIPELINE_STAGES.filter((s) => visibleStageIds.includes(s.id)),
@@ -136,15 +166,16 @@ export default function SalesPipeline() {
 
   // Filter leads by search
   const filtered = useMemo(() => {
-    if (!search.trim()) return leads;
+    const source = isExternalEstimator ? effectiveLeads : leads;
+    if (!search.trim()) return source;
     const q = search.toLowerCase();
-    return leads.filter(l =>
+    return source.filter(l =>
       l.title.toLowerCase().includes(q) ||
       (l.contact_name || "").toLowerCase().includes(q) ||
       (l.contact_company || "").toLowerCase().includes(q) ||
       (l.contact_email || "").toLowerCase().includes(q)
     );
-  }, [leads, search]);
+  }, [leads, effectiveLeads, search, isExternalEstimator]);
 
   // Group adapted leads by stage
   const leadsByStage = useMemo(() => {
@@ -187,6 +218,15 @@ export default function SalesPipeline() {
       assigned_to: form.assigned_to || null,
       description: form.description || null,
       notes: form.notes || null,
+    }, {
+      onSuccess: (data: any) => {
+        // Insert assignees into junction table
+        if (selectedAssignees.length > 0 && data?.id) {
+          selectedAssignees.forEach(profileId => {
+            addAssignee.mutate({ salesLeadId: data.id, profileId });
+          });
+        }
+      },
     });
     setCreateOpen(false);
     resetForm();
@@ -271,6 +311,7 @@ export default function SalesPipeline() {
           onEdit={noop as any}
           onDelete={noop as any}
           onLeadClick={handleLeadClick}
+          assigneesByLeadId={bySalesLeadId}
         />
       </div>
 
@@ -391,17 +432,37 @@ export default function SalesPipeline() {
             {/* Expected Close Date */}
             <div><Label>Expected Close Date</Label><Input type="date" value={form.expected_close_date} onChange={e => setForm(p => ({ ...p, expected_close_date: e.target.value }))} /></div>
 
-            {/* Assigned To + Territory */}
+            {/* Assignees (multi-select) + Territory */}
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Assigned To</Label>
-                <Select value={form.assigned_to} onValueChange={v => setForm(p => ({ ...p, assigned_to: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
-                  <SelectContent>
-                    {activeProfiles.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div>
+                <Label>Assign To</Label>
+                <Popover open={assigneePopoverOpen} onOpenChange={setAssigneePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between font-normal h-10">
+                      {selectedAssignees.length > 0
+                        ? `${selectedAssignees.length} selected`
+                        : <span className="text-muted-foreground">Select members...</span>}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[220px] p-2" align="start">
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                      {activeProfiles.map(p => (
+                        <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent cursor-pointer text-sm">
+                          <Checkbox
+                            checked={selectedAssignees.includes(p.id)}
+                            onCheckedChange={(checked) => {
+                              setSelectedAssignees(prev =>
+                                checked ? [...prev, p.id] : prev.filter(id => id !== p.id)
+                              );
+                            }}
+                          />
+                          {p.full_name}
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div><Label>Territory</Label><Input value={form.territory} onChange={e => setForm(p => ({ ...p, territory: e.target.value }))} placeholder="Region" /></div>
             </div>
@@ -428,6 +489,10 @@ export default function SalesPipeline() {
         onClose={() => setDrawerLead(null)}
         onUpdate={(data) => { updateLead.mutate(data); setDrawerLead(prev => prev ? { ...prev, ...data } : null); }}
         onDelete={(id) => deleteLead.mutate(id)}
+        assignees={drawerLead ? (bySalesLeadId[drawerLead.id] ?? []) : []}
+        profiles={activeProfiles}
+        onAddAssignee={(profileId) => { if (drawerLead) addAssignee.mutate({ salesLeadId: drawerLead.id, profileId }); }}
+        onRemoveAssignee={(profileId) => { if (drawerLead) removeAssignee.mutate({ salesLeadId: drawerLead.id, profileId }); }}
       />
     </div>
   );
