@@ -15,6 +15,7 @@ import { useScheduledActivities, type ScheduledActivity } from "@/hooks/useSched
 interface ScheduledActivitiesProps {
   entityType: string;
   entityId: string;
+  assignees?: { profile_id: string; full_name: string }[];
 }
 
 const typeIcons: Record<string, React.ElementType> = {
