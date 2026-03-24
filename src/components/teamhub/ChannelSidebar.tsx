@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { ProfileEditDialog } from "./ProfileEditDialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [membersOpen, setMembersOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
   const { unreadSenderIds } = useUnreadSenders();
 
   const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
@@ -84,12 +86,14 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
       <div className="p-3 md:p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <Avatar className="w-8 h-8 md:w-9 md:h-9 border border-primary/20">
-              <AvatarImage src={myProfile?.avatar_url || ""} />
-              <AvatarFallback className={cn("text-xs font-bold text-white", getAvatarColor(myProfile?.full_name || ""))}>
-                {getInitials(myProfile?.full_name || "?")}
-              </AvatarFallback>
-            </Avatar>
+            <button type="button" className="rounded-full" onClick={() => myProfile && setProfileEditOpen(true)}>
+              <Avatar className="w-8 h-8 md:w-9 md:h-9 border border-primary/20 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all">
+                <AvatarImage src={myProfile?.avatar_url || ""} />
+                <AvatarFallback className={cn("text-xs font-bold text-white", getAvatarColor(myProfile?.full_name || ""))}>
+                  {getInitials(myProfile?.full_name || "?")}
+                </AvatarFallback>
+              </Avatar>
+            </button>
             <div>
               <h2 className="text-sm font-bold text-foreground tracking-tight whitespace-nowrap">Team Hub</h2>
               <div className="flex items-center gap-1.5">
@@ -218,6 +222,14 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
           </div>
         )}
       </div>
+
+      {myProfile && (
+        <ProfileEditDialog
+          open={profileEditOpen}
+          onClose={() => setProfileEditOpen(false)}
+          profile={myProfile}
+        />
+      )}
     </div>
   );
 }
