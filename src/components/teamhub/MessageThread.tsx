@@ -33,7 +33,7 @@ import {
   Square,
   ChevronDown,
 } from "lucide-react";
-import { useGrammarCheck } from "@/hooks/useGrammarCheck";
+
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
 import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
