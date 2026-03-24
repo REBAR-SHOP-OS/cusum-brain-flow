@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile, type ChatAttachment, type TeamMessage } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
-import { useCreateChannel, useOpenDM } from "@/hooks/useChannelManagement";
+import { useCreateChannel, useOpenDM, useDeleteChannel } from "@/hooks/useChannelManagement";
 import { useActiveMeetings, useStartMeeting, useEndMeeting } from "@/hooks/useTeamMeetings";
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { ChannelSidebar } from "@/components/teamhub/ChannelSidebar";
