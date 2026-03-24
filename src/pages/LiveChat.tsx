@@ -58,7 +58,8 @@ export default function LiveChat() {
   }, [widgetMakeCall]);
 
   const chat = useAdminChat(undefined, handleBrowserAction);
-  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream } = chat;
+  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream, deleteMessage } = chat;
+  const grammar = useGrammarCheck();
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
