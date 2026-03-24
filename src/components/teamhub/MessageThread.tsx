@@ -151,6 +151,7 @@ export function MessageThread({
   readOnly = false,
   onForward,
   onLangChange,
+  headerExtra,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const [replyTo, setReplyTo] = useState<TeamMessage | null>(null);
