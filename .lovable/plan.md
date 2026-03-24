@@ -1,48 +1,25 @@
 
 
-## Fix Synology NAS Connection via QuickConnect Resolution
+## Fix Synology Connection: Use DDNS Instead of QuickConnect
 
 ### Problem
-The edge function gets an HTML page instead of JSON when connecting to the NAS. QuickConnect URLs (`quickconnect.to/RSI1`) use Synology's relay servers and require a resolution step before API calls can be made. Direct DDNS (`RSIC.synology.me:5001`) may also fail due to SSL certificate issues from external servers.
+QuickConnect ID `RSI1` returns errno 9 (not found) from Synology's relay service. However, DDNS is working: `RSIC.synology.me` resolves to `99.229.81.177` with DSM on ports 5000 (HTTP) / 5001 (HTTPS).
 
-### Solution
-Update the edge function to resolve the QuickConnect ID to the actual server URL using Synology's undocumented `global.quickconnect.to/Serv.php` API, then use the resolved URL for all API calls.
+### Fix
+
+1. **Update `SYNOLOGY_URL` secret** to `https://RSIC.synology.me:5001` — this is a direct URL with port, so the edge function will skip QuickConnect resolution entirely and connect directly.
+
+2. **Update edge function** to also try HTTP (port 5000) as fallback if HTTPS fails (self-signed cert from Synology can cause issues from server-side):
+   - Try `https://RSIC.synology.me:5001` first
+   - If that fails (SSL error), try `http://RSIC.synology.me:5000`
 
 ### Changes
 
-**File**: `supabase/functions/synology-proxy/index.ts`
-
-1. Add a `resolveQuickConnect(id)` function that:
-   - POSTs to `https://global.quickconnect.to/Serv.php` with `{"command":"get_server_info","id":"RSI1","version":1}`
-   - Extracts the external IP/port or relay URL from the response
-   - Tries connecting via: direct external IP → DDNS hostname → relay tunnel (in order)
-
-2. Update `getSid()` to:
-   - If `SYNOLOGY_URL` looks like a QuickConnect ID (no `://`), resolve it first
-   - If direct URL fails with HTML response, try QuickConnect resolution as fallback
-   - Log resolved URL for debugging
-
-3. Update the `SYNOLOGY_URL` secret to just `RSI1` (the QuickConnect ID) — simpler for the user
-
-### QuickConnect Resolution Flow
-```text
-POST https://global.quickconnect.to/Serv.php
-Body: {"command":"get_server_info","id":"RSI1","version":1}
-
-Response includes:
-  - server.external.ip + port
-  - server.ddns (e.g. RSIC.synology.me)
-  - env.relay_region
-
-Try in order:
-  1. https://{external_ip}:{port}
-  2. https://{ddns}:{port}
-  3. https://{id}.{relay_region}.quickconnect.to:{port}
-```
-
-### Files Changed
-
-| File | Change |
+| Item | Change |
 |---|---|
-| `supabase/functions/synology-proxy/index.ts` | Add QuickConnect ID resolution, fallback URL logic |
+| Secret `SYNOLOGY_URL` | Update to `https://RSIC.synology.me:5001` |
+| `supabase/functions/synology-proxy/index.ts` | Add HTTP fallback in `getDsmBaseUrl` — if HTTPS connection fails, retry with HTTP on port 5000 |
+
+### Technical Detail
+The existing `getDsmBaseUrl` function already handles direct URLs (matching `^https?://.+:\d+`), so changing the secret to a full URL will bypass all QuickConnect resolution logic.
 
