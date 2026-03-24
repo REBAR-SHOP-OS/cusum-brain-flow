@@ -551,6 +551,22 @@ export function MessageThread({
                           </div>
                         )}
 
+                        {/* Reply quote */}
+                        {msg.reply_to_id && (() => {
+                          const repliedMsg = messageMap.get(msg.reply_to_id!);
+                          if (!repliedMsg) return null;
+                          return (
+                            <div className="mb-1.5 pl-3 border-l-2 border-primary/40 py-1 rounded-sm bg-muted/30">
+                              <span className="text-[10px] font-semibold text-primary/80">
+                                {repliedMsg.sender?.full_name || "Unknown"}
+                              </span>
+                              <p className="text-[11px] text-muted-foreground truncate max-w-[300px]">
+                                {repliedMsg.original_text.slice(0, 80)}{repliedMsg.original_text.length > 80 ? "…" : ""}
+                              </p>
+                            </div>
+                          );
+                        })()}
+
                         {/* Message Body */}
                         {(() => {
                           const { cleanText, parsedAttachments } = parseAttachmentLinks(displayText);
