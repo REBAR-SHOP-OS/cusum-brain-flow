@@ -1,31 +1,26 @@
 
 
-## Fix: Zahra's Profile ID Mismatch
+## Show Current User's Avatar in Sidebar Header
 
-### Root Cause
-The hardcoded `ZAHRA_PROFILE_ID` in `Tasks.tsx` is `2356f04b-0e8d-4b50-bd62-1aa0420f74ab`, but Zahra's **actual** profile ID in the database is `3a59f057-b232-4654-a2ea-d519fe22ccd5`.
+### Problem
+The circled area in the sidebar header shows a generic `MessageSquare` icon. The user wants the logged-in user's profile avatar displayed there instead.
 
-This means:
-- `isDelegateFor` never matches for Zahra, so `canDeleteOrFix` returns `false` — Generate Fix and Delete buttons are disabled
-- The mirroring code targets the wrong Map entry, so Zahra's column shows "No tasks"
+### Change
 
-### Fix
+**File**: `src/components/teamhub/ChannelSidebar.tsx`
 
-**File**: `src/pages/Tasks.tsx`
+1. Accept a new prop `myProfile?: Profile` (the current user's profile)
+2. Replace the `MessageSquare` icon block (lines 86-88) with an `Avatar` showing the user's photo or initials
+3. Keep the same size (`w-8 h-8 md:w-9 md:h-9`) and rounded style
 
-Update `ZAHRA_PROFILE_ID` from `"2356f04b-0e8d-4b50-bd62-1aa0420f74ab"` to `"3a59f057-b232-4654-a2ea-d519fe22ccd5"`.
+**File**: `src/pages/TeamHub.tsx`
+- Pass `myProfile` to `ChannelSidebar`
 
-**File**: `src/components/feedback/AnnotationOverlay.tsx`
-
-Same fix — update `ZAHRA_PROFILE_ID` to the correct value.
+### Result
+The sidebar header shows the current logged-in user's avatar (photo or initials) instead of the generic chat icon.
 
 | File | Change |
 |---|---|
-| `src/pages/Tasks.tsx` | Fix ZAHRA_PROFILE_ID constant |
-| `src/components/feedback/AnnotationOverlay.tsx` | Fix ZAHRA_PROFILE_ID constant |
-
-### Result
-- Generate Fix and Delete will be enabled for Zahra on Radin's tasks
-- Radin's feedback tasks will appear in Zahra's column
-- All delegate permissions work correctly
+| `src/components/teamhub/ChannelSidebar.tsx` | Replace MessageSquare icon with user Avatar |
+| `src/pages/TeamHub.tsx` | Pass `myProfile` prop to ChannelSidebar |
 
