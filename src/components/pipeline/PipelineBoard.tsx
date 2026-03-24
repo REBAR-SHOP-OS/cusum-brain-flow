@@ -26,6 +26,7 @@ interface PipelineBoardProps {
   aiMode?: boolean;
   aiActionLeadIds?: Set<string>;
   pendingActivitiesByLead?: Record<string, { type: string; dueDate: string }[]>;
+  assigneesByLeadId?: Record<string, { profile_id: string; full_name: string }[]>;
 }
 
 export { type PipelineBoardProps };
