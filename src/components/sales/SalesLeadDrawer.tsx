@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { ComposeEmailDialog } from "@/components/inbox/ComposeEmailDialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,9 +48,10 @@ const priorityConfig: Record<string, { label: string; class: string }> = {
 };
 
 export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete, assignees = [], profiles = [], onAddAssignee, onRemoveAssignee, isExternalEstimator }: Props) {
-  const { makeCall } = useRingCentralWidget();
+  const { makeCall, showWidget } = useRingCentralWidget();
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
+  const [composeOpen, setComposeOpen] = useState(false);
   const [lostReason, setLostReason] = useState("");
 
   useEffect(() => {
@@ -66,6 +68,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
   const age = formatDistanceToNow(new Date(lead.created_at), { addSuffix: false });
 
   return (
+    <>
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-[45vw] overflow-y-auto p-0 rounded-none">
         {/* ── Header ── */}
@@ -153,7 +156,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                     size="icon"
                     variant="ghost"
                     className="h-6 w-6 shrink-0"
-                    onClick={() => window.location.href = `mailto:${lead.contact_email}`}
+                    onClick={() => setComposeOpen(true)}
                   >
                     <Mail className="h-3.5 w-3.5 text-primary" />
                   </Button>
@@ -169,7 +172,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                     size="icon"
                     variant="ghost"
                     className="h-6 w-6 shrink-0"
-                    onClick={() => makeCall(lead.contact_phone!)}
+                    onClick={() => { makeCall(lead.contact_phone!); showWidget(); }}
                   >
                     <Phone className="h-3.5 w-3.5 text-green-600" />
                   </Button>
@@ -342,5 +345,13 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
         </div>
       </SheetContent>
     </Sheet>
+
+    <ComposeEmailDialog
+      open={composeOpen}
+      onOpenChange={setComposeOpen}
+      initialTo={lead.contact_email || ""}
+      initialSubject={`Regarding: ${lead.title}`}
+    />
+    </>
   );
 }
