@@ -93,7 +93,7 @@ function StatusBadge({ status }: { status: SystemBackup["status"] }) {
 }
 
 export function BackupModal({ isOpen, onClose }: BackupModalProps) {
-  const { data: backups = [], isLoading, refetch } = useBackups();
+  const { data: backups = [], isLoading, refetch } = useBackups(isOpen);
   const { data: logs = [], isLoading: logsLoading } = useBackupLogs();
   const runBackup = useRunBackup();
   const restoreBackup = useRestoreBackup();
