@@ -160,6 +160,7 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
     start,
     stop,
     reset,
+    clearTranscripts,
     isSupported,
   };
 }
