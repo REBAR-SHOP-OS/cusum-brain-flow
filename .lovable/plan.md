@@ -1,53 +1,45 @@
 
 
-## Cover Image on Instagram Reels — Why It Doesn't Show During Playback
+## Show Only One Channel: "کانال رسمی شرکت"
 
-### Root Cause: Instagram API Limitation (Not a Code Bug)
+### Problem
+The sidebar currently shows all 4 group channels (General, rsic, management-communication, management). The user wants only ONE channel visible: **کانال رسمی شرکت** (Official Company Channel).
 
-Your code is **correct** — it sends `cover_url` to the Instagram Graph API. But Instagram's `cover_url` parameter only sets the **static thumbnail** (the image shown in the grid/feed before someone taps to play). It does **NOT** overlay the cover onto the video during playback. This is an Instagram API limitation.
+### Approach
 
-```text
-What cover_url does:          What you want:
-┌─────────────┐              ┌─────────────┐
-│  Grid View  │              │  Playback   │
-│  ┌───────┐  │              │  ┌───────┐  │
-│  │ COVER │  │              │  │ VIDEO  │  │
-│  │ IMAGE │  │  ← thumbnail │  │ + COVER│  │ ← burned in
-│  │  ▶️   │  │    only       │  │OVERLAY │  │
-│  └───────┘  │              │  └───────┘  │
-└─────────────┘              └─────────────┘
+Two things need to happen:
+
+1. **Rename an existing channel** in the database to "کانال رسمی شرکت" (e.g. rename "General")
+2. **Filter the sidebar** to show only that one channel
+
+Since we can't know which channel ID to keep without risking data loss, the cleanest approach:
+
+### Changes
+
+**File: `src/components/teamhub/ChannelSidebar.tsx`**
+
+1. Filter `groupChannels` to only show the channel named "کانال رسمی شرکت":
+   ```typescript
+   const groupChannels = channels.filter(
+     (c) => c.channel_type === "group" && c.name === "کانال رسمی شرکت"
+   );
+   ```
+
+2. Hide the "+" (create channel) button — since only one channel should exist
+
+3. Remove the collapsible toggle — just show the single channel directly
+
+**Database migration**: Rename the "General" channel to "کانال رسمی شرکت":
+```sql
+UPDATE public.team_channels 
+SET name = 'کانال رسمی شرکت' 
+WHERE name = 'General' AND channel_type = 'group';
 ```
 
-### Solution: Burn Cover Into Video Before Upload
+### Files Changed
 
-To get the cover image visible **during playback**, we need to composite it into the video file using server-side FFmpeg processing before uploading to Instagram.
-
-#### New Edge Function: `video-add-cover`
-Creates a new video file with the cover image burned in as an overlay (first 3-5 seconds with fade-out, or full duration as watermark).
-
-**Process**:
-1. Download original video + cover image
-2. Use FFmpeg (via `ffmpeg-wasm` or a cloud service) to overlay the cover onto the video
-3. Upload the composited video back to storage
-4. Update `image_url` (the video URL) with the composited version before publishing
-
-#### Challenge: FFmpeg in Edge Functions
-Deno edge functions have a **50MB memory limit** and no native FFmpeg. Options:
-
-| Approach | Feasibility |
+| File | Change |
 |---|---|
-| FFmpeg WASM in edge function | Risky — memory/timeout limits for large videos |
-| External API (e.g., Creatomate, Shotstack) | Reliable but needs API key + cost |
-| Client-side FFmpeg.wasm | Works but slow on mobile, blocks UI |
-| Accept Instagram limitation | Zero effort — cover shows as thumbnail only |
-
-### Recommendation
-
-This is a significant engineering effort for a platform-specific limitation. Two practical options:
-
-**Option A (Quick)**: Accept that Instagram uses `cover_url` as thumbnail only. The cover already shows in the grid — users see it before tapping play.
-
-**Option B (Full fix)**: Integrate a video processing API (like Creatomate or Shotstack) to composite the cover image onto the video before upload. This would be a new edge function + API key setup.
-
-Which approach would you prefer?
+| `src/components/teamhub/ChannelSidebar.tsx` | Filter to show only "کانال رسمی شرکت", hide create button and collapse toggle |
+| Database migration | Rename "General" → "کانال رسمی شرکت" |
 
