@@ -133,6 +133,7 @@ export function MessageThread({
   onStartMeeting,
   onJoinMeeting,
   readOnly = false,
+  onForward,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const [replyTo, setReplyTo] = useState<TeamMessage | null>(null);
