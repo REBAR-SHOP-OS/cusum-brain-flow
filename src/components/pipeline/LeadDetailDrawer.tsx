@@ -81,6 +81,9 @@ export function LeadDetailDrawer({
   onStageChange,
 }: LeadDetailDrawerProps) {
   const { isAdmin } = useUserRole();
+  const { profiles } = useProfiles();
+  const activeProfiles = (profiles ?? []).filter(p => p.is_active);
+  const { byLeadId, addAssignee, removeAssignee } = useLeadAssignees();
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const { data: recommendation, isLoading: recLoading } = useLeadRecommendation(lead, open);
   const [convertingToQuote, setConvertingToQuote] = useState(false);
