@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MentionMenu } from "@/components/chat/MentionMenu";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import {
   Send,
   Loader2,
@@ -26,6 +27,8 @@ import {
   Trash2,
   Reply,
   Forward,
+  Mic,
+  Square,
 } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
@@ -111,6 +114,14 @@ function isImageFile(type: string) {
   return type.startsWith("image/");
 }
 
+function isAudioFile(type: string) {
+  return type.startsWith("audio/");
+}
+
+function isAudioUrl(url: string): boolean {
+  return /\.(mp3|wav|ogg|webm|m4a|aac)(\?|$)/i.test(url);
+}
+
 function isVideoFile(type: string) {
   return type.startsWith("video/");
 }
@@ -142,6 +153,36 @@ export function MessageThread({
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(-1);
   const grammar = useGrammarCheck();
+
+  // Voice recorder
+  const voiceRecorder = useVoiceRecorder();
+
+  const formatVoiceDuration = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const handleVoiceSend = async () => {
+    const blob = await voiceRecorder.stopRecording();
+    if (!blob) return;
+
+    setIsUploading(true);
+    const sessionOk = await ensureSession();
+    if (!sessionOk) { setIsUploading(false); return; }
+
+    const fileName = `voice-${Date.now()}.webm`;
+    const { error } = await supabase.storage.from("team-chat-files").upload(fileName, blob, { contentType: "audio/webm" });
+    if (error) {
+      toast.error("Failed to upload voice message");
+      setIsUploading(false);
+      return;
+    }
+    const publicUrl = getPublicFileUrl(fileName);
+    onSend("🎤", [{ name: fileName, url: publicUrl, type: "audio/webm", size: blob.size }], replyTo?.id || null);
+    setReplyTo(null);
+    setIsUploading(false);
+  };
 
   const DELETE_ADMINS = ["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"];
   const canDelete = DELETE_ADMINS.includes(myProfile?.email ?? "");
@@ -619,6 +660,7 @@ export function MessageThread({
                                   {uniqueAttachments.map((att, i) => {
                                     const isImg = isImageFile(att.type) || isImageUrl(att.url) || isImageUrl(att.name);
                                     const isVid = isVideoFile(att.type) || isVideoUrl(att.url) || isVideoUrl(att.name);
+                                    const isAud = isAudioFile(att.type) || isAudioUrl(att.url) || isAudioUrl(att.name);
 
                                     if (isImg) {
                                       return (
@@ -658,6 +700,15 @@ export function MessageThread({
                                             <Download className="w-3 h-3" />
                                             <span>Download</span>
                                           </button>
+                                        </div>
+                                      );
+                                    }
+
+                                    if (isAud) {
+                                      return (
+                                        <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20 max-w-[300px]">
+                                          <Mic className="w-4 h-4 text-primary shrink-0" />
+                                          <audio controls preload="metadata" className="h-8 w-full min-w-0" src={att.url} />
                                         </div>
                                       );
                                     }
@@ -823,67 +874,112 @@ export function MessageThread({
 
           {/* Bottom bar */}
           <div className="flex items-center justify-between px-2 pb-1.5 md:pb-2">
-            <div className="flex items-center gap-1">
-              <EmojiPicker onSelect={handleEmojiSelect} disabled={isSending} />
-              <VoiceInputButton
-                isListening={speech.isListening}
-                isSupported={speech.isSupported}
-                onToggle={speech.isListening ? speech.stop : speech.start}
-                disabled={isSending}
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isSending || isUploading}
-                className={cn(
-                  "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
-                  (isSending || isUploading) && "opacity-50 cursor-not-allowed"
-                )}
-                title="Attach file"
-              >
-                {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!input.trim()) return;
-                  const result = await grammar.check(input);
-                  if (result.changed) setInput(result.corrected);
-                }}
-                disabled={grammar.checking || !input.trim() || isSending}
-                className={cn(
-                  "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
-                  (grammar.checking || !input.trim() || isSending) && "opacity-50 cursor-not-allowed"
-                )}
-                title="Check spelling"
-              >
-                {grammar.checking ? <Loader2 className="w-5 h-5 animate-spin" /> : <SpellCheck className="w-5 h-5" />}
-              </button>
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 hidden sm:inline-flex ml-1">
-                {myLangInfo.flag} {myLangInfo.name}
-              </Badge>
-            </div>
+            {voiceRecorder.isRecording ? (
+              /* Recording state UI */
+              <>
+                <div className="flex items-center gap-2 flex-1">
+                  <div className="flex items-center gap-1.5 text-destructive animate-pulse">
+                    <div className="w-2 h-2 rounded-full bg-destructive" />
+                    <span className="text-xs font-medium">{formatVoiceDuration(voiceRecorder.duration)}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">Recording...</span>
+                  <button
+                    type="button"
+                    onClick={voiceRecorder.cancelRecording}
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    title="Cancel"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-lg px-3"
+                  onClick={handleVoiceSend}
+                  disabled={isUploading}
+                >
+                  {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />}
+                  <span className="hidden md:inline">Stop & Send</span>
+                </Button>
+              </>
+            ) : (
+              /* Normal composer UI */
+              <>
+                <div className="flex items-center gap-1">
+                  <EmojiPicker onSelect={handleEmojiSelect} disabled={isSending} />
+                  <VoiceInputButton
+                    isListening={speech.isListening}
+                    isSupported={speech.isSupported}
+                    onToggle={speech.isListening ? speech.stop : speech.start}
+                    disabled={isSending}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => voiceRecorder.startRecording()}
+                    disabled={isSending || isUploading}
+                    className={cn(
+                      "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
+                      (isSending || isUploading) && "opacity-50 cursor-not-allowed"
+                    )}
+                    title="Record voice message"
+                  >
+                    <Mic className="w-5 h-5" />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSending || isUploading}
+                    className={cn(
+                      "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
+                      (isSending || isUploading) && "opacity-50 cursor-not-allowed"
+                    )}
+                    title="Attach file"
+                  >
+                    {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!input.trim()) return;
+                      const result = await grammar.check(input);
+                      if (result.changed) setInput(result.corrected);
+                    }}
+                    disabled={grammar.checking || !input.trim() || isSending}
+                    className={cn(
+                      "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
+                      (grammar.checking || !input.trim() || isSending) && "opacity-50 cursor-not-allowed"
+                    )}
+                    title="Check spelling"
+                  >
+                    {grammar.checking ? <Loader2 className="w-5 h-5 animate-spin" /> : <SpellCheck className="w-5 h-5" />}
+                  </button>
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 hidden sm:inline-flex ml-1">
+                    {myLangInfo.flag} {myLangInfo.name}
+                  </Badge>
+                </div>
 
-            <Button
-              size="sm"
-              className="h-8 w-8 md:w-auto md:px-3 gap-1.5 rounded-lg p-0 md:p-2"
-              onClick={handleSubmit}
-              disabled={(!input.trim() && pendingFiles.length === 0) || isSending}
-            >
-              {isSending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Send className="w-3.5 h-3.5" />
-              )}
-              <span className="hidden md:inline">Send</span>
-            </Button>
+                <Button
+                  size="sm"
+                  className="h-8 w-8 md:w-auto md:px-3 gap-1.5 rounded-lg p-0 md:p-2"
+                  onClick={handleSubmit}
+                  disabled={(!input.trim() && pendingFiles.length === 0) || isSending}
+                >
+                  {isSending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  <span className="hidden md:inline">Send</span>
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -891,7 +987,8 @@ export function MessageThread({
         <div className="h-3 md:h-4 mt-0.5 md:mt-1">
           <p className="text-[10px] text-muted-foreground/60">
             {isSending && "Translating & sending..."}
-            {speech.isListening && !isSending && "🎙️ Listening..."}
+            {voiceRecorder.isRecording && !isSending && "🔴 Recording voice message..."}
+            {speech.isListening && !isSending && !voiceRecorder.isRecording && "🎙️ Listening..."}
             {speech.interimText && !isSending && ` ${speech.interimText}`}
           </p>
         </div>
