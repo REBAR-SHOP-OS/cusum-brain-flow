@@ -348,6 +348,8 @@ export default function TeamHub() {
         channels={channels}
         currentChannelId={activeChannelId}
         onForward={handleForward}
+        profiles={profiles}
+        onForwardToMember={handleForwardToMember}
       />
     </div>
   );
