@@ -38,6 +38,7 @@ export default function TeamHub() {
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<TeamMessage | null>(null);
   const [selfChannelId, setSelfChannelId] = useState<string | null>(null);
+  const { themeId, theme, setTheme } = useTeamHubTheme();
 
   const isNotesView = selectedChannelId === "__my_notes__";
 
