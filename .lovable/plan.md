@@ -1,20 +1,48 @@
 
 
-## Hide Sensitive Fields from 3rd Party Vendors
+## Add Profile Editor Dialog on Avatar Click in Team Hub Sidebar
 
-### Change
+### Problem
+When a user clicks their avatar in the sidebar header, nothing happens. They should be able to upload a new profile picture and edit their name.
 
-**File**: `src/components/sales/SalesLeadDrawer.tsx`
+### Changes
 
-1. **Stage ribbon (lines 108-126)**: Wrap in `{!isExternalEstimator && (...)}`
-2. **Email field (lines 144-150)**: Add `!isExternalEstimator &&` to the existing condition
-3. **Phone field (lines 152-158)**: Add `!isExternalEstimator &&` to the existing condition
-4. **Assignees section (lines 174-184)**: Wrap in `{!isExternalEstimator && (...)}`
+**File**: `src/components/teamhub/ProfileEditDialog.tsx` (NEW)
+- Create a dialog component with:
+  - Avatar display with camera/upload overlay on hover
+  - Hidden file input for avatar upload (uses `useAvatarUpload().uploadSingle`)
+  - Input field for `full_name` with save button (uses `useProfiles().updateProfile`)
+  - Cancel/Close button
 
-### Result
-External estimators see only: title, priority badge, contact name, company name, expected value, source, timeline/details tabs. Stage controls, email, phone, and assignee chips are hidden.
+**File**: `src/components/teamhub/ChannelSidebar.tsx`
+- Make the avatar clickable (wrap in button or add `onClick`)
+- Add state `profileEditOpen` to toggle the dialog
+- Render `<ProfileEditDialog>` passing `myProfile`, open state, and close handler
+
+### New Component: `ProfileEditDialog`
+
+```
+Props: { open, onClose, profile: Profile }
+
+Layout:
+┌─────────────────────────┐
+│  [X]   Edit Profile     │
+│                         │
+│      (  Avatar  )       │
+│    click to upload      │
+│                         │
+│  Full Name: [________]  │
+│                         │
+│  [Cancel]      [Save]   │
+└─────────────────────────┘
+```
+
+- Uses existing `useAvatarUpload` hook for photo upload
+- Uses existing `useProfiles().updateProfile` for name change
+- After successful upload/update, queries are invalidated automatically (already in hooks)
 
 | File | Change |
 |---|---|
-| `src/components/sales/SalesLeadDrawer.tsx` | Guard 4 sections with `!isExternalEstimator` |
+| `src/components/teamhub/ProfileEditDialog.tsx` | New dialog for avatar upload + name edit |
+| `src/components/teamhub/ChannelSidebar.tsx` | Make avatar clickable, show ProfileEditDialog |
 
