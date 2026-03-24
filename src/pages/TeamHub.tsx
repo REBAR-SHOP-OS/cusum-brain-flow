@@ -12,6 +12,7 @@ import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
 import { MeetingReportDialog } from "@/components/teamhub/MeetingReportDialog";
 import { ForwardMessageDialog } from "@/components/teamhub/ForwardMessageDialog";
+import { BackgroundThemePicker, useTeamHubTheme } from "@/components/teamhub/BackgroundThemePicker";
 import { MessageSquare, Globe, Users, Sparkles, Menu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
