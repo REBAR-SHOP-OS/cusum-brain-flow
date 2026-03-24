@@ -108,7 +108,7 @@ function getSlaInfo(lead: Lead): { label: string; urgent: boolean; breached: boo
   return { label: dist, urgent: hoursLeft <= 12, breached: false };
 }
 
-export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick, hasAIAction = false, pendingActivities = [] }: LeadCardProps) {
+export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick, hasAIAction = false, pendingActivities = [], assignees = [] }: LeadCardProps) {
   const stars = getPriorityStars(lead);
   const salesperson = getSalesperson(lead);
   const meta = lead.metadata as Record<string, unknown> | null;
@@ -121,6 +121,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const scoreConfidence = lead.score_confidence as string | null;
   const slaInfo = getSlaInfo(lead);
   const isStale = differenceInCalendarDays(new Date(), new Date(lead.updated_at)) >= 7 && lead.stage !== "won" && lead.stage !== "lost";
+  const hasAssignees = assignees.length > 0;
 
   return (
     <div
