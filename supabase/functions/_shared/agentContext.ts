@@ -121,14 +121,20 @@ export async function fetchContext(
         .order("name");
       context.machineStatus = machines;
 
-      // Active Work Orders (expanded — join orders + customers)
+      // Active Work Orders (expanded — with created_at for date awareness)
       const { data: workOrders } = await supabase
         .from("work_orders")
-        .select("id, work_order_number, status, scheduled_start, order_id, priority, notes")
+        .select("id, work_order_number, status, scheduled_start, order_id, priority, notes, created_at")
         .in("status", ["queued", "pending", "in-progress"])
         .order("scheduled_start", { ascending: true })
         .limit(50);
-      context.activeWorkOrders = workOrders;
+
+      const todayDateStr = new Date().toISOString().split("T")[0];
+      context.activeWorkOrders = (workOrders || []).map((wo: any) => ({
+        ...wo,
+        is_created_today: wo.created_at ? wo.created_at.startsWith(todayDateStr) : false,
+        is_scheduled_today: wo.scheduled_start ? wo.scheduled_start.startsWith(todayDateStr) : false,
+      }));
 
       // Today's Machine Runs (with operator names via profile map)
       const { data: machineRuns } = await supabase

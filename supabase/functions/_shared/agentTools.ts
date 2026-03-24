@@ -124,11 +124,12 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
         type: "function" as const,
         function: {
           name: "get_work_orders",
-          description: "List work orders with status, priority, and order info. Use when asked about work orders, job status, or production queue.",
+          description: "List work orders with date awareness. Supports 3 modes: 'active' (default — currently queued/pending/in-progress), 'created_today' (only WOs created today), 'scheduled_today' (only WOs scheduled for today). Each result includes is_created_today and is_scheduled_today flags. When user asks 'today's work orders', use mode='created_today' or 'scheduled_today'. When user asks 'are these from today', check the is_created_today flag.",
           parameters: {
             type: "object",
             properties: {
-              status_filter: { type: "string", description: "Filter by status: queued, pending, in-progress, completed (default: all active)" },
+              mode: { type: "string", enum: ["active", "created_today", "scheduled_today"], description: "Query mode: 'active' (default), 'created_today', or 'scheduled_today'" },
+              status_filter: { type: "string", description: "Filter by status (only used in 'active' mode): queued, pending, in-progress, completed" },
               limit: { type: "number", description: "Max results (default 30)" }
             },
             required: []

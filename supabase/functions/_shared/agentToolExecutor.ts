@@ -137,22 +137,56 @@ export async function executeToolCall(
     // 5c. Get Work Orders (Forge)
     else if (name === "get_work_orders") {
       const statusFilter = args.status_filter;
+      const mode = args.mode || "active";
       const limit = args.limit || 30;
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayISO = todayStart.toISOString();
 
       let query = svcClient
         .from("work_orders")
-        .select("id, work_order_number, status, scheduled_start, order_id, priority, notes")
-        .order("scheduled_start", { ascending: true })
+        .select("id, work_order_number, status, scheduled_start, order_id, priority, notes, created_at")
         .limit(limit);
 
-      if (statusFilter) {
-        query = query.eq("status", statusFilter);
+      if (mode === "created_today") {
+        query = query.gte("created_at", todayISO).order("created_at", { ascending: false });
+      } else if (mode === "scheduled_today") {
+        const todayDate = new Date().toISOString().split("T")[0];
+        query = query.gte("scheduled_start", `${todayDate}T00:00:00`).lte("scheduled_start", `${todayDate}T23:59:59`).order("scheduled_start", { ascending: true });
       } else {
-        query = query.in("status", ["queued", "pending", "in-progress"]);
+        // "active" mode (default)
+        if (statusFilter) {
+          query = query.eq("status", statusFilter);
+        } else {
+          query = query.in("status", ["queued", "pending", "in-progress"]);
+        }
+        query = query.order("scheduled_start", { ascending: true });
       }
 
       const { data: wos, error } = await query;
-      result.result = error ? { error: error.message } : { success: true, work_orders: wos, count: (wos || []).length };
+
+      // Annotate each WO with date flags
+      const todayDateStr = new Date().toISOString().split("T")[0];
+      const annotated = (wos || []).map((wo: any) => ({
+        ...wo,
+        is_created_today: wo.created_at ? wo.created_at.startsWith(todayDateStr) : false,
+        is_scheduled_today: wo.scheduled_start ? wo.scheduled_start.startsWith(todayDateStr) : false,
+      }));
+
+      const createdTodayCount = annotated.filter((w: any) => w.is_created_today).length;
+      const scheduledTodayCount = annotated.filter((w: any) => w.is_scheduled_today).length;
+
+      result.result = error
+        ? { error: error.message }
+        : {
+            success: true,
+            mode,
+            work_orders: annotated,
+            count: annotated.length,
+            created_today_count: createdTodayCount,
+            scheduled_today_count: scheduledTodayCount,
+          };
     }
 
     // 5d. Get Cut Plan Status (Forge)
