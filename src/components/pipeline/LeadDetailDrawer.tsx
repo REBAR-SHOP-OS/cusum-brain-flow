@@ -8,6 +8,7 @@ import { ScheduledActivities } from "./ScheduledActivities";
 import { AddCommunicationDialog } from "./AddCommunicationDialog";
 import { LeadFiles } from "./LeadFiles";
 import { Progress } from "@/components/ui/progress";
+import { AssigneeManager } from "./AssigneeManager";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -26,6 +27,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useProfiles } from "@/hooks/useProfiles";
+import { useLeadAssignees } from "@/hooks/useLeadAssignees";
 import { OdooChatter } from "./OdooChatter";
 import { useLeadRecommendation, getActionIcon, getUrgencyConfig } from "@/hooks/useLeadRecommendation";
 import type { Tables } from "@/integrations/supabase/types";
