@@ -258,6 +258,7 @@ export default function TeamHub() {
                   onJoinMeeting={(m) => setActiveMeeting(m)}
                   readOnly={!canWrite}
                   onForward={(msg) => setForwardMsg(msg)}
+                  onLangChange={setActiveLang}
                 />
               ) : channelsLoading ? (
                 <div className="flex items-center justify-center h-full">

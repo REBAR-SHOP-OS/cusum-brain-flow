@@ -973,9 +973,36 @@ export function MessageThread({
                   >
                     {grammar.checking ? <Loader2 className="w-5 h-5 animate-spin" /> : <SpellCheck className="w-5 h-5" />}
                   </button>
-                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 hidden sm:inline-flex ml-1">
-                    {myLangInfo.flag} {myLangInfo.name}
-                  </Badge>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="hidden sm:inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full border border-border text-[10px] font-medium bg-muted/40 hover:bg-muted/70 transition-colors cursor-pointer"
+                        title="Select language"
+                      >
+                        <span className="text-sm leading-none">{myLangInfo.flag}</span>
+                        <span>{myLangInfo.name}</span>
+                        <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="end" className="w-48 p-1 max-h-64 overflow-y-auto">
+                      {Object.entries(LANG_LABELS).map(([code, info]) => (
+                        <button
+                          key={code}
+                          onClick={() => onLangChange?.(code)}
+                          className={cn(
+                            "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors",
+                            code === myLang
+                              ? "bg-primary/10 text-primary font-medium"
+                              : "hover:bg-muted/60 text-foreground"
+                          )}
+                        >
+                          <span className="text-base leading-none">{info.flag}</span>
+                          <span className="truncate">{info.name}</span>
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 <Button
