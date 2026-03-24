@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile, type ChatAttachment, type TeamMessage } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useCreateChannel, useOpenDM, useDeleteChannel } from "@/hooks/useChannelManagement";
@@ -6,8 +6,8 @@ import { useActiveMeetings, useStartMeeting, useEndMeeting } from "@/hooks/useTe
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { ChannelSidebar } from "@/components/teamhub/ChannelSidebar";
 import { MessageThread } from "@/components/teamhub/MessageThread";
-import { PersonalNotes } from "@/components/teamhub/PersonalNotes";
 import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
+import { supabase } from "@/integrations/supabase/client";
 import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
 import { MeetingReportDialog } from "@/components/teamhub/MeetingReportDialog";
@@ -36,9 +36,35 @@ export default function TeamHub() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<TeamMessage | null>(null);
+  const [selfChannelId, setSelfChannelId] = useState<string | null>(null);
 
   const isNotesView = selectedChannelId === "__my_notes__";
-  const activeChannelId = isNotesView ? null : (selectedChannelId || (channelsLoading ? null : channels[0]?.id || null));
+
+  // Resolve self-DM channel for My Notes
+  useEffect(() => {
+    if (!isNotesView || !myProfile) {
+      setSelfChannelId(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("create_dm_channel" as any, {
+          _my_profile_id: myProfile.id,
+          _target_profile_id: myProfile.id,
+        });
+        if (!cancelled && !error && data) {
+          setSelfChannelId(data as string);
+        }
+      } catch (e) {
+        console.error("Failed to resolve self-notes channel", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isNotesView, myProfile?.id]);
+
+  const resolvedChannelId = isNotesView ? selfChannelId : (selectedChannelId || (channelsLoading ? null : channels[0]?.id || null));
+  const activeChannelId = resolvedChannelId;
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   const { messages, isLoading: msgsLoading } = useTeamMessages(activeChannelId);
@@ -257,8 +283,28 @@ export default function TeamHub() {
           <div className="flex-1 flex min-w-0 overflow-hidden">
             {/* Message Thread */}
             <div className={activeMeeting ? "flex-1 min-w-0 hidden lg:flex lg:flex-col" : "flex-1 flex flex-col min-w-0"}>
-              {isNotesView && myProfile ? (
-                <PersonalNotes myProfile={myProfile} />
+              {isNotesView && myProfile && selfChannelId ? (
+                <MessageThread
+                  channelName="My Notes"
+                  channelDescription="Your private saved messages"
+                  messages={messages}
+                  profiles={profiles}
+                  myProfile={myProfile}
+                  myLang={myLang}
+                  isLoading={msgsLoading}
+                  isSending={sendMutation.isPending}
+                  onSend={handleSend}
+                  activeMeetings={[]}
+                  onStartMeeting={() => {}}
+                  onJoinMeeting={() => {}}
+                  readOnly={false}
+                  onForward={(msg) => setForwardMsg(msg)}
+                  onLangChange={setActiveLang}
+                />
+              ) : isNotesView ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary/40" />
+                </div>
               ) : activeChannel ? (
                 <MessageThread
                   channelName={activeChannel.name}
