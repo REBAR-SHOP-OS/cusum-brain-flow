@@ -1,44 +1,38 @@
 
 
-## Add Background Theme Picker for Team Hub
+## Improve Background Theme Colors for Better Readability
 
-### What It Does
-Adds a small paintbrush/palette icon button in the Team Hub header area. Clicking it opens a popover with preset background themes (colors, gradients, patterns). The user's choice is saved to `localStorage` and applied to the chat area background.
+### Problem
+Current theme swatches are very dark and similar-looking, making it hard to distinguish them and causing poor text readability. The user wants brighter, more beautiful colors that maintain good contrast with text.
 
 ### Changes
 
-**File**: `src/components/teamhub/BackgroundThemePicker.tsx` (NEW)
-- A popover component with 8-10 preset themes:
-  - Default dark, Midnight blue, Deep purple, Ocean teal, Forest green, Warm sunset gradient, Starry pattern, Geometric subtle pattern, etc.
-- Each theme is a small circular swatch the user can click
-- Selected theme is stored in `localStorage` under key `teamhub_bg_theme`
-- Exports a `useTeamHubTheme()` hook that reads the stored theme and returns CSS classes/styles
+**File**: `src/components/teamhub/BackgroundThemePicker.tsx`
 
-**File**: `src/pages/TeamHub.tsx`
-- Import `useTeamHubTheme` and `BackgroundThemePicker`
-- Apply the selected theme's CSS to the main chat container (`div.bg-background` at line 242)
-- Render `BackgroundThemePicker` icon button in the top area (passed to `MessageThread` or rendered alongside it)
+Replace the 10 dark themes with brighter, more distinct options that keep text readable:
+
+| Theme | Preview/Style |
+|---|---|
+| Default | Current dark background (no change) |
+| Sky Blue | Soft blue gradient `hsl(210 60% 85%)` → `hsl(220 50% 75%)` |
+| Mint Green | Fresh mint `hsl(160 40% 85%)` → `hsl(170 35% 75%)` |
+| Lavender | Soft purple `hsl(270 40% 85%)` → `hsl(260 35% 78%)` |
+| Peach | Warm peach `hsl(20 60% 88%)` → `hsl(15 50% 80%)` |
+| Rose | Soft pink `hsl(340 40% 88%)` → `hsl(350 35% 80%)` |
+| Sand | Warm beige `hsl(40 40% 88%)` → `hsl(35 35% 80%)` |
+| Teal | Ocean teal `hsl(180 40% 82%)` → `hsl(190 35% 72%)` |
+| Lilac | Light violet `hsl(280 35% 88%)` → `hsl(290 30% 80%)` |
+| Cloud | Neutral gray `hsl(220 15% 90%)` → `hsl(220 10% 82%)` |
+
+Since the app uses dark mode, all text is light-colored. These brighter backgrounds will create strong contrast, making text highly readable while looking visually appealing. The text color in messages will need to be set to dark for readability against these light backgrounds.
+
+**Additional change**: Add `color: "hsl(222 47% 11%)"` (dark text) to each non-default theme's `style` object so message text remains readable on light backgrounds. Message bubbles and UI elements inside the chat area will also need dark text overrides.
 
 **File**: `src/components/teamhub/MessageThread.tsx`
-- Add optional `headerExtra?: ReactNode` prop
-- Render `headerExtra` in the channel header bar (next to the video call button) so the theme picker icon appears in the top-right of the chat
+- When a non-default theme is active, add a CSS class that forces dark text color on the chat message area so all content remains readable against the light backgrounds.
 
-### Preset Themes
-| Name | Style |
-|---|---|
-| Default | Current dark background |
-| Midnight | `bg-slate-950` |
-| Ocean | `bg-gradient-to-b from-cyan-950 to-slate-900` |
-| Purple Haze | `bg-gradient-to-b from-purple-950 to-slate-900` |
-| Forest | `bg-gradient-to-b from-emerald-950 to-slate-900` |
-| Warm | `bg-gradient-to-b from-amber-950 to-slate-900` |
-| Geometric | CSS pattern overlay |
-| Minimal Light | Light gray theme |
-
-### Summary
 | File | Change |
 |---|---|
-| `src/components/teamhub/BackgroundThemePicker.tsx` | NEW — theme picker popover + hook |
-| `src/pages/TeamHub.tsx` | Apply selected theme to chat area |
-| `src/components/teamhub/MessageThread.tsx` | Add `headerExtra` prop for picker icon |
+| `BackgroundThemePicker.tsx` | Replace dark swatches with bright, colorful gradients |
+| `MessageThread.tsx` | Ensure text contrast adapts to light backgrounds |
 
