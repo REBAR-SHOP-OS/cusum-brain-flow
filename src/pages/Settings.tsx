@@ -1,4 +1,4 @@
-import { useState, useRef, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import {
   Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut,
   Camera, Settings as SettingsIcon, Users, Loader2, GraduationCap,
