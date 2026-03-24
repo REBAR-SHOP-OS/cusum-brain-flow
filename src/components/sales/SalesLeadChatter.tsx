@@ -187,13 +187,31 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
     }
 
     if (activeTab === "note") {
+      // Strip attachment URLs for notification (keep only text lines)
+      const noteTextForEmail = body
+        .split("\n")
+        .filter((line: string) => !line.trim().startsWith("http"))
+        .join("\n")
+        .trim();
+
       create.mutate({
         sales_lead_id: salesLeadId,
         company_id: companyId,
         activity_type: "note",
         body,
       }, {
-        onSuccess: () => { setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false); },
+        onSuccess: () => {
+          setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false);
+          // Fire notification email to assignees (fire-and-forget)
+          supabase.functions.invoke("notify-lead-assignees", {
+            body: {
+              sales_lead_id: salesLeadId,
+              event_type: "note",
+              note_text: noteTextForEmail,
+              actor_name: currentUserName || "Someone",
+            },
+          }).catch(() => {}); // silent — don't block UI
+        },
         onError: () => setUploading(false),
       });
     } else if (activeTab === "activity") {

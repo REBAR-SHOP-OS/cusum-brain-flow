@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { useAuth } from "@/lib/auth";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
@@ -233,8 +234,22 @@ export default function SalesPipeline() {
   };
 
   const handleStageChange = useCallback((leadId: string, newStage: string) => {
-    updateLead.mutate({ id: leadId, stage: newStage });
-  }, [updateLead]);
+    updateLead.mutate({ id: leadId, stage: newStage }, {
+      onSuccess: () => {
+        // Find lead title for the notification
+        const lead = leads.find(l => l.id === leadId);
+        // Fire notification email to assignees (fire-and-forget)
+        supabase.functions.invoke("notify-lead-assignees", {
+          body: {
+            sales_lead_id: leadId,
+            event_type: "stage_change",
+            new_stage: newStage,
+            actor_name: "System",
+          },
+        }).catch(() => {});
+      },
+    });
+  }, [updateLead, leads]);
 
   const handleLeadClick = useCallback((lead: LeadWithCustomer) => {
     // Find the original SalesLead
