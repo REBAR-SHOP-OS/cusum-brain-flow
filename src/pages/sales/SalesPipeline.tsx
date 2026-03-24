@@ -93,11 +93,21 @@ export default function SalesPipeline() {
   const { contacts: unifiedContacts } = useSalesContacts();
   const { profiles } = useProfiles();
   const activeProfiles = (profiles ?? []).filter(p => p.is_active);
+  const { bySalesLeadId, addAssignee, removeAssignee } = useSalesLeadAssignees();
+
+  // Find external estimator's profile ID
+  const myProfileId = useMemo(() => {
+    if (!isExternalEstimator) return null;
+    return activeProfiles.find(p => p.email?.toLowerCase() === userEmail)?.id ?? null;
+  }, [isExternalEstimator, activeProfiles, userEmail]);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [drawerLead, setDrawerLead] = useState<SalesLead | null>(null);
   const [search, setSearch] = useState("");
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
 
   // Form state
   const SOURCES = ["Email", "Phone/Call", "Website", "Referral", "Trade Show", "Social Media", "Cold Outreach", "Partner", "Other"];
@@ -106,11 +116,14 @@ export default function SalesPipeline() {
     expected_value: "", source: "", notes: "", stage: "new", priority: "medium",
     probability: "", expected_close_date: "", assigned_to: "", territory: "", description: "", lead_type: "opportunity",
   });
-  const resetForm = () => setForm({
-    title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "",
-    expected_value: "", source: "", notes: "", stage: "new", priority: "medium",
-    probability: "", expected_close_date: "", assigned_to: "", territory: "", description: "", lead_type: "opportunity",
-  });
+  const resetForm = () => {
+    setForm({
+      title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "",
+      expected_value: "", source: "", notes: "", stage: "new", priority: "medium",
+      probability: "", expected_close_date: "", assigned_to: "", territory: "", description: "", lead_type: "opportunity",
+    });
+    setSelectedAssignees([]);
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
