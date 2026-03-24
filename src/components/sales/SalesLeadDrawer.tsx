@@ -233,7 +233,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
         {/* ── Tab Bar ── */}
         <div className="border-b border-border bg-background">
           <div className="flex">
-            {(["timeline", ...(isExternalEstimator ? [] : ["details"])] as const).map((tab) => (
+            {(isExternalEstimator ? ["timeline"] as const : ["timeline", "details"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
