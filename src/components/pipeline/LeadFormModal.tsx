@@ -148,6 +148,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         territory: data.territory || null,
       } as any;
 
+      let leadId = lead?.id;
       if (lead) {
         const { error } = await supabase
           .from("leads")
@@ -155,12 +156,33 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
           .eq("id", lead.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("leads").insert({ ...payload, company_id: companyId! });
+        const { data: created, error } = await supabase.from("leads").insert({ ...payload, company_id: companyId! }).select("id").single();
         if (error) throw error;
+        leadId = created?.id;
+      }
+
+      // Sync assignees
+      if (leadId && companyId) {
+        const existing = byLeadId[leadId] ?? [];
+        const existingIds = new Set(existing.map(a => a.profile_id));
+        const newIds = new Set(selectedAssignees);
+        // Add new
+        for (const pid of selectedAssignees) {
+          if (!existingIds.has(pid)) {
+            await supabase.from("lead_assignees" as any).insert({ lead_id: leadId, profile_id: pid, company_id: companyId });
+          }
+        }
+        // Remove old
+        for (const a of existing) {
+          if (!newIds.has(a.profile_id)) {
+            await supabase.from("lead_assignees" as any).delete().eq("lead_id", leadId).eq("profile_id", a.profile_id);
+          }
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["lead_assignees"] });
       toast({ title: lead ? "Lead updated" : "Lead created" });
       onOpenChange(false);
     },
