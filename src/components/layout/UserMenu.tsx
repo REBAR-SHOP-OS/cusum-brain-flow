@@ -4,8 +4,9 @@ import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { useProfiles } from "@/hooks/useProfiles";
 import { ThemeToggle } from "./ThemeToggle";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,10 +41,13 @@ export function UserMenu() {
   const { warehouse, setWarehouse, toggleIntelligencePanel } = useWorkspace();
   const { isAdmin, isOffice } = useUserRole();
   const { isSuperAdmin } = useSuperAdmin();
+  const { profiles } = useProfiles();
+  const myProfile = profiles.find((p) => p.user_id === user?.id);
 
   if (!user) return null;
 
   const initials = getInitials(user.email);
+  const displayName = myProfile?.full_name || user.email?.split("@")[0];
   const currentWarehouse = warehouses.find((w) => w.id === warehouse) ?? warehouses[0];
 
   return (
@@ -51,6 +55,7 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <button className="w-8 h-8 rounded-full flex items-center justify-center hover:ring-2 hover:ring-white/30 transition-all">
           <Avatar className="w-8 h-8">
+            <AvatarImage src={myProfile?.avatar_url || undefined} />
             <AvatarFallback className="bg-white/20 text-primary-foreground text-xs font-semibold">
               {initials}
             </AvatarFallback>
@@ -62,12 +67,13 @@ export function UserMenu() {
         <DropdownMenuLabel className="font-normal">
           <div className="flex items-center gap-3">
             <Avatar className="w-10 h-10">
+              <AvatarImage src={myProfile?.avatar_url || undefined} />
               <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{user.email?.split("@")[0]}</p>
+              <p className="text-sm font-medium truncate">{displayName}</p>
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
           </div>
