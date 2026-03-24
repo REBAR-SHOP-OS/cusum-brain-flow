@@ -336,6 +336,14 @@ export function FixRequestQueue() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
+                    onClick={() => handleAutoFix(req)}
+                    disabled={generatingId === req.id}
+                    className="p-1.5 rounded-md hover:bg-muted transition-colors text-emerald-500 hover:text-emerald-400 disabled:opacity-50"
+                    title="Auto-fix: generate & copy fix command"
+                  >
+                    <Wand2 className={`w-3.5 h-3.5 ${generatingId === req.id ? "animate-spin" : ""}`} />
+                  </button>
+                  <button
                     onClick={() => generateLovableCommand(req)}
                     disabled={generatingId === req.id}
                     className="p-1.5 rounded-md hover:bg-muted transition-colors text-primary hover:text-primary/80 disabled:opacity-50"
