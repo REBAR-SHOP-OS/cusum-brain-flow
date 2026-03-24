@@ -1,48 +1,63 @@
 
 
-## Train Forge: Comprehensive Shop Floor + Office Data & Reporting Tools
+## Train Forge: Add Date Awareness, Tool Instructions, and Delivery Visibility
 
 ### Problem
-Forge (Shop Floor Commander) can only see machine statuses and 15 active work orders. It has **one tool** (`update_machine_status`). When asked "what did you do today" or "show work orders," it correctly says "I cannot show you the work orders." It needs access to production data, machine runs, cut plans, inventory, timeclock, and office-relevant data to give comprehensive reports.
+Forge (shopfloor agent) has three gaps despite having tools deployed:
+1. **No date awareness** — The system prompt never tells Forge what today's date is, so it can't reason about "today"
+2. **No delivery data** — Forge says "I can't access deliveries" because delivery context is only loaded for `agent === "delivery"`
+3. **Prompt doesn't list its new tools** — The `operations.ts` prompt for Forge doesn't mention `get_production_report`, `get_work_orders`, `get_cut_plan_status`, or `get_timeclock_summary`, so the model doesn't know to call them
 
 ### Changes
 
-**File: `supabase/functions/_shared/agentContext.ts`** — Expand shopfloor context block
+**File: `supabase/functions/ai-agent/index.ts`** (line 981-983)
 
-Add these queries inside the `agent === "shopfloor"` block:
+Inject today's date (EST timezone) into the static system prompt:
 
-1. **Today's machine runs** — `machine_runs` with operator profile join, started today
-2. **Cut plans** — active `cut_plans` with status
-3. **Cut plan items** — `cut_plan_items` in active phases + completed today
-4. **Today's timeclock entries** — `timeclock_entries` for today (who's clocked in, hours)
-5. **Inventory levels** — `inventory` low-stock items or recent consumption
-6. **Orders with customer names** — expand work_orders query to join `orders(order_number, customers(name))` and increase limit to 50
+```typescript
+const todayEST = new Date().toLocaleDateString("en-US", {
+  weekday: "long", year: "numeric", month: "long", day: "numeric",
+  timeZone: "America/Toronto"
+});
 
-**File: `supabase/functions/_shared/agentTools.ts`** — Add read tools for Forge
+const staticSystemPrompt = ONTARIO_CONTEXT + basePrompt + 
+  GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + LANG_INSTRUCTION +
+  `\n\n## Current Date & Time\nToday is: ${todayEST}\nTimezone: Eastern (America/Toronto)` +
+  `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
+```
 
-Add these tools when `agent === "shopfloor"`:
+**File: `supabase/functions/_shared/agents/operations.ts`** (shopfloor prompt)
 
-1. `get_production_report` — Fetches today's machine runs, pieces produced, operator activity summary
-2. `get_work_orders` — Lists work orders with status, customer, priority (read-only)  
-3. `get_cut_plan_status` — Shows cut plan progress (items completed vs total)
-4. `get_timeclock_summary` — Who's clocked in, shift hours, breaks
+Add a tools section to Forge's prompt listing its available tools and when to use them:
 
-**File: `supabase/functions/_shared/agentToolExecutor.ts`** — Implement tool executors
+```
+## Available Tools — USE THESE
+You have these tools available. ALWAYS use them instead of saying you can't access data:
 
-Add execution handlers for each new tool:
-- `get_production_report`: Query `machine_runs` today with operator names, aggregate output_qty
-- `get_work_orders`: Query `work_orders` joined with orders/customers, return formatted list
-- `get_cut_plan_status`: Query `cut_plans` + `cut_plan_items` phase counts
-- `get_timeclock_summary`: Query `timeclock_entries` for today
+- **get_production_report**: Today's machine runs, pieces produced, operator activity. USE for "what happened today", "daily report", "status"
+- **get_work_orders**: List work orders with status and priority. USE for "show work orders", "what's pending"
+- **get_cut_plan_status**: Cut plan progress by phase. USE for "cut plan progress", "what's being cut"
+- **get_timeclock_summary**: Who's clocked in, hours worked. USE for "who's working", "attendance"
+- **update_machine_status**: Change machine status (idle, running, blocked, down)
+- **create_notifications**: Create todos, alerts, ideas
 
-**File: `supabase/functions/_shared/agents/support.ts`** — Update Forge prompt
+CRITICAL: When asked about production, work orders, or employee activity — ALWAYS call the relevant tool FIRST. Never say "I don't have access" or "I can only update machine statuses." You have full read access to production data.
+```
 
-Expand the Forge section to instruct it to:
-- Always check production data before answering "what happened today"
-- Use `get_production_report` for daily summaries
-- Report pieces produced, machine runs completed, operator assignments
-- Include cut plan progress in daily briefings
-- Reference timeclock data for who was working
+**File: `supabase/functions/_shared/agentContext.ts`** (shopfloor block, after line 210)
+
+Add basic delivery data to Forge's context so it has cross-department visibility:
+
+```typescript
+// Deliveries (cross-department visibility for Forge)
+const { data: deliveries } = await supabase
+  .from("deliveries")
+  .select("id, delivery_number, status, scheduled_date, driver_name, notes")
+  .in("status", ["planned", "scheduled", "loading", "in_transit"])
+  .order("scheduled_date", { ascending: true })
+  .limit(15);
+context.activeDeliveries = deliveries;
+```
 
 **Deploy**: Redeploy `ai-agent` edge function
 
@@ -50,9 +65,8 @@ Expand the Forge section to instruct it to:
 
 | File | Change |
 |---|---|
-| `_shared/agentContext.ts` | Add machine_runs, cut_plans, cut_plan_items, timeclock to shopfloor context |
-| `_shared/agentTools.ts` | Add 4 read tools for shopfloor agent |
-| `_shared/agentToolExecutor.ts` | Implement 4 new tool executors |
-| `_shared/agents/support.ts` | Update Forge prompt with reporting instructions |
+| `ai-agent/index.ts` | Inject today's date into system prompt for all agents |
+| `_shared/agents/operations.ts` | Add tool instructions to Forge's prompt |
+| `_shared/agentContext.ts` | Add delivery data to shopfloor context |
 | Deploy | Redeploy `ai-agent` |
 
