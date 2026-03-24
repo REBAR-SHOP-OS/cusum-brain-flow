@@ -1,50 +1,29 @@
 
 
-## Show "Pending Approval" / "Scheduled · Approved" on Calendar Cards
+## Fix: Approved Cards Still Showing "Pending Approval"
 
-### What
-Scheduled cards should show **"Pending Approval"** by default, and only show **"Scheduled · Approved"** after `neel_approved` is true (approved by neel@rebar.shop or sattar@rebar.shop).
+### Root Cause
 
-### Current Behavior
-Line 240 shows `statusLabel` (which says "Scheduled" for scheduled posts) and appends "· Approved" only if `neel_approved` is true. But unapproved scheduled cards still say "Scheduled" — they should say "Pending Approval" instead.
+The card's approval status is checked using only `firstPost.neel_approved` (line 191, 237, 243), where `firstPost = posts[0]` — the first post in a grouped set. When a group has multiple posts (e.g., same content across multiple pages), `posts[0]` may not be the one that was approved. So even though Neel approved the post, the card shows "Pending Approval" because it's checking the wrong post in the group.
 
 ### Fix
 
-**File**: `src/components/social/SocialCalendar.tsx` (lines 233-244)
+**File**: `src/components/social/SocialCalendar.tsx`
 
-Change the display logic so that for `status === "scheduled"`:
-- If `neel_approved` is **false** → show "Pending Approval" in yellow
-- If `neel_approved` is **true** → show "Scheduled · Approved" in green
+Replace all `firstPost.neel_approved` checks with a group-level check that returns `true` if **any** post in the group is approved:
 
-```tsx
-// Replace lines 233-244
-<span className={cn(
-  status === "published" ? "text-green-600 font-medium"
-    : status === "scheduled" && firstPost.neel_approved ? "text-green-500 font-medium"
-    : status === "scheduled" ? "text-yellow-600"
-    : status === "declined" ? "text-destructive"
-    : status === "pending_approval" ? "text-yellow-600"
-    : "text-muted-foreground"
-)}>
-  {status === "scheduled" && !firstPost.neel_approved
-    ? "Pending Approval"
-    : status === "scheduled" && firstPost.neel_approved
-    ? "Scheduled · Approved"
-    : statusLabel}
-</span>
+```typescript
+const isApproved = posts.some(p => p.neel_approved);
 ```
 
-Also update card border color (lines 191-192) so unapproved scheduled cards get yellow border:
-```tsx
-: status === "scheduled" && firstPost.neel_approved
-? "bg-card border-green-500/30"
-: status === "scheduled"
-? "bg-yellow-500/10 border-yellow-500/30"
-```
+Then use `isApproved` instead of `firstPost.neel_approved` in the three places:
+- Line 191 (card border color)
+- Line 237 (status text color)
+- Lines 243-246 (status label text)
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/social/SocialCalendar.tsx` | Show "Pending Approval" for unapproved scheduled cards, "Scheduled · Approved" for approved ones |
+| `src/components/social/SocialCalendar.tsx` | Add `isApproved` variable, replace 3 occurrences of `firstPost.neel_approved` |
 
