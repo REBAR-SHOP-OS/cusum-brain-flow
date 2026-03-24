@@ -105,13 +105,22 @@ async function resolveQuickConnect(qcId: string): Promise<QuickConnectInfo> {
  * Supports both direct URLs (https://...) and QuickConnect IDs (e.g. RSI1).
  */
 async function getDsmBaseUrl(synologyUrl: string): Promise<string> {
-  // If it already looks like a URL, use it directly
-  if (synologyUrl.includes("://")) {
+  // If it already looks like a full URL with port, use it directly
+  if (synologyUrl.match(/^https?:\/\/.+:\d+/)) {
     return synologyUrl.replace(/\/+$/, "");
   }
 
-  // Otherwise treat as QuickConnect ID
-  const resolved = await resolveQuickConnect(synologyUrl);
+  // Extract QuickConnect ID from various formats:
+  // "RSI1", "quickconnect.to/RSI1", "http://quickconnect.to/RSI1"
+  let qcId = synologyUrl;
+  const qcMatch = synologyUrl.match(/quickconnect\.to\/(\w+)/i);
+  if (qcMatch) {
+    qcId = qcMatch[1];
+  }
+  // Also strip any protocol prefix if someone pastes a URL without quickconnect.to
+  qcId = qcId.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+
+  const resolved = await resolveQuickConnect(qcId);
   return resolved.baseUrl;
 }
 
