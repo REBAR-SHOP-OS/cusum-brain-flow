@@ -282,35 +282,37 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
         {/* ── Footer ── */}
         <div className="border-t border-border p-3 text-[11px] text-muted-foreground flex items-center justify-between bg-muted/30">
           <span>Created {format(new Date(lead.created_at), "MMM d, yyyy")}</span>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1 h-6 text-[11px] rounded-sm"
-              >
-                <Trash2 className="w-3 h-3" />
-                Delete
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action cannot be undone. The lead "{lead.title}" will be permanently removed.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={() => { onDelete(lead.id); onClose(); }}
+          {!isExternalEstimator && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1 h-6 text-[11px] rounded-sm"
                 >
+                  <Trash2 className="w-3 h-3" />
                   Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. The lead "{lead.title}" will be permanently removed.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => { onDelete(lead.id); onClose(); }}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <span>Updated {formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true })}</span>
         </div>
       </SheetContent>

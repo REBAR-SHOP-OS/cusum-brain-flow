@@ -493,6 +493,7 @@ export default function SalesPipeline() {
         profiles={activeProfiles}
         onAddAssignee={(profileId) => { if (drawerLead) addAssignee.mutate({ salesLeadId: drawerLead.id, profileId }); }}
         onRemoveAssignee={(profileId) => { if (drawerLead) removeAssignee.mutate({ salesLeadId: drawerLead.id, profileId }); }}
+        isExternalEstimator={isExternalEstimator}
       />
     </div>
   );
