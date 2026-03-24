@@ -114,7 +114,42 @@ const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
 const ZAHRA_PROFILE_ID = "3a59f057-b232-4654-a2ea-d519fe22ccd5";
 const SATTAR_PROFILE_ID = "ee659c5c-20e1-4bf5-a01d-dedd886a4ad7";
 const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID];
+const MIRROR_FEEDBACK_PROFILES = [ZAHRA_PROFILE_ID, RADIN_PROFILE_ID];
 const EXCLUDED_EMAILS = ["ai@rebar.shop", "kourosh@rebar.shop"];
+
+/** When Zahra or Radin completes a feedback task, auto-complete the paired task */
+async function mirrorFeedbackCompletion(task: TaskRow, currentProfileId: string | null) {
+  if (!currentProfileId || !MIRROR_FEEDBACK_PROFILES.includes(currentProfileId)) return;
+  const src = (task as any).source as string | undefined;
+  if (!src) return;
+
+  const now = new Date().toISOString();
+
+  try {
+    if (src === "feedback_verification") {
+      // Complete the original screenshot_feedback task
+      const meta = typeof task.metadata === "string" ? JSON.parse(task.metadata) : task.metadata;
+      const originalId = (meta as any)?.original_task_id;
+      if (originalId) {
+        await supabase.from("tasks").update({
+          status: "completed",
+          completed_at: now,
+          updated_at: now,
+        }).eq("id", originalId).eq("status", "open");
+      }
+    } else if (src === "screenshot_feedback") {
+      // Complete any feedback_verification tasks linked to this one
+      await supabase.from("tasks").update({
+        status: "completed",
+        completed_at: now,
+        updated_at: now,
+      } as any).eq("source", "feedback_verification").eq("status", "open")
+        .filter("metadata->>original_task_id", "eq", task.id);
+    }
+  } catch (e) {
+    console.error("mirrorFeedbackCompletion error:", e);
+  }
+}
 
 // Delegate access: key = profile who gains access, value = profiles they can manage
 const TASK_DELEGATES: Record<string, string[]> = {
@@ -671,6 +706,11 @@ export default function Tasks() {
       await dismissTaskNotifications(task.id);
     }
 
+    // Mirror feedback completion between Zahra & Radin
+    if (!isCompleted) {
+      await mirrorFeedbackCompletion(task, currentProfileId);
+    }
+
     toast.success(isCompleted ? "Task reopened" : "Task completed");
     loadData();
   };
@@ -683,6 +723,7 @@ export default function Tasks() {
     }).eq("id", task.id);
     if (error) { toast.error(error.message); return; }
     await writeAudit(task.id, "complete", "status", "open", "completed");
+    await mirrorFeedbackCompletion(task, currentProfileId);
     toast.success("فیدبک تأیید شد ✅");
     loadData();
   };
@@ -763,6 +804,7 @@ export default function Tasks() {
         }
       }
 
+      await mirrorFeedbackCompletion(task, currentProfileId);
       toast.success("Task approved & closed");
       loadData();
     } catch (e: any) {
