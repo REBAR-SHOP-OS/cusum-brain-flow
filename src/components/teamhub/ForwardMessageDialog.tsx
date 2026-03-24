@@ -29,6 +29,7 @@ export function ForwardMessageDialog({
   onForward,
   profiles = [],
   onForwardToMember,
+  currentProfileId,
 }: ForwardMessageDialogProps) {
   const [search, setSearch] = useState("");
 
