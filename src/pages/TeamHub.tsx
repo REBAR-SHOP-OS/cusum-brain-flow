@@ -241,7 +241,7 @@ export default function TeamHub() {
   );
 
   return (
-    <div className="relative flex flex-col h-full bg-background overflow-hidden">
+    <div className="relative flex flex-col h-full bg-background overflow-hidden" style={theme.style}>
       {/* Ambient glow effects */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px]" />
