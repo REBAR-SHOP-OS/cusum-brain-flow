@@ -276,17 +276,23 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
             <div
               key={msg.id}
               className={cn(
-                "rounded-xl px-3 py-2 text-sm max-w-[85%] overflow-hidden min-w-0 [overflow-wrap:anywhere] [word-break:break-word]",
+                "group/msg relative rounded-xl px-3 py-2 text-sm max-w-[85%] overflow-hidden min-w-0 [overflow-wrap:anywhere] [word-break:break-word]",
                 msg.role === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
                   : "mr-auto bg-muted text-foreground"
               )}
             >
+              <button
+                onClick={() => deleteMessage(msg.id)}
+                className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+                title="Delete"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
               {msg.role === "assistant" ? (
                 <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_p]:[overflow-wrap:anywhere] [&_*]:max-w-full [&_a]:break-all" />
               ) : (
                 <p className="whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
-                  {/* Strip the context prefix from display */}
                   {msg.content.replace(/^\[Currently viewing:.*?\]\n/, "")}
                 </p>
               )}
