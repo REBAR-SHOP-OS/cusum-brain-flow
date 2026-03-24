@@ -43,7 +43,7 @@ const platformFilters = [
 
 const statusFilters = [
   { id: "all", label: "All statuses" },
-  { id: "pending_approval", label: "Pending Approval" },
+  
   { id: "draft", label: "Drafts" },
   { id: "scheduled", label: "Scheduled" },
   { id: "published", label: "Published" },
