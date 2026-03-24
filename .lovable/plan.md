@@ -1,36 +1,27 @@
 
 
-## Fix Sales Lead Drawer: Mentions, Assignee Permissions, Delete Restriction
+## Mirror Radin's Feedback Tasks to Zahra's Column
 
-### Problems
-1. **"@" mention not working** in `SalesLeadChatter` — the chatter has no `MentionMenu` integration (unlike OdooChatter, LeadTimeline, etc.)
-2. **External estimators can add/remove assignees** — the `AssigneeManager` in the drawer has no `readOnly` guard for external users
-3. **External estimators can delete leads** — the Delete button in the drawer footer is visible to everyone
+### Problem
+Feedback tasks (`source: "screenshot_feedback"`) assigned to Radin only appear in Radin's column. Zahra (delegate) can manage them but has to look in Radin's column. The user wants these feedback tasks to also appear in Zahra's column so she can see and generate fixes from her own view.
 
 ### Changes
 
+**File**: `src/pages/Tasks.tsx`
+
+1. **Mirror feedback tasks to Zahra's column** (after line 533, in the task grouping loop):
+   - After grouping tasks by employee, iterate through Radin's feedback tasks (`source === "screenshot_feedback"` or `source === "feedback_verification"`)
+   - Push copies of those tasks into Zahra's column in `tasksByEmployee`
+   - This way Zahra sees all of Radin's feedback tasks directly in her column
+
+2. **No permission changes needed** — the existing `canDeleteOrFix` function already grants Zahra access via `isDelegateFor(task.assigned_to)`, so "Generate Fix", "Delete", "Approve", and "Reopen with Issue" all work for her on Radin's tasks.
+
+### Result
+- Zahra sees all feedback tasks in her own column (mirrored from Radin)
+- She can open any feedback task and click "Generate Fix"
+- Original tasks remain in Radin's column too
+
 | File | Change |
 |---|---|
-| `src/components/sales/SalesLeadChatter.tsx` | Add `MentionMenu` with `@` detection on the note textarea (same pattern as OdooChatter) |
-| `src/components/sales/SalesLeadDrawer.tsx` | Accept `isExternalEstimator` prop; pass `readOnly={true}` to `AssigneeManager` for external users; hide Delete button, priority selector, and stage buttons for external users |
-| `src/pages/sales/SalesPipeline.tsx` | Pass `isExternalEstimator` to `SalesLeadDrawer` |
-
-### Detail
-
-**SalesLeadChatter.tsx** — Add mention support:
-- Import `MentionMenu` from `@/components/chat/MentionMenu`
-- Add `mentionOpen`, `mentionFilter`, `mentionIndex` state
-- On `setText`, detect `@word$` pattern to open the menu
-- On mention select, replace `@word` with `@Name `
-- Handle ArrowUp/Down/Escape keys for navigation
-- Render `<MentionMenu>` inside the composer block
-
-**SalesLeadDrawer.tsx** — Restrict external estimator actions:
-- New prop: `isExternalEstimator?: boolean`
-- When true: `AssigneeManager` gets `readOnly={true}`
-- When true: hide the Delete `AlertDialog` in footer
-- When true: hide the priority `Select` and disable stage ribbon buttons
-
-**SalesPipeline.tsx** — Pass the flag:
-- Pass `isExternalEstimator={isExternalEstimator}` to `SalesLeadDrawer`
+| `src/pages/Tasks.tsx` | Add feedback task mirroring from Radin's column to Zahra's column |
 
