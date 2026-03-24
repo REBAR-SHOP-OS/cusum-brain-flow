@@ -8,7 +8,7 @@ import {
   Hash,
   Plus,
   Search,
-  MessageSquare,
+  MessageSquare as _MessageSquare,
   Globe,
   ChevronDown,
   ChevronRight,
@@ -29,6 +29,7 @@ interface ChannelSidebarProps {
   onCreateChannel: () => void;
   onClickMember: (profileId: string, name: string) => void;
   onClose?: () => void;
+  myProfile?: Profile;
 }
 
 function getInitials(name: string) {
@@ -46,7 +47,7 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose }: ChannelSidebarProps) {
+export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose, myProfile }: ChannelSidebarProps) {
   const [membersOpen, setMembersOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -83,9 +84,12 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
       <div className="p-3 md:p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
-              <MessageSquare className="w-4 h-4 text-primary" />
-            </div>
+            <Avatar className="w-8 h-8 md:w-9 md:h-9 border border-primary/20">
+              <AvatarImage src={myProfile?.avatar_url || ""} />
+              <AvatarFallback className={cn("text-xs font-bold text-white", getAvatarColor(myProfile?.full_name || ""))}>
+                {getInitials(myProfile?.full_name || "?")}
+              </AvatarFallback>
+            </Avatar>
             <div>
               <h2 className="text-sm font-bold text-foreground tracking-tight whitespace-nowrap">Team Hub</h2>
               <div className="flex items-center gap-1.5">

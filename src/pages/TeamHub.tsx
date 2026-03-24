@@ -179,6 +179,7 @@ export default function TeamHub() {
       onlineCount={onlineCount}
       profiles={profiles}
       onCreateChannel={() => setShowCreateDialog(true)}
+      myProfile={myProfile}
       onClickMember={async (profileId, name) => {
         if (profileId === myProfile?.id) return;
         try {
