@@ -1,48 +1,29 @@
 
 
-## Show All @rebar.shop Users in Team Members
+## Fix: Repost Fails Due to DB Trigger Conflict
 
-### Problem
+### Root Cause
 
-The sidebar filters `profiles.filter(p => p.is_active !== false)` — but **9 out of 13 profiles** have `is_active = false` in the database, including Sattar, Neel, Vicky, Zahra, Kourosh, and Ben. That's why only 4 members appear.
+Line 727-728 in `PostReviewPanel.tsx` inserts the repost with:
+- `status: "scheduled"` 
+- `qa_status: "needs_review"`
 
-| Profile | is_active | Visible? |
-|---|---|---|
-| Ai | true | Yes |
-| Radin Lachini | true | Yes |
-| Saurabh Seghal | true | Yes |
-| Tariq Amiri | true | Yes |
-| Sattar Esmaeili | **false** | No ❌ |
-| Neel Mahajan | **false** | No ❌ |
-| Zahra Zokaei | **false** | No ❌ |
-| Behnam Rajabifar | **false** | No ❌ |
-| Kourosh Zand | **false** | No ❌ |
-| Vicky Anderson | **false** | No ❌ |
+But the DB trigger (`validate_social_post_status`) blocks any insert where `status = 'scheduled'` unless `qa_status` is one of `('approved', 'scheduled', 'published')`. Since `"needs_review"` isn't in that list, the trigger raises the exception.
 
 ### Fix
 
-**File**: `src/components/teamhub/ChannelSidebar.tsx`
+**File**: `src/components/social/PostReviewPanel.tsx` (line 728)
 
-Remove the `is_active` filter on line ~56. Show ALL profiles in the Team Members list. Optionally dim inactive members slightly so there's a visual distinction, but don't hide them.
+Change `qa_status` from `"needs_review"` to `"scheduled"` for reposted posts. A repost is a clone of an already-published/approved post, so it should bypass the review gate:
 
 ```
-BEFORE: const activeProfiles = profiles.filter((p) => p.is_active !== false);
-AFTER:  const activeProfiles = profiles; // Show all team members
+BEFORE: qa_status: "needs_review",
+AFTER:  qa_status: "scheduled",
 ```
-
-Also filter out non-rebar.shop emails (like `deleted_*@removed.invalid` and `General Labour` with no email) to keep the list clean:
-
-```typescript
-const activeProfiles = profiles.filter((p) => 
-  p.email?.endsWith("@rebar.shop") || p.email?.endsWith("@gmail.com")
-);
-```
-
-Update the badge count to reflect the filtered list length.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/teamhub/ChannelSidebar.tsx` | Remove `is_active` filter, show all @rebar.shop + @gmail.com profiles |
+| `src/components/social/PostReviewPanel.tsx` | Change repost `qa_status` from `"needs_review"` to `"scheduled"` |
 
