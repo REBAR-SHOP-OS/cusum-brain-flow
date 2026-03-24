@@ -1,76 +1,32 @@
 
 
-## Add Personal Notes/Storage Space for Each @rebar.shop User
+## Add RingCentral Call & Email Actions to Sales Lead Drawer
 
 ### Problem
-Users want a personal space within Team Hub to save notes, text, and information privately.
+The phone number and email in the lead drawer are plain links (`tel:` and `mailto:`). Users want to:
+1. **Click-to-call** via RingCentral (using the Embeddable widget) directly from the lead drawer
+2. **Send email** by clicking the email — open compose window
 
 ### Changes
 
-**Database Migration** — Create `user_notes` table:
-```sql
-CREATE TABLE public.user_notes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  company_id UUID NOT NULL,
-  title TEXT NOT NULL DEFAULT 'Untitled',
-  content TEXT NOT NULL DEFAULT '',
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+**File**: `src/components/sales/SalesLeadDrawer.tsx`
 
-ALTER TABLE public.user_notes ENABLE ROW LEVEL SECURITY;
+1. **Import `useRingCentralWidget`** hook to get `makeCall` function
+2. **Replace the phone `<a href="tel:...">` link** (line 156-158) with a row containing:
+   - The phone number text (still displayed)
+   - A small `Phone` icon button that calls `makeCall(lead.contact_phone)` to initiate a RingCentral call via the Embeddable widget
+3. **Replace the email `<a href="mailto:...">` link** (line 148-150) with a row containing:
+   - The email text (still displayed)
+   - A small `Mail` icon button that opens `mailto:` compose
 
-CREATE POLICY "Users can manage own notes"
-  ON public.user_notes FOR ALL TO authenticated
-  USING (profile_id IN (
-    SELECT id FROM public.profiles WHERE user_id = auth.uid()
-  ))
-  WITH CHECK (profile_id IN (
-    SELECT id FROM public.profiles WHERE user_id = auth.uid()
-  ));
-```
+This uses the existing `useRingCentralWidget` hook already used in `LiveChat.tsx`. The Embeddable widget handles the actual call UI (transfer, hold, etc.) — clicking the button triggers the call and the widget pops up with full call controls including transfer capability.
 
-**File**: `src/components/teamhub/PersonalNotes.tsx` (NEW)
-- A panel component showing user's saved notes as a list
-- Create, edit, delete notes with title + rich text content
-- Auto-save on blur or after a short debounce
-- Search/filter notes by title
-
-**File**: `src/components/teamhub/ChannelSidebar.tsx`
-- Add a "My Notes" item (with `StickyNote` icon) in the sidebar, above CHANNELS section
-- When clicked, set a special selection mode (e.g. `onSelect("__my_notes__")`)
-
-**File**: `src/pages/TeamHub.tsx`
-- Detect when `activeChannelId === "__my_notes__"` and render `<PersonalNotes>` instead of `<MessageThread>`
-- Pass `myProfile` to `PersonalNotes`
-
-**File**: `src/hooks/usePersonalNotes.ts` (NEW)
-- CRUD hook using `@tanstack/react-query` for `user_notes` table
-- `useNotes(profileId)` — fetch all notes for user
-- `createNote`, `updateNote`, `deleteNote` mutations
-
-### UI Layout
-```
-Sidebar:                    Main Area (when "My Notes" selected):
-┌──────────────────┐       ┌─────────────────────────────────────┐
-│ [Avatar] Team Hub│       │  My Notes          [+ New Note]     │
-│ [Search...]      │       │─────────────────────────────────────│
-│                  │       │  📝 Meeting recap    Mar 24         │
-│ 📝 My Notes     │◄──    │  📝 Project ideas    Mar 23         │
-│                  │       │  📝 TODO list        Mar 22         │
-│ CHANNELS         │       │─────────────────────────────────────│
-│ # Official Chan. │       │  [Selected note editor area]        │
-│ ...              │       │  Title: [____________]              │
-└──────────────────┘       │  Content: [___________________]     │
-                           └─────────────────────────────────────┘
-```
+### Result
+- Phone number shows a call button that initiates a RingCentral call via the browser widget
+- The RingCentral widget provides built-in transfer/hold/mute controls
+- Email shows a button that opens the user's email client to compose
 
 | File | Change |
 |---|---|
-| DB Migration | Create `user_notes` table with RLS |
-| `src/hooks/usePersonalNotes.ts` | NEW — CRUD hook for notes |
-| `src/components/teamhub/PersonalNotes.tsx` | NEW — Notes list + editor panel |
-| `src/components/teamhub/ChannelSidebar.tsx` | Add "My Notes" sidebar item |
-| `src/pages/TeamHub.tsx` | Render PersonalNotes when selected |
+| `src/components/sales/SalesLeadDrawer.tsx` | Add `useRingCentralWidget`, add call & email action buttons |
 
