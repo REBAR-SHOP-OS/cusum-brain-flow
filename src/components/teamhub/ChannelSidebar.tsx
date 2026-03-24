@@ -52,7 +52,9 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const { unreadSenderIds } = useUnreadSenders();
 
   const groupChannels = channels.filter((c) => c.channel_type === "group");
-  const activeProfiles = profiles.filter((p) => p.is_active !== false);
+  const activeProfiles = profiles.filter((p) => 
+    p.email?.endsWith("@rebar.shop") || p.email?.endsWith("@gmail.com")
+  );
 
   const filteredMembers = searchTerm
     ? activeProfiles.filter((p) => p.full_name.toLowerCase().includes(searchTerm.toLowerCase()))
