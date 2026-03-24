@@ -178,7 +178,7 @@ export function DetailedListView() {
               return (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_40px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
+                  className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_70px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
                 >
                   <span className="text-xs text-muted-foreground">{item.drawing_ref || "—"}</span>
                   <span className="text-xs text-muted-foreground">{idx + 1}</span>
@@ -201,9 +201,12 @@ export function DetailedListView() {
                       {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">MM</sub></span> : ""}
                     </span>
                   ))}
-                  <button className="text-muted-foreground hover:text-foreground transition-colors">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button className="text-muted-foreground hover:text-foreground transition-colors">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <DeleteItemButton itemId={item.id} markNumber={item.mark_number} />
+                  </div>
                 </div>
               );
             })
