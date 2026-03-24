@@ -173,9 +173,21 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     production: {
       activeCutPlans: (cutPlans || []).length,
       queuedItems: (cutItems || []).length,
-      completedToday: (cutItems || []).filter((i: any) => (i.completed_pieces ?? 0) >= (i.total_pieces ?? 0) && (i.total_pieces ?? 0) > 0).length,
+      completedToday: (completedTodayItems || []).length,
       machinesRunning: (machines || []).length,
+      machineRunsToday: (machineRunsToday || []).length,
     },
+    machineRuns: (() => {
+      const machineNameMap = new Map((allMachines || []).map((m: any) => [m.id, m.name]));
+      const runs = (machineRunsToday || []).map((r: any) => ({
+        machine_name: machineNameMap.get(r.machine_id) || "Unknown",
+        process: r.process,
+        status: r.status,
+        started_at: r.started_at,
+        output_qty: r.output_qty,
+      }));
+      return { totalToday: runs.length, runs };
+    })(),
     crm: {
       openLeads: (leads || []).length,
       hotLeads: (leads || []).filter((l: any) => (l.probability || 0) >= 70).slice(0, 5),
