@@ -143,10 +143,15 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-blue-500/20 text-blue-600 dark:text-blue-400",
-  const canToggleTask = (task: TaskRow) => {
-    if (task.status === "completed") return canUncomplete(task);
-    return canMarkComplete(task);
-  };
+  in_progress: "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+  completed: "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+};
+
+// ─── Delegate helper (module-level) ─────────────────────
+const isDelegateFor = (currentProfileId: string | null, taskAssignedTo: string | null): boolean => {
+  if (!currentProfileId || !taskAssignedTo) return false;
+  return TASK_DELEGATES[currentProfileId]?.includes(taskAssignedTo) ?? false;
+};
 
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
