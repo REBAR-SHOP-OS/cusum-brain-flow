@@ -169,6 +169,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
                 const { dominant: status, label: statusLabel } = statusSummary(posts);
                 const firstPost = posts[0];
+                const isApproved = posts.some(p => p.neel_approved);
 
                 return (
                   <button
@@ -177,7 +178,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       if (onToggleSelect) {
                         groupIds.forEach(id => onToggleSelect(id));
                       } else if (onGroupClick) {
-                        const isApproved = posts.some(p => p.neel_approved);
+                        const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))] as string[];
                         const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))] as string[];
                         onGroupClick(firstPost, uniquePages);
                       } else {
