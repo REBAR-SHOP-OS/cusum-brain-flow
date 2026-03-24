@@ -397,14 +397,16 @@ Deno.serve(async (req) => {
               actions.push({ id: fr.id, action_taken: "human_task_created" });
             } else {
               // Unknown area — create human task
-              await supabaseAdmin.from("human_tasks").insert({
-                company_id: companyId,
-                title: `Unresolved fix request: ${fr.description?.slice(0, 80)}`,
-                description: `Area: ${fr.affected_area || "unknown"}. Description: ${fr.description}`,
-                status: "open",
-                priority: "medium",
-                created_by: userId,
-              }).catch(() => {});
+              try {
+                await supabaseAdmin.from("human_tasks").insert({
+                  company_id: companyId,
+                  title: `Unresolved fix request: ${fr.description?.slice(0, 80)}`,
+                  description: `Area: ${fr.affected_area || "unknown"}. Description: ${fr.description}`,
+                  status: "open",
+                  priority: "medium",
+                  created_by: userId,
+                });
+              } catch { /* ignore */ }
               actions.push({ id: fr.id, action_taken: "human_task_created" });
             }
 
