@@ -1,40 +1,34 @@
 
 
-## Approvals Button → Filter Calendar to Approved Posts Only
+## Move "Pending Approval" Filter Next to Approvals Button
 
 ### What
-When clicking the "Approvals" button in the toolbar, instead of (or in addition to) showing the ApprovalsPanel, the calendar should filter to show **only approved cards** (`neel_approved === true`). Clicking again resets the filter.
+Move the "Pending Approval" pill from the status filter row (line 470) up to the toolbar, placing it right next to the "Approvals" button.
 
 ### Changes
 
 **File**: `src/pages/SocialMediaManager.tsx`
 
-1. When `showApprovals` is toggled **on**, set `statusFilter` to `"approved_by_neel"` (which already exists in the filter logic at line 123-124):
-   ```typescript
-   onClick={() => {
-     setShowApprovals((v) => {
-       const next = !v;
-       if (next) setStatusFilter("approved_by_neel");
-       else setStatusFilter("all");
-       return next;
-     });
-     setShowStrategy(false);
-   }}
+1. **Add a "Pending Approval" button** next to the Approvals button (after line 317), styled similarly:
+   ```tsx
+   <Button
+     variant={statusFilter === "pending_approval" ? "default" : "outline"}
+     size="sm"
+     className="gap-1.5"
+     onClick={() => setStatusFilter(statusFilter === "pending_approval" ? "all" : "pending_approval")}
+   >
+     <Clock className="w-3.5 h-3.5" />
+     <span className="hidden sm:inline">Pending Approval</span>
+   </Button>
    ```
 
-2. The existing `filteredPosts` logic already handles `statusFilter === "approved_by_neel"` at line 123-124:
-   ```typescript
-   if (statusFilter === "approved_by_neel") {
-     items = items.filter((p) => p.neel_approved);
-   }
-   ```
-   So no changes needed in the filter logic.
+2. **Remove "Pending Approval" from `statusFilters` array** (line 46) so it no longer appears in the filter pills row below.
 
-3. Keep the `ApprovalsPanel` visible when `showApprovals` is true (existing behavior preserved).
+3. **Import `Clock`** icon (add to line 6 imports).
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/pages/SocialMediaManager.tsx` | Update Approvals button onClick to also set `statusFilter` to `"approved_by_neel"` / `"all"` |
+| `src/pages/SocialMediaManager.tsx` | Add Pending Approval button next to Approvals, remove from statusFilters array, import Clock icon |
 
