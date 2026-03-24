@@ -1,59 +1,48 @@
 
 
-## Add Synology NAS Integration
+## Fix Synology NAS Connection via QuickConnect Resolution
 
-### What
-Add a "Synology NAS" integration card to the Integrations page. When connected, it enables file browsing, NAS monitoring, media access, and team file sharing via the Synology DSM API (using DDNS hostname `RSIC.synology.me` and QuickConnect ID `RSI1`).
+### Problem
+The edge function gets an HTML page instead of JSON when connecting to the NAS. QuickConnect URLs (`quickconnect.to/RSI1`) use Synology's relay servers and require a resolution step before API calls can be made. Direct DDNS (`RSIC.synology.me:5001`) may also fail due to SSL certificate issues from external servers.
 
-### Architecture
-
-The Synology DSM exposes a REST API (`/webapi/entry.cgi`) for authentication, file operations, and system info. We will:
-
-1. Store the NAS credentials as secrets (URL, username, password)
-2. Create an edge function that proxies requests to the Synology API (avoids CORS and keeps credentials server-side)
-3. Add UI for browsing files, monitoring NAS status, and sharing
+### Solution
+Update the edge function to resolve the QuickConnect ID to the actual server URL using Synology's undocumented `global.quickconnect.to/Serv.php` API, then use the resolved URL for all API calls.
 
 ### Changes
 
-**File**: `src/components/integrations/integrationsList.ts`
-- Add a new `synology-nas` integration entry with fields for NAS URL, DSM username, and DSM password
+**File**: `supabase/functions/synology-proxy/index.ts`
 
-**File**: `src/components/integrations/IntegrationIcons.tsx`
-- Add a Synology NAS icon (server/storage icon in Synology blue `#4B9FD5`)
+1. Add a `resolveQuickConnect(id)` function that:
+   - POSTs to `https://global.quickconnect.to/Serv.php` with `{"command":"get_server_info","id":"RSI1","version":1}`
+   - Extracts the external IP/port or relay URL from the response
+   - Tries connecting via: direct external IP → DDNS hostname → relay tunnel (in order)
 
-**File**: `src/hooks/useIntegrations.ts`
-- Add `synology-nas` to the OAuth integrations list (uses the connect dialog flow)
-- Add handler in `startOAuth` for `synology-nas` that calls the edge function to verify connection
+2. Update `getSid()` to:
+   - If `SYNOLOGY_URL` looks like a QuickConnect ID (no `://`), resolve it first
+   - If direct URL fails with HTML response, try QuickConnect resolution as fallback
+   - Log resolved URL for debugging
 
-**File**: `supabase/functions/synology-proxy/index.ts` (new)
-- Edge function that authenticates with Synology DSM API and proxies requests
-- Supports actions: `login` (test connection), `list-files` (browse shared folders), `system-info` (disk usage, health, uptime), `download` (proxy file download)
-- Uses secrets: `SYNOLOGY_URL`, `SYNOLOGY_USERNAME`, `SYNOLOGY_PASSWORD`
-- Base URL: `https://RSIC.synology.me:5001` (HTTPS port)
+3. Update the `SYNOLOGY_URL` secret to just `RSI1` (the QuickConnect ID) — simpler for the user
 
-**File**: `src/pages/SynologyNAS.tsx` (new)
-- Dashboard page with tabs: **Files** (browse shared folders), **Status** (disk health, CPU, RAM), **Team Files** (shared folder access for team)
-- File browser with breadcrumb navigation, download links, and folder tree
-- System status cards showing disk usage, health status, temperature
+### QuickConnect Resolution Flow
+```text
+POST https://global.quickconnect.to/Serv.php
+Body: {"command":"get_server_info","id":"RSI1","version":1}
 
-**File**: `src/App.tsx`
-- Add route `/synology` pointing to the new page
+Response includes:
+  - server.external.ip + port
+  - server.ddns (e.g. RSIC.synology.me)
+  - env.relay_region
 
-### Secrets Required
-| Secret | Value | Description |
-|---|---|---|
-| `SYNOLOGY_URL` | `https://RSIC.synology.me:5001` | DSM HTTPS endpoint |
-| `SYNOLOGY_USERNAME` | (user provides) | DSM admin username |
-| `SYNOLOGY_PASSWORD` | (user provides) | DSM admin password |
+Try in order:
+  1. https://{external_ip}:{port}
+  2. https://{ddns}:{port}
+  3. https://{id}.{relay_region}.quickconnect.to:{port}
+```
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/integrations/integrationsList.ts` | Add Synology NAS integration definition |
-| `src/components/integrations/IntegrationIcons.tsx` | Add Synology server icon |
-| `src/hooks/useIntegrations.ts` | Add synology-nas connect handler |
-| `supabase/functions/synology-proxy/index.ts` | New edge function for DSM API proxy |
-| `src/pages/SynologyNAS.tsx` | New NAS dashboard page |
-| `src/App.tsx` | Add `/synology` route |
+| `supabase/functions/synology-proxy/index.ts` | Add QuickConnect ID resolution, fallback URL logic |
 
