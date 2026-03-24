@@ -555,7 +555,7 @@ function QueueCard({ plan, onDelete, onEdit }: {
           <span className="text-xs font-medium text-foreground">{plan.name}</span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" className="gap-1 text-xs h-7" <Button variant="outline" size="sm" className="gap-1 text-xs h-7" onClick={(e) => { e.stopPropagation(); onEdit(); }}>>
+          <Button variant="outline" size="sm" className="gap-1 text-xs h-7" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
             <Pencil className="w-3 h-3" /> Edit
           </Button>
           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
