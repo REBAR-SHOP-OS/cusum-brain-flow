@@ -123,7 +123,7 @@ export function DockChatBar() {
   const BOX_WIDTH = 330;
   const LAUNCHER_OFFSET = 80; // space for the launcher pill
 
-  if (!portalContainer) return null;
+  if (!portalContainer || isTeamHub) return null;
 
   return createPortal(
     <>
