@@ -305,7 +305,7 @@ export default function SocialMediaManager() {
             variant={showApprovals ? "default" : "outline"}
             size="sm"
             className="gap-1.5 relative"
-            onClick={() => { setShowApprovals((v) => !v); setShowStrategy(false); }}
+            onClick={() => { setShowApprovals((v) => { const next = !v; if (next) setStatusFilter("approved_by_neel"); else setStatusFilter("all"); return next; }); setShowStrategy(false); }}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Approvals</span>
