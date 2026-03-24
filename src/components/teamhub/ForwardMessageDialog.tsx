@@ -29,7 +29,7 @@ export function ForwardMessageDialog({
 
   const filteredChannels = channels
     .filter((c) => c.id !== currentChannelId)
-    .filter((c) => c.channel_type !== "dm")
+    .filter((c) => c.name === "Official Channel" || c.name === "Official Group")
     .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
 
   // Build preview
