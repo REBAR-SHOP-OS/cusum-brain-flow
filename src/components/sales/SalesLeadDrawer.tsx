@@ -171,7 +171,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                     size="icon"
                     variant="ghost"
                     className="h-6 w-6 shrink-0"
-                    onClick={() => makeCall(lead.contact_phone!)}
+                    onClick={() => { makeCall(lead.contact_phone!); showWidget(); }}
                   >
                     <Phone className="h-3.5 w-3.5 text-green-600" />
                   </Button>
