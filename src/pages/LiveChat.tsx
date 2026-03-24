@@ -459,6 +459,27 @@ export default function LiveChat() {
 
                 <div className="flex-1" />
 
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!input.trim()) return;
+                        const result = await grammar.check(input);
+                        if (result.changed) setInput(result.corrected);
+                      }}
+                      disabled={grammar.checking || !input.trim() || isStreaming}
+                      className={cn(
+                        "p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
+                    >
+                      {grammar.checking ? <Loader2 className="w-5 h-5 animate-spin" /> : <SpellCheck className="w-5 h-5" />}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Check spelling</TooltipContent>
+                </Tooltip>
+
                 {isStreaming ? (
                   <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream} aria-label="Stop generating">
                     <Square className="w-4 h-4" />

@@ -273,6 +273,19 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
                 rows={1}
                 disabled={isStreaming}
               />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!input.trim()) return;
+                  const result = await grammar.check(input);
+                  if (result.changed) setInput(result.corrected);
+                }}
+                disabled={grammar.checking || !input.trim() || isStreaming}
+                title="Check spelling"
+                className="h-10 w-10 p-0 shrink-0 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {grammar.checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <SpellCheck className="w-4 h-4" />}
+              </button>
               <Button
                 size="sm"
                 className="h-10 w-10 p-0 shrink-0 rounded-xl"

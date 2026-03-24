@@ -416,6 +416,20 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
             rows={1}
             disabled={isStreaming || !!pendingAction || isUploading}
           />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-9 w-9 rounded-lg shrink-0"
+            onClick={async () => {
+              if (!input.trim()) return;
+              const result = await grammar.check(input);
+              if (result.changed) setInput(result.corrected);
+            }}
+            disabled={grammar.checking || !input.trim() || isStreaming || !!pendingAction}
+            title="Check spelling"
+          >
+            {grammar.checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <SpellCheck className="w-4 h-4" />}
+          </Button>
           {isStreaming ? (
             <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
               <Square className="w-4 h-4" />
