@@ -212,6 +212,7 @@ export default function TeamHub() {
                   activeMeetings={activeMeetings}
                   onStartMeeting={() => setShowMeetingDialog(true)}
                   onJoinMeeting={(m) => setActiveMeeting(m)}
+                  readOnly={!canWrite}
                 />
               ) : channelsLoading ? (
                 <div className="flex items-center justify-center h-full">

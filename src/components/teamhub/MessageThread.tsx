@@ -727,6 +727,7 @@ export function MessageThread({
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }
