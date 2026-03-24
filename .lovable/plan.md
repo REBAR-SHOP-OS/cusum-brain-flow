@@ -1,22 +1,27 @@
 
 
-## Fix: Redeploy notify-lead-assignees & Add Error Visibility
+## Fix: Stop Event Propagation on QueueCard Buttons
 
 ### Problem
-The `notify-lead-assignees` edge function has zero logs, meaning it was never successfully invoked. Most likely the function wasn't properly deployed after the transient network error. The frontend also silently swallows invocation errors with `.catch(() => {})`.
+Clicking "Edit" or delete icons on manifests in the Production Queue triggers the parent `CollapsibleTrigger` click handler (which toggles the folder open/closed), and the Edit button navigates to `/shopfloor/cutter` because that's the current `onEditPlan` behavior. The event bubbles up through the collapsible trigger.
 
 ### Changes
 
-1. **Redeploy the edge function** — Ensure `notify-lead-assignees` is live and callable.
+**File: `src/components/office/ProductionQueueView.tsx`**
 
-2. **File: `src/components/sales/SalesLeadChatter.tsx`** (line 213)
-   - Replace `.catch(() => {})` with `.catch((err) => console.error("notify-lead-assignees error:", err))` so failures are visible in the console for debugging.
+1. **Line 558** — Add `e.stopPropagation()` to the Edit button:
+   ```tsx
+   onClick={(e) => { e.stopPropagation(); onEdit(); }}
+   ```
 
-3. **File: `src/pages/sales/SalesPipeline.tsx`** — Same change for the stage-change notification call.
+2. **Line 570** — Add `e.stopPropagation()` to the Delete button:
+   ```tsx
+   onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
+   ```
+
+These two changes prevent clicks on the Edit and Delete buttons from bubbling up to the parent `CollapsibleTrigger`, which was collapsing/expanding the folder and interfering with the intended action.
 
 | File | Change |
 |---|---|
-| Edge function deploy | Redeploy `notify-lead-assignees` |
-| `SalesLeadChatter.tsx` | Log notification errors to console instead of swallowing |
-| `SalesPipeline.tsx` | Log notification errors to console instead of swallowing |
+| `ProductionQueueView.tsx` | Add `e.stopPropagation()` to Edit and Delete buttons in `QueueCard` |
 
