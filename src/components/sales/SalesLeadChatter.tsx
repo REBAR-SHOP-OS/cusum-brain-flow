@@ -272,6 +272,20 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
                 onChange={(e) => setDueDate(e.target.value)}
                 className="w-36 h-8 text-xs"
               />
+              {assignees.length > 0 && (
+                <Select value={assignedName} onValueChange={setAssignedName}>
+                  <SelectTrigger className="w-36 h-8 text-xs">
+                    <SelectValue placeholder="Assign to..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assignees.map((a) => (
+                      <SelectItem key={a.profile_id} value={a.full_name}>
+                        {a.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           )}
           <div className="relative">
