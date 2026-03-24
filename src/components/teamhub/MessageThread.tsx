@@ -718,6 +718,15 @@ export function MessageThread({
                             <Reply className="w-3.5 h-3.5" />
                           </button>
                         )}
+                        {onForward && (
+                          <button
+                            onClick={() => onForward(msg)}
+                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                            title="Forward"
+                          >
+                            <Forward className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
                         {canDelete && (
                           <button
