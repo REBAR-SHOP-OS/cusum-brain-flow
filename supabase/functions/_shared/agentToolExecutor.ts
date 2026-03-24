@@ -90,9 +90,136 @@ export async function executeToolCall(
       result.result = error ? { error: error.message } : { success: true, data };
     }
 
-    // ═══════════════════════════════════════════════════
-    // 6. Run Takeoff — POST to ai-estimate edge function
-    // ═══════════════════════════════════════════════════
+    // 5b. Get Production Report (Forge)
+    else if (name === "get_production_report") {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayISO = todayStart.toISOString();
+
+      const { data: runs } = await svcClient
+        .from("machine_runs")
+        .select("id, machine_id, process, status, started_at, ended_at, output_qty, scrap_qty, operator_profile_id")
+        .gte("started_at", todayISO)
+        .order("started_at", { ascending: false })
+        .limit(100);
+
+      const { data: machines } = await svcClient.from("machines").select("id, name").limit(50);
+      const { data: profiles } = await svcClient.from("profiles").select("id, full_name").eq("is_active", true);
+
+      const machineMap = new Map((machines || []).map((m: any) => [m.id, m.name]));
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.full_name]));
+
+      const completedRuns = (runs || []).filter((r: any) => r.status === "completed");
+      const totalPieces = completedRuns.reduce((s: number, r: any) => s + (r.output_qty || 0), 0);
+      const totalScrap = completedRuns.reduce((s: number, r: any) => s + (r.scrap_qty || 0), 0);
+
+      result.result = {
+        success: true,
+        summary: {
+          totalRunsToday: (runs || []).length,
+          completedRuns: completedRuns.length,
+          totalPiecesProduced: totalPieces,
+          totalScrap,
+        },
+        runs: (runs || []).map((r: any) => ({
+          machine: machineMap.get(r.machine_id) || r.machine_id,
+          process: r.process,
+          status: r.status,
+          output_qty: r.output_qty,
+          scrap_qty: r.scrap_qty,
+          operator: profileMap.get(r.operator_profile_id) || "unassigned",
+          started_at: r.started_at,
+          ended_at: r.ended_at,
+        })),
+      };
+    }
+
+    // 5c. Get Work Orders (Forge)
+    else if (name === "get_work_orders") {
+      const statusFilter = args.status_filter;
+      const limit = args.limit || 30;
+
+      let query = svcClient
+        .from("work_orders")
+        .select("id, work_order_number, status, scheduled_start, order_id, priority, notes")
+        .order("scheduled_start", { ascending: true })
+        .limit(limit);
+
+      if (statusFilter) {
+        query = query.eq("status", statusFilter);
+      } else {
+        query = query.in("status", ["queued", "pending", "in-progress"]);
+      }
+
+      const { data: wos, error } = await query;
+      result.result = error ? { error: error.message } : { success: true, work_orders: wos, count: (wos || []).length };
+    }
+
+    // 5d. Get Cut Plan Status (Forge)
+    else if (name === "get_cut_plan_status") {
+      const { data: plans } = await svcClient
+        .from("cut_plans")
+        .select("id, name, status, machine_id")
+        .in("status", ["active", "in_progress", "queued"])
+        .limit(20);
+
+      const { data: items } = await svcClient
+        .from("cut_plan_items")
+        .select("id, phase, cut_plan_id")
+        .limit(500);
+
+      const phaseCounts: Record<string, number> = {};
+      for (const item of items || []) {
+        phaseCounts[item.phase] = (phaseCounts[item.phase] || 0) + 1;
+      }
+
+      result.result = {
+        success: true,
+        activePlans: plans || [],
+        planCount: (plans || []).length,
+        itemPhaseCounts: phaseCounts,
+        totalItems: (items || []).length,
+      };
+    }
+
+    // 5e. Get Timeclock Summary (Forge)
+    else if (name === "get_timeclock_summary") {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayISO = todayStart.toISOString();
+
+      const { data: entries } = await svcClient
+        .from("time_clock_entries")
+        .select("id, profile_id, clock_in, clock_out, break_minutes, notes")
+        .gte("clock_in", todayISO)
+        .order("clock_in", { ascending: false })
+        .limit(50);
+
+      const { data: profiles } = await svcClient.from("profiles").select("id, full_name").eq("is_active", true);
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.full_name]));
+
+      const now = new Date();
+      const summary = (entries || []).map((e: any) => {
+        const clockIn = new Date(e.clock_in);
+        const clockOut = e.clock_out ? new Date(e.clock_out) : now;
+        const hoursWorked = +((clockOut.getTime() - clockIn.getTime()) / 3600000).toFixed(2);
+        return {
+          employee: profileMap.get(e.profile_id) || e.profile_id,
+          clock_in: e.clock_in,
+          clock_out: e.clock_out,
+          is_active: !e.clock_out,
+          hours_worked: hoursWorked,
+          break_minutes: e.break_minutes || 0,
+        };
+      });
+
+      result.result = {
+        success: true,
+        entries: summary,
+        activeCount: summary.filter((s: any) => s.is_active).length,
+        totalEntries: summary.length,
+      };
+    }
     else if (name === "run_takeoff") {
       const body: any = {
         name: args.name || args.project_name || "Untitled Takeoff",
