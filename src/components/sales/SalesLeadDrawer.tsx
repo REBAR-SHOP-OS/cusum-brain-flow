@@ -142,7 +142,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                 <p className="font-medium truncate">{lead.contact_company}</p>
               </div>
             )}
-            {lead.contact_email && (
+            {!isExternalEstimator && lead.contact_email && (
               <div>
                 <span className="text-[11px] text-muted-foreground font-medium">Email</span>
                 <a href={`mailto:${lead.contact_email}`} className="text-primary hover:underline truncate block">
@@ -150,7 +150,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                 </a>
               </div>
             )}
-            {lead.contact_phone && (
+            {!isExternalEstimator && lead.contact_phone && (
               <div>
                 <span className="text-[11px] text-muted-foreground font-medium">Phone</span>
                 <a href={`tel:${lead.contact_phone}`} className="text-primary hover:underline block">
