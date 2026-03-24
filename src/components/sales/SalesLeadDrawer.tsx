@@ -33,6 +33,7 @@ interface Props {
   profiles?: Profile[];
   onAddAssignee?: (profileId: string) => void;
   onRemoveAssignee?: (profileId: string) => void;
+  isExternalEstimator?: boolean;
 }
 
 const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
