@@ -6435,6 +6435,59 @@ export type Database = {
           },
         ]
       }
+      lead_assignees: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          lead_id: string
+          profile_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          lead_id: string
+          profile_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          lead_id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_assignees_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_assignees_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_assignees_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_assignees_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_communications: {
         Row: {
           body_preview: string | null
@@ -11900,6 +11953,52 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "sales_lead_activities_sales_lead_id_fkey"
+            columns: ["sales_lead_id"]
+            isOneToOne: false
+            referencedRelation: "sales_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_lead_assignees: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          profile_id: string
+          sales_lead_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          profile_id: string
+          sales_lead_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          profile_id?: string
+          sales_lead_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_lead_assignees_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_lead_assignees_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_lead_assignees_sales_lead_id_fkey"
             columns: ["sales_lead_id"]
             isOneToOne: false
             referencedRelation: "sales_leads"
