@@ -37,8 +37,8 @@ const navCommands: NavCommand[] = [
   { label: "Business Tasks", icon: CheckSquare, href: "/tasks", group: "Navigate" },
   { label: "Pipeline", icon: Kanban, href: "/pipeline", roles: ["admin", "sales", "office"], group: "Navigate" },
   { label: "Customers", icon: Users, href: "/customers", group: "Navigate", blockedEmails: ["zahra@rebar.shop"] },
-  { label: "Shop Floor Hub", icon: Factory, href: "/shop-floor", group: "Operations" },
-  { label: "Station Dashboard", icon: Factory, href: "/shopfloor/station", group: "Operations" },
+  { label: "Shop Floor Hub", icon: Factory, href: "/shop-floor", group: "Operations", blockedEmails: ["zahra@rebar.shop"] },
+  { label: "Station Dashboard", icon: Factory, href: "/shopfloor/station", group: "Operations", blockedEmails: ["zahra@rebar.shop"] },
   { label: "Office Portal", icon: LayoutGrid, href: "/office", roles: ["admin", "office"], group: "Operations" },
   { label: "Inventory", icon: Package, href: "/office", roles: ["admin", "office"], group: "Operations" },
   
