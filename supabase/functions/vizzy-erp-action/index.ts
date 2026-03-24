@@ -336,17 +336,19 @@ Deno.serve(async (req) => {
           } as any).eq("id", dupId);
 
           // Log activity event
-          await supabaseAdmin.from("activity_events").insert({
-            company_id: companyId,
-            entity_type: "customer_merge",
-            entity_id: dupId,
-            event_type: "customer_merged",
-            description: `Merged customer "${dup.name}" into "${primary.name}"`,
-            actor_id: userId,
-            actor_type: "vizzy",
-            source: "system",
-            metadata: { primary_id, duplicate_id: dupId, relinked_counts: relinked, merge_reason: reason },
-          }).catch(() => {});
+          try {
+            await supabaseAdmin.from("activity_events").insert({
+              company_id: companyId,
+              entity_type: "customer_merge",
+              entity_id: dupId,
+              event_type: "customer_merged",
+              description: `Merged customer "${dup.name}" into "${primary.name}"`,
+              actor_id: userId,
+              actor_type: "vizzy",
+              source: "system",
+              metadata: { primary_id, duplicate_id: dupId, relinked_counts: relinked, merge_reason: reason },
+            });
+          } catch { /* ignore */ }
 
           allResults.push({ duplicate_id: dupId, duplicate_name: dup.name, relinked_counts: relinked, archived: true });
         }
