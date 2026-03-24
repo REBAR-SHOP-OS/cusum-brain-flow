@@ -76,6 +76,35 @@ export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Mention support
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  const handleTextChange = useCallback((val: string) => {
+    setText(val);
+    const match = val.match(/@(\w*)$/);
+    if (match) {
+      setMentionFilter(match[1]);
+      setMentionOpen(true);
+      setMentionIndex(0);
+    } else {
+      setMentionOpen(false);
+    }
+  }, []);
+
+  const handleMentionSelect = useCallback((item: { id: string; label: string }) => {
+    setText(prev => prev.replace(/@\w*$/, `@${item.label} `));
+    setMentionOpen(false);
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!mentionOpen) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => i + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(0, i - 1)); }
+    else if (e.key === "Escape") { setMentionOpen(false); }
+  }, [mentionOpen]);
+
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const newFiles = files.map(f => ({ file: f, previewUrl: URL.createObjectURL(f) }));
