@@ -34,12 +34,13 @@ const typeLabels: Record<string, string> = {
   follow_up: "Follow-up",
 };
 
-export function ScheduledActivities({ entityType, entityId }: ScheduledActivitiesProps) {
+export function ScheduledActivities({ entityType, entityId, assignees }: ScheduledActivitiesProps) {
   const { planned, done, isLoading, createActivity, markDone, cancelActivity } = useScheduledActivities(entityType, entityId);
   const [showForm, setShowForm] = useState(false);
   const [activityType, setActivityType] = useState("call");
   const [summary, setSummary] = useState("");
   const [dueDate, setDueDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [assignedName, setAssignedName] = useState("");
 
   const handleSubmit = () => {
     if (!summary.trim()) return;
